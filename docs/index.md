@@ -1,10 +1,10 @@
 # Ferrum – Dokumentationsportal
 
-**Projektstand:** v0.1 mit SQLite als lokaler Standarddatenbank und PostgreSQL als weiterem Backend · **Dokumentationssprache:** Deutsch
+**Projektstand:** Funktionsstand v0.8. Die Cargo-Version bleibt `0.1.0`. SQLite ist die lokale Standarddatenbank, PostgreSQL das optionale Backend. **Dokumentationssprache:** Deutsch
 
 ## Wie dieses Handbuch zu lesen ist
 
-Jedes Dokument trennt **IST (v0.1)** von **SOLL (Entwurf)**. SOLL bezeichnet eine Architekturentscheidung oder einen Vorschlag, **keine implementierte Funktion**. Beispiel-Code und CLI-Aufrufe in SOLL-Abschnitten sind nicht ausführbar, solange die Funktion nicht implementiert wurde.
+Jedes Dokument trennt **IST** von **SOLL (Entwurf)**. SOLL bezeichnet eine Architekturentscheidung oder einen Vorschlag, **keine implementierte Funktion**. Beispiel-Code und CLI-Aufrufe in SOLL-Abschnitten sind nicht ausführbar, solange die Funktion nicht implementiert wurde. Authentifizierung ist v0.7. Der automatische Admin ist v0.8 und in [admin.md](admin.md) beschrieben. Die Cargo-Version bleibt `0.1.0`.
 
 **Zentrale Regel:** Rust-Struct → `FerrumModel`-Makro → typisierte Repository-Implementierung und Modelldeskriptor → explizite Registrierung → HTTP-Routen. Schemaänderungen laufen über die Migrations-Engine. `myshop --bootstrap` ist Legacy.
 
@@ -24,9 +24,11 @@ Jedes Dokument trennt **IST (v0.1)** von **SOLL (Entwurf)**. SOLL bezeichnet ein
 | Sicherheit | IST + SOLL | [security.md](security.md) | Access Defaults, Bedrohungen, Checks |
 | Datenvalidierung | IST + SOLL | [validation.md](validation.md) | Regeln und Fehlersemantik |
 | Tests & CI | IST + SOLL | [testing.md](testing.md) | SQLite-HTTP im Workspace-Test, PostgreSQL optional |
-| Migrationen | IST, mit benannten Lücken | [migrations.md](migrations.md) | Snapshots, Diffs, sichere Ausführung |
-| Auth & Rechte | **nur SOLL** | [auth.md](auth.md) | Sessions, Policies, Deny by default |
-| Admin-Backend & UI | **nur SOLL** | [admin.md](admin.md) | Berechtigte Metadaten, React-UI |
+| Migrationen | IST, mit benannten Grenzen | [migrations.md](migrations.md) | Snapshots, Constraints, explizite Umbenennung, geprüfter SQLite-Umbau, Baseline |
+| Constraints und Indizes | IST | [constraints.md](constraints.md) | Unique, Index, Foreign Key, SQL und Fehlercodes |
+| Modellbeziehungen | IST, Lazy Loading | [relations.md](relations.md) | Belongs-To, Has-Many, N+1 |
+| Auth & Rechte | IST | [auth.md](auth.md), [sessions.md](sessions.md), [permissions.md](permissions.md), [policies.md](policies.md) | Benutzer, Sitzungen, RBAC, Objektregeln |
+| Admin | IST v0.8 | [admin.md](admin.md), [admin-backend.md](admin-backend.md), [admin-frontend.md](admin-frontend.md), [admin-security.md](admin-security.md), [admin-components.md](admin-components.md), [admin-customization.md](admin-customization.md) | Metadaten, API, React-Oberfläche |
 | OpenAPI | **nur SOLL** | [openapi.md](openapi.md) | Dokumentation aus DTOs |
 | Erweiterungen | **nur SOLL** | [extensions.md](extensions.md) | Hooks, Plugin-Grenzen |
 | Deployment | IST SQLite, optionales Docker-PostgreSQL, SOLL App | [deployment.md](deployment.md) | Lokaler Start, Proxy, Produktion |
@@ -36,7 +38,7 @@ Jedes Dokument trennt **IST (v0.1)** von **SOLL (Entwurf)**. SOLL bezeichnet ein
 ## Verbindliche Begriffe
 
 - **Model:** Entwicklerseitige, serialisierbare Rust-Struct mit `#[derive(FerrumModel)]`.
-- **Deskriptor:** `ModelDescriptor` mit Name, Tabelle, API-Pfad und `allow_anonymous`. Spalten stehen zusätzlich in `ColumnSpec`.
+- **Deskriptor:** `ModelDescriptor` mit Name, Tabelle, API-Pfad, `allow_anonymous`, `permission` und `requires_object_policy`. Spalten stehen zusätzlich in `ColumnSpec`.
 - **Repository:** Generierte typisierte Methoden `list`, `get`, `create`, `update` und `delete`. `update` nimmt `{Model}Update` mit `PatchField<T>`.
 - **Migration:** versionierte Datei unter `migrations/`, angewendet über `ferrum migrate up`.
 - **Bootstrap:** Legacy-Befehl ohne Schemaänderung. `App::bootstrap_schema` bleibt ein Testhelfer für leere Datenbanken ohne Historie.

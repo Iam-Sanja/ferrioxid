@@ -6,9 +6,11 @@ use ferrum_core::{FerrumError, FerrumModel};
 use sea_orm::DatabaseConnection;
 use serde::{de::DeserializeOwned, Serialize};
 pub use sql::{
-    delete_record, get_record, insert_record, kind_of, list_records, render_add_column,
-    render_create_table, render_drop_column, render_drop_table, render_schema, update_record,
-    PhysicalColumn, ValuePage,
+    delete_record, find_by_column, get_record, insert_record, kind_of, list_records,
+    query_admin_page, render_add_column, render_add_column_referencing, render_create_index,
+    render_create_table, render_drop_column, render_drop_index, render_drop_table,
+    render_rename_column, render_rename_table, render_schema, render_table_bundle, update_record,
+    AdminPage, AdminPageRequest, ForeignKeyClause, PhysicalColumn, ValuePage,
 };
 
 #[derive(Debug, Serialize)]

@@ -4,7 +4,7 @@
 
 ## 1. Erst den vorhandenen Code verstehen
 
-Lies in dieser Reihenfolge `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [testing.md](testing.md), bevor du die betroffene Crate änderst. **Behaupte keine Feature-Vollständigkeit auf Basis einer SOLL-Dokumentation.**
+Lies in dieser Reihenfolge `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [testing.md](testing.md), bevor du die betroffene Crate änderst. **Behaupte keine Feature-Vollständigkeit auf Basis einer SOLL-Dokumentation.** Auth-Tabellen laufen über `apply_directory_with_history` und `_ferrum_auth_migrations`. `0001_initial.json` wird nicht geändert.
 
 ## 2. Modulgrenzen respektieren
 
@@ -67,4 +67,4 @@ Vorgeschlagene ADR-Themen: Macro ↔ ORM-Strategie; Schema-Format; Zugriffspolic
 
 ## 7. Aktueller Schwerpunkt
 
-SQLite ist die lokale Standarddatenbank. PostgreSQL bleibt über `DATABASE_URL` unterstützt. Neue Spaltenabbildungen gehören nach `crates/ferrum-db/src/sql.rs`. Neue Migrationsregeln gehören nach `crates/ferrum-migrations` und müssen unsichere SQLite-Umbauten ablehnen, statt sie halb auszuführen. Authentifizierung, Admin und zusätzliche REST-Funktionen nur nach ausdrücklicher Beauftragung. Die Roadmap ist keine Freigabe.
+SQLite ist die lokale Standarddatenbank. PostgreSQL bleibt über `DATABASE_URL` unterstützt. Neue Spaltenabbildungen gehören nach `crates/ferrum-db/src/sql.rs`. Neue Migrationsregeln gehören nach `crates/ferrum-migrations`. Ein SQLite-Umbau darf nur laufen, wenn die geänderte Spalte vorher geprüft ist und die Transaktion bei Fehler alles zurücknimmt. Foreign Keys auf bestehenden Spalten werden nicht umgebaut. Authentifizierung ist vorhanden. Der Admin ist in v0.8 vorhanden und in [admin.md](admin.md) beschrieben. Many-to-Many und Eager Loading nur nach ausdrücklicher Beauftragung. Die Roadmap ist keine Freigabe. Constraints und Beziehungen sind in [constraints.md](constraints.md) und [relations.md](relations.md) beschrieben.

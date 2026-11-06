@@ -1,4 +1,5 @@
-//! Die eingecheckte myshop-Migration muss zum registrierten Product-Modell passen.
+//! `0001_initial.json` bleibt an das Produktmodell gebunden, das beim Anlegen dieser Datei galt.
+//! Das aktuelle Product hat `category_id` und wird durch `0002_categories_and_product_relations.json` abgebildet.
 
 use ferrum::core::FerrumModel;
 use ferrum::migrations::{load_migration, RegisteredModel, SchemaSnapshot};
@@ -29,6 +30,7 @@ fn initial_migration_matches_the_registered_product_model() {
     let schema = SchemaSnapshot::from_registered(&[RegisteredModel {
         table: Product::descriptor().table,
         columns: Product::columns(),
+        constraints: Product::constraints(),
     }])
     .unwrap();
     assert!(migration.from_snapshot.tables.is_empty());

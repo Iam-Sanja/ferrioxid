@@ -1,0 +1,674 @@
+{
+  "format_version": 1,
+  "id": "0001_auth_schema",
+  "name": "auth_schema",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": []
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "_ferrum_users",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "password_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "is_staff",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "is_superuser",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_login",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_users_email",
+            "columns": [
+              "email"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrum_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_roles_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrum_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_permissions_code",
+            "columns": [
+              "code"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrum_sessions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "csrf_token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_seen_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_sessions_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrum_sessions_user_id",
+            "columns": [
+              "user_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrum_sessions_user_id__ferrum_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrum_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrum_user_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_user_roles_user_id_role_id",
+            "columns": [
+              "user_id",
+              "role_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrum_user_roles_user_id__ferrum_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrum_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__ferrum_user_roles_role_id__ferrum_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_ferrum_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrum_role_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "permission_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_role_permissions_role_id_permission_id",
+            "columns": [
+              "role_id",
+              "permission_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrum_role_permissions_role_id__ferrum_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_ferrum_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__ferrum_role_permissions_permission_id__ferrum_permissions_id",
+            "columns": [
+              "permission_id"
+            ],
+            "referenced_table": "_ferrum_permissions",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrum_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_permissions_code",
+            "columns": [
+              "code"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrum_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_roles_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrum_role_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "permission_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_role_permissions_role_id_permission_id",
+            "columns": [
+              "role_id",
+              "permission_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrum_role_permissions_role_id__ferrum_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_ferrum_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__ferrum_role_permissions_permission_id__ferrum_permissions_id",
+            "columns": [
+              "permission_id"
+            ],
+            "referenced_table": "_ferrum_permissions",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrum_users",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "password_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "is_staff",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "is_superuser",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_login",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_users_email",
+            "columns": [
+              "email"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrum_sessions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "csrf_token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_seen_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_sessions_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrum_sessions_user_id",
+            "columns": [
+              "user_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrum_sessions_user_id__ferrum_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrum_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrum_user_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrum_user_roles_user_id_role_id",
+            "columns": [
+              "user_id",
+              "role_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrum_user_roles_user_id__ferrum_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrum_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__ferrum_user_roles_role_id__ferrum_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_ferrum_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "fad0df81311633e8617737fe62e6bcaab7fed21d4b67b73ac269429c6a2c9b67"
+}

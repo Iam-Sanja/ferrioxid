@@ -20,11 +20,14 @@ examples/myshop → ferrum (Fassade)
                     ├── ferrum-core
                     ├── ferrum-macros
                     ├── ferrum-db → ferrum-core, SeaORM
-                    └── ferrum-api → ferrum-core, ferrum-db, Axum, SeaORM
-ferrum-cli (separate Binary)
+                    ├── ferrum-auth → ferrum-core, ferrum-db, ferrum-migrations
+                    ├── ferrum-admin → ferrum-auth, ferrum-core, ferrum-db
+                    └── ferrum-api → ferrum-admin, ferrum-auth, ferrum-core, ferrum-db, Axum
+ferrum-cli → ferrum-auth, ferrum-db, ferrum-migrations
+apps/admin-ui → gebautes Verzeichnis, vom Server unter `/admin` ausgeliefert
 ```
 
-Physische Crates: `crates/ferrum/`, `crates/ferrum-core/`, `crates/ferrum-macros/`, `crates/ferrum-db/`, `crates/ferrum-api/`, `crates/ferrum-cli/`. `Cargo.toml` legt Workspace Edition 2021 fest. Versionsangaben und Features stehen dort, nicht in dieser Dokumentation.
+Physische Crates: `crates/ferrum/`, `crates/ferrum-core/`, `crates/ferrum-macros/`, `crates/ferrum-db/`, `crates/ferrum-migrations/`, `crates/ferrum-auth/`, `crates/ferrum-api/`, `crates/ferrum-cli/`. `ferrum-auth` hängt nicht von `ferrum-api` ab. `Cargo.toml` legt Workspace Edition 2021 fest. Versionsangaben und Features stehen dort, nicht in dieser Dokumentation.
 
 ## 3. Compile-time-Verarbeitung (IST)
 
@@ -43,6 +46,7 @@ Makrocode: `crates/ferrum-macros/src/lib.rs`. Die Modell-Struct muss zusätzlich
 ```text
 myshop::main
   ├─ DATABASE_URL oder sqlite://db.sqlite3?mode=rwc → ferrum::db::connect
+  ├─ AuthService::new + App::with_auth
   ├─ App::new(db.clone()).register::<Product>()
   │    ├─ Routen GET, GET /{id}, POST, PATCH, DELETE oder denied
   │    └─ ColumnSpec für den Bootstrap merken
@@ -50,9 +54,10 @@ myshop::main
   ├─ --print-schema? → Snapshot-JSON der registrierten Modelle
   └─ BIND_ADDRESS lesen → TcpListener → axum::serve
 
-ferrum migrate make|up|status
+ferrum migrate make|up|status|rename-column|rename-table|reseal|baseline
   → ferrum.toml oder --schema-file
-  → Snapshot, Diff, Datei, Historie `_ferrum_migrations`
+  → zuerst Auth-Verzeichnis und Historie `_ferrum_auth_migrations`
+  → danach Snapshot, Diff, Datei, Historie `_ferrum_migrations`
 
 POST /api/v1/products
   → Axum Json<ProductCreate>
@@ -85,7 +90,7 @@ Die Prüfung `allow_anonymous` geschieht **beim Registrieren der Route**. Ohne F
 
 | Producer | Consumer | Vertrag | Datei |
 |---|---|---|---|
-| `ferrum-macros` | `ferrum-core` | `FerrumModel::descriptor/columns/schema_sql(DatabaseKind)` | `crates/ferrum-core/src/lib.rs` |
+| `ferrum-macros` | `ferrum-core` | `FerrumModel::descriptor/columns/constraints/schema_sql(DatabaseKind)` | `crates/ferrum-core/src/lib.rs` |
 | `ferrum-macros` | `ferrum-db` | `ModelRepository` und SeaQuery-CRUD | `crates/ferrum-db/src/lib.rs`, `crates/ferrum-db/src/sql.rs` |
 | `ferrum-api` | `ferrum-db` | generische `M: ModelRepository` | `crates/ferrum-api/src/lib.rs` |
 | `myshop` | `ferrum` | `prelude`, `db::connect`, `App` | `crates/ferrum/src/lib.rs` |
@@ -101,7 +106,7 @@ Rust-Modelle + Makros
  → CLI / Docker-Deployment / Plugins
 ```
 
-**Wichtiger Entwurfspunkt:** Der aktuelle `ModelDescriptor` enthält **keinen** Feldkatalog. Für automatische Migrationen und Admin müssen Metadaten erweitert werden, ohne vorhandene Model-Implementierungen still zu brechen. Schema-Snapshots müssen serialisierbar und deterministisch sein. Eine Laufzeit-Registry kann explizit registrierte Deskriptoren führen, aber nicht ungefragt alle Rust-Structs entdecken.
+`ModelDescriptor` enthält weiterhin keinen Feldkatalog. Spalten, Unique-Gruppen, Index-Gruppen und Foreign Keys stehen in `ColumnSpec` und `TableConstraints`. Daraus entstehen Snapshot, SQL und die Lazy-Loading-Methoden. Policies, Eager Loading und eine automatische Entdeckung aller Rust-Structs sind nicht implementiert. Schema-Snapshots bleiben serialisierbar und deterministisch. Eine Laufzeit-Registry führt nur explizit registrierte Modelle.
 
 ## 7. Sicherheitsgrenzen und offene Risiken
 

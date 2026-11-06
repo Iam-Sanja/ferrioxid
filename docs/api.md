@@ -16,9 +16,13 @@ let router = app.into_router();
 
 - `register<M: ModelRepository>(self)` liest `M::descriptor()`.
 - `allow_anonymous == true`: GET `list::<M>`, POST `create::<M>`, sowie auf `/{id}` GET `get_one::<M>`, PATCH `update::<M>` und DELETE `delete_one::<M>`.
-- Andernfalls: dieselben Methoden über `denied`, jeweils 403 mit Ferrum-JSON-Fehlerkörper.
+- `permissions = "authenticated"` oder ein Ressourcenname: Sitzung und Recht. GET prüft `read`, POST `create`, PATCH `update`, DELETE `delete`.
+- `object_policy = true` ohne `register_policy`: 403. Mit `register_policy` prüft der Einzelabruf die Regel und antwortet bei Ablehnung mit 404. Die Liste bleibt für normale Benutzer 403.
+- Sonst: dieselben Methoden über `denied`, jeweils 403.
+- `with_auth` hängt `AuthService` an. `into_router` mountet `/auth/login`, `/auth/logout`, `/auth/me` und `/auth/change-password`.
 - Bootstrap merkt sich Tabelle und `columns()`, unabhängig von der Freigabe, und rendert das DDL erst aus dem erkannten Datenbank-Backend.
-- `into_router()` hängt `GET /healthz` an und setzt die DB als Axum-State.
+- `into_router()` hängt `GET /healthz` an. Der Axum-State ist `AppState` mit Datenbank und optionalem Auth-Service.
+- Cookie-Schreibzugriffe verlangen `x-csrf-token`. Anonyme Demo-Routen prüfen dieses Token nicht, weil sie das Session-Cookie nicht als Berechtigung verwenden.
 
 ### HTTP-API (IST)
 
@@ -29,9 +33,9 @@ let router = app.into_router();
 | `GET /api/v1/products/{id}` | 200 / 404 | typisiertes Model / Ferrum-Problem-JSON bei unbekannter UUID |
 | `POST /api/v1/products` | 201 | erstelltes JSON-Model mit serverseitiger UUID |
 | `PATCH /api/v1/products/{id}` | 200 / 404 / 422 | aktualisiertes Model, fehlende UUID oder Validierung |
-| `DELETE /api/v1/products/{id}` | 204 / 404 | leerer Körper nur bei 204; fehlende UUID als Problem-JSON |
+| `DELETE /api/v1/products/{id}` | 204 / 404 / 422 | leerer Körper nur bei 204; fehlende UUID als Problem-JSON; Foreign-Key-`restrict` als 422 |
 | nicht freigegebenes Model, alle diese Methoden | 403 | Ferrum-Problem-JSON |
-| Validierungsfehler aus Repository | 422 | Ferrum-Problem-JSON |
+| Validierungsfehler, Unique- oder Foreign-Key-Verletzung | 422 | Ferrum-Problem-JSON ohne SQL-Text |
 | Datenbankfehler | 500 | generische Nachricht; Detail im `tracing`-Log |
 
 Es existiert kein Auth-System, kein API-Versionierungsmodul, kein Filter und kein Offset/Cursor. Der `/api/v1`-Prefix stammt aus dem im Model hinterlegten Pfad. Eine ungültige UUID im Pfad beantwortet Axum selbst, nicht `ApiError`.
@@ -73,3 +77,7 @@ Wenn `allow_anonymous = true`, ist die Route ohne Authentifizierung benutzbar. N
 - GET `/healthz` nicht als DB-Readiness-Test missverstehen.
 
 Weiterlesen: [database.md](database.md), [validation.md](validation.md), [security.md](security.md).
+
+## Admin
+
+`App::with_admin` hängt `/admin/api` und `/admin` an denselben Router. Die öffentliche CRUD-API und ihr Limit von 100 bleiben unverändert. `allow_anonymous` gilt dort weiter und gilt nicht für den Admin. Details, Fehler und Tests: [admin-backend.md](admin-backend.md).

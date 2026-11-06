@@ -209,10 +209,16 @@ pub fn load_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
             file.id
         )));
     }
-    let plan = plan_change(&file.from_snapshot, &file.to_snapshot)?;
-    if plan.operations != file.operations {
+    let produced = crate::simulate::apply_operations(&file.from_snapshot, &file.operations)
+        .map_err(|error| {
+            MigrationError::new(format!(
+                "Operationen der Migration {} passen nicht zum Ausgangsschema: {}",
+                file.id, error.0
+            ))
+        })?;
+    if !produced.semantically_eq(&file.to_snapshot) {
         return Err(MigrationError::new(format!(
-            "Operationen der Migration {} passen nicht zum Übergang von Ausgangs- zu Zielschema.",
+            "Operationen der Migration {} erzeugen nicht das gespeicherte Zielschema.",
             file.id
         )));
     }
@@ -288,7 +294,7 @@ pub fn validate_chain(files: &[MigrationFile]) -> Result<(), MigrationError> {
             None => {
                 if !file.from_snapshot.semantically_eq(&SchemaSnapshot::empty()) {
                     return Err(MigrationError::new(format!(
-                        "Die erste Migration {} muss von einem leeren Schema ausgehen. Eine Baseline vorhandener Datenbanken ist nicht implementiert.",
+                        "Die erste Migration {} muss von einem leeren Schema ausgehen.",
                         file.id
                     )));
                 }
@@ -334,6 +340,115 @@ fn is_migration_slug(name: &str) -> bool {
         && chars.all(|character| {
             character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
         })
+}
+
+pub fn write_explicit_migration(
+    directory: &Path,
+    name: &str,
+    current: &SchemaSnapshot,
+    operation: MigrationOperation,
+) -> Result<MakeOutcome, MigrationError> {
+    if !matches!(
+        operation,
+        MigrationOperation::RenameColumn { .. } | MigrationOperation::RenameTable { .. }
+    ) {
+        return Err(MigrationError::new(
+            "Eine explizite Migrationsdatei akzeptiert nur RenameColumn oder RenameTable."
+                .to_owned(),
+        ));
+    }
+    current.validate()?;
+    if !is_migration_slug(name) {
+        return Err(MigrationError::new(
+            "Der Migrationsname muss mit einem Buchstaben beginnen und darf nur Kleinbuchstaben, Ziffern und Unterstriche enthalten.".to_owned(),
+        ));
+    }
+    let state = inspect_directory(directory);
+    if !state.conflicts.is_empty() {
+        return Err(MigrationError::new(state.conflicts.join("\n")));
+    }
+    let from = state
+        .files
+        .last()
+        .map(|file| file.to_snapshot.clone())
+        .unwrap_or_else(SchemaSnapshot::empty);
+    let produced = crate::simulate::apply_operations(&from, std::slice::from_ref(&operation))?;
+    if !produced.semantically_eq(current) {
+        return Err(MigrationError::new(
+            "Die Umbenennung erklärt nicht die gesamte Abweichung zwischen dem letzten Migrationsziel und dem registrierten Schema. Es wurde keine Datei geschrieben.".to_owned(),
+        ));
+    }
+    let number = state
+        .files
+        .last()
+        .map(|file| migration_number(&file.id).unwrap_or(0) + 1)
+        .unwrap_or(1);
+    if number > 9999 {
+        return Err(MigrationError::new(
+            "Es sind höchstens 9999 nummerierte Migrationen vorgesehen.".to_owned(),
+        ));
+    }
+    let id = format!("{number:04}_{name}");
+    let plan = MigrationPlan {
+        operations: vec![operation],
+        risks: Vec::new(),
+        refusal: None,
+    };
+    let file = seal(id, name.to_owned(), from, current.clone(), &plan)?;
+    let path = save_migration(directory, &file)?;
+    Ok(MakeOutcome::Written {
+        path,
+        id: file.id,
+        risks: file.risks,
+    })
+}
+
+pub fn reseal_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
+    let text = fs::read_to_string(path).map_err(|error| {
+        MigrationError::new(format!(
+            "Migration {} ist nicht lesbar: {error}",
+            path.display()
+        ))
+    })?;
+    let mut file: MigrationFile = serde_json::from_str(&text).map_err(|error| {
+        MigrationError::new(format!(
+            "Migration {} ist kein gültiges JSON: {error}",
+            path.display()
+        ))
+    })?;
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("");
+    if stem != file.id {
+        return Err(MigrationError::new(format!(
+            "Dateiname `{stem}` und Migrations-ID `{}` stimmen nicht überein.",
+            file.id
+        )));
+    }
+    file.from_snapshot.validate()?;
+    file.to_snapshot.validate()?;
+    validate_migration_name(&file.id, &file.name)?;
+    let produced = crate::simulate::apply_operations(&file.from_snapshot, &file.operations)?;
+    if !produced.semantically_eq(&file.to_snapshot) {
+        return Err(MigrationError::new(format!(
+            "Migration {} wird nicht neu versiegelt, weil die Operationen das Zielschema nicht erzeugen.",
+            file.id
+        )));
+    }
+    file.checksum = checksum_of(&file)?;
+    let text = serde_json::to_string_pretty(&file).map_err(|error| {
+        MigrationError::new(format!(
+            "Migration konnte nicht serialisiert werden: {error}"
+        ))
+    })?;
+    fs::write(path, format!("{text}\n")).map_err(|error| {
+        MigrationError::new(format!(
+            "Migration {} konnte nicht geschrieben werden: {error}",
+            path.display()
+        ))
+    })?;
+    Ok(file)
 }
 
 pub fn migration_number(id: &str) -> Option<u32> {

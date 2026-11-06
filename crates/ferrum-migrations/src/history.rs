@@ -9,6 +9,7 @@ use sea_orm::sea_query::{
 use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
 
 pub const HISTORY_TABLE: &str = "_ferrum_migrations";
+pub const AUTH_HISTORY_TABLE: &str = "_ferrum_auth_migrations";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HistoryEntry {
@@ -19,7 +20,14 @@ pub struct HistoryEntry {
 }
 
 pub async fn history_exists(db: &DatabaseConnection) -> Result<bool, MigrationError> {
-    table_exists(db, HISTORY_TABLE).await
+    history_exists_in(db, HISTORY_TABLE).await
+}
+
+pub async fn history_exists_in(
+    db: &DatabaseConnection,
+    history_table: &str,
+) -> Result<bool, MigrationError> {
+    table_exists(db, history_table).await
 }
 
 pub async fn table_exists(db: &DatabaseConnection, table: &str) -> Result<bool, MigrationError> {
@@ -45,7 +53,19 @@ pub async fn table_exists(db: &DatabaseConnection, table: &str) -> Result<bool, 
     Ok(row.is_some())
 }
 
-pub async fn ensure_history(db: &DatabaseConnection) -> Result<(), MigrationError> {
+pub async fn ensure_history(db: &impl ConnectionTrait) -> Result<(), MigrationError> {
+    ensure_history_in(db, HISTORY_TABLE).await
+}
+
+pub async fn ensure_history_in(
+    db: &impl ConnectionTrait,
+    history_table: &str,
+) -> Result<(), MigrationError> {
+    if !crate::snapshot::is_identifier(history_table) {
+        return Err(MigrationError::new(format!(
+            "Ungültiger Historienname `{history_table}`."
+        )));
+    }
     let backend = db.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
     let columns = [
@@ -78,7 +98,7 @@ pub async fn ensure_history(db: &DatabaseConnection) -> Result<(), MigrationErro
             default_bool: None,
         },
     ];
-    let sql = render_create_table(kind, HISTORY_TABLE, &columns, true);
+    let sql = render_create_table(kind, history_table, &columns, true);
     db.execute(Statement::from_string(backend, sql))
         .await
         .map_err(|error| {
@@ -90,7 +110,14 @@ pub async fn ensure_history(db: &DatabaseConnection) -> Result<(), MigrationErro
 }
 
 pub async fn read_history(db: &DatabaseConnection) -> Result<Vec<HistoryEntry>, MigrationError> {
-    if !history_exists(db).await? {
+    read_history_in(db, HISTORY_TABLE).await
+}
+
+pub async fn read_history_in(
+    db: &DatabaseConnection,
+    history_table: &str,
+) -> Result<Vec<HistoryEntry>, MigrationError> {
+    if !history_exists_in(db, history_table).await? {
         return Ok(Vec::new());
     }
     let backend = db.get_database_backend();
@@ -102,7 +129,7 @@ pub async fn read_history(db: &DatabaseConnection) -> Result<Vec<HistoryEntry>, 
             Alias::new("checksum"),
             Alias::new("applied_at_unix"),
         ])
-        .from(Alias::new(HISTORY_TABLE))
+        .from(Alias::new(history_table))
         .order_by(Alias::new("id"), Order::Asc);
     let (sql, values) = match backend {
         DatabaseBackend::Postgres => query.build(PostgresQueryBuilder),
@@ -136,6 +163,17 @@ pub async fn insert_history(
     checksum: &str,
     applied_at_unix: i64,
 ) -> Result<(), MigrationError> {
+    insert_history_in(db, HISTORY_TABLE, id, name, checksum, applied_at_unix).await
+}
+
+pub async fn insert_history_in(
+    db: &impl ConnectionTrait,
+    history_table: &str,
+    id: &str,
+    name: &str,
+    checksum: &str,
+    applied_at_unix: i64,
+) -> Result<(), MigrationError> {
     let backend = db.get_database_backend();
     let mut query = Query::insert();
     let values: [SimpleExpr; 4] = [
@@ -145,7 +183,7 @@ pub async fn insert_history(
         Value::from(applied_at_unix).into(),
     ];
     query
-        .into_table(Alias::new(HISTORY_TABLE))
+        .into_table(Alias::new(history_table))
         .columns([
             Alias::new("id"),
             Alias::new("name"),

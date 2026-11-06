@@ -11,9 +11,15 @@
 - Axums JSON-Extractor verwendet standardmäßig Serde-DTOs mit `deny_unknown_fields` auf dem Create-Typ.
 - Demo-Bind ist `127.0.0.1:3000`; Docker-Postgres-Port ist auf `127.0.0.1` publiziert.
 
-## Explizite Lücken (IST)
+## Authentifizierung (IST, v0.7)
 
-**Keine** Benutzeridentitäten, Passwort-Hashes, Sessions, JWTs, CSRF, RBAC, Objekt-/Feldrechte, Ratelimits, sichere Produktionsdefaults oder Admin-UI. `allow_anonymous = true` erlaubt jedem erreichenden Client, Daten zu lesen, anzulegen, zu ändern und zu löschen. Das ist keine Auth-Lösung. Kein sicherer Internetbetrieb. Parallele PATCH-Anweisungen haben kein Versionsfeld.
+Benutzer, Argon2id, serverseitige Sitzungen, HttpOnly-Cookies, CSRF für Cookie-Schreibzugriffe, Rollen und Modellrechte sind implementiert. Details stehen in [auth.md](auth.md), [sessions.md](sessions.md), [permissions.md](permissions.md) und [policies.md](policies.md).
+
+`allow_anonymous = true` bleibt eine ausdrückliche öffentliche Freigabe. Produkt und Kategorie in myshop sind solche Demo-Endpunkte. Geschützte Routen verweigern ohne Sitzung und Recht.
+
+## Verbleibende Lücken (IST)
+
+Kein OAuth, kein MFA, kein Passwort-Reset, kein JWT für externe APIs und kein Admin-UI. Das Login-Rate-Limit gilt pro Prozess. Objektregeln haben keinen SQL-Filter; ihre Listen sind blockiert. `allow_anonymous` prüft kein CSRF, weil der Zugriff nicht am Cookie hängt. Parallele PATCH-Anweisungen haben kein Versionsfeld. Ferrum ist damit nicht als öffentlicher Internetdienst ohne zusätzlichen Proxy und Betriebsgrenzen beschrieben.
 
 ## SOLL-Bedrohungsmodell
 
@@ -39,3 +45,7 @@
 - Vor jedem produktiven Release Security-Review, Dependency-Audit und dokumentierte Threat-Model-Annahmen.
 
 **Meldeweg:** `SECURITY.md` im Repository enthält derzeit nur eine knappe Projektinformation, keinen etablierten Vulnerability-Disclosure-Prozess. Für öffentliche Releases muss der gepflegt werden.
+
+## Admin
+
+Der Admin prüft Sitzung, aktiven Benutzer, Staff, Modellrecht, Objektregel und bei Schreibzugriff CSRF. Pfadparameter werden nicht ungeprüft zu SQL-Bezeichnern. Sortierung, Suche und Filter sind Whitelists. Details und die bekannten Grenzen stehen in [admin-security.md](admin-security.md).

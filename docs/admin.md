@@ -1,57 +1,66 @@
-# Admin-System – Backend und React-UI (NICHT implementiert)
+# Ferrum Admin
 
-[Zur Übersicht](index.md) · **Status:** ausschließlich SOLL. Es existieren weder `ferrum-admin` noch `apps/admin-ui` im aktuellen Workspace.
+[Zur Übersicht](index.md) · Backend: [admin-backend.md](admin-backend.md) · Oberfläche: [admin-frontend.md](admin-frontend.md) · Sicherheit: [admin-security.md](admin-security.md)
 
-## Leitprinzip
+**Stand:** implementiert in v0.8. Die Cargo-Version bleibt `0.1.0`. Admin-Metadaten ändern das Datenbankschema nicht.
 
-Eine Admin-Anwendung für beliebig viele Modelle, statt generierter React-Projektkopien pro Modell. Das Backend gibt ausschließlich **für den angemeldeten Actor berechtigte** Metadaten und Daten zurück. Frontend-Validierung unterstützt die Benutzerführung, ist aber nie Sicherheitsgrenze.
+## Zweck
 
-## Zielarchitektur
+Ein Modell mit `admin = true` liefert Navigation, Tabelle, Formular, Detail und Löschen. Die React-Oberfläche rendert diese Angaben. Autorisierung bleibt auf dem Server.
 
-```text
-Rust Models → Field-/UI-Metadaten + Policies
-     → Admin Schema API (nur freigegebene Felder/Aktionen)
-     → React Admin Renderer
-           ├─ Navigation
-           ├─ List mit Filter/Sort/Pagination
-           ├─ Create/Edit Form
-           └─ Detailansicht/Custom Widgets
+## Zuständige Dateien
+
+| Bereich | Dateien |
+|---|---|
+| Metadaten | `crates/ferrum-core/src/lib.rs`, `crates/ferrum-macros/src/lib.rs` |
+| Admin-API | `crates/ferrum-admin/src/` |
+| Listenabfrage | `crates/ferrum-db/src/sql.rs` (`query_admin_page`) |
+| Oberfläche | `apps/admin-ui/src/` |
+| Beispiel | `examples/myshop/src/models/`, `examples/myshop/src/main.rs` |
+| Test | `examples/myshop/tests/admin_http.rs`, `apps/admin-ui/src/admin.test.tsx` |
+
+## Datenfluss
+
+Rust-Struct → `FerrumModel` erzeugt `AdminModelMeta` neben dem bestehenden `ModelDescriptor` → `AdminRegistry::add` → `GET /admin/api/models/{modell}/schema` → React-Formular. Schreibende Aufrufe laufen durch Session, Staff-Prüfung, Modellrecht, CSRF und die vorhandene Repository-Validierung.
+
+## Konfiguration
+
+`App::with_admin(registry)` hängt die Admin-Routen an. `FERRUM_ADMIN_DIST` zeigt auf das gebaute Verzeichnis. Ohne die Variable sucht das Backend `apps/admin-ui/dist` relativ zur Crate. Fehlt das Verzeichnis, antwortet `/admin` mit 503 und dem Hinweis `npm run build`.
+
+## Öffentliche Nutzung
+
+```rust
+let admin = ferrum::admin::AdminRegistry::new()
+    .add::<Category>()
+    .add::<Product>()
+    .add::<InternalNote>();
+App::new(db).with_auth(auth).with_admin(admin)
 ```
 
-### 1. Admin-Backend (SOLL)
+Die Oberfläche liegt unter `http://127.0.0.1:3000/admin`. Die API liegt unter `/admin/api`.
 
-- Ressourcenregistrierung referenziert dieselbe Model Registry wie API/Migrations.
-- Auth verpflichtend; ohne Session kein Modellkatalog.
-- Beispielkontrakt (nur Entwurf): `GET /admin/schema` (verfügbare Ressourcen), `GET /admin/schema/products` (erlaubte Felder und Actions).
-- Datenrouten serverseitig authorisieren, Payloads strikt validieren.
-- Keine technischen DB-Spalten oder verborgenen Felder allein wegen Model-Sichtbarkeit ausgeben.
-- Schema-Version im Response für UI-Kompatibilität.
+## Sicherheit
 
-### 2. Admin-Frontend (SOLL)
+Jede Admin-Anfrage braucht eine gültige Sitzung und `is_staff = true`. `allow_anonymous` öffnet den Admin nicht. Ein Superuser ohne Staff-Flag kommt nicht hinein. Modellrechte bleiben nötig, außer die Admin-Berechtigung ist leer: dann darf nur ein Superuser das Modell bedienen. Objekt-Policy-Listen bleiben blockiert.
 
-- React + TypeScript + Vite; modulare UI-Layer: API-Client, Auth-State, Resource Registry, Tabellenrenderer, Formularrenderer, Custom Components.
-- Routing über zulässige Ressourcen, nicht via frei eingebbare Tabellenamen.
-- Typbasierte Widgets für `String`, `i64`, `bool`, `Uuid`; weitere Typen nach Model-Erweiterung.
-- Such- und Filter-UI nur für serverseitig zugelassene Felder.
-- Fehler-, Leer-, Lade- und Forbidden-Zustände; Tastaturbedienung und responsive Layouts.
+## Fehler
 
-### 3. Erweiterungspunkte (SOLL)
+| Lage | Antwort |
+|---|---|
+| Keine Sitzung | 401 |
+| Kein Staff oder fehlendes Modellrecht | 403 |
+| Unbekanntes Modell, falsche Sortierung, gesperrtes Feld | 404 oder 422 |
+| Objektregel lehnt einen Datensatz ab | 404 |
+| Admin-Build fehlt | 503 |
 
-- `AdminResourceConfig` (Anzeige-Label, Listenfelder, Suchfelder, Filters, Edit-Rechte).
-- Custom Form Field Renderer mit expliziter Registrierung.
-- Custom Action mit eigener Auth-Policy und Audit-Hinweisen.
-- Detailansichten/Widgets; React-Komponenten werden **nicht** aus dem Makro kompiliert.
+## Tests
 
-## Sicherheitsanforderungen
+`examples/myshop/tests/admin_http.rs` prüft Registry, CRUD, Whitelist, CSRF-Bootstrap, anonyme Anfrage, Staff ohne Recht, Objektregel und Superuser-Sperre gegen SQLite. `apps/admin-ui` prüft Login, Navigation, Tabelle, Validierung, gesperrte Aktion und Löschdialog.
 
-Keine UI-only-Policies; vor jedem List-, Create-, Update-, Delete-Aufruf dieselbe Server-Policy wie REST-API. CSRF bei Session-Cookies; XSS-Schutz durch korrektes Escaping und sicheren Content-Flow; kein blindes HTML aus DB-Feldern; Audit Trails später separat versionieren.
+## Grenzen
 
-## Umsetzungsphasen und Abnahme (SOLL)
+Kein Plugin-System, kein OAuth, kein MFA, keine Mehrsprachigkeit, kein Mandantensystem. Superuser-Flags lassen sich im Admin nicht setzen. Die Benutzerverwaltung ist Superusern vorbehalten und kein generisches Modell-CRUD.
 
-1. Reiche Field-Metadaten und Auth/Policies stabilisieren.
-2. Geschützte Schema-API mit klar versioniertem JSON definieren und testen.
-3. Statisches React-Dashboard, API-Client und Sessions.
-4. Tabellen, Formulare und CRUD mit Feld-Policy-Tests.
-5. Custom Widgets als optionale Erweiterung.
+## Später
 
-Abnahme: Zwei registrierte Models erscheinen ausschließlich für berechtigte Nutzer; Create/Edit funktioniert ohne handgeschriebene Formulare; ein nicht berechtigtes Feld ist auch über direkte HTTP-Anfrage nicht änderbar.
+SQL-Scopes für Objektregeln, eingebettete Assets, eigene Feld-Widgets und feiner steuerbare Verzeichnisrechte.

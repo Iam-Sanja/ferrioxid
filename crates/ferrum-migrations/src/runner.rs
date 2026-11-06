@@ -5,10 +5,11 @@ use crate::error::MigrationError;
 use crate::history::{self, HistoryEntry};
 use crate::snapshot::{ColumnSnapshot, SchemaSnapshot};
 use crate::store::{inspect_directory, MigrationFile};
-use ferrum_core::DatabaseKind;
+use ferrum_core::{secondary_index_name, unique_index_name, DatabaseKind, ReferentialAction};
 use ferrum_db::{
-    kind_of, render_add_column, render_create_table, render_drop_column, render_drop_table,
-    PhysicalColumn,
+    kind_of, render_add_column_referencing, render_create_index, render_drop_column,
+    render_drop_index, render_drop_table, render_rename_column, render_rename_table,
+    render_table_bundle, ForeignKeyClause, PhysicalColumn,
 };
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, TransactionTrait};
 use std::path::Path;
@@ -66,17 +67,26 @@ pub async fn apply_directory(
     directory: &Path,
     allow_destructive: bool,
 ) -> Result<ApplyReport, MigrationError> {
+    apply_directory_with_history(db, directory, allow_destructive, history::HISTORY_TABLE).await
+}
+
+pub async fn apply_directory_with_history(
+    db: &DatabaseConnection,
+    directory: &Path,
+    allow_destructive: bool,
+    history_table: &str,
+) -> Result<ApplyReport, MigrationError> {
     let state = inspect_directory(directory);
     if !state.conflicts.is_empty() {
         return Err(MigrationError::new(state.conflicts.join("\n")));
     }
-    history::ensure_history(db).await?;
-    let applied = history::read_history(db).await?;
+    history::ensure_history_in(db, history_table).await?;
+    let applied = history::read_history_in(db, history_table).await?;
     let pending = pending_files(&state.files, &applied)?;
     let mut done = Vec::new();
     for file in pending {
         reject_blocked(file, allow_destructive)?;
-        apply_one(db, file).await?;
+        apply_one(db, file, history_table).await?;
         done.push(file.id.clone());
     }
     Ok(ApplyReport { applied: done })
@@ -209,8 +219,10 @@ fn pending_files<'a>(
 }
 
 fn reject_blocked(file: &MigrationFile, allow_destructive: bool) -> Result<(), MigrationError> {
+    let mut schema = file.from_snapshot.clone();
     for operation in &file.operations {
-        let (class, reason) = classify(operation, &file.from_snapshot);
+        let (class, reason) = classify(operation, &schema);
+        schema = crate::simulate::apply_operations(&schema, std::slice::from_ref(operation))?;
         match class {
             ApplyClass::Safe => {}
             ApplyClass::Destructive if allow_destructive => {}
@@ -236,7 +248,11 @@ fn reject_blocked(file: &MigrationFile, allow_destructive: bool) -> Result<(), M
     Ok(())
 }
 
-async fn apply_one(db: &DatabaseConnection, file: &MigrationFile) -> Result<(), MigrationError> {
+async fn apply_one(
+    db: &DatabaseConnection,
+    file: &MigrationFile,
+    history_table: &str,
+) -> Result<(), MigrationError> {
     let backend = db.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
     let transaction = db.begin().await.map_err(|error| {
@@ -244,19 +260,42 @@ async fn apply_one(db: &DatabaseConnection, file: &MigrationFile) -> Result<(), 
             "Transaktion konnte nicht gestartet werden: {error}"
         ))
     })?;
+    let mut schema = file.from_snapshot.clone();
     for operation in &file.operations {
-        let sql = render_operation(kind, operation)?;
-        transaction
-            .execute(Statement::from_string(backend, sql))
-            .await
-            .map_err(|error| map_execute_error(&file.id, operation, &error.to_string()))?;
+        if let Some((table, from, to)) = crate::rebuild::alter_parts(operation) {
+            crate::rebuild::apply_alter(&transaction, kind, &schema, table, from, to)
+                .await
+                .map_err(|error| {
+                    MigrationError::new(format!(
+                        "Migration {} wurde zurückgerollt bei `{}`: {}",
+                        file.id,
+                        operation.summary(),
+                        error.0
+                    ))
+                })?;
+        } else {
+            for sql in render_operation(kind, operation)? {
+                transaction
+                    .execute(Statement::from_string(backend, sql))
+                    .await
+                    .map_err(|error| map_execute_error(&file.id, operation, &error.to_string()))?;
+            }
+            for sql in followup_index_renames(kind, &schema, operation) {
+                transaction
+                    .execute(Statement::from_string(backend, sql))
+                    .await
+                    .map_err(|error| map_execute_error(&file.id, operation, &error.to_string()))?;
+            }
+        }
+        schema = crate::simulate::apply_operations(&schema, std::slice::from_ref(operation))?;
     }
     let applied_at_unix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map_err(|error| MigrationError::new(format!("Systemzeit ist ungültig: {error}")))?
         .as_secs() as i64;
-    history::insert_history(
+    history::insert_history_in(
         &transaction,
+        history_table,
         &file.id,
         &file.name,
         &file.checksum,
@@ -275,24 +314,234 @@ async fn apply_one(db: &DatabaseConnection, file: &MigrationFile) -> Result<(), 
 fn render_operation(
     kind: DatabaseKind,
     operation: &MigrationOperation,
-) -> Result<String, MigrationError> {
+) -> Result<Vec<String>, MigrationError> {
     Ok(match operation {
         MigrationOperation::CreateTable { table } => {
             let columns = physical_columns(&table.columns)?;
-            render_create_table(kind, &table.name, &columns, false)
+            let uniques = table
+                .unique_constraints
+                .iter()
+                .map(|constraint| {
+                    (
+                        constraint.name.as_str(),
+                        constraint
+                            .columns
+                            .iter()
+                            .map(String::as_str)
+                            .collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let unique_refs = uniques
+                .iter()
+                .map(|(name, columns)| (*name, columns.as_slice()))
+                .collect::<Vec<_>>();
+            let foreign_keys = table
+                .foreign_keys
+                .iter()
+                .map(|foreign_key| ForeignKeyClause {
+                    name: foreign_key.name.as_str(),
+                    column: foreign_key.columns[0].as_str(),
+                    referenced_table: foreign_key.referenced_table.as_str(),
+                    referenced_column: foreign_key.referenced_columns[0].as_str(),
+                    on_delete: referential_action(foreign_key.on_delete),
+                })
+                .collect::<Vec<_>>();
+            let indexes = table
+                .indexes
+                .iter()
+                .map(|index| {
+                    (
+                        index.name.as_str(),
+                        index.columns.iter().map(String::as_str).collect::<Vec<_>>(),
+                    )
+                })
+                .collect::<Vec<_>>();
+            let index_refs = indexes
+                .iter()
+                .map(|(name, columns)| (*name, columns.as_slice()))
+                .collect::<Vec<_>>();
+            render_table_bundle(
+                kind,
+                &table.name,
+                &columns,
+                &unique_refs,
+                &foreign_keys,
+                &index_refs,
+            )
         }
-        MigrationOperation::DropTable { name } => render_drop_table(kind, name),
-        MigrationOperation::AddColumn { table, column } => {
+        MigrationOperation::DropTable { name } => vec![render_drop_table(kind, name)],
+        MigrationOperation::AddColumn {
+            table,
+            column,
+            foreign_key,
+        } => {
             let physical = physical_column(column)?;
-            render_add_column(kind, table, &physical)
+            let clause = foreign_key.as_ref().map(|foreign_key| ForeignKeyClause {
+                name: foreign_key.name.as_str(),
+                column: foreign_key.columns[0].as_str(),
+                referenced_table: foreign_key.referenced_table.as_str(),
+                referenced_column: foreign_key.referenced_columns[0].as_str(),
+                on_delete: referential_action(foreign_key.on_delete),
+            });
+            vec![render_add_column_referencing(
+                kind,
+                table,
+                &physical,
+                clause.as_ref(),
+            )]
         }
-        MigrationOperation::DropColumn { table, name } => render_drop_column(kind, table, name),
+        MigrationOperation::DropColumn { table, name } => {
+            vec![render_drop_column(kind, table, name)]
+        }
+        MigrationOperation::RenameTable { from, to } => vec![render_rename_table(kind, from, to)],
+        MigrationOperation::RenameColumn { table, from, to } => {
+            vec![render_rename_column(kind, table, from, to)]
+        }
+        MigrationOperation::AddUniqueConstraint { table, constraint } => {
+            let columns = constraint
+                .columns
+                .iter()
+                .map(String::as_str)
+                .collect::<Vec<_>>();
+            vec![render_create_index(
+                kind,
+                &constraint.name,
+                table,
+                &columns,
+                true,
+            )]
+        }
+        MigrationOperation::DropUniqueConstraint { name, .. }
+        | MigrationOperation::DropIndex { name, .. } => vec![render_drop_index(kind, name)],
+        MigrationOperation::AddIndex { table, index } => {
+            let columns = index.columns.iter().map(String::as_str).collect::<Vec<_>>();
+            vec![render_create_index(
+                kind,
+                &index.name,
+                table,
+                &columns,
+                false,
+            )]
+        }
+        MigrationOperation::AddForeignKey { .. } | MigrationOperation::DropForeignKey { .. } => {
+            return Err(MigrationError::new(
+                "Fremdschlüssel auf bestehenden Spalten werden nicht ausgeführt.".to_owned(),
+            ));
+        }
         MigrationOperation::AlterColumn { .. } => {
             return Err(MigrationError::new(
-                "ALTER COLUMN ist nicht als sichere Operation implementiert.".to_owned(),
+                "ALTER COLUMN wird über den geprüften Umbau ausgeführt und nicht als einzelnes DDL gerendert.".to_owned(),
             ));
         }
     })
+}
+
+fn followup_index_renames(
+    kind: DatabaseKind,
+    schema: &SchemaSnapshot,
+    operation: &MigrationOperation,
+) -> Vec<String> {
+    match operation {
+        MigrationOperation::RenameColumn { table, from, to } => {
+            let Some(found) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *table)
+            else {
+                return Vec::new();
+            };
+            let mut statements = Vec::new();
+            for unique in &found.unique_constraints {
+                if !unique.columns.iter().any(|column| column == from) {
+                    continue;
+                }
+                let columns = renamed_columns(&unique.columns, from, to);
+                let new_name = unique_index_name(table, &columns);
+                if new_name != unique.name {
+                    statements.push(render_drop_index(kind, &unique.name));
+                    statements.push(render_create_index(kind, &new_name, table, &columns, true));
+                }
+            }
+            for index in &found.indexes {
+                if !index.columns.iter().any(|column| column == from) {
+                    continue;
+                }
+                let columns = renamed_columns(&index.columns, from, to);
+                let new_name = secondary_index_name(table, &columns);
+                if new_name != index.name {
+                    statements.push(render_drop_index(kind, &index.name));
+                    statements.push(render_create_index(kind, &new_name, table, &columns, false));
+                }
+            }
+            statements
+        }
+        MigrationOperation::RenameTable { from, to } => {
+            let Some(found) = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == *from)
+            else {
+                return Vec::new();
+            };
+            let mut statements = Vec::new();
+            for unique in &found.unique_constraints {
+                let columns = unique
+                    .columns
+                    .iter()
+                    .map(String::as_str)
+                    .collect::<Vec<_>>();
+                let new_name = unique_index_name(to, &columns);
+                statements.push(render_drop_index(kind, &unique.name));
+                statements.push(render_create_index(kind, &new_name, to, &columns, true));
+            }
+            for index in &found.indexes {
+                let columns = index.columns.iter().map(String::as_str).collect::<Vec<_>>();
+                let new_name = secondary_index_name(to, &columns);
+                statements.push(render_drop_index(kind, &index.name));
+                statements.push(render_create_index(kind, &new_name, to, &columns, false));
+            }
+            statements
+        }
+        _ => Vec::new(),
+    }
+}
+
+fn renamed_columns<'a>(columns: &'a [String], from: &str, to: &'a str) -> Vec<&'a str> {
+    columns
+        .iter()
+        .map(|column| if column == from { to } else { column.as_str() })
+        .collect()
+}
+
+fn referential_action(action: crate::snapshot::OnDelete) -> ReferentialAction {
+    match action {
+        crate::snapshot::OnDelete::Restrict => ReferentialAction::Restrict,
+        crate::snapshot::OnDelete::Cascade => ReferentialAction::Cascade,
+        crate::snapshot::OnDelete::SetNull => ReferentialAction::SetNull,
+    }
+}
+
+pub async fn reseal_unapplied(
+    db: &DatabaseConnection,
+    path: &Path,
+) -> Result<crate::store::MigrationFile, MigrationError> {
+    let text = std::fs::read_to_string(path).map_err(|error| {
+        MigrationError::new(format!(
+            "Migration {} ist nicht lesbar: {error}",
+            path.display()
+        ))
+    })?;
+    let id = serde_json::from_str::<crate::store::MigrationFile>(&text)
+        .map_err(|error| MigrationError::new(format!("Migration ist kein gültiges JSON: {error}")))?
+        .id;
+    let history = history::read_history(db).await?;
+    if history.iter().any(|entry| entry.id == id) {
+        return Err(MigrationError::new(format!(
+            "Migration {id} ist bereits angewendet. Die Checksum einer angewendeten Datei wird nicht neu geschrieben."
+        )));
+    }
+    crate::store::reseal_migration(path)
 }
 
 fn physical_columns(columns: &[ColumnSnapshot]) -> Result<Vec<PhysicalColumn<'_>>, MigrationError> {

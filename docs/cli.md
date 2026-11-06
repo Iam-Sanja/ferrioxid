@@ -15,7 +15,17 @@ cargo run -p ferrum-cli -- migrate status
 
 `migrate` liest `ferrum.toml` oder die Flags `--schema-file`, `--migrations-dir` und `--database-url`. Die Ausführung beschreibt [migrations.md](migrations.md). `--bootstrap` gehört zur `myshop`-Binary, ist Legacy und führt keine Migration aus.
 
-Nicht existent: `ferrum new`, `ferrum dev`, `ferrum generate`, `ferrum build`, `ferrum migrate down`, `ferrum admin create-user`.
+```powershell
+cargo run -p ferrum-cli -- admin create-user --email admin@example.com --superuser
+cargo run -p ferrum-cli -- auth list-users
+cargo run -p ferrum-cli -- auth create-role editor
+cargo run -p ferrum-cli -- auth grant-permission notes.read --role editor
+cargo run -p ferrum-cli -- auth assign-role --email admin@example.com --role editor
+```
+
+`create-user` liest das Passwort verdeckt und verlangt die Wiederholung. Es akzeptiert kein Passwortargument. `migrate up` wendet zuerst die Auth-Migrationen an. Schreibende Auth-Befehle legen die Auth-Tabellen ebenfalls an, wenn sie fehlen. `list-users` zeigt keine Hashes.
+
+Nicht existent: `ferrum new`, `ferrum dev`, `ferrum generate`, `ferrum build`, `ferrum migrate down`.
 
 ## SOLL: CLI-Kommandostruktur
 
@@ -26,6 +36,10 @@ ferrum
 ├─ dev                         Entwicklungsprozess starten
 ├─ generate model <name>       Kompilierbare Modelldatei erstellen
 ├─ migrate make|up|status      IST, siehe migrations.md
+├─ migrate rename-column       IST, explizite Spaltenumbenennung
+├─ migrate rename-table        IST, explizite Tabellenumbenennung
+├─ migrate reseal              IST, Checksum einer noch nicht angewendeten Datei
+├─ migrate baseline            IST nur für SQLite und nur mit --confirm
 ├─ migrate down                nicht implementiert
 └─ build                       Definierter Release-Build
 ```

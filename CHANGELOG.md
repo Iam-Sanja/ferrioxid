@@ -1,11 +1,54 @@
 # Changelog
 
+## Unreleased — Automatischer Admin
+
+- Neue Crate `ferrum-admin` und React-Anwendung `apps/admin-ui`. Modelle mit `admin = true` erscheinen nach expliziter `AdminRegistry`-Registrierung.
+- Admin-Metadaten hängen am `FerrumModel`-Trait und ändern `ColumnSpec` nicht. Bestehende Migrationen bleiben gültig.
+- HTTP unter `/admin/api`. Die Oberfläche wird aus `apps/admin-ui/dist` oder `FERRUM_ADMIN_DIST` ausgeliefert. Ohne Build antwortet `/admin` mit 503.
+- `GET /auth/csrf` rotiert das sitzungsgebundene CSRF-Token, ohne die Sitzung zu ersetzen.
+- Benutzer- und Rollenverzeichnis nur für Staff-Superuser. Superuser-Vergabe ist blockiert. Passwort-Hashes verlassen den Server nicht.
+- Objektregeln blockieren Admin-Listen und Fremdschlüssel-Auswahlen, bis ein SQL-Scope existiert.
+- myshop registriert Produkt, Kategorie und interne Notiz im Admin. `0001`, `0002` und `0003` sind unverändert.
+- Nicht enthalten: OAuth, MFA, Plugin-System, Drag-and-Drop-Dashboard, GraphQL, WebSockets, Mandanten.
+
+## Unreleased — Authentifizierung, Sitzungen und Berechtigungen
+
+- Neue Crate `ferrum-auth` mit Argon2id, serverseitigen Sitzungen, HttpOnly-Cookie `ferrum_session`, CSRF-Token und prozesslokalem Login-Limit.
+- Tabellen `_ferrum_users`, `_ferrum_sessions`, `_ferrum_roles`, `_ferrum_permissions`, `_ferrum_user_roles` und `_ferrum_role_permissions`. Historie `_ferrum_auth_migrations`, Datei `crates/ferrum-auth/migrations/0001_auth_schema.json`.
+- HTTP: `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, `POST /auth/change-password`.
+- Modelle: `permissions` und `object_policy`. Standard bleibt Verweigerung. `allow_anonymous = true` bleibt die öffentliche Demo-Freigabe.
+- Objektregeln ohne SQL-Scope blockieren Listen. Ein abgelehnter Einzeldatensatz antwortet mit 404.
+- CLI: `admin create-user`, `auth list-users` und Befehle für Rollen. `migrate up` wendet Auth-Migrationen zuerst an. Kein voreingestelltes Admin-Passwort.
+- myshop: geschützte `InternalNote` und `0003_internal_notes.json`. Produkte und Kategorien bleiben anonyme Demo-Routen.
+- `0001_initial.json` ist unverändert. Die Cargo-Version bleibt `0.1.0`.
+- Nicht enthalten: OAuth, MFA, JWT für externe APIs, E-Mail-Reset. Der Admin folgt in v0.8.
+
+## Unreleased — Constraints, Foreign Keys und typisierte Beziehungen
+
+- `#[field(unique)]` und `#[ferrum(unique_together = "a,b")]` erzeugen einen benannten Unique Index. Mehrere `NULL`-Werte bleiben erlaubt.
+- `#[field(index)]` und `#[ferrum(index_together = "a,b")]` erzeugen sekundäre Indizes. Ein Primärschlüssel oder Unique Constraint wird nicht doppelt indiziert.
+- `#[field(foreign_key = "tabelle.spalte", on_delete = "restrict|cascade|set_null")]` erzeugt einen echten Foreign Key. `ON UPDATE` bleibt `NO ACTION`. `set_null` verlangt eine nullable Spalte.
+- Belongs-To und Has-Many laden typisierte Modelle. Die Gegenrichtung wird explizit deklariert. Eager Loading fehlt.
+- Snapshots der Formatversion 1 nehmen die neuen Objekte auf, lassen leere Listen weg und lesen alte Dateien weiter. `0001_initial.json` behält die Checksum `06393cd03c3d2afb2e4fbe111d0cf8430caf2ef0eaeda3c503d21edaf3f7a026`.
+- Neue Operationen: `add_unique_constraint`, `drop_unique_constraint`, `add_index`, `drop_index`. `add_foreign_key` und `drop_foreign_key` werden erkannt und blockiert. Ein Foreign Key auf einer neuen Spalte hängt an `add_column`.
+- Unique- und Foreign-Key-Verletzungen werden HTTP 422. SQLite-`RESTRICT` nutzt den erweiterten Code 1811 mit der festen Meldung `FOREIGN KEY constraint failed`.
+- myshop erhält `Category`, ein optionales `Product.category_id` und `0002_categories_and_product_relations.json`.
+- Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Explizite Umbenennung, SQLite-Umbau und Baseline
+
+- `RenameColumn` und `RenameTable` bleiben Daten erhalten und werden nicht aus einem Drop plus Add erraten.
+- SQLite baut unterstützte Spaltenänderungen als transaktionale Kopie um. Geprüft werden `string` ↔ `i64`, Nullbarkeit und Bool-Defaults. `NULL` bei einer `NOT NULL`-Verschärfung blockiert ohne Ersatzwert.
+- PostgreSQL führt dieselben unterstützten Änderungen per `ALTER COLUMN` aus. Der SQLite-Umbau läuft dort nicht.
+- `ferrum migrate baseline` schreibt nach `--confirm` nur Historieneinträge, wenn das SQLite-Schema zum letzten Migrationsziel passt. Destruktive oder typändernde Ketten werden nicht markiert. PostgreSQL-Baseline bricht ab.
+- `ferrum migrate reseal` erneuert die Checksum einer noch nicht angewendeten Datei.
+
 ## Unreleased — Versionierte Migrationen
 
 - Neue Crate `ferrum-migrations` mit Snapshot, Diff, Checksum, Historie und Runner für SQLite und PostgreSQL.
 - CLI: `ferrum migrate make`, `ferrum migrate up`, `ferrum migrate status`. Modelle kommen über `ferrum.toml` und `myshop --print-schema`, nicht über Quelltextanalyse.
 - Sichere Operationen: neue Tabelle, nullable Spalte, boolesche NOT-NULL-Spalte mit Default. Löschungen nur mit `--allow-destructive`.
-- Typänderungen, Umbenennungen, Primärschlüsseländerungen und Tabellen-Neubau werden abgelehnt.
+- Primärschlüsseländerungen und nicht geprüfte Typänderungen werden abgelehnt. Umbenennung und der begrenzte Umbau stehen im neueren Eintrag.
 - `myshop --bootstrap` legt nichts mehr an und markiert vorhandene Tabellen nicht als migriert.
 - Breaking Change: der bisherige Bootstrap-Start erzeugt kein Schema mehr. Neue Datenbanken brauchen `ferrum migrate up`.
 

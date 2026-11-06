@@ -5,7 +5,7 @@
 ## Verantwortung und Verarbeitungsschritte (IST)
 
 1. `#[derive(FerrumModel)]` empfängt `syn::DeriveInput`.
-2. `#[ferrum(...)]` liest `table`, `api`, `allow_anonymous`.
+2. `#[ferrum(...)]` liest `table`, `api`, `allow_anonymous`, `admin`, `admin_label` und `admin_permission`. Felder lesen zusätzlich `#[admin(...)]`. Die Admin-Angaben erzeugen `admin_meta()` und keine zusätzliche Spalte. Details: [admin-customization.md](admin-customization.md).
 3. Erlaubt sind nur Structs mit benannten Feldern.
 4. Pro Feld wird `#[field(...)]` geprüft.
 5. SQL-Datentyp, Constraints und generiertes Create-DTO werden bestimmt.
@@ -19,9 +19,11 @@
 #[ferrum(table = "products", api = "/api/v1/products", allow_anonymous = true)]
 pub struct Product {
     #[field(primary_key, auto)] pub id: Uuid,
-    #[field(required, min_length = 3, max_length = 150)] pub name: String,
+    #[field(required, index, min_length = 3, max_length = 150)] pub name: String,
     #[field(min = 0)] pub price_cents: i64,
     #[field(default = true)] pub active: bool,
+    #[field(foreign_key = "categories.id", on_delete = "restrict", belongs_to = "super::category::Category")]
+    pub category_id: Option<Uuid>,
 }
 ```
 
@@ -37,7 +39,7 @@ pub struct Product {
 | `bool` | `BOOLEAN NOT NULL` | `default = true/false` | `Option<bool>` bei Default; Update `PatchField<bool>` |
 | `Option<String/i64/bool/Uuid>` | Typ ohne `NOT NULL` | Länge und `min` nur bei vorhandenem Wert | `Option<T>` mit `#[serde(default)]`; Update `PatchField<T>` |
 
-`id` darf nicht nullable sein. `required` und `default` dürfen nicht mit `Option<T>` kombiniert werden. `#[field(readonly)]` lässt das Feld im Create-DTO, entfernt es aus dem Update-DTO. Nicht unterstützt: `Decimal`, `DateTime`, Relationen, benutzerdefinierte Felder, generische Models. `min = -5` ist kein Literal, das das Makro akzeptiert.
+`id` darf nicht nullable sein. `required` und `default` dürfen nicht mit `Option<T>` kombiniert werden. `#[field(readonly)]` lässt das Feld im Create-DTO, entfernt es aus dem Update-DTO. Nicht unterstützt: `Decimal`, `DateTime`, Many-to-Many, benutzerdefinierte Felder, generische Models. `min = -5` ist kein Literal, das das Makro akzeptiert. Belongs-To und Has-Many sind implementiert und in [relations.md](relations.md) beschrieben. Unique, Index und Foreign Key sind in [constraints.md](constraints.md) beschrieben.
 
 ## Validierung (IST)
 

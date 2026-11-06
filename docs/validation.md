@@ -12,9 +12,13 @@
 | `min` | `i64` | Feldwert muss ≥ Integer-Literal sein |
 | `default = true/false` | `bool` | Fehlendes Feld und JSON-`null` im Create-DTO werden zum Default, zusätzlich SQL `DEFAULT` |
 | `readonly` | jedes unterstützte Feld | Create setzt den Wert; PATCH kann ihn nicht senden |
+| `unique` | jedes unterstützte Feld außer dem Primärschlüssel | Datenbank-Unique-Index; Duplikat wird 422 |
+| `unique_together` | mindestens zwei Felder am Modell | zusammengesetzter Unique Index |
+| `index`, `index_together` | Feld oder Feldgruppe | sekundärer Index, keine Wertprüfung |
+| `foreign_key`, `on_delete` | eine Spalte | Datenbank-Foreign-Key; ungültige Referenz und `restrict` werden 422 |
 | `Option<T>` | `String`, `i64`, `bool`, `Uuid` | Create: fehlend oder `null` speichert SQL `NULL`. PATCH: siehe `PatchField` |
 
-Keine allgemeine Validator-Registry, Regex-/E-Mail-/Unique-Validierung oder Cross-Field-Regel vorhanden. Die Regeln laufen in `ModelRepository::create` und `update`. Direkte Datenbank-INSERTs umgehen Rust-Validation; DB-Constraints sichern nur das tatsächlich vorhandene SQL-Schema.
+Keine allgemeine Validator-Registry, keine Regex- und keine E-Mail-Prüfung. Rust prüft Länge, Pflicht und `min` in `create` und `update`. Unique und Foreign Key prüft die Datenbank. Die Repository-Schicht übersetzt die sqlx-Fehlerart in `Validation`. Mehrere `NULL` bleiben in einem Unique Index erlaubt. Details stehen in [constraints.md](constraints.md).
 
 ### PATCH-Null-Semantik
 

@@ -3,7 +3,7 @@ resolver = "2"
 members = [
   "crates/ferrum", "crates/ferrum-core", "crates/ferrum-macros",
   "crates/ferrum-db", "crates/ferrum-api", "crates/ferrum-cli",
-  "crates/ferrum-migrations", "examples/myshop"
+  "crates/ferrum-migrations", "crates/ferrum-auth", "crates/ferrum-admin", "examples/myshop"
 ]
 
 [workspace.package]
@@ -24,3 +24,5 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 clap = { version = "4", features = ["derive"] }
 sha2 = "0.10"
+argon2 = "0.5"
+rpassword = "7"

@@ -1,4 +1,8 @@
-# Ferrum v0.1 — Model-first Rust backend (experimental)
+# Ferrum — Model-first Rust backend (experimental)
+
+Funktionsstand v0.8. Die Cargo-Version bleibt `0.1.0`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`, die Beschreibung in `docs/admin.md`.
+
+Authentifizierung, Sitzungen und Rollen beschreibt `docs/auth.md`. Geschützte myshop-Ressource ist `/api/v1/internal_notes`. Produkte und Kategorien bleiben ausdrücklich öffentliche Demo-Routen.
 
 > This is **not** a complete Django replacement. The current milestone covers a Rust derive macro, shared model metadata, one SeaORM/SeaQuery repository for SQLite and PostgreSQL, and generated list, detail, create, patch and delete routes.
 
@@ -21,6 +25,9 @@ Create and update the schema with migrations, from the workspace root:
 cargo run -p ferrum-cli -- migrate make initial
 cargo run -p ferrum-cli -- migrate up
 cargo run -p ferrum-cli -- migrate status
+cargo run -p ferrum-cli -- migrate rename-column --table products --from name --to title
+cargo run -p ferrum-cli -- migrate baseline --confirm
+cargo run -p ferrum-cli -- admin create-user --email admin@example.com --superuser
 cargo run -p myshop
 ```
 
@@ -49,6 +56,8 @@ curl http://127.0.0.1:3000/api/v1/products
 - `crates/ferrum-api/src/lib.rs` — route registration, handler adapters and bootstrap
 - `crates/ferrum/src/lib.rs` — public framework API
 - `crates/ferrum-cli/src/main.rs` — experimental informational `ferrum doctor` CLI
+- `crates/ferrum-admin/` — Admin-API, Rechteprüfung und Auslieferung der Oberfläche
+- `apps/admin-ui/` — React-Oberfläche, gebaut nach `apps/admin-ui/dist`
 
 ## Model example
 
@@ -60,7 +69,7 @@ use ferrum::prelude::*;
 pub struct Product {
     #[field(primary_key, auto)]
     pub id: Uuid,
-    #[field(required, min_length = 3, max_length = 150)]
+    #[field(required, index, min_length = 3, max_length = 150)]
     pub name: String,
     #[field(min = 0)]
     pub price_cents: i64,
@@ -98,9 +107,9 @@ store the original text.
 
 ## Scope and limitations
 
-**Included in source:** workspace; macros for `Uuid`, `String`, `i64`, `bool` and `Option` of those types except a nullable `id`; typed create and update DTOs; `PatchField`; trimmed string validation; Boolean defaults rendered per dialect; generated list, read-by-UUID, create, patch and delete; SeaQuery SQL for SQLite and PostgreSQL; versioned migrations for create-table, safe add-column, and explicit destructive drops; SQLite migration and HTTP tests in `cargo test --workspace`; optional Docker Compose PostgreSQL; example app and CLI.
+**Included in source:** workspace; macros for `Uuid`, `String`, `i64`, `bool` and `Option` of those types except a nullable `id`; typed create and update DTOs; `PatchField`; trimmed string validation; Boolean defaults rendered per dialect; generated list, read-by-UUID, create, patch and delete; single-column and composite unique constraints; secondary indexes; single-column foreign keys with `restrict`, `cascade` and `set_null`; lazy belongs-to and has-many methods; SeaQuery SQL for SQLite and PostgreSQL; versioned migrations for those objects, explicit renames, checked SQLite rebuilds, explicit destructive drops, and a confirm-only SQLite baseline; SQLite migration, constraint and HTTP tests in `cargo test --workspace`; optional Docker Compose PostgreSQL; the myshop category/product example and CLI.
 
-**Not included:** column rename, table rebuild, `migrate down`, migration baseline for an existing bootstrap database, relationships, admin UI, auth, RBAC, OpenAPI, pagination beyond 100 rows, optimistic version columns, `DateTime` or JSON columns, unique or index metadata, MySQL, and a Dockerfile for the API. The ignored PostgreSQL tests are not part of the default run. Do not assume otherwise.
+**Not included:** many-to-many, eager or batch loading, changing a foreign key on an existing column, heuristic renames, `migrate down`, PostgreSQL baseline, admin UI, auth, RBAC, OpenAPI, pagination beyond 100 rows, optimistic version columns, `DateTime` or JSON columns, MySQL, and a Dockerfile for the API. The ignored PostgreSQL tests are not part of the default run. Do not assume otherwise.
 
 ## Development checks
 
@@ -113,9 +122,9 @@ cargo build --workspace
 
 ## Ausführliche Entwicklerdokumentation (Deutsch)
 
-**[Dokumentationsportal: docs/index.md](docs/index.md)** – Architektur, Modulgrenzen, Datenflüsse, Codegenerierung, Datenbank, API, CLI, Konfiguration, Validierung, Sicherheit, Tests und Beispielanwendung. Für geplante Module wie Migrationen, Authentifizierung, Admin, OpenAPI, Plugins und Deployment gibt es jeweils ein eigenes technisches Entwurfsdokument.
+**[Dokumentationsportal: docs/index.md](docs/index.md)** – Architektur, Modulgrenzen, Datenflüsse, Codegenerierung, Datenbank, API, CLI, Konfiguration, Validierung, Sicherheit, Tests und Beispielanwendung. Constraints stehen in [docs/constraints.md](docs/constraints.md), Beziehungen in [docs/relations.md](docs/relations.md), Migrationen in [docs/migrations.md](docs/migrations.md). Authentifizierung, Admin, OpenAPI, Plugins und Deployment bleiben Entwürfe, soweit die jeweilige Seite das so ausweist.
 
-Jede Seite trennt **IST (v0.1 implementiert)** von **SOLL (nur geplant)**. Änderungen am Framework müssen auch in der passenden Moduldokumentation nachgetragen werden. Der [Implementierungsleitfaden](docs/implementation-guide.md) definiert dafür einen verbindlichen Änderungs- und Testprozess.
+Jede Seite trennt **IST** von **SOLL (nur geplant)**. Der Funktionsstand dieser Constraints und Beziehungen ist v0.6. Die Cargo-Version bleibt `0.1.0`. Änderungen am Framework müssen auch in der passenden Moduldokumentation nachgetragen werden. Der [Implementierungsleitfaden](docs/implementation-guide.md) definiert dafür einen verbindlichen Änderungs- und Testprozess.
 
 Siehe außerdem [Architektur](docs/architecture.md), [Roadmap](docs/roadmap.md) und [Tests](docs/testing.md).
 

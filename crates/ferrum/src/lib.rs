@@ -2,7 +2,9 @@
 extern crate self as ferrum;
 
 pub use async_trait;
+pub use ferrum_admin as admin;
 pub use ferrum_api::App;
+pub use ferrum_auth as auth;
 pub use ferrum_core as core;
 pub use ferrum_db as db;
 pub use ferrum_macros::FerrumModel;

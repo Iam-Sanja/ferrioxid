@@ -7,6 +7,35 @@ pub struct ModelDescriptor {
     pub api_path: &'static str,
     /// Explicit opt-in for unauthenticated access (demo only).
     pub allow_anonymous: bool,
+    /// `None` verweigert den Zugriff, sofern `allow_anonymous` nicht gesetzt ist.
+    /// `Some("authenticated")` verlangt eine aktive Sitzung.
+    /// Jeder andere Wert ist der Ressourcenname für `{name}.read|create|update|delete`.
+    pub permission: Option<&'static str>,
+    /// Listen bleiben blockiert. Einzelzugriffe prüfen `ObjectPolicy`.
+    pub requires_object_policy: bool,
+}
+
+/// Admin-Feld. Die Werte stammen aus demselben Modell wie das Schema.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdminFieldMeta {
+    pub name: &'static str,
+    pub label: &'static str,
+    pub list_display: bool,
+    pub searchable: bool,
+    pub sortable: bool,
+    pub filterable: bool,
+    pub readonly: bool,
+    pub hidden: bool,
+}
+
+/// Admin-Freigabe eines Modells. `None` bei `admin_meta` bedeutet: nicht im Admin.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdminModelMeta {
+    pub key: &'static str,
+    pub label: &'static str,
+    /// `None`: nur ein aktiver Superuser. Sonst `{permission}.read|create|update|delete`.
+    pub permission: Option<&'static str>,
+    pub fields: &'static [AdminFieldMeta],
 }
 
 /// Backend, für den Ferrum DDL und Abfragen erzeugt.
@@ -25,6 +54,14 @@ pub enum ColumnKind {
     Boolean,
 }
 
+/// Aktion für `ON DELETE`. `ON UPDATE` bleibt `NO ACTION`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ReferentialAction {
+    Restrict,
+    Cascade,
+    SetNull,
+}
+
 /// Metadaten einer Modellspalte. Das Makro erzeugt sie, die Datenbankschicht rendert sie.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ColumnSpec {
@@ -33,12 +70,69 @@ pub struct ColumnSpec {
     pub nullable: bool,
     pub primary_key: bool,
     pub default_bool: Option<bool>,
+    pub unique: bool,
+    pub indexed: bool,
+    pub foreign_table: Option<&'static str>,
+    pub foreign_column: Option<&'static str>,
+    pub on_delete: Option<ReferentialAction>,
+}
+
+/// Zusammengesetzte Unique-Constraints und Indizes. Leere Listen sind der Normalfall.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct TableConstraints {
+    pub unique_groups: &'static [&'static [&'static str]],
+    pub index_groups: &'static [&'static [&'static str]],
+}
+
+impl TableConstraints {
+    pub const EMPTY: Self = Self {
+        unique_groups: &[],
+        index_groups: &[],
+    };
+}
+
+impl Default for TableConstraints {
+    fn default() -> Self {
+        Self::EMPTY
+    }
 }
 
 pub trait FerrumModel: Send + Sync + 'static {
     fn descriptor() -> &'static ModelDescriptor;
     fn columns() -> &'static [ColumnSpec];
+    fn constraints() -> &'static TableConstraints {
+        &TableConstraints::EMPTY
+    }
     fn schema_sql(kind: DatabaseKind) -> String;
+    fn admin_meta() -> Option<&'static AdminModelMeta> {
+        None
+    }
+}
+
+pub fn unique_index_name(table: &str, columns: &[&str]) -> String {
+    object_name("uq", table, columns)
+}
+
+pub fn secondary_index_name(table: &str, columns: &[&str]) -> String {
+    object_name("ix", table, columns)
+}
+
+pub fn foreign_key_name(
+    table: &str,
+    column: &str,
+    referenced_table: &str,
+    referenced_column: &str,
+) -> String {
+    format!("fk_{table}_{column}_{referenced_table}_{referenced_column}")
+}
+
+fn object_name(prefix: &str, table: &str, columns: &[&str]) -> String {
+    let mut name = format!("{prefix}_{table}");
+    for column in columns {
+        name.push('_');
+        name.push_str(column);
+    }
+    name
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -47,6 +141,10 @@ pub enum FerrumError {
     Validation(String),
     #[error("permission denied")]
     Forbidden,
+    #[error("{0}")]
+    Denied(String),
+    #[error("authentication required")]
+    Unauthorized(String),
     #[error("resource not found")]
     NotFound,
     #[error("database operation failed")]

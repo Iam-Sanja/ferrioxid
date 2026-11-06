@@ -1,8 +1,11 @@
 //! SeaQuery-backed CRUD and DDL for SQLite and PostgreSQL.
 
-use ferrum_core::{ColumnKind, ColumnSpec, DatabaseKind, FerrumError};
+use ferrum_core::{
+    ColumnKind, ColumnSpec, DatabaseKind, FerrumError, FerrumModel, ReferentialAction,
+};
 use sea_orm::sea_query::{
-    Alias, ColumnDef, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder, Table,
+    Alias, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Index, Order, PostgresQueryBuilder,
+    Query, SqliteQueryBuilder, Table,
 };
 use sea_orm::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, QueryResult, Statement, Value,
@@ -65,6 +68,109 @@ pub fn render_create_table(
     render_ddl(kind, statement)
 }
 
+pub struct ForeignKeyClause<'a> {
+    pub name: &'a str,
+    pub column: &'a str,
+    pub referenced_table: &'a str,
+    pub referenced_column: &'a str,
+    pub on_delete: ReferentialAction,
+}
+
+pub fn render_table_bundle(
+    kind: DatabaseKind,
+    table: &str,
+    columns: &[PhysicalColumn<'_>],
+    uniques: &[(&str, &[&str])],
+    foreign_keys: &[ForeignKeyClause<'_>],
+    indexes: &[(&str, &[&str])],
+) -> Vec<String> {
+    let mut statement = Table::create();
+    statement.table(Alias::new(table));
+    for column in columns {
+        let mut definition = column_definition(kind, column);
+        statement.col(&mut definition);
+    }
+    for foreign_key in foreign_keys {
+        let mut constraint = ForeignKey::create();
+        constraint
+            .name(foreign_key.name)
+            .from_tbl(Alias::new(table))
+            .from_col(Alias::new(foreign_key.column))
+            .to_tbl(Alias::new(foreign_key.referenced_table))
+            .to_col(Alias::new(foreign_key.referenced_column))
+            .on_delete(foreign_key_action(foreign_key.on_delete))
+            .on_update(ForeignKeyAction::NoAction);
+        statement.foreign_key(&mut constraint);
+    }
+    let mut statements = vec![render_ddl(kind, statement)];
+    for (name, unique_columns) in uniques {
+        statements.push(render_create_index(kind, name, table, unique_columns, true));
+    }
+    for (name, index_columns) in indexes {
+        statements.push(render_create_index(kind, name, table, index_columns, false));
+    }
+    statements
+}
+
+pub fn render_create_index(
+    kind: DatabaseKind,
+    name: &str,
+    table: &str,
+    columns: &[&str],
+    unique: bool,
+) -> String {
+    let mut index = Index::create();
+    index.name(name).table(Alias::new(table));
+    if unique {
+        index.unique();
+    }
+    for column in columns {
+        index.col(Alias::new(*column));
+    }
+    render_ddl(kind, index)
+}
+
+pub fn render_drop_index(kind: DatabaseKind, name: &str) -> String {
+    let mut index = Index::drop();
+    index.name(name);
+    render_ddl(kind, index)
+}
+
+pub fn render_add_column_referencing(
+    kind: DatabaseKind,
+    table: &str,
+    column: &PhysicalColumn<'_>,
+    foreign_key: Option<&ForeignKeyClause<'_>>,
+) -> String {
+    let mut sql = render_add_column(kind, table, column);
+    if let Some(foreign_key) = foreign_key {
+        sql.push_str(&format!(
+            " CONSTRAINT \"{}\" REFERENCES \"{}\" (\"{}\") ON DELETE {} ON UPDATE NO ACTION",
+            foreign_key.name,
+            foreign_key.referenced_table,
+            foreign_key.referenced_column,
+            on_delete_sql(foreign_key.on_delete)
+        ));
+    }
+    sql
+}
+
+fn foreign_key_action(action: ReferentialAction) -> ForeignKeyAction {
+    match action {
+        ReferentialAction::Restrict => ForeignKeyAction::Restrict,
+        ReferentialAction::Cascade => ForeignKeyAction::Cascade,
+        ReferentialAction::SetNull => ForeignKeyAction::SetNull,
+    }
+}
+
+fn on_delete_sql(action: ReferentialAction) -> &'static str {
+    match action {
+        ReferentialAction::Restrict => "RESTRICT",
+        ReferentialAction::Cascade => "CASCADE",
+        ReferentialAction::SetNull => "SET NULL",
+    }
+}
+
 pub fn render_add_column(kind: DatabaseKind, table: &str, column: &PhysicalColumn<'_>) -> String {
     let mut statement = Table::alter();
     let mut definition = column_definition(kind, column);
@@ -78,6 +184,16 @@ pub fn render_drop_table(kind: DatabaseKind, table: &str) -> String {
     let mut statement = Table::drop();
     statement.table(Alias::new(table));
     render_ddl(kind, statement)
+}
+
+pub fn render_rename_table(kind: DatabaseKind, from: &str, to: &str) -> String {
+    let _ = kind;
+    format!("ALTER TABLE \"{from}\" RENAME TO \"{to}\"")
+}
+
+pub fn render_rename_column(kind: DatabaseKind, table: &str, from: &str, to: &str) -> String {
+    let _ = kind;
+    format!("ALTER TABLE \"{table}\" RENAME COLUMN \"{from}\" TO \"{to}\"")
 }
 
 pub fn render_drop_column(kind: DatabaseKind, table: &str, column: &str) -> String {
@@ -173,6 +289,116 @@ pub async fn list_records(
     })
 }
 
+pub struct AdminPageRequest<'a> {
+    pub search_columns: &'a [&'a str],
+    pub search: Option<&'a str>,
+    pub sort_column: &'a str,
+    pub descending: bool,
+    pub equal_filters: &'a [(&'a str, Value)],
+    pub offset: u64,
+    pub limit: u64,
+}
+
+pub struct AdminPage {
+    pub rows: Vec<Json>,
+    pub limit: usize,
+    pub has_more: bool,
+}
+
+pub async fn query_admin_page(
+    db: &DatabaseConnection,
+    table: &str,
+    columns: &[ColumnSpec],
+    request: AdminPageRequest<'_>,
+) -> Result<AdminPage, FerrumError> {
+    ensure_column(columns, request.sort_column)?;
+    for name in request.search_columns {
+        ensure_column(columns, name)?;
+    }
+    for (name, _) in request.equal_filters {
+        ensure_column(columns, name)?;
+    }
+    if request.limit == 0 || request.limit > LIST_LIMIT as u64 {
+        return Err(FerrumError::Validation(
+            "page size must be between 1 and 100".into(),
+        ));
+    }
+    let mut query = Query::select();
+    query
+        .columns(columns.iter().map(|column| Alias::new(column.name)))
+        .from(Alias::new(table));
+    if let Some(term) = request.search.filter(|term| !term.is_empty()) {
+        let pattern = like_pattern(term);
+        let mut any = Vec::new();
+        for column in request.search_columns {
+            any.push(Expr::cust_with_values(
+                format!("LOWER(\"{column}\") LIKE LOWER(?) ESCAPE '\\'"),
+                [Value::from(pattern.clone())],
+            ));
+        }
+        if let Some(first) = any.into_iter().reduce(|left, right| left.or(right)) {
+            query.cond_where(first);
+        }
+    }
+    for (column, value) in request.equal_filters {
+        query.and_where(Expr::col(Alias::new(*column)).eq(value.clone()));
+    }
+    query.order_by(
+        Alias::new(request.sort_column),
+        if request.descending {
+            Order::Desc
+        } else {
+            Order::Asc
+        },
+    );
+    if request.sort_column != "id" {
+        query.order_by(Alias::new("id"), Order::Asc);
+    }
+    query.limit(request.limit + 1).offset(request.offset);
+    let rows = db
+        .query_all(statement(db, &query)?)
+        .await
+        .map_err(FerrumError::database)?;
+    let has_more = rows.len() > request.limit as usize;
+    let rows = rows
+        .into_iter()
+        .take(request.limit as usize)
+        .map(|row| row_to_json(&row, columns))
+        .collect::<Result<Vec<_>, _>>()?;
+    Ok(AdminPage {
+        rows,
+        limit: request.limit as usize,
+        has_more,
+    })
+}
+
+fn ensure_column(columns: &[ColumnSpec], name: &str) -> Result<(), FerrumError> {
+    if columns.iter().any(|column| column.name == name) && is_safe_ident(name) {
+        Ok(())
+    } else {
+        Err(FerrumError::Validation(format!(
+            "column {name} is not available"
+        )))
+    }
+}
+
+fn is_safe_ident(name: &str) -> bool {
+    let mut chars = name.chars();
+    matches!(chars.next(), Some(char) if char.is_ascii_alphabetic() || char == '_')
+        && chars.all(|char| char.is_ascii_alphanumeric() || char == '_')
+}
+
+fn like_pattern(term: &str) -> String {
+    let mut escaped = String::new();
+    for char in term.chars() {
+        if matches!(char, '\\' | '%' | '_') {
+            escaped.push('\\');
+        }
+        escaped.push(char);
+    }
+    format!("%{escaped}%")
+}
+
 pub async fn get_record(
     db: &DatabaseConnection,
     table: &str,
@@ -206,7 +432,7 @@ pub async fn insert_record(
     let row = db
         .query_one(statement(db, &query)?)
         .await
-        .map_err(FerrumError::database)?
+        .map_err(map_write)?
         .ok_or_else(|| FerrumError::Validation("no row returned".into()))?;
     row_to_json(&row, columns)
 }
@@ -234,7 +460,7 @@ pub async fn update_record(
     let row = db
         .query_one(statement(db, &query)?)
         .await
-        .map_err(FerrumError::database)?
+        .map_err(map_write)?
         .ok_or(FerrumError::NotFound)?;
     row_to_json(&row, columns)
 }
@@ -251,8 +477,88 @@ pub async fn delete_record(
     let result = db
         .execute(statement(db, &query)?)
         .await
-        .map_err(FerrumError::database)?;
+        .map_err(map_write)?;
     Ok(result.rows_affected())
+}
+
+pub async fn find_by_column<M>(
+    db: &DatabaseConnection,
+    column: &str,
+    value: Value,
+) -> Result<Vec<M>, FerrumError>
+where
+    M: FerrumModel + serde::de::DeserializeOwned,
+{
+    let columns = M::columns();
+    if !columns.iter().any(|candidate| candidate.name == column) {
+        return Err(FerrumError::Validation(format!(
+            "column {column} is not part of {}",
+            M::descriptor().table
+        )));
+    }
+    let mut query = Query::select();
+    query
+        .columns(columns.iter().map(|candidate| Alias::new(candidate.name)))
+        .from(Alias::new(M::descriptor().table))
+        .and_where(Expr::col(Alias::new(column)).eq(value))
+        .order_by(Alias::new("id"), Order::Asc);
+    let rows = db
+        .query_all(statement(db, &query)?)
+        .await
+        .map_err(FerrumError::database)?;
+    rows.into_iter()
+        .map(|row| {
+            let json = row_to_json(&row, columns)?;
+            serde_json::from_value(json).map_err(FerrumError::database)
+        })
+        .collect()
+}
+
+fn map_write(error: sea_orm::DbErr) -> FerrumError {
+    if let Some(mapped) = constraint_violation(&error) {
+        return mapped;
+    }
+    FerrumError::database(error)
+}
+
+fn constraint_violation(error: &sea_orm::DbErr) -> Option<FerrumError> {
+    let database = sqlite_or_postgres_database(error)?;
+    match database.kind() {
+        sea_orm::sqlx::error::ErrorKind::UniqueViolation => {
+            Some(FerrumError::Validation("unique constraint violated".into()))
+        }
+        sea_orm::sqlx::error::ErrorKind::ForeignKeyViolation => Some(FerrumError::Validation(
+            "foreign key constraint violated".into(),
+        )),
+        // SQLite setzt ON DELETE/UPDATE RESTRICT als internes RAISE um.
+        // Der erweiterte Code ist dann 1811 (SQLITE_CONSTRAINT_TRIGGER) und nicht 787.
+        // Die Meldung ist der feste Text dieser Implementierung.
+        sea_orm::sqlx::error::ErrorKind::Other
+            if database.code().as_deref() == Some("1811")
+                && database.message() == "FOREIGN KEY constraint failed" =>
+        {
+            Some(FerrumError::Validation(
+                "foreign key constraint violated".into(),
+            ))
+        }
+        _ => None,
+    }
+}
+
+fn sqlite_or_postgres_database(
+    error: &sea_orm::DbErr,
+) -> Option<&dyn sea_orm::sqlx::error::DatabaseError> {
+    let runtime = match error {
+        sea_orm::DbErr::Exec(runtime) | sea_orm::DbErr::Query(runtime) => runtime,
+        _ => return None,
+    };
+    let sea_orm::RuntimeErr::SqlxError(sqlx_error) = runtime else {
+        return None;
+    };
+    let sea_orm::sqlx::Error::Database(database) = sqlx_error else {
+        return None;
+    };
+    Some(database.as_ref())
 }
 
 fn statement(

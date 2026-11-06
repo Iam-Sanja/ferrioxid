@@ -2,8 +2,9 @@
 
 use clap::{Parser, Subcommand};
 use ferrum_migrations::{
-    apply_directory, discover_project, load_schema_from_command, make_migration, migration_status,
-    MakeOutcome, SchemaSnapshot,
+    apply_directory, baseline_database, discover_project, load_schema_from_command, make_migration,
+    migration_status, reseal_unapplied, write_explicit_migration, MakeOutcome, MigrationOperation,
+    SchemaSnapshot,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -23,6 +24,81 @@ enum Command {
     Migrate {
         #[command(subcommand)]
         action: MigrateCommand,
+    },
+    /// Benutzer anlegen. Das Passwort wird verdeckt abgefragt.
+    Admin {
+        #[command(subcommand)]
+        action: AdminCommand,
+    },
+    /// Benutzer, Rollen und Berechtigungen.
+    Auth {
+        #[command(subcommand)]
+        action: AuthCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum AdminCommand {
+    /// Legt einen Benutzer an. Es gibt kein voreingestelltes Admin-Passwort.
+    CreateUser {
+        /// Login. Ohne Angabe wird die Adresse abgefragt.
+        #[arg(long)]
+        email: Option<String>,
+        #[arg(long)]
+        staff: bool,
+        #[arg(long)]
+        superuser: bool,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+}
+
+#[derive(Subcommand)]
+enum AuthCommand {
+    /// Listet Benutzer ohne Passwort-Hash.
+    ListUsers {
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Legt eine Rolle an oder erkennt eine vorhandene.
+    CreateRole {
+        name: String,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Vergibt `resource.read|create|update|delete` an eine Rolle.
+    GrantPermission {
+        code: String,
+        #[arg(long)]
+        role: String,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Entzieht einer Rolle eine Berechtigung.
+    RevokePermission {
+        code: String,
+        #[arg(long)]
+        role: String,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Weist einem Benutzer eine Rolle zu.
+    AssignRole {
+        #[arg(long)]
+        email: String,
+        #[arg(long)]
+        role: String,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Entzieht einem Benutzer eine Rolle.
+    RevokeRole {
+        #[arg(long)]
+        email: String,
+        #[arg(long)]
+        role: String,
+        #[arg(long)]
+        database_url: Option<String>,
     },
 }
 
@@ -58,6 +134,51 @@ enum MigrateCommand {
         #[arg(long)]
         schema_file: Option<PathBuf>,
     },
+    /// Schreibt eine explizite Spaltenumbenennung. Das registrierte Schema muss bereits den neuen Namen enthalten.
+    RenameColumn {
+        #[arg(long)]
+        table: String,
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: String,
+        /// Kurzname der Datei. Standard ist rename_<ziel>.
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        schema_file: Option<PathBuf>,
+        #[arg(long)]
+        migrations_dir: Option<PathBuf>,
+    },
+    /// Schreibt eine explizite Tabellenumbenennung. Das registrierte Schema muss bereits den neuen Namen enthalten.
+    RenameTable {
+        #[arg(long)]
+        from: String,
+        #[arg(long)]
+        to: String,
+        #[arg(long)]
+        name: Option<String>,
+        #[arg(long)]
+        schema_file: Option<PathBuf>,
+        #[arg(long)]
+        migrations_dir: Option<PathBuf>,
+    },
+    /// Berechnet die Checksum einer noch nicht angewendeten Datei neu.
+    Reseal {
+        path: PathBuf,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Markiert vorhandene SQLite-Migrationen als angewendet, wenn das Schema exakt passt. Ohne --confirm wird nichts geschrieben.
+    Baseline {
+        #[arg(long)]
+        database_url: Option<String>,
+        #[arg(long)]
+        migrations_dir: Option<PathBuf>,
+        /// Schreibt nach erfolgreicher Prüfung nur die Historie.
+        #[arg(long)]
+        confirm: bool,
+    },
 }
 
 fn main() -> ExitCode {
@@ -73,6 +194,20 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        Command::Admin { action } => match run_admin(action) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(1)
+            }
+        },
+        Command::Auth { action } => match run_auth(action) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(1)
+            }
+        },
     }
 }
 
@@ -80,9 +215,13 @@ fn print_doctor() {
     println!("Ferrum: SQLite ist die lokale Standarddatenbank. PostgreSQL wählt DATABASE_URL.");
     println!("Standarddatei: sqlite://db.sqlite3?mode=rwc im Arbeitsverzeichnis.");
     println!("Modelle werden nicht aus dem Quelltext gelesen. ferrum.toml nennt schema_command und migrations_dir.");
-    println!("Migrationen: ferrum migrate make <name>, ferrum migrate up, ferrum migrate status");
+    println!("Migrationen: make, up, status, rename-column, rename-table, reseal, baseline");
+    println!("Auth-Migrationen laufen bei migrate up vor den Anwendungsdateien.");
+    println!(
+        "Benutzer: admin create-user, auth list-users, auth assign-role, auth grant-permission"
+    );
     println!("--bootstrap an myshop ist Legacy und schreibt kein Schema und keine Historie.");
-    println!("Nicht implementiert: Admin, Authentifizierung, Rename-Ausführung, Tabellen-Neubau, Down-Migrationen.");
+    println!("Nicht implementiert: Admin-Oberfläche, OAuth, MFA, Down-Migrationen, Baseline für PostgreSQL.");
 }
 
 fn run_migrate(action: MigrateCommand) -> Result<(), String> {
@@ -102,18 +241,78 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 }
                 MakeOutcome::Written { path, id, risks } => {
                     println!("Migration geschrieben: {} ({id})", path.display());
-                    if risks.is_empty() {
-                        println!("Risiken: keine");
-                    } else {
-                        println!("Risiken:");
-                        for risk in risks {
-                            println!("  {}: {}", risk.code, risk.message);
-                        }
-                        println!(
-                            "ferrum migrate up führt diese Datei erst mit --allow-destructive aus."
-                        );
-                    }
+                    print_risks(&risks);
                 }
+            }
+        }
+        MigrateCommand::RenameColumn {
+            table,
+            from,
+            to,
+            name,
+            schema_file,
+            migrations_dir,
+        } => {
+            let (directory, schema) = resolve_schema(schema_file, migrations_dir)?;
+            let slug = name.unwrap_or_else(|| format!("rename_{to}"));
+            let outcome = write_explicit_migration(
+                &directory,
+                &slug,
+                &schema,
+                MigrationOperation::RenameColumn { table, from, to },
+            )
+            .map_err(|error| error.0)?;
+            print_written(outcome);
+        }
+        MigrateCommand::RenameTable {
+            from,
+            to,
+            name,
+            schema_file,
+            migrations_dir,
+        } => {
+            let (directory, schema) = resolve_schema(schema_file, migrations_dir)?;
+            let slug = name.unwrap_or_else(|| format!("rename_{to}"));
+            let outcome = write_explicit_migration(
+                &directory,
+                &slug,
+                &schema,
+                MigrationOperation::RenameTable { from, to },
+            )
+            .map_err(|error| error.0)?;
+            print_written(outcome);
+        }
+        MigrateCommand::Reseal { path, database_url } => {
+            let url = resolve_database_url(database_url)?;
+            let file = runtime.block_on(async {
+                let db = ferrum_db::connect(&url)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                reseal_unapplied(&db, &path).await.map_err(|error| error.0)
+            })?;
+            println!(
+                "Checksum neu geschrieben für {}. Angewendete Migrationen bleiben unverändert.",
+                file.id
+            );
+        }
+        MigrateCommand::Baseline {
+            database_url,
+            migrations_dir,
+            confirm,
+        } => {
+            let directory = resolve_directory(migrations_dir)?;
+            let url = resolve_database_url(database_url)?;
+            let ids = runtime.block_on(async {
+                let db = ferrum_db::connect(&url)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                baseline_database(&db, &directory, confirm)
+                    .await
+                    .map_err(|error| error.0)
+            })?;
+            println!("Baseline geschrieben. Es wurden keine Tabellen und keine Daten verändert.");
+            for id in ids {
+                println!("Als angewendet markiert: {id}");
             }
         }
         MigrateCommand::Up {
@@ -123,14 +322,25 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
         } => {
             let directory = resolve_directory(migrations_dir)?;
             let url = resolve_database_url(database_url)?;
-            let report = runtime.block_on(async {
+            let (auth_applied, report) = runtime.block_on(async {
                 let db = ferrum_db::connect(&url)
                     .await
                     .map_err(|error| error.to_string())?;
-                apply_directory(&db, &directory, allow_destructive)
+                let auth_applied = ferrum_auth::apply_migrations(&db)
                     .await
-                    .map_err(|error| error.0)
+                    .map_err(|error| error.to_string())?;
+                let report = apply_directory(&db, &directory, allow_destructive)
+                    .await
+                    .map_err(|error| error.0)?;
+                Ok::<_, String>((auth_applied, report))
             })?;
+            if auth_applied.is_empty() {
+                println!("Keine ausstehenden Auth-Migrationen.");
+            } else {
+                for id in auth_applied {
+                    println!("Auth-Migration angewendet: {id}");
+                }
+            }
             if report.applied.is_empty() {
                 println!("Keine ausstehenden Migrationen.");
             } else {
@@ -162,6 +372,35 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
         }
     }
     Ok(())
+}
+
+fn print_written(outcome: MakeOutcome) {
+    match outcome {
+        MakeOutcome::Unchanged => {
+            println!("Keine Schemaänderung. Es wurde keine Migration geschrieben.");
+        }
+        MakeOutcome::Written { path, id, risks } => {
+            println!("Migration geschrieben: {} ({id})", path.display());
+            print_risks(&risks);
+        }
+    }
+}
+
+fn print_risks(risks: &[ferrum_migrations::MigrationRisk]) {
+    if risks.is_empty() {
+        println!("Risiken: keine");
+        return;
+    }
+    println!("Risiken:");
+    for risk in risks {
+        println!("  {}: {}", risk.code, risk.message);
+    }
+    let destructive = risks
+        .iter()
+        .any(|risk| risk.code == "drop_table" || risk.code == "drop_column");
+    if destructive {
+        println!("Löschungen führt ferrum migrate up erst mit --allow-destructive aus.");
+    }
 }
 
 fn resolve_directory(override_dir: Option<PathBuf>) -> Result<PathBuf, String> {
@@ -211,6 +450,179 @@ fn load_optional_schema(schema_file: Option<PathBuf>) -> Result<Option<SchemaSna
     Ok(Some(
         load_schema_from_command(&project.root, &command).map_err(|error| error.0)?,
     ))
+}
+
+fn run_admin(action: AdminCommand) -> Result<(), String> {
+    match action {
+        AdminCommand::CreateUser {
+            email,
+            staff,
+            superuser,
+            database_url,
+        } => {
+            let email = match email {
+                Some(email) => email,
+                None => prompt_line("E-Mail: ")?,
+            };
+            let password = prompt_secret("Passwort: ")?;
+            let confirm = prompt_secret("Passwort wiederholen: ")?;
+            if password != confirm {
+                return Err("Die Passwörter stimmen nicht überein.".to_owned());
+            }
+            let url = resolve_database_url(database_url)?;
+            let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+            let user = runtime.block_on(async {
+                let db = ferrum_db::connect(&url)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                ferrum_auth::apply_migrations(&db)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                let auth = ferrum_auth::AuthService::new(db, ferrum_auth::AuthConfig::from_env());
+                auth.create_user(&email, &password, staff, superuser)
+                    .await
+                    .map_err(auth_message)
+            })?;
+            println!("Benutzer angelegt: {} ({})", user.email, user.id);
+            Ok(())
+        }
+    }
+}
+
+fn run_auth(action: AuthCommand) -> Result<(), String> {
+    let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
+    match action {
+        AuthCommand::ListUsers { database_url } => {
+            let url = resolve_database_url(database_url)?;
+            let users = runtime.block_on(async {
+                let service = open_auth(&url).await?;
+                service.list_users().await.map_err(auth_message)
+            })?;
+            for user in users {
+                println!(
+                    "{}  {}  active={} staff={} superuser={}",
+                    user.id, user.email, user.is_active, user.is_staff, user.is_superuser
+                );
+            }
+        }
+        AuthCommand::CreateRole { name, database_url } => {
+            let url = resolve_database_url(database_url)?;
+            let id = runtime.block_on(async {
+                let service = open_auth(&url).await?;
+                service.ensure_role(&name).await.map_err(auth_message)
+            })?;
+            println!("Rolle bereit: {name} ({id})");
+        }
+        AuthCommand::GrantPermission {
+            code,
+            role,
+            database_url,
+        } => {
+            let url = resolve_database_url(database_url)?;
+            runtime.block_on(async {
+                let service = open_auth(&url).await?;
+                service
+                    .grant_permission(&role, &code)
+                    .await
+                    .map_err(auth_message)
+            })?;
+            println!("Berechtigung {code} an Rolle {role} vergeben.");
+        }
+        AuthCommand::RevokePermission {
+            code,
+            role,
+            database_url,
+        } => {
+            let url = resolve_database_url(database_url)?;
+            runtime.block_on(async {
+                let service = open_auth(&url).await?;
+                service
+                    .revoke_permission(&role, &code)
+                    .await
+                    .map_err(auth_message)
+            })?;
+            println!("Berechtigung {code} von Rolle {role} entzogen.");
+        }
+        AuthCommand::AssignRole {
+            email,
+            role,
+            database_url,
+        } => {
+            let url = resolve_database_url(database_url)?;
+            runtime.block_on(async {
+                let service = open_auth(&url).await?;
+                service
+                    .assign_role(&email, &role)
+                    .await
+                    .map_err(auth_message)
+            })?;
+            println!("Rolle {role} an {email} zugewiesen.");
+        }
+        AuthCommand::RevokeRole {
+            email,
+            role,
+            database_url,
+        } => {
+            let url = resolve_database_url(database_url)?;
+            runtime.block_on(async {
+                let service = open_auth(&url).await?;
+                service
+                    .revoke_role(&email, &role)
+                    .await
+                    .map_err(auth_message)
+            })?;
+            println!("Rolle {role} von {email} entzogen.");
+        }
+    }
+    Ok(())
+}
+
+async fn open_auth(url: &str) -> Result<ferrum_auth::AuthService, String> {
+    let db = ferrum_db::connect(url)
+        .await
+        .map_err(|error| error.to_string())?;
+    ferrum_auth::apply_migrations(&db)
+        .await
+        .map_err(|error| error.to_string())?;
+    Ok(ferrum_auth::AuthService::new(
+        db,
+        ferrum_auth::AuthConfig::from_env(),
+    ))
+}
+
+fn prompt_line(label: &str) -> Result<String, String> {
+    use std::io::Write;
+    eprint!("{label}");
+    std::io::stderr()
+        .flush()
+        .map_err(|error| error.to_string())?;
+    let mut line = String::new();
+    std::io::stdin()
+        .read_line(&mut line)
+        .map_err(|error| error.to_string())?;
+    Ok(line.trim().to_owned())
+}
+
+fn prompt_secret(label: &str) -> Result<String, String> {
+    rpassword::prompt_password(label).map_err(|error| error.to_string())
+}
+
+fn auth_message(error: ferrum_auth::AuthError) -> String {
+    match error {
+        ferrum_auth::AuthError::Validation(message) if message == "record already exists" => {
+            "Der Benutzer oder die Zuordnung existiert bereits.".to_owned()
+        }
+        ferrum_auth::AuthError::Validation(message) if message == "user was not found" => {
+            "Der Benutzer wurde nicht gefunden.".to_owned()
+        }
+        ferrum_auth::AuthError::Validation(message) if message == "email is invalid" => {
+            "Die E-Mail-Adresse ist ungültig.".to_owned()
+        }
+        ferrum_auth::AuthError::Database(_) => {
+            "Die Datenbankoperation ist fehlgeschlagen.".to_owned()
+        }
+        other => other.to_string(),
+    }
 }
 
 fn resolve_database_url(override_url: Option<String>) -> Result<String, String> {

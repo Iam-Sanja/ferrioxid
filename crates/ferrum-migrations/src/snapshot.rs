@@ -1,7 +1,10 @@
 //! Versionierte, deterministische Schema-Snapshots.
 
 use crate::error::MigrationError;
-use ferrum_core::{ColumnKind, ColumnSpec};
+use ferrum_core::{
+    foreign_key_name, secondary_index_name, unique_index_name, ColumnKind, ColumnSpec,
+    ReferentialAction, TableConstraints,
+};
 use serde::{Deserialize, Serialize};
 
 pub const FORMAT_VERSION: u32 = 1;
@@ -48,10 +51,57 @@ pub struct ColumnSnapshot {
     pub default: Option<bool>,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum OnDelete {
+    Restrict,
+    Cascade,
+    SetNull,
+}
+
+impl From<ReferentialAction> for OnDelete {
+    fn from(action: ReferentialAction) -> Self {
+        match action {
+            ReferentialAction::Restrict => Self::Restrict,
+            ReferentialAction::Cascade => Self::Cascade,
+            ReferentialAction::SetNull => Self::SetNull,
+        }
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct UniqueConstraintSnapshot {
+    pub name: String,
+    pub columns: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct IndexSnapshot {
+    pub name: String,
+    pub columns: Vec<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ForeignKeySnapshot {
+    pub name: String,
+    pub columns: Vec<String>,
+    pub referenced_table: String,
+    pub referenced_columns: Vec<String>,
+    pub on_delete: OnDelete,
+    /// Ferrum setzt derzeit immer `no_action`.
+    pub on_update: String,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct TableSnapshot {
     pub name: String,
     pub columns: Vec<ColumnSnapshot>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub unique_constraints: Vec<UniqueConstraintSnapshot>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub indexes: Vec<IndexSnapshot>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub foreign_keys: Vec<ForeignKeySnapshot>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -64,6 +114,7 @@ pub struct SchemaSnapshot {
 pub struct RegisteredModel {
     pub table: &'static str,
     pub columns: &'static [ColumnSpec],
+    pub constraints: &'static TableConstraints,
 }
 
 impl SchemaSnapshot {
@@ -77,21 +128,7 @@ impl SchemaSnapshot {
     pub fn from_registered(models: &[RegisteredModel]) -> Result<Self, MigrationError> {
         let mut tables = Vec::with_capacity(models.len());
         for model in models {
-            let columns = model
-                .columns
-                .iter()
-                .map(|column| ColumnSnapshot {
-                    name: column.name.to_owned(),
-                    logical_type: column.kind.into(),
-                    primary_key: column.primary_key,
-                    nullable: column.nullable,
-                    default: column.default_bool,
-                })
-                .collect();
-            tables.push(TableSnapshot {
-                name: model.table.to_owned(),
-                columns,
-            });
+            tables.push(table_from_registered(model)?);
         }
         tables.sort_by(|left, right| left.name.cmp(&right.name));
         let snapshot = Self {
@@ -184,7 +221,9 @@ impl SchemaSnapshot {
                     table.name
                 )));
             }
+            validate_table_objects(table, &column_names)?;
         }
+        validate_foreign_keys(self)?;
         Ok(())
     }
 
@@ -198,7 +237,12 @@ impl SchemaSnapshot {
                 .tables
                 .iter()
                 .find(|candidate| candidate.name == table.name)
-                .is_some_and(|candidate| columns_equivalent(&table.columns, &candidate.columns))
+                .is_some_and(|candidate| {
+                    columns_equivalent(&table.columns, &candidate.columns)
+                        && same_objects(&table.unique_constraints, &candidate.unique_constraints)
+                        && same_objects(&table.indexes, &candidate.indexes)
+                        && same_objects(&table.foreign_keys, &candidate.foreign_keys)
+                })
         })
     }
 }
@@ -218,6 +262,260 @@ fn columns_equivalent(left: &[ColumnSnapshot], right: &[ColumnSnapshot]) -> bool
                     && candidate.default == column.default
             })
     })
+}
+
+fn table_from_registered(model: &RegisteredModel) -> Result<TableSnapshot, MigrationError> {
+    let columns = model
+        .columns
+        .iter()
+        .map(|column| ColumnSnapshot {
+            name: column.name.to_owned(),
+            logical_type: column.kind.into(),
+            primary_key: column.primary_key,
+            nullable: column.nullable,
+            default: column.default_bool,
+        })
+        .collect::<Vec<_>>();
+    let mut unique_constraints = Vec::new();
+    let mut indexes = Vec::new();
+    let mut foreign_keys = Vec::new();
+    for column in model.columns {
+        if column.unique {
+            unique_constraints.push(unique_snapshot(model.table, &[column.name]));
+        }
+        if column.indexed {
+            indexes.push(index_snapshot(model.table, &[column.name]));
+        }
+        if let (Some(referenced_table), Some(referenced_column), Some(on_delete)) = (
+            column.foreign_table,
+            column.foreign_column,
+            column.on_delete,
+        ) {
+            foreign_keys.push(ForeignKeySnapshot {
+                name: foreign_key_name(
+                    model.table,
+                    column.name,
+                    referenced_table,
+                    referenced_column,
+                ),
+                columns: vec![column.name.to_owned()],
+                referenced_table: referenced_table.to_owned(),
+                referenced_columns: vec![referenced_column.to_owned()],
+                on_delete: on_delete.into(),
+                on_update: "no_action".to_owned(),
+            });
+        }
+    }
+    for group in model.constraints.unique_groups {
+        unique_constraints.push(unique_snapshot(model.table, group));
+    }
+    for group in model.constraints.index_groups {
+        indexes.push(index_snapshot(model.table, group));
+    }
+    unique_constraints.sort_by(|left, right| left.name.cmp(&right.name));
+    indexes.sort_by(|left, right| left.name.cmp(&right.name));
+    foreign_keys.sort_by(|left, right| left.name.cmp(&right.name));
+    indexes.retain(|index| {
+        !unique_constraints
+            .iter()
+            .any(|unique| unique.columns == index.columns)
+    });
+    Ok(TableSnapshot {
+        name: model.table.to_owned(),
+        columns,
+        unique_constraints,
+        indexes,
+        foreign_keys,
+    })
+}
+
+fn unique_snapshot(table: &str, columns: &[&str]) -> UniqueConstraintSnapshot {
+    UniqueConstraintSnapshot {
+        name: unique_index_name(table, columns),
+        columns: columns.iter().map(|column| (*column).to_owned()).collect(),
+    }
+}
+
+fn index_snapshot(table: &str, columns: &[&str]) -> IndexSnapshot {
+    IndexSnapshot {
+        name: secondary_index_name(table, columns),
+        columns: columns.iter().map(|column| (*column).to_owned()).collect(),
+    }
+}
+
+fn validate_table_objects(table: &TableSnapshot, columns: &[&str]) -> Result<(), MigrationError> {
+    let mut names = Vec::new();
+    for unique in &table.unique_constraints {
+        remember_name(table, &mut names, &unique.name)?;
+        require_columns(table, columns, &unique.columns)?;
+    }
+    for index in &table.indexes {
+        remember_name(table, &mut names, &index.name)?;
+        require_columns(table, columns, &index.columns)?;
+        if table
+            .unique_constraints
+            .iter()
+            .any(|unique| unique.columns == index.columns)
+        {
+            return Err(MigrationError::new(format!(
+                "Index `{}` wiederholt den Unique-Constraint und wird nicht doppelt angelegt.",
+                index.name
+            )));
+        }
+        if index.columns.len() == 1
+            && table
+                .columns
+                .iter()
+                .any(|column| column.name == index.columns[0] && column.primary_key)
+        {
+            return Err(MigrationError::new(format!(
+                "Index `{}` wiederholt den Primärschlüssel.",
+                index.name
+            )));
+        }
+    }
+    for foreign_key in &table.foreign_keys {
+        remember_name(table, &mut names, &foreign_key.name)?;
+        require_columns(table, columns, &foreign_key.columns)?;
+        if foreign_key.on_update != "no_action" {
+            return Err(MigrationError::new(format!(
+                "Fremdschlüssel `{}` darf für ON UPDATE nur no_action verwenden.",
+                foreign_key.name
+            )));
+        }
+        if foreign_key.on_delete == OnDelete::SetNull {
+            for column_name in &foreign_key.columns {
+                let nullable = table
+                    .columns
+                    .iter()
+                    .find(|column| column.name == *column_name)
+                    .is_some_and(|column| column.nullable);
+                if !nullable {
+                    return Err(MigrationError::new(format!(
+                        "SET NULL ist für `{}.{}` unzulässig, weil die Spalte NOT NULL ist.",
+                        table.name, column_name
+                    )));
+                }
+            }
+        }
+    }
+    Ok(())
+}
+
+fn validate_foreign_keys(schema: &SchemaSnapshot) -> Result<(), MigrationError> {
+    for table in &schema.tables {
+        for foreign_key in &table.foreign_keys {
+            let referenced = schema
+                .tables
+                .iter()
+                .find(|candidate| candidate.name == foreign_key.referenced_table)
+                .ok_or_else(|| {
+                    MigrationError::new(format!(
+                        "Fremdschlüssel `{}` verweist auf die unbekannte Tabelle `{}`.",
+                        foreign_key.name, foreign_key.referenced_table
+                    ))
+                })?;
+            if foreign_key.columns.len() != foreign_key.referenced_columns.len()
+                || foreign_key.columns.len() != 1
+            {
+                return Err(MigrationError::new(format!(
+                    "Fremdschlüssel `{}` muss genau eine Spalte referenzieren.",
+                    foreign_key.name
+                )));
+            }
+            let referenced_column = referenced
+                .columns
+                .iter()
+                .find(|column| column.name == foreign_key.referenced_columns[0])
+                .ok_or_else(|| {
+                    MigrationError::new(format!(
+                        "Fremdschlüssel `{}` verweist auf die unbekannte Spalte `{}.{}`.",
+                        foreign_key.name, referenced.name, foreign_key.referenced_columns[0]
+                    ))
+                })?;
+            let Some(local) = table
+                .columns
+                .iter()
+                .find(|column| column.name == foreign_key.columns[0])
+            else {
+                return Err(MigrationError::new(format!(
+                    "Fremdschlüssel `{}` nennt die fehlende Spalte `{}.{}`.",
+                    foreign_key.name, table.name, foreign_key.columns[0]
+                )));
+            };
+            if local.logical_type != referenced_column.logical_type {
+                return Err(MigrationError::new(format!(
+                    "Fremdschlüssel `{}` verbindet {:?} mit {:?}.",
+                    foreign_key.name, local.logical_type, referenced_column.logical_type
+                )));
+            }
+            let unique_target = referenced_column.primary_key
+                || referenced.unique_constraints.iter().any(|unique| {
+                    unique.columns.len() == 1 && unique.columns[0] == referenced_column.name
+                });
+            if !unique_target {
+                return Err(MigrationError::new(format!(
+                    "Fremdschlüssel `{}` verlangt einen Primärschlüssel oder Unique-Constraint auf `{}.{}`.",
+                    foreign_key.name, referenced.name, referenced_column.name
+                )));
+            }
+        }
+    }
+    Ok(())
+}
+
+fn remember_name<'a>(
+    table: &TableSnapshot,
+    names: &mut Vec<&'a str>,
+    name: &'a str,
+) -> Result<(), MigrationError> {
+    if !is_identifier(name) {
+        return Err(MigrationError::new(format!(
+            "Ungültiger Constraint-Name `{name}`."
+        )));
+    }
+    if names.contains(&name) {
+        return Err(MigrationError::new(format!(
+            "Doppelter Constraint-Name `{name}` in `{}`.",
+            table.name
+        )));
+    }
+    names.push(name);
+    Ok(())
+}
+
+fn require_columns(
+    table: &TableSnapshot,
+    columns: &[&str],
+    used: &[String],
+) -> Result<(), MigrationError> {
+    if used.is_empty() {
+        return Err(MigrationError::new(format!(
+            "Constraint in `{}` hat keine Spalten.",
+            table.name
+        )));
+    }
+    let mut seen = Vec::new();
+    for column in used {
+        if !columns.contains(&column.as_str()) {
+            return Err(MigrationError::new(format!(
+                "Constraint in `{}` nennt die unbekannte Spalte `{column}`.",
+                table.name
+            )));
+        }
+        if seen.contains(&column.as_str()) {
+            return Err(MigrationError::new(format!(
+                "Spalte `{column}` ist in einem Constraint von `{}` doppelt.",
+                table.name
+            )));
+        }
+        seen.push(column.as_str());
+    }
+    Ok(())
+}
+
+fn same_objects<T: PartialEq>(left: &[T], right: &[T]) -> bool {
+    left.len() == right.len() && left.iter().all(|item| right.contains(item))
 }
 
 pub fn is_identifier(value: &str) -> bool {
@@ -261,6 +559,9 @@ mod tests {
                         default: Some(true),
                     },
                 ],
+                unique_constraints: Vec::new(),
+                indexes: Vec::new(),
+                foreign_keys: Vec::new(),
             }],
         }
     }
@@ -275,6 +576,13 @@ mod tests {
         let name = first.find("\"name\":\"name\"").unwrap();
         let active = first.find("\"name\":\"active\"").unwrap();
         assert!(id < name && name < active);
+        assert!(!first.contains("unique_constraints"));
+        assert!(!first.contains("foreign_keys"));
+        let legacy = r#"{"format_version":1,"tables":[{"name":"products","columns":[{"name":"id","type":"uuid","primary_key":true,"nullable":false},{"name":"name","type":"string","primary_key":false,"nullable":false}]}]}"#;
+        let parsed = SchemaSnapshot::from_json(legacy).unwrap();
+        assert!(parsed.tables[0].unique_constraints.is_empty());
+        assert!(parsed.tables[0].indexes.is_empty());
+        assert!(parsed.tables[0].foreign_keys.is_empty());
     }
 
     #[test]
@@ -285,6 +593,11 @@ mod tests {
             nullable: false,
             primary_key: true,
             default_bool: None,
+            unique: false,
+            indexed: false,
+            foreign_table: None,
+            foreign_column: None,
+            on_delete: None,
         };
         const LABEL: ColumnSpec = ColumnSpec {
             name: "label",
@@ -292,15 +605,22 @@ mod tests {
             nullable: false,
             primary_key: false,
             default_bool: None,
+            unique: false,
+            indexed: false,
+            foreign_table: None,
+            foreign_column: None,
+            on_delete: None,
         };
         let left = SchemaSnapshot::from_registered(&[
             RegisteredModel {
                 table: "zeta",
                 columns: &[ID, LABEL],
+                constraints: &ferrum_core::TableConstraints::EMPTY,
             },
             RegisteredModel {
                 table: "alpha",
                 columns: &[ID, LABEL],
+                constraints: &ferrum_core::TableConstraints::EMPTY,
             },
         ])
         .unwrap();
@@ -308,10 +628,12 @@ mod tests {
             RegisteredModel {
                 table: "alpha",
                 columns: &[ID, LABEL],
+                constraints: &ferrum_core::TableConstraints::EMPTY,
             },
             RegisteredModel {
                 table: "zeta",
                 columns: &[ID, LABEL],
+                constraints: &ferrum_core::TableConstraints::EMPTY,
             },
         ])
         .unwrap();

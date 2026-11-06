@@ -6,6 +6,8 @@ license.workspace = true
 
 [dependencies]
 ferrum-core = { path = "../ferrum-core" }
+ferrum-auth = { path = "../ferrum-auth" }
+ferrum-admin = { path = "../ferrum-admin" }
 ferrum-db = { path = "../ferrum-db" }
 ferrum-migrations = { path = "../ferrum-migrations" }
 axum.workspace = true

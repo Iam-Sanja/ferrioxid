@@ -1,11 +1,17 @@
-//! Explicit model registration -> generated list, read, create, update and delete routes.
+//! Explizite Modellregistrierung erzeugt Listen-, Lese-, Anlage-, Änderungs- und Löschrouten.
+//!
+//! `allow_anonymous` bleibt die einzige öffentliche Freigabe. Jede andere Route prüft die
+//! Sitzung und die am Modell hinterlegte Berechtigung. Objektregeln ohne SQL-Scope blockieren Listen.
+
 use axum::{
     extract::{Path, State},
-    http::StatusCode,
+    http::{HeaderMap, Method, StatusCode},
     response::IntoResponse,
     routing::get,
     Json, Router,
 };
+use ferrum_admin::AdminRegistry;
+use ferrum_auth::{mount, AppState, AuthError, AuthService, AuthUser, ClientIp, ObjectPolicy};
 use ferrum_core::{ColumnSpec, FerrumError};
 use ferrum_db::{kind_of, render_schema, DeleteOutcome, ModelRepository};
 use ferrum_migrations::history_exists;
@@ -14,7 +20,9 @@ use serde_json::json;
 
 pub struct App {
     db: DatabaseConnection,
-    routes: Router<DatabaseConnection>,
+    auth: Option<AuthService>,
+    admin: Option<AdminRegistry>,
+    routes: Router<AppState>,
     schemas: Vec<(&'static str, &'static [ColumnSpec])>,
 }
 
@@ -22,9 +30,21 @@ impl App {
     pub fn new(db: DatabaseConnection) -> Self {
         Self {
             db,
+            auth: None,
+            admin: None,
             routes: Router::new(),
             schemas: Vec::new(),
         }
+    }
+
+    pub fn with_auth(mut self, auth: AuthService) -> Self {
+        self.auth = Some(auth);
+        self
+    }
+
+    pub fn with_admin(mut self, registry: AdminRegistry) -> Self {
+        self.admin = Some(registry);
+        self
     }
 
     pub fn register<M: ModelRepository>(mut self) -> Self {
@@ -38,8 +58,29 @@ impl App {
                 &detail_path,
                 get(get_one::<M>).patch(update::<M>).delete(delete_one::<M>),
             );
+        } else if descriptor.requires_object_policy {
+            self.routes = self.routes.route(
+                descriptor.api_path,
+                get(policy_unbound).post(policy_unbound),
+            );
+            self.routes = self.routes.route(
+                &detail_path,
+                get(policy_unbound)
+                    .patch(policy_unbound)
+                    .delete(policy_unbound),
+            );
+        } else if descriptor.permission.is_some() {
+            self.routes = self.routes.route(
+                descriptor.api_path,
+                get(guarded_list::<M>).post(guarded_create::<M>),
+            );
+            self.routes = self.routes.route(
+                &detail_path,
+                get(guarded_get::<M>)
+                    .patch(guarded_update::<M>)
+                    .delete(guarded_delete::<M>),
+            );
         } else {
-            // No auth implementation exists: deny access by default on all routes.
             self.routes = self
                 .routes
                 .route(descriptor.api_path, get(denied).post(denied));
@@ -47,6 +88,30 @@ impl App {
                 .routes
                 .route(&detail_path, get(denied).patch(denied).delete(denied));
         }
+        self.schemas.push((descriptor.table, M::columns()));
+        self
+    }
+
+    /// Bindet eine Objektregel. Listen bleiben blockiert, außer für aktive Superuser.
+    ///
+    /// `register_policy` ersetzt `register` für dasselbe Modell. Beide Aufrufe erzeugen doppelte Routen.
+    pub fn register_policy<M, P>(mut self) -> Self
+    where
+        M: ModelRepository,
+        P: ObjectPolicy<M> + 'static,
+    {
+        let descriptor = M::descriptor();
+        let detail_path = format!("{}/{{id}}", descriptor.api_path.trim_end_matches('/'));
+        self.routes = self.routes.route(
+            descriptor.api_path,
+            get(policy_list::<M>).post(guarded_create::<M>),
+        );
+        self.routes = self.routes.route(
+            &detail_path,
+            get(policy_get::<M, P>)
+                .patch(policy_update::<M, P>)
+                .delete(policy_delete::<M, P>),
+        );
         self.schemas.push((descriptor.table, M::columns()));
         self
     }
@@ -76,9 +141,19 @@ impl App {
     }
 
     pub fn into_router(self) -> Router {
-        self.routes
-            .route("/healthz", get(|| async { Json(json!({"status": "ok"})) }))
-            .with_state(self.db)
+        let state = AppState {
+            db: self.db,
+            auth: self.auth,
+        };
+        {
+            let mut routes = mount(self.routes);
+            if let Some(registry) = self.admin {
+                routes = ferrum_admin::mount(routes, registry);
+            }
+            routes
+        }
+        .route("/healthz", get(|| async { Json(json!({"status": "ok"})) }))
+        .with_state(state)
     }
 }
 
@@ -90,47 +165,213 @@ impl From<FerrumError> for ApiError {
     }
 }
 
+impl From<AuthError> for ApiError {
+    fn from(error: AuthError) -> Self {
+        Self(FerrumError::from(error))
+    }
+}
+
 async fn denied() -> ApiError {
     ApiError(FerrumError::Forbidden)
 }
 
+async fn policy_unbound() -> ApiError {
+    ApiError(FerrumError::Denied(
+        "object policy is not bound; call register_policy".into(),
+    ))
+}
+
 async fn list<M: ModelRepository>(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
 ) -> Result<Json<ferrum_db::ListPage<M>>, ApiError> {
-    Ok(Json(M::list(&db).await?))
+    Ok(Json(M::list(&state.db).await?))
 }
 
 async fn get_one<M: ModelRepository>(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<Json<M>, ApiError> {
-    let model = M::get(&db, id).await?.ok_or(FerrumError::NotFound)?;
+    let model = M::get(&state.db, id).await?.ok_or(FerrumError::NotFound)?;
     Ok(Json(model))
 }
 
 async fn create<M: ModelRepository>(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Json(input): Json<M::Create>,
 ) -> Result<(StatusCode, Json<M>), ApiError> {
-    Ok((StatusCode::CREATED, Json(M::create(&db, input).await?)))
+    Ok((
+        StatusCode::CREATED,
+        Json(M::create(&state.db, input).await?),
+    ))
 }
 
 async fn update<M: ModelRepository>(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
     Json(input): Json<M::Update>,
 ) -> Result<Json<M>, ApiError> {
-    Ok(Json(M::update(&db, id, input).await?))
+    Ok(Json(M::update(&state.db, id, input).await?))
 }
 
 async fn delete_one<M: ModelRepository>(
-    State(db): State<DatabaseConnection>,
+    State(state): State<AppState>,
     Path(id): Path<uuid::Uuid>,
 ) -> Result<StatusCode, ApiError> {
-    match M::delete(&db, id).await? {
+    match M::delete(&state.db, id).await? {
         DeleteOutcome::Deleted => Ok(StatusCode::NO_CONTENT),
         DeleteOutcome::Missing => Err(FerrumError::NotFound.into()),
     }
+}
+
+async fn guarded_list<M: ModelRepository>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+) -> Result<Json<ferrum_db::ListPage<M>>, ApiError> {
+    ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
+    Ok(Json(M::list(&state.db).await?))
+}
+
+async fn guarded_get<M: ModelRepository>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+    Path(id): Path<uuid::Uuid>,
+) -> Result<Json<M>, ApiError> {
+    ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
+    let model = M::get(&state.db, id).await?.ok_or(FerrumError::NotFound)?;
+    Ok(Json(model))
+}
+
+async fn guarded_create<M: ModelRepository>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+    Json(input): Json<M::Create>,
+) -> Result<(StatusCode, Json<M>), ApiError> {
+    ensure::<M>(&state, &headers, &Method::POST, &peer.0, "create").await?;
+    Ok((
+        StatusCode::CREATED,
+        Json(M::create(&state.db, input).await?),
+    ))
+}
+
+async fn guarded_update<M: ModelRepository>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+    Path(id): Path<uuid::Uuid>,
+    Json(input): Json<M::Update>,
+) -> Result<Json<M>, ApiError> {
+    ensure::<M>(&state, &headers, &Method::PATCH, &peer.0, "update").await?;
+    Ok(Json(M::update(&state.db, id, input).await?))
+}
+
+async fn guarded_delete<M: ModelRepository>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+    Path(id): Path<uuid::Uuid>,
+) -> Result<StatusCode, ApiError> {
+    ensure::<M>(&state, &headers, &Method::DELETE, &peer.0, "delete").await?;
+    match M::delete(&state.db, id).await? {
+        DeleteOutcome::Deleted => Ok(StatusCode::NO_CONTENT),
+        DeleteOutcome::Missing => Err(FerrumError::NotFound.into()),
+    }
+}
+
+async fn policy_list<M: ModelRepository>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+) -> Result<Json<ferrum_db::ListPage<M>>, ApiError> {
+    let user = ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
+    if user.is_superuser {
+        return Ok(Json(M::list(&state.db).await?));
+    }
+    Err(FerrumError::Denied(
+        "object-level policies block list endpoints until a query scope exists".into(),
+    )
+    .into())
+}
+
+async fn policy_get<M, P>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+    Path(id): Path<uuid::Uuid>,
+) -> Result<Json<M>, ApiError>
+where
+    M: ModelRepository,
+    P: ObjectPolicy<M>,
+{
+    let user = ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
+    let model = M::get(&state.db, id).await?.ok_or(FerrumError::NotFound)?;
+    if !allows(user.is_superuser, P::can_read(&user, &model)) {
+        return Err(FerrumError::NotFound.into());
+    }
+    Ok(Json(model))
+}
+
+async fn policy_update<M, P>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+    Path(id): Path<uuid::Uuid>,
+    Json(input): Json<M::Update>,
+) -> Result<Json<M>, ApiError>
+where
+    M: ModelRepository,
+    P: ObjectPolicy<M>,
+{
+    let user = ensure::<M>(&state, &headers, &Method::PATCH, &peer.0, "update").await?;
+    let current = M::get(&state.db, id).await?.ok_or(FerrumError::NotFound)?;
+    if !allows(user.is_superuser, P::can_update(&user, &current)) {
+        return Err(FerrumError::NotFound.into());
+    }
+    Ok(Json(M::update(&state.db, id, input).await?))
+}
+
+async fn policy_delete<M, P>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+    Path(id): Path<uuid::Uuid>,
+) -> Result<StatusCode, ApiError>
+where
+    M: ModelRepository,
+    P: ObjectPolicy<M>,
+{
+    let user = ensure::<M>(&state, &headers, &Method::DELETE, &peer.0, "delete").await?;
+    let current = M::get(&state.db, id).await?.ok_or(FerrumError::NotFound)?;
+    if !allows(user.is_superuser, P::can_delete(&user, &current)) {
+        return Err(FerrumError::NotFound.into());
+    }
+    match M::delete(&state.db, id).await? {
+        DeleteOutcome::Deleted => Ok(StatusCode::NO_CONTENT),
+        DeleteOutcome::Missing => Err(FerrumError::NotFound.into()),
+    }
+}
+
+fn allows(superuser: bool, permitted: bool) -> bool {
+    superuser || permitted
+}
+
+async fn ensure<M: ModelRepository>(
+    state: &AppState,
+    headers: &HeaderMap,
+    method: &Method,
+    _peer: &str,
+    action: &str,
+) -> Result<AuthUser, ApiError> {
+    let auth = state
+        .auth
+        .as_ref()
+        .ok_or_else(|| FerrumError::Denied("authentication is not configured".into()))?;
+    let user = auth.authenticate(headers, method).await?;
+    auth.authorize(&user, M::descriptor().permission, action)
+        .await?;
+    Ok(user)
 }
 
 impl IntoResponse for ApiError {
@@ -142,6 +383,10 @@ impl IntoResponse for ApiError {
                 message.as_str(),
             ),
             FerrumError::Forbidden => (StatusCode::FORBIDDEN, "Forbidden", "Access denied"),
+            FerrumError::Denied(message) => (StatusCode::FORBIDDEN, "Forbidden", message.as_str()),
+            FerrumError::Unauthorized(message) => {
+                (StatusCode::UNAUTHORIZED, "Unauthorized", message.as_str())
+            }
             FerrumError::NotFound => (StatusCode::NOT_FOUND, "Not found", "Resource not found"),
             FerrumError::Database(error) => {
                 tracing::error!(error = %error, "database operation failed");
@@ -152,6 +397,15 @@ impl IntoResponse for ApiError {
                 )
             }
         };
-        (status, Json(json!({"type":"about:blank","title":title,"status":status.as_u16(),"detail":detail}))).into_response()
+        (
+            status,
+            Json(json!({
+                "type": "about:blank",
+                "title": title,
+                "status": status.as_u16(),
+                "detail": detail
+            })),
+        )
+            .into_response()
     }
 }

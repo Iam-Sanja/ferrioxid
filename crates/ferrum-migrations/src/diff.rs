@@ -1,7 +1,10 @@
 //! Vergleich zweier bestätigter Schema-Snapshots.
 
 use crate::error::MigrationError;
-use crate::snapshot::{ColumnSnapshot, SchemaSnapshot, TableSnapshot};
+use crate::snapshot::{
+    ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType, SchemaSnapshot, TableSnapshot,
+    UniqueConstraintSnapshot,
+};
 use serde::{Deserialize, Serialize};
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -16,6 +19,8 @@ pub enum MigrationOperation {
     AddColumn {
         table: String,
         column: ColumnSnapshot,
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        foreign_key: Option<ForeignKeySnapshot>,
     },
     DropColumn {
         table: String,
@@ -25,6 +30,39 @@ pub enum MigrationOperation {
         table: String,
         from: ColumnSnapshot,
         to: ColumnSnapshot,
+    },
+    RenameColumn {
+        table: String,
+        from: String,
+        to: String,
+    },
+    RenameTable {
+        from: String,
+        to: String,
+    },
+    AddUniqueConstraint {
+        table: String,
+        constraint: UniqueConstraintSnapshot,
+    },
+    DropUniqueConstraint {
+        table: String,
+        name: String,
+    },
+    AddIndex {
+        table: String,
+        index: IndexSnapshot,
+    },
+    DropIndex {
+        table: String,
+        name: String,
+    },
+    AddForeignKey {
+        table: String,
+        foreign_key: ForeignKeySnapshot,
+    },
+    DropForeignKey {
+        table: String,
+        name: String,
     },
 }
 
@@ -55,13 +93,40 @@ impl MigrationOperation {
         match self {
             Self::CreateTable { table } => format!("create_table {}", table.name),
             Self::DropTable { name } => format!("drop_table {name}"),
-            Self::AddColumn { table, column } => format!("add_column {table}.{}", column.name),
+            Self::AddColumn { table, column, .. } => format!("add_column {table}.{}", column.name),
             Self::DropColumn { table, name } => format!("drop_column {table}.{name}"),
             Self::AlterColumn { table, from, to } => {
                 format!("alter_column {table}.{} -> {}", from.name, to.name)
             }
+            Self::RenameColumn { table, from, to } => {
+                format!("rename_column {table}.{from} -> {to}")
+            }
+            Self::RenameTable { from, to } => format!("rename_table {from} -> {to}"),
+            Self::AddUniqueConstraint { table, constraint } => {
+                format!("add_unique {table}.{}", constraint.name)
+            }
+            Self::DropUniqueConstraint { table, name } => format!("drop_unique {table}.{name}"),
+            Self::AddIndex { table, index } => format!("add_index {table}.{}", index.name),
+            Self::DropIndex { table, name } => format!("drop_index {table}.{name}"),
+            Self::AddForeignKey { table, foreign_key } => {
+                format!("add_foreign_key {table}.{}", foreign_key.name)
+            }
+            Self::DropForeignKey { table, name } => format!("drop_foreign_key {table}.{name}"),
         }
     }
+}
+
+pub fn alter_is_supported(from: &ColumnSnapshot, to: &ColumnSnapshot) -> bool {
+    if from.name != to.name || from.primary_key != to.primary_key {
+        return false;
+    }
+    if from.logical_type == to.logical_type {
+        return from.nullable != to.nullable || from.default != to.default;
+    }
+    matches!(
+        (from.logical_type, to.logical_type),
+        (LogicalType::String, LogicalType::I64) | (LogicalType::I64, LogicalType::String)
+    )
 }
 
 pub fn plan_change(
@@ -88,28 +153,242 @@ pub fn plan_change(
     names.sort_unstable();
     names.dedup();
 
+    let mut creates = Vec::new();
+    let mut drops = Vec::new();
     for name in names {
         let previous = from.tables.iter().find(|table| table.name == name);
         let next = to.tables.iter().find(|table| table.name == name);
         match (previous, next) {
-            (None, Some(table)) => operations.push(MigrationOperation::CreateTable {
-                table: table.clone(),
-            }),
-            (Some(table), None) => operations.push(MigrationOperation::DropTable {
-                name: table.name.clone(),
-            }),
-            (Some(previous), Some(next)) => diff_columns(&mut operations, previous, next),
+            (None, Some(table)) => creates.push(table.clone()),
+            (Some(table), None) => drops.push(table.clone()),
+            (Some(previous), Some(next)) => diff_table(&mut operations, previous, next),
             (None, None) => {}
         }
     }
-
-    let risks = risks_for(&operations);
-    let refusal = refusal_for(&operations);
+    let mut ordered = Vec::new();
+    for table in order_creates(creates)? {
+        ordered.push(MigrationOperation::CreateTable { table });
+    }
+    operations.sort_by_key(operation_rank);
+    ordered.append(&mut operations);
+    for table in order_drops(drops)? {
+        ordered.push(MigrationOperation::DropTable { name: table });
+    }
+    let risks = risks_for(&ordered);
+    let refusal = refusal_for(&ordered);
     Ok(MigrationPlan {
-        operations,
+        operations: ordered,
         risks,
         refusal,
     })
+}
+
+fn diff_table(
+    operations: &mut Vec<MigrationOperation>,
+    previous: &TableSnapshot,
+    next: &TableSnapshot,
+) {
+    diff_columns(operations, previous, next);
+    attach_new_foreign_keys(operations, previous, next);
+    diff_named(
+        operations,
+        &previous.name,
+        &previous.unique_constraints,
+        &next.unique_constraints,
+        |constraint| MigrationOperation::AddUniqueConstraint {
+            table: next.name.clone(),
+            constraint: constraint.clone(),
+        },
+        |name| MigrationOperation::DropUniqueConstraint {
+            table: previous.name.clone(),
+            name,
+        },
+    );
+    diff_named(
+        operations,
+        &previous.name,
+        &previous.indexes,
+        &next.indexes,
+        |index| MigrationOperation::AddIndex {
+            table: next.name.clone(),
+            index: index.clone(),
+        },
+        |name| MigrationOperation::DropIndex {
+            table: previous.name.clone(),
+            name,
+        },
+    );
+}
+
+fn diff_named<T>(
+    operations: &mut Vec<MigrationOperation>,
+    _table: &str,
+    previous: &[T],
+    next: &[T],
+    add: impl Fn(&T) -> MigrationOperation,
+    drop: impl Fn(String) -> MigrationOperation,
+) where
+    T: Clone + PartialEq + NamedObject,
+{
+    for item in next {
+        match previous
+            .iter()
+            .find(|candidate| candidate.object_name() == item.object_name())
+        {
+            Some(existing) if existing == item => {}
+            Some(_) => {
+                operations.push(drop(item.object_name()));
+                operations.push(add(item));
+            }
+            None => operations.push(add(item)),
+        }
+    }
+    for item in previous {
+        if !next
+            .iter()
+            .any(|candidate| candidate.object_name() == item.object_name())
+        {
+            operations.push(drop(item.object_name()));
+        }
+    }
+}
+
+trait NamedObject {
+    fn object_name(&self) -> String;
+}
+
+impl NamedObject for UniqueConstraintSnapshot {
+    fn object_name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+impl NamedObject for IndexSnapshot {
+    fn object_name(&self) -> String {
+        self.name.clone()
+    }
+}
+
+fn attach_new_foreign_keys(
+    operations: &mut Vec<MigrationOperation>,
+    previous: &TableSnapshot,
+    next: &TableSnapshot,
+) {
+    for foreign_key in &next.foreign_keys {
+        if let Some(existing) = previous
+            .foreign_keys
+            .iter()
+            .find(|candidate| candidate.name == foreign_key.name)
+        {
+            if existing != foreign_key {
+                operations.push(MigrationOperation::DropForeignKey {
+                    table: previous.name.clone(),
+                    name: foreign_key.name.clone(),
+                });
+                operations.push(MigrationOperation::AddForeignKey {
+                    table: next.name.clone(),
+                    foreign_key: foreign_key.clone(),
+                });
+            }
+            continue;
+        }
+        let attached = foreign_key.columns.len() == 1
+            && !previous
+                .columns
+                .iter()
+                .any(|column| column.name == foreign_key.columns[0])
+            && operations.iter_mut().any(|operation| match operation {
+                MigrationOperation::AddColumn {
+                    table,
+                    column,
+                    foreign_key: slot,
+                } if table == &next.name
+                    && column.name == foreign_key.columns[0]
+                    && slot.is_none() =>
+                {
+                    *slot = Some(foreign_key.clone());
+                    true
+                }
+                _ => false,
+            });
+        if !attached {
+            operations.push(MigrationOperation::AddForeignKey {
+                table: next.name.clone(),
+                foreign_key: foreign_key.clone(),
+            });
+        }
+    }
+    for foreign_key in &previous.foreign_keys {
+        if !next
+            .foreign_keys
+            .iter()
+            .any(|candidate| candidate.name == foreign_key.name)
+        {
+            operations.push(MigrationOperation::DropForeignKey {
+                table: previous.name.clone(),
+                name: foreign_key.name.clone(),
+            });
+        }
+    }
+}
+
+fn order_creates(tables: Vec<TableSnapshot>) -> Result<Vec<TableSnapshot>, MigrationError> {
+    order_by_dependencies(tables, false)
+}
+
+fn order_drops(tables: Vec<TableSnapshot>) -> Result<Vec<String>, MigrationError> {
+    Ok(order_by_dependencies(tables, true)?
+        .into_iter()
+        .map(|table| table.name)
+        .collect())
+}
+
+fn order_by_dependencies(
+    tables: Vec<TableSnapshot>,
+    dependents_first: bool,
+) -> Result<Vec<TableSnapshot>, MigrationError> {
+    let mut pending = tables;
+    let mut ordered = Vec::new();
+    while !pending.is_empty() {
+        let ready = pending.iter().position(|table| {
+            table.foreign_keys.iter().all(|foreign_key| {
+                let referenced_in_batch = pending
+                    .iter()
+                    .any(|candidate| candidate.name == foreign_key.referenced_table);
+                let self_reference = foreign_key.referenced_table == table.name;
+                !referenced_in_batch || self_reference
+            })
+        });
+        let Some(index) = ready else {
+            return Err(MigrationError::new(
+                "Fremdschlüssel bilden einen Zyklus. Die Migration wird nicht geschrieben."
+                    .to_owned(),
+            ));
+        };
+        let table = pending.remove(index);
+        if dependents_first {
+            ordered.insert(0, table);
+        } else {
+            ordered.push(table);
+        }
+    }
+    Ok(ordered)
+}
+
+fn operation_rank(operation: &MigrationOperation) -> u8 {
+    match operation {
+        MigrationOperation::AddColumn { .. } => 1,
+        MigrationOperation::AddUniqueConstraint { .. } | MigrationOperation::AddIndex { .. } => 2,
+        MigrationOperation::AddForeignKey { .. } => 3,
+        MigrationOperation::AlterColumn { .. }
+        | MigrationOperation::RenameColumn { .. }
+        | MigrationOperation::RenameTable { .. } => 4,
+        MigrationOperation::DropForeignKey { .. }
+        | MigrationOperation::DropIndex { .. }
+        | MigrationOperation::DropUniqueConstraint { .. } => 5,
+        MigrationOperation::DropColumn { .. } => 6,
+        MigrationOperation::CreateTable { .. } | MigrationOperation::DropTable { .. } => 0,
+    }
 }
 
 fn diff_columns(
@@ -132,6 +411,7 @@ fn diff_columns(
             (None, Some(column)) => operations.push(MigrationOperation::AddColumn {
                 table: next.name.clone(),
                 column: column.clone(),
+                foreign_key: None,
             }),
             (Some(column), None) => operations.push(MigrationOperation::DropColumn {
                 table: previous.name.clone(),
@@ -171,15 +451,25 @@ fn risks_for(operations: &[MigrationOperation]) -> Vec<MigrationRisk> {
                 code: "drop_column".to_owned(),
                 message: format!("Spalte `{table}.{name}` würde samt Werten gelöscht."),
             }),
+            MigrationOperation::AlterColumn { table, from, to } if alter_is_supported(from, to) => {
+                Some(MigrationRisk {
+                    operation_index: index,
+                    code: "rebuild_column".to_owned(),
+                    message: format!(
+                        "Spalte `{table}.{}` wird nur geändert, wenn vorhandene Werte verlustfrei übernommen werden können. Bei einem Fehler wird die Transaktion zurückgerollt.",
+                        from.name
+                    ),
+                })
+            }
             MigrationOperation::AlterColumn { table, from, .. } => Some(MigrationRisk {
                 operation_index: index,
                 code: "alter_column".to_owned(),
                 message: format!(
-                    "Spalte `{table}.{}` ändert Typ, Nullbarkeit, Default oder Primärschlüssel. Ein sicherer Umbau ist nicht implementiert.",
+                    "Spalte `{table}.{}` hat keine geprüfte verlustfreie Änderung.",
                     from.name
                 ),
             }),
-            MigrationOperation::AddColumn { table, column }
+            MigrationOperation::AddColumn { table, column, .. }
                 if column.primary_key || (!column.nullable && column.default.is_none()) =>
             {
                 Some(MigrationRisk {
@@ -191,6 +481,13 @@ fn risks_for(operations: &[MigrationOperation]) -> Vec<MigrationRisk> {
                     ),
                 })
             }
+            MigrationOperation::DropUniqueConstraint { table, name } => Some(MigrationRisk {
+                operation_index: index,
+                code: "drop_unique".to_owned(),
+                message: format!(
+                    "Unique-Constraint `{name}` auf `{table}` wird entfernt. Vorhandene Zeilen bleiben, neue Duplikate werden danach zugelassen."
+                ),
+            }),
             _ => None,
         })
         .collect()
@@ -200,15 +497,17 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
     let mut reasons = Vec::new();
     for operation in operations {
         match operation {
-            MigrationOperation::AlterColumn { table, from, to } => reasons.push(format!(
-                "Änderung an `{table}.{}` ({:?} -> {:?}, nullable {} -> {}, default {:?} -> {:?}) wird blockiert. SQLite kann diesen Umbau nicht sicher per ALTER ausführen, und ein Tabellen-Neubau ist nicht implementiert. PostgreSQL nutzt denselben logischen Plan und führt diese Änderung ebenfalls nicht aus.",
-                from.name, from.logical_type, to.logical_type, from.nullable, to.nullable, from.default, to.default
-            )),
-            MigrationOperation::AddColumn { table, column } if column.primary_key => reasons.push(format!(
+            MigrationOperation::AlterColumn { table, from, to } if !alter_is_supported(from, to) => {
+                reasons.push(format!(
+                    "Änderung an `{table}.{}` ({:?} -> {:?}, nullable {} -> {}, default {:?} -> {:?}) wird blockiert. Es gibt keine geprüfte verlustfreie Übernahme.",
+                    from.name, from.logical_type, to.logical_type, from.nullable, to.nullable, from.default, to.default
+                ))
+            }
+            MigrationOperation::AddColumn { table, column, .. } if column.primary_key => reasons.push(format!(
                 "Neue Primärschlüsselspalte `{table}.{}` wird blockiert.",
                 column.name
             )),
-            MigrationOperation::AddColumn { table, column }
+            MigrationOperation::AddColumn { table, column, .. }
                 if !column.nullable && column.default.is_none() =>
             {
                 reasons.push(format!(
@@ -216,7 +515,24 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
                     column.name
                 ))
             }
-            MigrationOperation::DropColumn { .. } | MigrationOperation::CreateTable { .. } | MigrationOperation::DropTable { .. } | MigrationOperation::AddColumn { .. } => {}
+            MigrationOperation::DropColumn { .. }
+            | MigrationOperation::CreateTable { .. }
+            | MigrationOperation::DropTable { .. }
+            | MigrationOperation::AddColumn { .. }
+            | MigrationOperation::AlterColumn { .. }
+            | MigrationOperation::RenameColumn { .. }
+            | MigrationOperation::RenameTable { .. }
+            | MigrationOperation::AddUniqueConstraint { .. }
+            | MigrationOperation::DropUniqueConstraint { .. }
+            | MigrationOperation::AddIndex { .. }
+            | MigrationOperation::DropIndex { .. } => {}
+            MigrationOperation::AddForeignKey { table, foreign_key } => reasons.push(format!(
+                "Fremdschlüssel `{}` auf `{table}` kann nicht an eine bestehende Spalte angefügt werden. SQLite unterstützt das nicht ohne Tabellenumbau, und dieser Umbau wird für Fremdschlüssel nicht ausgeführt.",
+                foreign_key.name
+            )),
+            MigrationOperation::DropForeignKey { table, name } => reasons.push(format!(
+                "Fremdschlüssel `{name}` auf `{table}` kann nicht entfernt oder in seiner Löschregel geändert werden. SQLite bräuchte dafür einen Tabellenumbau, der für Fremdschlüssel blockiert bleibt."
+            )),
         }
     }
 
@@ -238,6 +554,7 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
                 MigrationOperation::AddColumn {
                     table: name,
                     column,
+                    ..
                 } if name == table => Some(column.name.as_str()),
                 _ => None,
             })
@@ -254,11 +571,33 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
             .collect();
         if !added.is_empty() && !removed.is_empty() {
             reasons.push(format!(
-                "Tabelle `{table}` verliert {} und erhält {}. Das wird nicht als Umbenennung gedeutet und nicht als Löschen plus Anlegen ausgeführt. Eine Rename-Operation ist nicht implementiert. Setze die Modelländerung so um, dass nur eine eindeutige, sichere Operation übrig bleibt.",
+                "Tabelle `{table}` verliert {} und erhält {}. Das wird nicht als Umbenennung gedeutet. Verwende `ferrum migrate rename-column`, wenn genau diese Spalte umbenannt werden soll.",
                 removed.join(", "),
                 added.join(", ")
             ));
         }
+    }
+
+    let dropped_tables: Vec<&str> = operations
+        .iter()
+        .filter_map(|operation| match operation {
+            MigrationOperation::DropTable { name } => Some(name.as_str()),
+            _ => None,
+        })
+        .collect();
+    let created_tables: Vec<&str> = operations
+        .iter()
+        .filter_map(|operation| match operation {
+            MigrationOperation::CreateTable { table } => Some(table.name.as_str()),
+            _ => None,
+        })
+        .collect();
+    if !dropped_tables.is_empty() && !created_tables.is_empty() {
+        reasons.push(format!(
+            "Der Plan löscht {} und erzeugt {}. Das wird nicht als Umbenennung gedeutet. Verwende `ferrum migrate rename-table` oder trenne die Änderungen.",
+            dropped_tables.join(", "),
+            created_tables.join(", ")
+        ));
     }
 
     if reasons.is_empty() {
@@ -276,12 +615,18 @@ pub fn classify(
         MigrationOperation::CreateTable { .. } => (ApplyClass::Safe, None),
         MigrationOperation::AddColumn { column, .. } if column.primary_key => (
             ApplyClass::Unsupported,
-            Some("Eine Primärschlüsselspalte kann nicht sicher nachträglich angelegt werden.".into()),
+            Some(
+                "Eine Primärschlüsselspalte kann nicht sicher nachträglich angelegt werden.".into(),
+            ),
         ),
-        MigrationOperation::AddColumn { column, .. } if !column.nullable && column.default.is_none() => (
-            ApplyClass::Unsupported,
-            Some("NOT NULL ohne Default kann bestehende Zeilen nicht füllen.".into()),
-        ),
+        MigrationOperation::AddColumn { column, .. }
+            if !column.nullable && column.default.is_none() =>
+        {
+            (
+                ApplyClass::Unsupported,
+                Some("NOT NULL ohne Default kann bestehende Zeilen nicht füllen.".into()),
+            )
+        }
         MigrationOperation::AddColumn { .. } => (ApplyClass::Safe, None),
         MigrationOperation::DropTable { .. } => (ApplyClass::Destructive, None),
         MigrationOperation::DropColumn { table, name } => {
@@ -295,18 +640,46 @@ pub fn classify(
                 (
                     ApplyClass::Unsupported,
                     Some(format!(
-                        "Primärschlüssel `{table}.{name}` kann nicht gelöscht werden. Ein Tabellen-Neubau ist nicht implementiert."
+                        "Primärschlüssel `{table}.{name}` kann nicht gelöscht werden."
                     )),
                 )
             } else {
                 (ApplyClass::Destructive, None)
             }
         }
-        MigrationOperation::AlterColumn { .. } => (
+        MigrationOperation::AlterColumn { from, to, .. } if alter_is_supported(from, to) => {
+            (ApplyClass::Safe, None)
+        }
+        MigrationOperation::AlterColumn { from, to, .. } => (
+            ApplyClass::Unsupported,
+            Some(if from.primary_key != to.primary_key {
+                "Primärschlüssel können nicht umgebaut werden.".to_owned()
+            } else {
+                format!(
+                    "Änderung von {:?} nach {:?} ist nicht als verlustfreie Übernahme implementiert.",
+                    from.logical_type, to.logical_type
+                )
+            }),
+        ),
+        MigrationOperation::RenameColumn { .. } | MigrationOperation::RenameTable { .. } => {
+            (ApplyClass::Safe, None)
+        }
+        MigrationOperation::AddUniqueConstraint { .. }
+        | MigrationOperation::AddIndex { .. }
+        | MigrationOperation::DropIndex { .. } => (ApplyClass::Safe, None),
+        MigrationOperation::DropUniqueConstraint { .. } => (ApplyClass::Safe, None),
+        MigrationOperation::AddForeignKey { .. } => (
             ApplyClass::Unsupported,
             Some(
-                "Typ-, Nullbarkeits- und Default-Änderungen sind nicht als sichere ALTER-Operation implementiert."
-                    .into(),
+                "Ein Fremdschlüssel auf einer bestehenden Spalte wird nicht ausgeführt."
+                    .to_owned(),
+            ),
+        ),
+        MigrationOperation::DropForeignKey { .. } => (
+            ApplyClass::Unsupported,
+            Some(
+                "Ein vorhandener Fremdschlüssel wird nicht entfernt und seine Löschregel nicht geändert."
+                    .to_owned(),
             ),
         ),
     }
@@ -348,6 +721,9 @@ mod tests {
             tables: vec![TableSnapshot {
                 name: name.to_owned(),
                 columns,
+                unique_constraints: Vec::new(),
+                indexes: Vec::new(),
+                foreign_keys: Vec::new(),
             }],
         }
     }
@@ -402,12 +778,23 @@ mod tests {
         let mut changed = initial.clone();
         changed.tables[0].columns[1].logical_type = LogicalType::I64;
         let typed = plan_change(&initial, &changed).unwrap();
-        assert!(typed.refusal.as_ref().unwrap().contains("blockiert"));
+        assert!(typed.refusal.is_none());
+        assert_eq!(typed.risks[0].code, "rebuild_column");
 
         let mut default_changed = initial.clone();
         default_changed.tables[0].columns[2].default = Some(false);
         let defaults = plan_change(&initial, &default_changed).unwrap();
-        assert!(defaults.refusal.as_ref().unwrap().contains("blockiert"));
+        assert!(defaults.refusal.is_none());
+        assert!(matches!(
+            defaults.operations.as_slice(),
+            [MigrationOperation::AlterColumn { .. }]
+        ));
+
+        let mut blocked = initial.clone();
+        blocked.tables[0].columns[2].logical_type = LogicalType::String;
+        blocked.tables[0].columns[2].default = None;
+        let unsupported = plan_change(&initial, &blocked).unwrap();
+        assert!(unsupported.refusal.as_ref().unwrap().contains("blockiert"));
 
         let dropped = plan_change(&initial, &empty).unwrap();
         assert!(matches!(

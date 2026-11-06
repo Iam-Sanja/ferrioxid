@@ -42,7 +42,7 @@ TLS-Client → Reverse Proxy → Ferrum-App → PostgreSQL
 5. Forwarded-Header nur von vertrauenswürdigen Proxies.
 6. HTTPS am Proxy. Sessions und CSRF erst zusammen mit Authentifizierung.
 7. Secrets über die Einsatzumgebung, nicht im Image oder Repository.
-8. Schemaänderungen bleiben ein eigener Schritt über `ferrum migrate up`, nicht beim Prozessstart. `down`, Rename und Tabellen-Neubau sind nicht Teil dieses Schritts.
+8. Schemaänderungen bleiben ein eigener Schritt über `ferrum migrate up`, nicht beim Prozessstart. `down` ist nicht Teil dieses Schritts.
 9. Kein produktives `allow_anonymous=true` ohne Sicherheitsreview.
 
 SQLite kann lokale Entwicklung und Tests tragen. Für mehrere App-Prozesse ist es nicht die vorgesehene Produktionsdatenbank: der Pool hat eine Verbindung, und Schreibzugriffe serialisieren sich über die Datei. PostgreSQL bleibt dafür das unterstützte Server-Backend, sobald es betrieben wird.
@@ -54,3 +54,7 @@ Ein internes Compose-Netz und Nginx Proxy Manager sind nicht implementiert. Eine
 ## Abnahme
 
 Der lokale SQLite-Start braucht keinen Datenbankserver. Ein optionales PostgreSQL-Setup bleibt auf localhost beschränkt. Secrets erscheinen nicht im Log. Es gibt keinen App-Container und keine automatische Migration.
+
+## Admin ausliefern
+
+Vor dem Start `npm run build` in `apps/admin-ui` ausführen oder `FERRUM_ADMIN_DIST` setzen. Der Rust-Prozess braucht danach kein Node.js. `/admin` liefert `index.html` für unbekannte Oberflächenpfade. `/admin/api` bleibt die JSON-API und wird vor dem Datei-Fallback registriert. Pfade mit `..` werden abgelehnt. Fehlt das Build, ist die Antwort 503.

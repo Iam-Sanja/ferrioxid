@@ -6,7 +6,7 @@ use syn::{
     PathArguments, Type,
 };
 
-#[proc_macro_derive(FerrumModel, attributes(ferrum, field))]
+#[proc_macro_derive(FerrumModel, attributes(ferrum, field, admin))]
 pub fn derive_model(input: TokenStream) -> TokenStream {
     match expand(parse_macro_input!(input as DeriveInput)) {
         Ok(tokens) => tokens.into(),
@@ -19,6 +19,14 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let mut table: Option<String> = None;
     let mut api: Option<String> = None;
     let mut anonymous = false;
+    let mut permission: Option<String> = None;
+    let mut object_policy = false;
+    let mut unique_groups = Vec::new();
+    let mut index_groups = Vec::new();
+    let mut has_many = Vec::new();
+    let mut admin_enabled = false;
+    let mut admin_label: Option<String> = None;
+    let mut admin_permission: Option<String> = None;
     for attr in &input.attrs {
         if !attr.path().is_ident("ferrum") {
             continue;
@@ -30,6 +38,31 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 api = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("allow_anonymous") {
                 anonymous = meta.value()?.parse::<LitBool>()?.value;
+            } else if meta.path.is_ident("permissions") {
+                permission = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("object_policy") {
+                object_policy = meta.value()?.parse::<LitBool>()?.value;
+            } else if meta.path.is_ident("unique_together") {
+                unique_groups.push(
+                    split_names(&meta.value()?.parse::<LitStr>()?.value(), "unique_together")
+                        .map_err(|error| meta.error(error))?,
+                );
+            } else if meta.path.is_ident("index_together") {
+                index_groups.push(
+                    split_names(&meta.value()?.parse::<LitStr>()?.value(), "index_together")
+                        .map_err(|error| meta.error(error))?,
+                );
+            } else if meta.path.is_ident("admin") {
+                admin_enabled = meta.value()?.parse::<LitBool>()?.value;
+            } else if meta.path.is_ident("admin_label") {
+                admin_label = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("admin_permission") {
+                admin_permission = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("has_many") {
+                has_many.push(
+                    parse_has_many(&meta.value()?.parse::<LitStr>()?.value())
+                        .map_err(|error| meta.error(error))?,
+                );
             } else {
                 return Err(meta.error("unknown ferrum setting"));
             }
@@ -39,6 +72,48 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let table = table
         .ok_or_else(|| syn::Error::new_spanned(&name, "missing #[ferrum(table = \"...\")]"))?;
     let api = api.unwrap_or_else(|| format!("/{table}"));
+    if anonymous && (permission.is_some() || object_policy) {
+        return Err(syn::Error::new_spanned(
+            &name,
+            "allow_anonymous cannot be combined with permissions or object_policy",
+        ));
+    }
+    if object_policy && permission.is_none() {
+        return Err(syn::Error::new_spanned(
+            &name,
+            "object_policy requires permissions",
+        ));
+    }
+    if let Some(value) = &permission {
+        if value != "authenticated" && !valid_ident(value) {
+            return Err(syn::Error::new_spanned(
+                &name,
+                "permissions must be \"authenticated\" or a SQL identifier such as products",
+            ));
+        }
+    }
+    if !admin_enabled && (admin_label.is_some() || admin_permission.is_some()) {
+        return Err(syn::Error::new_spanned(
+            &name,
+            "admin_label and admin_permission require admin = true",
+        ));
+    }
+    if let Some(value) = &admin_permission {
+        if value != "authenticated" && !valid_ident(value) {
+            return Err(syn::Error::new_spanned(
+                &name,
+                "admin_permission must be \"authenticated\" or a SQL identifier",
+            ));
+        }
+    }
+    if let Some(value) = &admin_label {
+        if value.trim().is_empty() || value.chars().count() > 80 {
+            return Err(syn::Error::new_spanned(
+                &name,
+                "admin_label must contain 1 to 80 characters",
+            ));
+        }
+    }
     if !valid_ident(&table)
         || !api.starts_with('/')
         || api == "/"
@@ -76,6 +151,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let mut update_fields = Vec::new();
     let mut update_bindings = Vec::new();
     let mut seen_id = false;
+    let mut field_names = Vec::new();
+    let mut relation_methods = Vec::new();
+    let mut admin_fields = Vec::new();
     for field in fields {
         let ident = field.ident.unwrap();
         let field_name = ident.to_string();
@@ -103,6 +181,11 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let mut max_length: Option<usize> = None;
         let mut min: Option<i64> = None;
         let mut default_bool: Option<bool> = None;
+        let mut unique = false;
+        let mut indexed = false;
+        let mut foreign_key: Option<String> = None;
+        let mut on_delete: Option<String> = None;
+        let mut belongs_to: Option<String> = None;
         for attr in &field.attrs {
             if !attr.path().is_ident("field") {
                 continue;
@@ -124,11 +207,106 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     min = Some(meta.value()?.parse::<LitInt>()?.base10_parse()?);
                 } else if meta.path.is_ident("default") {
                     default_bool = Some(meta.value()?.parse::<LitBool>()?.value);
+                } else if meta.path.is_ident("unique") {
+                    unique = true;
+                } else if meta.path.is_ident("index") {
+                    indexed = true;
+                } else if meta.path.is_ident("foreign_key") {
+                    foreign_key = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("on_delete") {
+                    on_delete = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("belongs_to") {
+                    belongs_to = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else {
                     return Err(meta.error("unsupported field attribute"));
                 }
                 Ok(())
             })?;
+        }
+        let mut admin_list = false;
+        let mut admin_search = false;
+        let mut admin_sort = false;
+        let mut admin_filter = false;
+        let mut admin_readonly = false;
+        let mut admin_hidden = false;
+        let mut admin_field_label: Option<String> = None;
+        let mut saw_admin_attr = false;
+        for attr in &field.attrs {
+            if !attr.path().is_ident("admin") {
+                continue;
+            }
+            saw_admin_attr = true;
+            attr.parse_nested_meta(|meta| {
+                if meta.path.is_ident("list_display") {
+                    admin_list = true;
+                } else if meta.path.is_ident("searchable") {
+                    admin_search = true;
+                } else if meta.path.is_ident("sortable") {
+                    admin_sort = true;
+                } else if meta.path.is_ident("filterable") {
+                    admin_filter = true;
+                } else if meta.path.is_ident("readonly") {
+                    admin_readonly = true;
+                } else if meta.path.is_ident("hidden") {
+                    admin_hidden = true;
+                } else if meta.path.is_ident("label") {
+                    admin_field_label = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else {
+                    return Err(meta.error(
+                        "unknown admin attribute; expected list_display, searchable, sortable, filterable, readonly, hidden or label",
+                    ));
+                }
+                Ok(())
+            })?;
+        }
+        if saw_admin_attr && !admin_enabled {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "field admin attributes require #[ferrum(admin = true)]",
+            ));
+        }
+        if admin_enabled {
+            if field_name == "id" && admin_hidden {
+                return Err(syn::Error::new_spanned(&ident, "id cannot be hidden"));
+            }
+            if admin_hidden && (admin_list || admin_search || admin_sort || admin_filter) {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "hidden admin fields cannot be displayed, searched, sorted or filtered",
+                ));
+            }
+            if admin_search && type_name != "String" {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "searchable requires String",
+                ));
+            }
+            if sensitive_admin_name(&field_name)
+                && (!admin_hidden || admin_list || admin_search || admin_sort || admin_filter)
+            {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "password, token and secret fields must be #[admin(hidden)] and cannot be listed",
+                ));
+            }
+            if let Some(label) = &admin_field_label {
+                if label.trim().is_empty() || label.chars().count() > 80 {
+                    return Err(syn::Error::new_spanned(
+                        &ident,
+                        "admin label must contain 1 to 80 characters",
+                    ));
+                }
+            }
+            admin_fields.push(AdminFieldBits {
+                name: field_name.clone(),
+                label: admin_field_label.unwrap_or_else(|| field_label(&field_name)),
+                list_display: admin_list || field_name == "id",
+                searchable: admin_search,
+                sortable: admin_sort,
+                filterable: admin_filter,
+                readonly: admin_readonly || primary || readonly,
+                hidden: admin_hidden,
+            });
         }
         if primary || auto {
             if field_name != "id" || type_name != "Uuid" || !primary || !auto || seen_id {
@@ -180,6 +358,106 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 "default currently supports only bool",
             ));
         }
+        field_names.push(field_name.clone());
+        if unique && primary {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "primary key columns are already unique",
+            ));
+        }
+        if indexed && (primary || unique) {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "index is redundant on a primary key or unique column",
+            ));
+        }
+        if on_delete.is_some() && foreign_key.is_none() {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "on_delete requires foreign_key",
+            ));
+        }
+        if belongs_to.is_some() && foreign_key.is_none() {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "belongs_to requires foreign_key",
+            ));
+        }
+        let (foreign_table, foreign_column, on_delete_token) = if let Some(reference) = &foreign_key
+        {
+            let (foreign_table, foreign_column) = reference.split_once('.').ok_or_else(|| {
+                syn::Error::new_spanned(&ident, "foreign_key must look like table.column")
+            })?;
+            if !valid_ident(foreign_table) || !valid_ident(foreign_column) {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "foreign_key names must be SQL identifiers",
+                ));
+            }
+            let action = on_delete
+                .as_deref()
+                .ok_or_else(|| syn::Error::new_spanned(&ident, "foreign_key requires on_delete"))?;
+            if action == "set_null" && !nullable {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "on_delete = \"set_null\" requires a nullable column",
+                ));
+            }
+            let token = match action {
+                "restrict" => {
+                    quote! { ::core::option::Option::Some(::ferrum::core::ReferentialAction::Restrict) }
+                }
+                "cascade" => {
+                    quote! { ::core::option::Option::Some(::ferrum::core::ReferentialAction::Cascade) }
+                }
+                "set_null" => {
+                    quote! { ::core::option::Option::Some(::ferrum::core::ReferentialAction::SetNull) }
+                }
+                _ => {
+                    return Err(syn::Error::new_spanned(
+                        &ident,
+                        "on_delete must be restrict, cascade or set_null",
+                    ))
+                }
+            };
+            (
+                Some(foreign_table.to_owned()),
+                Some(foreign_column.to_owned()),
+                token,
+            )
+        } else {
+            (None, None, quote! { ::core::option::Option::None })
+        };
+        if let Some(path) = &belongs_to {
+            let ty: syn::Path =
+                syn::parse_str(path).map_err(|error| syn::Error::new_spanned(&ident, error))?;
+            let method_name = belongs_method(&field_name)
+                .map_err(|error| syn::Error::new_spanned(&ident, error))?;
+            let method = syn::Ident::new(&method_name, ident.span());
+            let field_ident = ident.clone();
+            relation_methods.push(if nullable {
+                quote! {
+                    pub async fn #method(&self, db: &::ferrum::sea_orm::DatabaseConnection) -> ::core::result::Result<::core::option::Option<#ty>, ::ferrum::core::FerrumError> {
+                        let ::core::option::Option::Some(id) = self.#field_ident else {
+                            return ::core::result::Result::Ok(::core::option::Option::None);
+                        };
+                        match <#ty as ::ferrum::db::ModelRepository>::get(db, id).await? {
+                            ::core::option::Option::Some(value) => ::core::result::Result::Ok(::core::option::Option::Some(value)),
+                            ::core::option::Option::None => ::core::result::Result::Err(::ferrum::core::FerrumError::NotFound),
+                        }
+                    }
+                }
+            } else {
+                quote! {
+                    pub async fn #method(&self, db: &::ferrum::sea_orm::DatabaseConnection) -> ::core::result::Result<#ty, ::ferrum::core::FerrumError> {
+                        match <#ty as ::ferrum::db::ModelRepository>::get(db, self.#field_ident).await? {
+                            ::core::option::Option::Some(value) => ::core::result::Result::Ok(value),
+                            ::core::option::Option::None => ::core::result::Result::Err(::ferrum::core::FerrumError::NotFound),
+                        }
+                    }
+                }
+            });
+        }
         if let (Some(lo), Some(hi)) = (min_length, max_length) {
             if lo > hi {
                 return Err(syn::Error::new_spanned(
@@ -192,6 +470,14 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             Some(value) => quote! { ::core::option::Option::Some(#value) },
             None => quote! { ::core::option::Option::None },
         };
+        let foreign_table_token = match &foreign_table {
+            Some(value) => quote! { ::core::option::Option::Some(#value) },
+            None => quote! { ::core::option::Option::None },
+        };
+        let foreign_column_token = match &foreign_column {
+            Some(value) => quote! { ::core::option::Option::Some(#value) },
+            None => quote! { ::core::option::Option::None },
+        };
         column_specs.push(quote! {
             ::ferrum::core::ColumnSpec {
                 name: #field_name,
@@ -199,6 +485,11 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 nullable: #nullable,
                 primary_key: #primary,
                 default_bool: #default_token,
+                unique: #unique,
+                indexed: #indexed,
+                foreign_table: #foreign_table_token,
+                foreign_column: #foreign_column_token,
+                on_delete: #on_delete_token,
             }
         });
         let null_sql = null_value(&type_name);
@@ -271,6 +562,32 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             min,
         }));
     }
+    validate_groups(&name, &field_names, &unique_groups, "unique_together")?;
+    validate_groups(&name, &field_names, &index_groups, "index_together")?;
+    for group in &index_groups {
+        if unique_groups.iter().any(|unique| same_names(unique, group)) {
+            return Err(syn::Error::new_spanned(
+                &name,
+                "index_together repeats a unique_together column list",
+            ));
+        }
+    }
+    for (method, type_path, column) in &has_many {
+        if field_names.iter().any(|field| field == method) {
+            return Err(syn::Error::new_spanned(
+                &name,
+                format!("has_many method {method} collides with a field"),
+            ));
+        }
+        let ty: syn::Path =
+            syn::parse_str(type_path).map_err(|error| syn::Error::new_spanned(&name, error))?;
+        let method_ident = syn::Ident::new(method, name.span());
+        relation_methods.push(quote! {
+            pub async fn #method_ident(&self, db: &::ferrum::sea_orm::DatabaseConnection) -> ::core::result::Result<::std::vec::Vec<#ty>, ::ferrum::core::FerrumError> {
+                ::ferrum::db::find_by_column::<#ty>(db, #column, ::ferrum::sea_orm::Value::from(self.id)).await
+            }
+        });
+    }
     if !seen_id {
         return Err(syn::Error::new_spanned(
             &name,
@@ -280,6 +597,56 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let create_dto = format_ident!("{}Create", name);
     let update_dto = format_ident!("{}Update", name);
     let columns_ident = format_ident!("__FERRUM_COLUMNS_{}", name.to_string().to_uppercase());
+    let unique_lists = groups_tokens(&unique_groups);
+    let index_lists = groups_tokens(&index_groups);
+    let permission_token = match &permission {
+        Some(value) => quote! { ::core::option::Option::Some(#value) },
+        None => quote! { ::core::option::Option::None },
+    };
+    let admin_meta_fn = if admin_enabled {
+        let resolved = admin_permission.clone().or(permission.clone());
+        let permission_meta = match &resolved {
+            Some(value) => quote! { ::core::option::Option::Some(#value) },
+            None => quote! { ::core::option::Option::None },
+        };
+        let label_value = admin_label.clone().unwrap_or_else(|| field_label(&table));
+        let field_tokens = admin_fields.iter().map(|field| {
+            let name = &field.name;
+            let label = &field.label;
+            let list_display = field.list_display;
+            let searchable = field.searchable;
+            let sortable = field.sortable;
+            let filterable = field.filterable;
+            let readonly = field.readonly;
+            let hidden = field.hidden;
+            quote! {
+                ::ferrum::core::AdminFieldMeta {
+                    name: #name,
+                    label: #label,
+                    list_display: #list_display,
+                    searchable: #searchable,
+                    sortable: #sortable,
+                    filterable: #filterable,
+                    readonly: #readonly,
+                    hidden: #hidden,
+                }
+            }
+        });
+        quote! {
+            fn admin_meta() -> ::core::option::Option<&'static ::ferrum::core::AdminModelMeta> {
+                static FIELDS: &[::ferrum::core::AdminFieldMeta] = &[#(#field_tokens),*];
+                static META: ::ferrum::core::AdminModelMeta = ::ferrum::core::AdminModelMeta {
+                    key: #table,
+                    label: #label_value,
+                    permission: #permission_meta,
+                    fields: FIELDS,
+                };
+                ::core::option::Option::Some(&META)
+            }
+        }
+    } else {
+        quote! {}
+    };
     Ok(quote! {
         #[derive(::ferrum::serde::Deserialize)]
         #[serde(crate = "::ferrum::serde", deny_unknown_fields)]
@@ -294,11 +661,24 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         impl ::ferrum::core::FerrumModel for #name {
             fn descriptor() -> &'static ::ferrum::core::ModelDescriptor {
                 static DESCRIPTOR: ::ferrum::core::ModelDescriptor = ::ferrum::core::ModelDescriptor {
-                    name: stringify!(#name), table: #table, api_path: #api, allow_anonymous: #anonymous,
+                    name: stringify!(#name),
+                    table: #table,
+                    api_path: #api,
+                    allow_anonymous: #anonymous,
+                    permission: #permission_token,
+                    requires_object_policy: #object_policy,
                 };
                 &DESCRIPTOR
             }
             fn columns() -> &'static [::ferrum::core::ColumnSpec] { #columns_ident }
+            fn constraints() -> &'static ::ferrum::core::TableConstraints {
+                static CONSTRAINTS: ::ferrum::core::TableConstraints = ::ferrum::core::TableConstraints {
+                    unique_groups: &[#(#unique_lists),*],
+                    index_groups: &[#(#index_lists),*],
+                };
+                &CONSTRAINTS
+            }
+            #admin_meta_fn
             fn schema_sql(kind: ::ferrum::core::DatabaseKind) -> ::std::string::String {
                 ::ferrum::db::render_schema(kind, #table, #columns_ident)
             }
@@ -363,7 +743,97 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 }
             }
         }
+
+        impl #name {
+            #(#relation_methods)*
+        }
     })
+}
+
+fn groups_tokens(groups: &[Vec<String>]) -> Vec<proc_macro2::TokenStream> {
+    groups
+        .iter()
+        .map(|group| {
+            let columns = group.iter().map(|column| quote! { #column });
+            quote! { &[#(#columns),*] }
+        })
+        .collect()
+}
+
+fn split_names(value: &str, label: &str) -> Result<Vec<String>, String> {
+    let names = value
+        .split(',')
+        .map(str::trim)
+        .filter(|name| !name.is_empty())
+        .map(str::to_owned)
+        .collect::<Vec<_>>();
+    if names.len() < 2 {
+        return Err(format!("{label} needs at least two column names"));
+    }
+    if names.iter().any(|name| !valid_ident(name)) {
+        return Err(format!("{label} contains an invalid column name"));
+    }
+    Ok(names)
+}
+
+fn parse_has_many(value: &str) -> Result<(String, String, String), String> {
+    let (method, rest) = value
+        .split_once('=')
+        .ok_or("has_many must look like products=Product.category_id")?;
+    let (type_path, column) = rest
+        .rsplit_once('.')
+        .ok_or("has_many must name a type and a column")?;
+    if !valid_ident(method) || !valid_ident(column) || type_path.is_empty() {
+        return Err("has_many contains an invalid name".to_owned());
+    }
+    if type_path
+        .split("::")
+        .any(|segment| segment.is_empty() || !valid_ident(segment))
+    {
+        return Err("has_many type path is invalid".to_owned());
+    }
+    Ok((method.to_owned(), type_path.to_owned(), column.to_owned()))
+}
+
+fn belongs_method(field_name: &str) -> Result<String, String> {
+    let method = field_name
+        .strip_suffix("_id")
+        .filter(|name| valid_ident(name))
+        .ok_or("belongs_to needs a column name ending in _id")?;
+    Ok(method.to_owned())
+}
+
+fn validate_groups(
+    name: &syn::Ident,
+    fields: &[String],
+    groups: &[Vec<String>],
+    label: &str,
+) -> syn::Result<()> {
+    for group in groups {
+        for column in group {
+            if !fields.iter().any(|field| field == column) {
+                return Err(syn::Error::new_spanned(
+                    name,
+                    format!("{label} names unknown column {column}"),
+                ));
+            }
+        }
+        if fields.iter().any(|field| field == "id") && group.iter().any(|column| column == "id") {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("{label} cannot include the primary key"),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn same_names(left: &[String], right: &[String]) -> bool {
+    let mut left = left.to_vec();
+    let mut right = right.to_vec();
+    left.sort();
+    right.sort();
+    left == right
 }
 
 fn valid_ident(value: &str) -> bool {
@@ -528,4 +998,36 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
             }
         };
     }
+}
+
+struct AdminFieldBits {
+    name: String,
+    label: String,
+    list_display: bool,
+    searchable: bool,
+    sortable: bool,
+    filterable: bool,
+    readonly: bool,
+    hidden: bool,
+}
+
+fn field_label(name: &str) -> String {
+    let mut chars = name.chars();
+    match chars.next() {
+        Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
+        None => name.to_owned(),
+    }
+}
+
+fn sensitive_admin_name(name: &str) -> bool {
+    matches!(
+        name,
+        "password"
+            | "password_hash"
+            | "token"
+            | "token_hash"
+            | "secret"
+            | "csrf_token"
+            | "csrf_token_hash"
+    )
 }

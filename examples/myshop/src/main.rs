@@ -1,15 +1,29 @@
-mod models;
-
 use ferrum::core::FerrumModel;
 use ferrum::migrations::{history_exists, table_exists, RegisteredModel, SchemaSnapshot};
 use ferrum::App;
-use models::product::Product;
+use myshop::models::category::Category;
+use myshop::models::internal_note::InternalNote;
+use myshop::models::product::Product;
+use std::net::SocketAddr;
 
 fn registered_schema() -> Result<SchemaSnapshot, Box<dyn std::error::Error>> {
-    Ok(SchemaSnapshot::from_registered(&[RegisteredModel {
-        table: Product::descriptor().table,
-        columns: Product::columns(),
-    }])?)
+    Ok(SchemaSnapshot::from_registered(&[
+        RegisteredModel {
+            table: Category::descriptor().table,
+            columns: Category::columns(),
+            constraints: Category::constraints(),
+        },
+        RegisteredModel {
+            table: Product::descriptor().table,
+            columns: Product::columns(),
+            constraints: Product::constraints(),
+        },
+        RegisteredModel {
+            table: InternalNote::descriptor().table,
+            columns: InternalNote::columns(),
+            constraints: InternalNote::constraints(),
+        },
+    ])?)
 }
 
 #[tokio::main]
@@ -23,7 +37,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("DATABASE_URL").unwrap_or_else(|_| ferrum::db::DEFAULT_SQLITE_URL.to_owned());
     let db = ferrum::db::connect(&url).await?;
     // register::<Product>() exposes GET, GET /{id}, POST, PATCH /{id} and DELETE /{id}.
-    let app = App::new(db.clone()).register::<Product>();
+    let auth = ferrum::auth::AuthService::new(db.clone(), ferrum::auth::AuthConfig::from_env());
+    let admin = ferrum::admin::AdminRegistry::new()
+        .add::<Category>()
+        .add::<Product>()
+        .add::<InternalNote>();
+    let app = App::new(db.clone())
+        .with_auth(auth)
+        .with_admin(admin)
+        .register::<Category>()
+        .register::<Product>()
+        .register::<InternalNote>();
 
     if std::env::args().any(|arg| arg == "--bootstrap") {
         eprintln!(
@@ -50,6 +74,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let listener = tokio::net::TcpListener::bind(&address).await?;
     println!("Ferrum myshop at http://{address}");
-    axum::serve(listener, app.into_router()).await?;
+    axum::serve(
+        listener,
+        app.into_router()
+            .into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .await?;
     Ok(())
 }

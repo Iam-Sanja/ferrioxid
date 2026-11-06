@@ -1,0 +1,192 @@
+{
+  "format_version": 1,
+  "id": "0002_categories_and_product_relations",
+  "name": "categories_and_product_relations",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "products",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "price_cents",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          }
+        ]
+      }
+    ]
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "categories",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_categories_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "products",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "price_cents",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "category_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix_products_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_products_category_id_categories_id",
+            "columns": [
+              "category_id"
+            ],
+            "referenced_table": "categories",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "create_table",
+      "table": {
+        "name": "categories",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_categories_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "add_column",
+      "table": "products",
+      "column": {
+        "name": "category_id",
+        "type": "uuid",
+        "primary_key": false,
+        "nullable": true
+      },
+      "foreign_key": {
+        "name": "fk_products_category_id_categories_id",
+        "columns": [
+          "category_id"
+        ],
+        "referenced_table": "categories",
+        "referenced_columns": [
+          "id"
+        ],
+        "on_delete": "restrict",
+        "on_update": "no_action"
+      }
+    },
+    {
+      "type": "add_index",
+      "table": "products",
+      "index": {
+        "name": "ix_products_name",
+        "columns": [
+          "name"
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "364a892314736db9c18380a5ba65dec35b1c7dd8ce3e981c2ba751847e70e396"
+}

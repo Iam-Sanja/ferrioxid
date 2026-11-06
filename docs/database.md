@@ -2,6 +2,10 @@
 
 [Zur Übersicht](index.md) · **IST-Dateien:** `crates/ferrum-db/src/lib.rs`, `crates/ferrum-db/src/sql.rs`. Die Repository-Implementierung erzeugt `crates/ferrum-macros/src/lib.rs`.
 
+## Auth-Tabellen (v0.7)
+
+`_ferrum_users`, `_ferrum_sessions`, `_ferrum_roles`, `_ferrum_permissions`, `_ferrum_user_roles` und `_ferrum_role_permissions` liegen in `ferrum-auth` und nutzen SeaQuery auf derselben Verbindung. Sie sind keine `FerrumModel`-CRUD-Modelle, damit `password_hash` nicht als REST-Ressource erscheint. Zeitstempel sind `i64`. UUID ist in SQLite Text und in PostgreSQL der UUID-Typ. Die Introspektion übergeht Tabellennamen mit Präfix `_ferrum_`.
+
 ## Verantwortung (IST)
 
 - `connect(url)` öffnet SeaORM. URLs mit `sqlite:` setzen den Pool auf eine Verbindung und aktivieren `PRAGMA foreign_keys=ON`.
@@ -76,16 +80,20 @@ postgres://user:password@localhost:5432/ferrum
 
 ## Fehler und Sicherheit (IST)
 
-SQL- und Deserialisierungsfehler werden `FerrumError::Database`. Die HTTP-Schicht antwortet mit 500 und einem generischen Text. Das Datenbankdetail geht ins Tracing-Log, nicht in die Antwort. `DATABASE_URL` wird nicht protokolliert. Ungültige Modelleingaben bleiben 422, fehlende Zeilen 404, nicht freigegebene Routen 403. SQLite-Fremdschlüssel sind eingeschaltet. Aktuelle Modelle erzeugen noch keine Fremdschlüsselspalten. SQLite prüft Typen schwächer als PostgreSQL. Ferrum prüft die unterstützten Werte vor dem Schreiben in Rust. Das ersetzt keine Datenbank-Constraints für künftige direkte SQL-Zugriffe.
+Deserialisierungsfehler und unbekannte SQL-Fehler werden `FerrumError::Database`. Die HTTP-Schicht antwortet dann mit 500 und einem generischen Text. Das Datenbankdetail geht ins Tracing-Log, nicht in die Antwort. `DATABASE_URL` wird nicht protokolliert. `sqlx::ErrorKind::UniqueViolation` und `ForeignKeyViolation` werden `Validation` und damit 422. SQLite meldet `ON DELETE RESTRICT` als erweiterten Code `1811` mit der festen Meldung `FOREIGN KEY constraint failed`. Auch das wird 422. Fehlende Zeilen bleiben 404, nicht freigegebene Routen 403. SQLite-Fremdschlüssel sind eingeschaltet. Modelle können Unique Indexes, sekundäre Indexes und Foreign Keys erzeugen. Beziehungsmethoden stehen in [relations.md](relations.md). `find_by_column` lädt typisierte Kindzeilen. SQLite prüft Typen schwächer als PostgreSQL. Ferrum prüft die unterstützten Werte vor dem Schreiben in Rust.
 
 ## Nicht implementiert (SOLL)
 
-- `migrate down`, Rename, Tabellen-Neubau und eine Transaktions-API für mehrere Modelle außerhalb einer einzelnen Migration. Die sichere Migrationsausführung ist in [migrations.md](migrations.md) beschrieben.
-- Abbildung von Unique- und Constraint-Verletzungen auf eigene Fehlercodes.
-- `DateTime`, JSON-Spalten, Beziehungen, MySQL.
+- `migrate down` und eine Transaktions-API für mehrere Modelle außerhalb einer einzelnen Migration. Explizite Umbenennung, der geprüfte SQLite-Umbau und die SQLite-Baseline sind in [migrations.md](migrations.md) beschrieben.
+- Eigene Fehlercodes außer den beiden festen Validation-Texten für Unique und Foreign Key.
+- `DateTime`, JSON-Spalten, Many-to-Many, Eager Loading, MySQL.
 - Pool-Größen und Timeouts als Anwendungskonfiguration außer dem festen SQLite-Limit von einer Verbindung.
 - Optimistisches Sperren.
 
 ## Tests
 
 `cargo test --workspace` führt `sqlite_http_roundtrip` gegen `sqlite::memory:` aus. Der Test verändert `db.sqlite3` nicht. `postgres_http_roundtrip` bleibt `#[ignore]` und verlangt eine gesetzte `DATABASE_URL`. Ohne laufenden PostgreSQL-Server ist er kein Erfolgsnachweis. Die CI startet keinen Datenbankserver. Siehe [testing.md](testing.md).
+
+## Admin-Listen
+
+`query_admin_page` in `crates/ferrum-db/src/sql.rs` nutzt dieselbe SeaQuery-Schicht. Spaltennamen kommen aus dem Deskriptor, Werte sind Parameter. Die Suche ist `LIKE` mit `ESCAPE` und läuft unter SQLite. PostgreSQL erhält denselben Ausdruck, keine dialektspezifische Eingabe aus der Oberfläche. Das öffentliche Listenlimit 100 bleibt. Die Admin-Seite ist höchstens 100 Zeilen, plus eine Zeile zur Erkennung von `has_more`.

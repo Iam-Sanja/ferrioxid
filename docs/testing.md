@@ -9,7 +9,8 @@
 3. **SQLite-HTTP:** `sqlite_http_roundtrip` nutzt `sqlite::memory:`, eine Pool-Verbindung und einen Axum-Listener auf einem zufälligen Localhost-Port. Die Datei `db.sqlite3` wird nicht verwendet.
 4. **DDL ohne Server:** `boolean_default_is_emitted_into_postgres_schema` prüft die gerenderte PostgreSQL- und SQLite-Definition von `active`.
 5. **Migrationen:** Snapshot, Diff, SQLite-Kette und `ferrum migrate` gegen eine temporäre Datei laufen in `cargo test --workspace`.
-6. **PostgreSQL, optional:** `postgres_http_roundtrip` und `postgres_migration_roundtrip` sind `#[ignore]`. Sie laufen nur mit `--ignored` und gesetzter `DATABASE_URL`.
+6. **Auth:** Passwort-, Sitzungs-, Migrations- und HTTP-Tests in `ferrum-auth` und `examples/myshop/tests/auth.rs` nutzen SQLite. Sie sind nicht ignoriert.
+7. **PostgreSQL, optional:** `postgres_http_roundtrip` und `postgres_migration_roundtrip` sind `#[ignore]`. Sie laufen nur mit `--ignored` und gesetzter `DATABASE_URL`.
 
 ### Lokale Befehle
 
@@ -52,11 +53,11 @@ Die JSON-Struktur ist für beide Backends dieselbe, weil die Handler dialektunab
 
 `.github/workflows/rust.yml` startet rustfmt, Clippy und `cargo test --workspace`. Dabei läuft der SQLite-Test. Es wird kein PostgreSQL-Service gestartet.
 
-Die Migrations-Tests prüfen gleiche Snapshots, deterministische Spaltenreihenfolge, doppelte Namen, unbekannte Versionen, neue Tabelle, neue Spalte, gelöschte Spalte, Typ- und Default-Änderung, leeren Diff, riskante Änderung, Umbenennungsverweigerung, Erstanwendung, zweite Migration mit erhaltenen Zeilen, wiederholtes `up`, manipulierte Datei, ungültige Änderung und vorhandene Tabellen ohne Historie. Der CLI-Test `migrate_make_up_and_status_use_a_temporary_sqlite_database` nutzt eine temporäre SQLite-Datei.
+Die Migrations-Tests prüfen gleiche Snapshots, deterministische Spaltenreihenfolge, doppelte Namen, unbekannte Versionen, neue Tabelle, neue Spalte, gelöschte Spalte, unterstützte Typ- und Default-Änderung, blockierte Typänderung, leeren Diff, riskante Änderung, Umbenennungsverweigerung, explizite Spalten- und Tabellenumbenennung, erfolgreichen und fehlgeschlagenen SQLite-Umbau, blockiertes `NOT NULL`, passende und abweichende Baseline, destruktive Ketten ohne Baseline, `reseal`, Erstanwendung, zweite Migration mit erhaltenen Zeilen, wiederholtes `up`, manipulierte Datei und vorhandene Tabellen ohne Historie. `tests/constraints.rs` prüft Unique inklusive `NULL` und zusammengesetzter Schlüssel, Index-Anlage, wiederholtes `up`, Index-Entfernen, gültige und ungültige Foreign Keys, `restrict`, `cascade`, `set_null`, abgelehntes `set_null` auf `NOT NULL`, Baseline mit Indizes, zurückgerollte Unique-Migration und blockierte Änderung der Löschregel. Eine Umbenennung einer indizierten Spalte benennt den Index in SQLite um. Der CLI-Test `migrate_make_up_and_status_use_a_temporary_sqlite_database` nutzt eine temporäre SQLite-Datei. `examples/myshop/tests/relations.rs` prüft Belongs-To, Has-Many, leere Kinder, optionales `None`, doppelten Kategorienamen, einen ungültigen Foreign Key und die eingecheckte Kette `0001` plus `0002`.
 
 PostgreSQL-Migrations- und HTTP-Tests bleiben ignoriert, solange kein Server läuft. Ein ignorierter Test zählt nicht als bestanden.
 
-Nach dieser Umsetzung endeten `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` und `cargo build --workspace` mit Exit-Code 0. Ignoriert blieben `postgres_http_roundtrip` und `postgres_migration_roundtrip`. Auf diesem Rechner sind weder Docker noch PostgreSQL installiert. Zusätzlich wurden `ferrum migrate up`, `status` und ein zweites `up` gegen eine temporäre SQLite-Datei ausgeführt; die erste Migration wurde angewendet, der zweite Lauf fand nichts Ausstehendes.
+Die Qualitätsbefehle dieser Umsetzung stehen im Abschlussbericht des Arbeitsgangs. Ignoriert bleiben `postgres_http_roundtrip` und `postgres_migration_roundtrip`, solange kein PostgreSQL-Server läuft. Ein ignorierter Test ist kein Erfolg.
 
 ## Geplanter Ausbau (SOLL)
 
@@ -71,3 +72,7 @@ Nach dieser Umsetzung endeten `cargo fmt --all`, `cargo clippy --workspace --all
 ## Berichtspflicht
 
 Ausgeführte Befehle, Exit-Codes und relevante Fehler nennen. Nicht ausgeführte Prüfungen als nicht ausgeführt kennzeichnen. Kein pauschales `allow(dead_code)`, wenn der Wert typsicher verwendet werden kann.
+
+## Admin
+
+SQLite: `cargo test -p myshop --test admin_http`. Frontend: in `apps/admin-ui` die Skripte `test`, `typecheck`, `lint` und `build`. `seed_file_database_when_requested` tut ohne `FERRUM_E2E_DATABASE` nichts. PostgreSQL-Admin-Tests gibt es nicht.
