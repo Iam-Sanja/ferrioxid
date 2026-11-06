@@ -102,6 +102,10 @@ impl ObjectPolicy<AdminSecret> for OwnerPolicy {
     fn write_scope(user: &AuthUser) -> QueryScope {
         Self::read_scope(user)
     }
+
+    fn can_create(user: &AuthUser, input: &AdminSecretCreate) -> bool {
+        input.owner == user.id.to_string()
+    }
 }
 
 struct Reply {
@@ -282,6 +286,7 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
         "products.delete",
         "categories.read",
         "secrets.read",
+        "secrets.create",
         "secrets.update",
         "secrets.delete",
     ] {
@@ -589,6 +594,33 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
     assert_eq!(scoped_rows.len(), 1);
     assert_eq!(scoped_rows[0]["title"], "Eigen");
     assert_eq!(scoped.json["total"], 1);
+    let own_create = call(
+        "POST",
+        "/admin/api/models/admin_secrets/records".into(),
+        Some(format!(r#"{{"owner":"{}","title":"Neu"}}"#, staff.id)),
+        session(&staff_cookie, &csrf),
+    )
+    .await
+    .unwrap();
+    assert_eq!(own_create.status, 201, "{}", own_create.json);
+    let foreign_create = call(
+        "POST",
+        "/admin/api/models/admin_secrets/records".into(),
+        Some(r#"{"owner":"someone-else","title":"Fremd"}"#.into()),
+        session(&staff_cookie, &csrf),
+    )
+    .await
+    .unwrap();
+    assert_eq!(foreign_create.status, 403, "{}", foreign_create.json);
+    let missing_owner = call(
+        "POST",
+        "/admin/api/models/admin_secrets/records".into(),
+        Some(r#"{"title":"Ohne"}"#.into()),
+        session(&staff_cookie, &csrf),
+    )
+    .await
+    .unwrap();
+    assert_eq!(missing_owner.status, 422, "{}", missing_owner.json);
     let foreign_patch = call(
         "PATCH",
         format!("/admin/api/models/admin_secrets/records/{}", secret.id),

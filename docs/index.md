@@ -1,10 +1,10 @@
 # Ferrum – Dokumentationsportal
 
-**Projektstand:** Funktionsstand v0.8.1. Die Cargo-Version bleibt `0.1.0`. SQLite ist die lokale Standarddatenbank, PostgreSQL das optionale Backend. **Dokumentationssprache:** Deutsch
+**Projektstand:** Funktionsstand v0.9. Die Cargo-Version bleibt `0.1.0`. SQLite ist die lokale Standarddatenbank, PostgreSQL das optionale Backend. **Dokumentationssprache:** Deutsch
 
 ## Wie dieses Handbuch zu lesen ist
 
-Jedes Dokument trennt **IST** von **SOLL (Entwurf)**. SOLL bezeichnet eine Architekturentscheidung oder einen Vorschlag, **keine implementierte Funktion**. Beispiel-Code und CLI-Aufrufe in SOLL-Abschnitten sind nicht ausführbar, solange die Funktion nicht implementiert wurde. Authentifizierung ist v0.7. Der automatische Admin ist v0.8. Query-Scopes, stabiles CSRF und eingebettete Admin-Assets sind v0.8.1: [query-scopes.md](query-scopes.md), [csrf.md](csrf.md), [admin-assets.md](admin-assets.md). Die Cargo-Version bleibt `0.1.0`.
+Jedes Dokument trennt **IST** von **SOLL (Entwurf)**. SOLL bezeichnet eine Architekturentscheidung oder einen Vorschlag, **keine implementierte Funktion**. Beispiel-Code und CLI-Aufrufe in SOLL-Abschnitten sind nicht ausführbar, solange die Funktion nicht implementiert wurde. Authentifizierung ist v0.7. Der automatische Admin ist v0.8. Query-Scopes, stabiles CSRF und eingebettete Admin-Assets sind v0.8.1. Create-Policies, das Admin-Feature und die Entwickler-CLI sind v0.9: [project-generator.md](project-generator.md), [project-templates.md](project-templates.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md). Die Cargo-Version bleibt `0.1.0`.
 
 **Zentrale Regel:** Rust-Struct → `FerrumModel`-Makro → typisierte Repository-Implementierung und Modelldeskriptor → explizite Registrierung → HTTP-Routen. Schemaänderungen laufen über die Migrations-Engine. `myshop --bootstrap` ist Legacy.
 
@@ -18,7 +18,7 @@ Jedes Dokument trennt **IST** von **SOLL (Entwurf)**. SOLL bezeichnet eine Archi
 | `ferrum-macros` | IST + SOLL | [macros.md](macros.md) | Parsing, Validierung, Codegenerierung |
 | `ferrum-db` | IST + SOLL | [database.md](database.md) | Typisierte Repositories, Connection, SQL |
 | `ferrum-api` | IST + SOLL | [api.md](api.md) | Axum-Routing, DTOs, Fehlerbehandlung |
-| `ferrum-cli` | IST + SOLL | [cli.md](cli.md) | Entwicklerbefehle und Kommandoverträge |
+| `ferrum-cli` | IST | [cli.md](cli.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generator, Diagnose, Entwicklungsserver |
 | `myshop` | IST | [example-myshop.md](example-myshop.md) | Integrationsbeispiel und Start |
 | Konfiguration | IST + SOLL | [configuration.md](configuration.md) | Environment, Bind, Secrets |
 | Sicherheit | IST + SOLL | [security.md](security.md) | Access Defaults, Bedrohungen, Checks |

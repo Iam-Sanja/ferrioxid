@@ -10,8 +10,10 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+ctrlc = "3.4"
 ferrum-auth = { path = "../ferrum-auth" }
 ferrum-db = { path = "../ferrum-db" }
 ferrum-migrations = { path = "../ferrum-migrations" }
+notify = "6"
 rpassword.workspace = true
 tokio.workspace = true

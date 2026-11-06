@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-ferrum = { path = "../../crates/ferrum" }
+ferrum = { path = "../../crates/ferrum", features = ["admin-ui"] }
 axum.workspace = true
 tokio.workspace = true
 serde.workspace = true

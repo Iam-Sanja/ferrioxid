@@ -25,7 +25,7 @@ Tests können `sqlite::memory:` verwenden. Diese URL erzeugt eine private Speich
 
 Die SQLite-Datei `db.sqlite3` sowie Journal-, WAL- und SHM-Dateien sind von Git ausgeschlossen. Wer myshop aus einem anderen Arbeitsverzeichnis startet, erhält eine andere Datei.
 
-`ferrum.toml` ist keine Geheimnisdatei. Sie nennt `migrations_dir` und `schema_command`. Die CLI startet diesen Befehl im Verzeichnis der TOML-Datei und liest das Schema von stdout. `DATABASE_URL` bleibt die einzige Verbindungszeichenkette und wird von `migrate status` nicht gedruckt.
+`ferrum.toml` ist keine Geheimnisdatei. Die Workspace-Datei nennt weiterhin nur `migrations_dir` und `schema_command`. Generierte Projekte dürfen zusätzlich `[project]`, `[database]`, `[server]` und `[admin]` enthalten. Unbekannte Abschnitte und Schlüssel sind Fehler. `database.url` ist standardmäßig `sqlite://db.sqlite3?mode=rwc`, `server.host` ist `127.0.0.1`, `server.port` ist 3000. `DATABASE_URL` ersetzt die Datei-URL zur Laufzeit und wird von `migrate status` nicht gedruckt. Die CLI startet `schema_command` im Verzeichnis der TOML-Datei und liest das Schema von stdout.
 
 `migrate baseline` liest dieselbe URL. Ohne `--confirm` schreibt der Befehl nichts. Für PostgreSQL endet er mit einer Unsupported-Meldung. Spalten- und Tabellennamen für `rename-column` und `rename-table` kommen von den CLI-Argumenten und werden als Bezeichner geprüft. Sie werden nicht aus HTTP-Anfragen übernommen.
 

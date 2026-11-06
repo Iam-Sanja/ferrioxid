@@ -10,6 +10,7 @@
 - `ApiError` loggt DB-Details intern und liefert bei 500 nur generische Informationen nach außen.
 - Axums JSON-Extractor verwendet standardmäßig Serde-DTOs mit `deny_unknown_fields` auf dem Create-Typ.
 - Demo-Bind ist `127.0.0.1:3000`; Docker-Postgres-Port ist auf `127.0.0.1` publiziert.
+- `can_create` prüft die Create-Eingabe vor dem INSERT. Eine fremde Besitzer-ID wird abgelehnt, wenn die Regel das verlangt. Der Standard der Methode ist `false`. Generierte Projekte binden nicht an `0.0.0.0` und enthalten kein Standardpasswort.
 
 ## Authentifizierung (IST, v0.7)
 

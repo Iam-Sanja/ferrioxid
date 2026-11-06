@@ -1,5 +1,10 @@
 //! Ferrum-CLI. Migrationen fragen die Modell-Registry über ferrum.toml ab.
 
+mod develop;
+mod diagnose;
+mod models;
+mod scaffold;
+
 use clap::{Parser, Subcommand};
 use ferrum_migrations::{
     apply_directory, baseline_database, discover_project, load_schema_from_command, make_migration,
@@ -18,8 +23,29 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Zeigt den aktuellen Funktionsumfang.
+    /// Erzeugt ein eigenständiges Ferrum-Projekt.
+    New {
+        name: String,
+        /// `api` oder `fullstack`. Standard ist `fullstack`.
+        #[arg(long, default_value = "fullstack")]
+        template: String,
+        /// Pfad zum Ferrum-Repository, solange Ferrum nicht veröffentlicht ist.
+        #[arg(long)]
+        ferrum_path: Option<PathBuf>,
+    },
+    /// Prüft Werkzeuge, Konfiguration und Projektdateien.
     Doctor,
+    /// Prüft Konfiguration, Migrationen und Kompilierung, ohne Daten zu ändern.
+    Check,
+    /// Startet den Entwicklungsserver und startet ihn nach Rust-Änderungen neu.
+    Dev,
+    /// Kompiliert das Projekt. Fullstack bettet das Admin-Frontend ein.
+    Build,
+    /// Erzeugt Quelltext.
+    Generate {
+        #[command(subcommand)]
+        action: GenerateCommand,
+    },
     /// Versionierte Schema-Migrationen.
     Migrate {
         #[command(subcommand)]
@@ -35,6 +61,12 @@ enum Command {
         #[command(subcommand)]
         action: AuthCommand,
     },
+}
+
+#[derive(Subcommand)]
+enum GenerateCommand {
+    /// Legt ein Modell an und trägt es in die Registry ein.
+    Model { name: String },
 }
 
 #[derive(Subcommand)]
@@ -183,10 +215,36 @@ enum MigrateCommand {
 
 fn main() -> ExitCode {
     match Cli::parse().command {
-        Command::Doctor => {
-            print_doctor();
-            ExitCode::SUCCESS
-        }
+        Command::New {
+            name,
+            template,
+            ferrum_path,
+        } => match scaffold::new_project(&name, &template, ferrum_path.as_deref()) {
+            Ok(path) => {
+                println!("Projekt erzeugt: {}", path.display());
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(1)
+            }
+        },
+        Command::Doctor => diagnose::doctor(),
+        Command::Check => diagnose::check(),
+        Command::Dev => develop::dev(),
+        Command::Build => develop::build(),
+        Command::Generate { action } => match action {
+            GenerateCommand::Model { name } => match models::generate_model(&name) {
+                Ok(path) => {
+                    println!("Modell erzeugt: {}", path.display());
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("{error}");
+                    ExitCode::from(1)
+                }
+            },
+        },
         Command::Migrate { action } => match run_migrate(action) {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
@@ -209,19 +267,6 @@ fn main() -> ExitCode {
             }
         },
     }
-}
-
-fn print_doctor() {
-    println!("Ferrum: SQLite ist die lokale Standarddatenbank. PostgreSQL wählt DATABASE_URL.");
-    println!("Standarddatei: sqlite://db.sqlite3?mode=rwc im Arbeitsverzeichnis.");
-    println!("Modelle werden nicht aus dem Quelltext gelesen. ferrum.toml nennt schema_command und migrations_dir.");
-    println!("Migrationen: make, up, status, rename-column, rename-table, reseal, baseline");
-    println!("Auth-Migrationen laufen bei migrate up vor den Anwendungsdateien.");
-    println!(
-        "Benutzer: admin create-user, auth list-users, auth assign-role, auth grant-permission"
-    );
-    println!("--bootstrap an myshop ist Legacy und schreibt kein Schema und keine Historie.");
-    println!("Nicht implementiert: Admin-Oberfläche, OAuth, MFA, Down-Migrationen, Baseline für PostgreSQL.");
 }
 
 fn run_migrate(action: MigrateCommand) -> Result<(), String> {
@@ -464,11 +509,22 @@ fn run_admin(action: AdminCommand) -> Result<(), String> {
                 Some(email) => email,
                 None => prompt_line("E-Mail: ")?,
             };
-            let password = prompt_secret("Passwort: ")?;
-            let confirm = prompt_secret("Passwort wiederholen: ")?;
-            if password != confirm {
-                return Err("Die Passwörter stimmen nicht überein.".to_owned());
-            }
+            let password = if let Ok(value) = std::env::var("FERRUM_PASSWORD") {
+                if value.len() < 12 {
+                    return Err(
+                        "FERRUM_PASSWORD muss mindestens 12 Zeichen haben. Es gibt kein Standardpasswort."
+                            .to_owned(),
+                    );
+                }
+                value
+            } else {
+                let password = prompt_secret("Passwort: ")?;
+                let confirm = prompt_secret("Passwort wiederholen: ")?;
+                if password != confirm {
+                    return Err("Die Passwörter stimmen nicht überein.".to_owned());
+                }
+                password
+            };
             let url = resolve_database_url(database_url)?;
             let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;
             let user = runtime.block_on(async {

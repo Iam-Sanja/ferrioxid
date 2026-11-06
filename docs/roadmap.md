@@ -9,6 +9,7 @@
 | v0.7 | Implementiert und mit SQLite-Tests geprüft | Argon2id, serverseitige Sitzungen, Cookies, CSRF, RBAC, Modellrechte, blockierte Objektlisten | Cargo-Version bleibt `0.1.0`. OAuth, MFA, JWT und Passwort-Reset fehlen |
 | v0.8 | Implementiert und mit SQLite- sowie Vitest-Tests geprüft | Admin-Metadaten, `/admin/api`, React-Oberfläche, CSRF-Bootstrap, Staff-Zugang | Cargo-Version bleibt `0.1.0`. Keine Superuser-Vergabe im Admin |
 | v0.8.1 | Implementiert | Stabiles CSRF, SQL-Query-Scopes, eingebettete Admin-Assets | Cargo-Version bleibt `0.1.0`. Kein OAuth, MFA, GraphQL oder JWT |
+| v0.9 | Implementiert | Create-Policy, Feature `admin-ui`, `ferrum new`, `dev`, `doctor`, `check`, `generate model`, `build` | Cargo-Version bleibt `0.1.0`. Besitzer-ID aus der Sitzung ist geplant |
 
 ## v0.1 enthalten
 

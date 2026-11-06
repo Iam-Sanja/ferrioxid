@@ -88,6 +88,10 @@ impl ObjectPolicy<SecretNote> for OwnerPolicy {
     fn write_scope(user: &AuthUser) -> QueryScope {
         Self::read_scope(user)
     }
+
+    fn can_create(user: &AuthUser, input: &SecretNoteCreate) -> bool {
+        input.owner == user.id.to_string()
+    }
 }
 
 struct Reply {
@@ -527,6 +531,46 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     let visible_rows = blocked_list.json["data"].as_array().unwrap();
     assert_eq!(visible_rows.len(), 1);
     assert_eq!(visible_rows[0]["title"], "Mine");
+    auth.grant_permission("editor", "secrets.create")
+        .await
+        .unwrap();
+    let own_create = call(
+        "POST",
+        "/api/v1/auth_secrets".into(),
+        Some(format!(r#"{{"owner":"{}","title":"Neu"}}"#, editor.id)),
+        auth_headers(&cookie, &csrf, None),
+    )
+    .await
+    .unwrap();
+    assert_eq!(own_create.status, 201, "{}", own_create.json);
+    let foreign_create = call(
+        "POST",
+        "/api/v1/auth_secrets".into(),
+        Some(r#"{"owner":"someone-else","title":"Fremd"}"#.into()),
+        auth_headers(&cookie, &csrf, None),
+    )
+    .await
+    .unwrap();
+    assert_eq!(foreign_create.status, 403, "{}", foreign_create.json);
+    let missing_owner = call(
+        "POST",
+        "/api/v1/auth_secrets".into(),
+        Some(r#"{"title":"Ohne"}"#.into()),
+        auth_headers(&cookie, &csrf, None),
+    )
+    .await
+    .unwrap();
+    assert_eq!(missing_owner.status, 422, "{}", missing_owner.json);
+    let root_csrf = root_login.json["csrf_token"].as_str().unwrap().to_owned();
+    let super_create = call(
+        "POST",
+        "/api/v1/auth_secrets".into(),
+        Some(r#"{"owner":"someone-else","title":"Super"}"#.into()),
+        auth_headers(&root_cookie, &root_csrf, None),
+    )
+    .await
+    .unwrap();
+    assert_eq!(super_create.status, 201, "{}", super_create.json);
     let super_list = call(
         "GET",
         "/api/v1/auth_secrets".into(),

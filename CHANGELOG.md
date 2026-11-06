@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Entwicklerwerkzeuge und Create-Policies (v0.9)
+
+- `ObjectPolicy::can_create` prüft Create-Eingaben vor dem INSERT. Der Standard ist Ablehnung. Superuser folgen der bisherigen Semantik und überspringen die Objektregel. REST und Admin verwenden dieselbe Regel. Die Antwort ist 403, `create policy rejected the record`. Fehlende Pflichtfelder bleiben 422.
+- Das Cargo-Feature `admin-ui` bettet Admin-Assets ein. Ohne das Feature kompiliert eine API auch ohne Frontend-Build. Mit dem Feature fehlt `apps/admin-ui/dist/index.html` als Build-Fehler. `FERRUM_ADMIN_DIST` bleibt der Entwicklungs-Override.
+- `ferrum new`, `dev`, `check`, `doctor`, `generate model` und `build` sind implementiert. Vorlagen sind `api` und `fullstack`. Solange Ferrum nicht veröffentlicht ist, verbindet `--ferrum-path` das neue Projekt mit diesem Repository.
+- Die Cargo-Version bleibt `0.1.0`. v0.9 ist der Funktionsstand, keine Paketversion. Automatisches Setzen der Besitzer-ID aus der Sitzung ist geplant und nicht implementiert.
+- Nicht enthalten: OAuth, MFA, GraphQL, WebSockets, Plugins, Mandanten, automatische Cloud-Deployments und `migrate down`.
+
 ## Unreleased — Stabilität, Sicherheit und Auslieferung (v0.8.1)
 
 - `GET /auth/csrf` berechnet ein HMAC-Token aus Sitzungs-ID, Session-Hash und stabilem Schlüssel. Ein zweiter Tab ersetzt das Token nicht.

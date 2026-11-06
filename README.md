@@ -1,6 +1,18 @@
 # Ferrum — Model-first Rust backend (experimental)
 
-Funktionsstand v0.8.1. Die Cargo-Version bleibt `0.1.0`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`, die Beschreibung in `docs/admin.md`. Vor `cargo build` einmal `npm run build` in `apps/admin-ui` ausführen, damit das Frontend im Binary liegt. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
+Funktionsstand v0.9. Die Cargo-Version bleibt `0.1.0`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`, die Beschreibung in `docs/admin.md`. Das Feature `admin-ui` verlangt vor dem Build `npm run build` in `apps/admin-ui`. Reine API-Projekte ohne dieses Feature brauchen kein Node.js. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
+
+Ein neues Projekt außerhalb dieses Workspaces:
+
+```powershell
+cargo run -p ferrum-cli -- new demo --template fullstack --ferrum-path .
+cd demo
+cargo run --manifest-path ..\Cargo.toml -p ferrum-cli -- migrate up
+cargo run --manifest-path ..\Cargo.toml -p ferrum-cli -- admin create-user --email admin@example.com --staff --superuser
+cargo run --manifest-path ..\Cargo.toml -p ferrum-cli -- dev
+```
+
+Nach `cargo install --path crates/ferrum-cli` heißen dieselben Schritte `ferrum migrate up`, `ferrum admin create-user` und `ferrum dev`. Das Passwort wird abgefragt. `FERRUM_PASSWORD` ist nur für Automationen und hat keinen Standardwert.
 
 Authentifizierung, Sitzungen und Rollen beschreibt `docs/auth.md`. Geschützte myshop-Ressource ist `/api/v1/internal_notes`. Produkte und Kategorien bleiben ausdrücklich öffentliche Demo-Routen.
 

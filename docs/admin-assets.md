@@ -8,7 +8,9 @@ Ein produktiver Ferrum-Prozess soll HTML, CSS und JavaScript des Admins ausliefe
 
 ## Architektur
 
-`crates/ferrum-admin/build.rs` kopiert `apps/admin-ui/dist` nach `crates/ferrum-admin/embedded-admin`, wenn dort `index.html` liegt. `include_dir` bettet dieses Verzeichnis ein. `embedded-admin` ist generiert und steht in `.gitignore`.
+Das Feature `embedded-admin` auf `ferrum-admin` und das Feature `admin-ui` auf `ferrum` sind nicht Standard. `examples/myshop` und generierte Fullstack-Projekte aktivieren `admin-ui`. Ist das Feature aktiv und fehlt `apps/admin-ui/dist/index.html`, bricht `build.rs` mit einem deutschen Hinweis auf `npm run build` ab. Ohne das Feature bleibt ein fehlendes Verzeichnis ein leeres Embed. `/admin` antwortet dann mit 503, sofern `FERRUM_ADMIN_DIST` nicht gesetzt ist.
+
+`crates/ferrum-admin/build.rs` kopiert `apps/admin-ui/dist` nach `crates/ferrum-admin/embedded-admin`, wenn dort `index.html` liegt. `include_dir` bettet dieses Verzeichnis ein. `embedded-admin` ist generiert und steht in `.gitignore`. Ein Workspace-Build aktiviert das Feature, weil myshop es anfordert. Ein separates API-Projekt ohne das Feature braucht dafür kein Node.js.
 
 Zur Laufzeit gilt:
 
@@ -71,4 +73,4 @@ cargo run -p myshop
 
 ## Einschränkungen
 
-Ein Checkout ohne vorheriges `npm run build` erzeugt ein Binary ohne Admin-HTML. Der Server kompiliert trotzdem und antwortet auf `/admin` mit 503. Der Embed entsteht beim Kompilieren. Ein späteres `npm run build` allein ändert ein bereits gebautes Binary nicht.
+Ein Projekt mit `admin-ui` kompiliert ohne `dist/index.html` nicht. Ein Projekt ohne das Feature kompiliert und antwortet auf `/admin` mit 503. Der Embed entsteht beim Kompilieren. Ein späteres `npm run build` allein ändert ein bereits gebautes Binary nicht. `FERRUM_ADMIN_DIST` bleibt der explizite Entwicklungs-Override.

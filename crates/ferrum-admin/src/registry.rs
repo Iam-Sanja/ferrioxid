@@ -34,7 +34,12 @@ pub trait ManagedModel: Send + Sync {
         id: uuid::Uuid,
         scope: &QueryScope,
     ) -> Result<Option<Value>, FerrumError>;
-    async fn create(&self, db: &DatabaseConnection, body: Value) -> Result<Value, FerrumError>;
+    async fn create(
+        &self,
+        db: &DatabaseConnection,
+        body: Value,
+        user: &AuthUser,
+    ) -> Result<Value, FerrumError>;
     async fn update(
         &self,
         db: &DatabaseConnection,
@@ -178,7 +183,12 @@ where
     ) -> Result<Option<Value>, FerrumError> {
         Ok(M::get_scoped(db, id, scope).await?.map(json_of))
     }
-    async fn create(&self, db: &DatabaseConnection, body: Value) -> Result<Value, FerrumError> {
+    async fn create(
+        &self,
+        db: &DatabaseConnection,
+        body: Value,
+        _user: &AuthUser,
+    ) -> Result<Value, FerrumError> {
         let input = serde_json::from_value(body).map_err(|error| {
             FerrumError::Validation(format!("request body is invalid: {error}"))
         })?;
@@ -266,10 +276,20 @@ where
     ) -> Result<Option<Value>, FerrumError> {
         Ok(M::get_scoped(db, id, scope).await?.map(json_of))
     }
-    async fn create(&self, db: &DatabaseConnection, body: Value) -> Result<Value, FerrumError> {
-        let input = serde_json::from_value(body).map_err(|error| {
+    async fn create(
+        &self,
+        db: &DatabaseConnection,
+        body: Value,
+        user: &AuthUser,
+    ) -> Result<Value, FerrumError> {
+        let input = serde_json::from_value::<M::Create>(body).map_err(|error| {
             FerrumError::Validation(format!("request body is invalid: {error}"))
         })?;
+        if !user.is_superuser && !P::can_create(user, &input) {
+            return Err(FerrumError::Denied(
+                "create policy rejected the record".into(),
+            ));
+        }
         Ok(json_of(M::create(db, input).await?))
     }
     async fn update(

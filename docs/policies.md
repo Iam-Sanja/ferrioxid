@@ -34,7 +34,7 @@ Die Regel läuft nach der Sitzungs- und Berechtigungsprüfung. Ein aktiver Super
 
 Für GET, PATCH und DELETE lädt der Handler den Datensatz. Schlägt die Regel fehl, ist die Antwort 404, auch wenn die Zeile existiert. So bestätigt die Schnittstelle die Kennung nicht.
 
-POST prüft nur das Create-Recht. Die Trait-Methode dafür gibt es nicht.
+POST prüft zuerst das Create-Recht und danach `can_create`. Die Methode erhält den Create-Typ. Der Standard ist `false`. Ein Superuser überspringt sie. Die Prüfung liegt vor dem INSERT. Eine Ablehnung ist 403 mit dem Detail `create policy rejected the record` und legt keine Zeile an.
 
 ## Datenmodell
 
@@ -54,6 +54,8 @@ Listen, Zähler und Schreibzugriffe verwenden `QueryScope`. Der Standard ist `No
 | Scope ist `None` oder die Zeile gehört nicht dazu | leere Liste beziehungsweise 404 |
 | Datensatz fehlt oder `can_*` lehnt ab | 404 |
 | Create-Recht fehlt | 403 vor dem Schreiben |
+| `can_create` lehnt die Eingabe ab | 403, keine Zeile |
+| Pflichtfeld fehlt | 422 |
 
 ## Beispiel
 
@@ -70,6 +72,9 @@ impl ferrum::auth::ObjectPolicy<SecretNote> for OwnerPolicy {
     fn can_delete(user: &ferrum::auth::AuthUser, object: &SecretNote) -> bool {
         object.owner == user.id.to_string()
     }
+    fn can_create(user: &ferrum::auth::AuthUser, input: &SecretNoteCreate) -> bool {
+        input.owner == user.id.to_string()
+    }
 }
 
 let app = App::new(db).with_auth(auth).register_policy::<SecretNote, OwnerPolicy>();
@@ -79,11 +84,11 @@ myshop selbst bindet keine Objektregel. `InternalNote` nutzt nur Rollen, damit L
 
 ## Tests
 
-`examples/myshop/tests/auth.rs` legt zwei Geheimnisse an, erlaubt dem Eigentümer den Einzelabruf, antwortet beim fremden Datensatz mit 404, blockiert die Liste und lässt den Superuser die Liste laden. Dieselbe Datei prüft das ungebundene Modell.
+`examples/myshop/tests/auth.rs` und `admin_http.rs` prüfen eigene Notizen, fremde Besitzer, fehlende Felder und den Superuser. Anonyme Demomodelle bleiben ohne Objektregel.
 
 ## Einschränkungen
 
-Der Scope kennt `All`, `None` und einen Gleichheitsvergleich. Joins und Oder-Verknüpfungen sind nicht umgesetzt. Eine Regel kann die Create-Entscheidung nicht am neuen Inhalt treffen. Feldweises Ausblenden fehlt.
+Der Scope kennt `All`, `None` und einen Gleichheitsvergleich. Joins und Oder-Verknüpfungen sind nicht umgesetzt. `can_create` sieht die Eingabe, setzt die Besitzer-ID aber nicht selbst. Dieses serverseitige Setzen ist geplant. Feldweises Ausblenden fehlt.
 
 ## Geplante Erweiterungen
 

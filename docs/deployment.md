@@ -11,9 +11,9 @@ cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-Der Server startet ohne automatische Migration. Zuerst `ferrum migrate up` ausführen. `myshop --bootstrap` ändert die Datei nicht. Die Datei `db.sqlite3` liegt im Arbeitsverzeichnis. Eine ältere Bootstrap-Datei ohne `_ferrum_migrations` wird nicht übernommen und nicht gelöscht.
+Ein generiertes Projekt startet mit `ferrum dev` im Projektverzeichnis. Windows und Linux nutzen denselben Befehl. Der Server startet ohne automatische Migration. Zuerst `ferrum migrate up` ausführen. Generierte Anwendungen binden nicht an `0.0.0.0`. `myshop --bootstrap` ändert die Datei nicht. Die Datei `db.sqlite3` liegt im Arbeitsverzeichnis. Eine ältere Bootstrap-Datei ohne `_ferrum_migrations` wird nicht übernommen und nicht gelöscht.
 
-Das Admin-Frontend braucht keinen Node-Prozess zur Laufzeit. Vor dem Rust-Build:
+Das Admin-Frontend braucht keinen Node-Prozess zur Laufzeit. Ein Projekt mit Feature `admin-ui` verlangt vor dem Rust-Build:
 
 ```powershell
 cd apps/admin-ui

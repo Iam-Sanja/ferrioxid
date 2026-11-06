@@ -10,7 +10,7 @@ Ferrum prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferru
 
 `ferrum-auth` hängt von `ferrum-core`, `ferrum-db` und `ferrum-migrations` ab, nicht von `ferrum-api`. `ferrum-api` hängt von `ferrum-auth` und registriert die Auth-Routen zusammen mit den Modellrouten. Die CLI ruft dieselben Service-Methoden auf.
 
-Passwörter werden mit Argon2id gehasht. Sitzungstoken werden nur als SHA-256-Hex gespeichert. Das CSRF-Token wird bei Bedarf aus dem Schlüssel und der Sitzung berechnet; gespeichert wird ebenfalls nur der Hash. Rollen und Berechtigungen liest jede Prüfung erneut aus der Datenbank.
+Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Die CLI liest sie verdeckt oder aus `FERRUM_PASSWORD`. Sitzungstoken werden nur als SHA-256-Hex gespeichert. Objektregeln prüfen Create-Eingaben über `can_create`, bevor eine Zeile entsteht. Das Setzen der Besitzer-ID aus der Sitzung ist geplant. Das CSRF-Token wird bei Bedarf aus dem Schlüssel und der Sitzung berechnet; gespeichert wird ebenfalls nur der Hash. Rollen und Berechtigungen liest jede Prüfung erneut aus der Datenbank.
 
 ## Zuständige Dateien
 

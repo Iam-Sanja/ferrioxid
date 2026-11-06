@@ -104,7 +104,7 @@ impl App {
         let detail_path = format!("{}/{{id}}", descriptor.api_path.trim_end_matches('/'));
         self.routes = self.routes.route(
             descriptor.api_path,
-            get(policy_list::<M, P>).post(guarded_create::<M>),
+            get(policy_list::<M, P>).post(policy_create::<M, P>),
         );
         self.routes = self.routes.route(
             &detail_path,
@@ -278,6 +278,26 @@ async fn guarded_delete<M: ModelRepository>(
         DeleteOutcome::Deleted => Ok(StatusCode::NO_CONTENT),
         DeleteOutcome::Missing => Err(FerrumError::NotFound.into()),
     }
+}
+
+async fn policy_create<M, P>(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    peer: ClientIp,
+    Json(input): Json<M::Create>,
+) -> Result<(StatusCode, Json<M>), ApiError>
+where
+    M: ModelRepository,
+    P: ObjectPolicy<M>,
+{
+    let user = ensure::<M>(&state, &headers, &Method::POST, &peer.0, "create").await?;
+    if !allows(user.is_superuser, P::can_create(&user, &input)) {
+        return Err(FerrumError::Denied("create policy rejected the record".into()).into());
+    }
+    Ok((
+        StatusCode::CREATED,
+        Json(M::create(&state.db, input).await?),
+    ))
 }
 
 async fn policy_list<M, P>(

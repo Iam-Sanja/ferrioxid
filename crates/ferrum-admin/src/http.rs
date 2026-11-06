@@ -259,7 +259,7 @@ async fn create_record(
     if let Err(message) = reject_locked(model.meta(), object, true) {
         return failure(StatusCode::UNPROCESSABLE_ENTITY, &message);
     }
-    match model.create(&state.db, body).await {
+    match model.create(&state.db, body, &user).await {
         Ok(mut created) => {
             redact(model.meta(), &mut created);
             (StatusCode::CREATED, Json(created)).into_response()

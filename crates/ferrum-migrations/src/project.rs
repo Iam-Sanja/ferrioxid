@@ -10,6 +10,13 @@ pub struct ProjectConfig {
     pub root: PathBuf,
     pub migrations_dir: PathBuf,
     pub schema_command: Option<String>,
+    pub name: Option<String>,
+    pub template: Option<String>,
+    pub database_url: String,
+    pub host: String,
+    pub port: u16,
+    pub admin_enabled: bool,
+    pub embedded_assets: bool,
 }
 
 pub fn discover_project(start: &Path) -> Result<ProjectConfig, MigrationError> {
@@ -63,11 +70,32 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         ))
     })?;
     let root = path.parent().unwrap_or(Path::new(".")).to_path_buf();
+    let mut section = String::new();
     let mut migrations_dir = None;
     let mut schema_command = None;
+    let mut name = None;
+    let mut template = None;
+    let mut database_url = ferrum_db::DEFAULT_SQLITE_URL.to_owned();
+    let mut host = "127.0.0.1".to_owned();
+    let mut port = 3000_u16;
+    let mut admin_enabled = false;
+    let mut embedded_assets = false;
     for (line_number, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') {
+            continue;
+        }
+        if line.starts_with('[') && line.ends_with(']') {
+            section = line[1..line.len() - 1].trim().to_owned();
+            if !matches!(
+                section.as_str(),
+                "project" | "database" | "server" | "admin"
+            ) {
+                return Err(MigrationError::new(format!(
+                    "{}:{line_number}: unbekannter Abschnitt `[{section}]`.",
+                    path.display()
+                )));
+            }
             continue;
         }
         let Some((key, value)) = line.split_once('=') else {
@@ -77,18 +105,39 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             )));
         };
         let key = key.trim();
-        let value = unquote(value.trim()).ok_or_else(|| {
+        let value = parse_value(value.trim()).ok_or_else(|| {
             MigrationError::new(format!(
-                "{}:{line_number}: der Wert von `{key}` muss in doppelten Anführungszeichen stehen.",
+                "{}:{line_number}: der Wert von `{key}` ist ungültig.",
                 path.display()
             ))
         })?;
-        match key {
-            "migrations_dir" => migrations_dir = Some(root.join(value)),
-            "schema_command" => schema_command = Some(value.to_owned()),
+        let qualified = if section.is_empty() {
+            key.to_owned()
+        } else {
+            format!("{section}.{key}")
+        };
+        match qualified.as_str() {
+            "migrations_dir" | "project.migrations_dir" => {
+                migrations_dir = Some(root.join(value));
+            }
+            "schema_command" | "project.schema_command" => schema_command = Some(value),
+            "project.name" => name = Some(value),
+            "project.template" => template = Some(value),
+            "database.url" => database_url = value,
+            "server.host" => host = value,
+            "server.port" => {
+                port = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: server.port muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
+            "admin.enabled" => admin_enabled = parse_bool(&value)?,
+            "admin.embedded_assets" => embedded_assets = parse_bool(&value)?,
             _ => {
                 return Err(MigrationError::new(format!(
-                    "{}:{line_number}: unbekannter Schlüssel `{key}`.",
+                    "{}:{line_number}: unbekannter Schlüssel `{qualified}`.",
                     path.display()
                 )))
             }
@@ -97,11 +146,45 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let migrations_dir = migrations_dir.ok_or_else(|| {
         MigrationError::new(format!("{} enthält kein migrations_dir.", path.display()))
     })?;
+    if let Some(template) = &template {
+        if template != "api" && template != "fullstack" {
+            return Err(MigrationError::new(format!(
+                "project.template `{template}` ist unbekannt. Erlaubt sind api und fullstack."
+            )));
+        }
+    }
     Ok(ProjectConfig {
         root,
         migrations_dir,
         schema_command,
+        name,
+        template,
+        database_url,
+        host,
+        port,
+        admin_enabled,
+        embedded_assets,
     })
+}
+
+fn parse_value(value: &str) -> Option<String> {
+    if let Some(quoted) = unquote(value) {
+        return Some(quoted.to_owned());
+    }
+    if value == "true" || value == "false" || value.chars().all(|char| char.is_ascii_digit()) {
+        return Some(value.to_owned());
+    }
+    None
+}
+
+fn parse_bool(value: &str) -> Result<bool, MigrationError> {
+    match value {
+        "true" => Ok(true),
+        "false" => Ok(false),
+        _ => Err(MigrationError::new(format!(
+            "`{value}` ist kein Wahrheitswert. Erlaubt sind true und false."
+        ))),
+    }
 }
 
 fn unquote(value: &str) -> Option<&str> {

@@ -13,8 +13,13 @@ fn main() {
         let _ = std::fs::remove_dir_all(&embedded);
     }
     std::fs::create_dir_all(&embedded).expect("embedded-admin");
+    let required = std::env::var_os("CARGO_FEATURE_EMBEDDED_ADMIN").is_some();
     if dist.join("index.html").is_file() {
         copy_dir(&dist, &embedded);
+    } else if required {
+        panic!(
+            "Admin-Assets fehlen. Feature admin-ui erwartet apps/admin-ui/dist/index.html. Im Verzeichnis apps/admin-ui zuerst npm run build ausführen."
+        );
     }
 }
 

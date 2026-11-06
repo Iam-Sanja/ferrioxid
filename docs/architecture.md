@@ -1,6 +1,6 @@
 # Architektur – Modulgrenzen und Laufzeit
 
-[Zur Übersicht](index.md) · **Status:** Beschreibung v0.1 + ausdrücklich getrennte Zukunftsarchitektur.
+[Zur Übersicht](index.md) · **Status:** Modulgrenzen bleiben gültig. v0.9 ergänzt Create-Policies und die Entwickler-CLI.
 
 ## 1. Architekturprinzipien
 
@@ -12,6 +12,7 @@
 6. **Datenbankzugriffe parameterisieren:** SQL-Identifier stammen nur aus geprüften Makroattributen. SeaQuery wählt den Dialekt.
 7. **Eine Repository-Implementierung:** Handler und Modelle unterscheiden SQLite und PostgreSQL nicht.
 8. **Schemaänderungen laufen über Migrationen.** `myshop --bootstrap` ist Legacy und schreibt weder Tabellen noch Historie.
+9. **Create-Policies gelten vor dem INSERT.** REST und Admin rufen dieselbe `can_create`-Regel auf. Der Standard ist Ablehnung.
 
 ## 2. Tatsächlicher Workspace (IST)
 

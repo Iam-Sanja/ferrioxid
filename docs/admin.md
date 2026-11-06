@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Backend: [admin-backend.md](admin-backend.md) · Oberfläche: [admin-frontend.md](admin-frontend.md) · Sicherheit: [admin-security.md](admin-security.md)
 
-**Stand:** implementiert in v0.8. Die Cargo-Version bleibt `0.1.0`. Admin-Metadaten ändern das Datenbankschema nicht.
+**Stand:** implementiert in v0.8, Create-Policy und Asset-Feature in v0.9. Die Cargo-Version bleibt `0.1.0`. Admin-Metadaten ändern das Datenbankschema nicht. Admin-Create verwendet dieselbe `can_create`-Regel wie REST.
 
 ## Zweck
 
