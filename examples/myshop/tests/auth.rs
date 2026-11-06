@@ -1,6 +1,7 @@
 //! HTTP-Prüfung für Login, Sitzungen, CSRF und Modellrechte. Nur SQLite.
 
 use ferrum::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
+use ferrum::core::{QueryScope, ScopeValue};
 use ferrum::db::ModelRepository;
 use ferrum::prelude::*;
 use std::io::{Read, Write};
@@ -75,6 +76,17 @@ impl ObjectPolicy<SecretNote> for OwnerPolicy {
 
     fn can_delete(user: &AuthUser, object: &SecretNote) -> bool {
         object.owner == user.id.to_string()
+    }
+
+    fn read_scope(user: &AuthUser) -> QueryScope {
+        QueryScope::Equals {
+            column: "owner",
+            value: ScopeValue::Text(user.id.to_string()),
+        }
+    }
+
+    fn write_scope(user: &AuthUser) -> QueryScope {
+        Self::read_scope(user)
     }
 }
 
@@ -511,11 +523,10 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     )
     .await
     .unwrap();
-    assert_eq!(blocked_list.status, 403);
-    assert!(blocked_list.json["detail"]
-        .as_str()
-        .unwrap()
-        .contains("query scope"));
+    assert_eq!(blocked_list.status, 200, "{}", blocked_list.json);
+    let visible_rows = blocked_list.json["data"].as_array().unwrap();
+    assert_eq!(visible_rows.len(), 1);
+    assert_eq!(visible_rows[0]["title"], "Mine");
     let super_list = call(
         "GET",
         "/api/v1/auth_secrets".into(),
@@ -608,6 +619,15 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     .await
     .unwrap();
     assert_eq!(after.status, 401);
+    let csrf_after_logout = call(
+        "GET",
+        "/auth/csrf".into(),
+        None,
+        format!("Cookie: {cookie}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(csrf_after_logout.status, 401);
     let again = call("POST", "/auth/logout".into(), None, String::new())
         .await
         .unwrap();

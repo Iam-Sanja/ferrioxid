@@ -1,5 +1,13 @@
 # Changelog
 
+## Unreleased — Stabilität, Sicherheit und Auslieferung (v0.8.1)
+
+- `GET /auth/csrf` berechnet ein HMAC-Token aus Sitzungs-ID, Session-Hash und stabilem Schlüssel. Ein zweiter Tab ersetzt das Token nicht.
+- Objektregeln liefern `QueryScope`. REST und Admin filtern Listen, Zähler, Details, PATCH und DELETE mit derselben SQL-Bedingung. Ohne ausdrücklichen Scope bleibt `None`.
+- Das Admin-Frontend wird beim Rust-Build aus `apps/admin-ui/dist` eingebettet. `FERRUM_ADMIN_DIST` bleibt ein Entwicklungs-Override. Node.js läuft zur Laufzeit nicht.
+- Admin-Listen enthalten `total`. Ungebundene Objektregeln bleiben 403. Fehlerantworten nutzen weiterhin Problem-Details und geben keine Datenbanktexte, Hashes oder Tokens aus.
+- Nicht enthalten: OAuth, MFA, GraphQL, WebSockets, Plugins, Mandanten, JWT und ein neues Migrationsformat. `0001`, `0002` und `0003` bleiben unverändert. Die Cargo-Version bleibt `0.1.0`.
+
 ## Unreleased — Automatischer Admin
 
 - Neue Crate `ferrum-admin` und React-Anwendung `apps/admin-ui`. Modelle mit `admin = true` erscheinen nach expliziter `AdminRegistry`-Registrierung.

@@ -19,7 +19,7 @@ Ein aktiver Superuser überspringt Modellrechte, wenn die Ressource gesetzt ist.
 
 ## CSRF-Bootstrap
 
-`GET /auth/csrf` funktioniert nur mit gültiger Sitzung. Origin oder Referer müssen erlaubt sein, wenn sie gesendet werden. Ein fehlender Origin ist erlaubt, weil keine offene CORS-Policy existiert. Der Aufruf rotiert nur den CSRF-Hash. Sitzungstoken und Ablauf bleiben. Der vorherige Token wird ungültig. Gleichzeitige Tabs können sich damit gegenseitig das Token entziehen.
+`GET /auth/csrf` funktioniert nur mit gültiger Sitzung. Origin oder Referer müssen erlaubt sein, wenn sie gesendet werden. Ein fehlender Origin ist erlaubt, weil keine offene CORS-Policy existiert. Der Aufruf berechnet dasselbe HMAC-Token erneut. Sitzungstoken und Ablauf bleiben. Gleichzeitige Tabs bleiben gültig. Details stehen in [csrf.md](csrf.md).
 
 Das Token steht nicht in `localStorage` und nicht in der URL. Das Sitzungscookie bleibt `HttpOnly`.
 
@@ -27,7 +27,7 @@ Das Token steht nicht in `localStorage` und nicht in der URL. Das Sitzungscookie
 
 Sortier-, Such- und Filterfelder stammen aus `AdminModelMeta`. Bezeichner müssen zusätzlich `^[A-Za-z_][A-Za-z0-9_]*$` und einer echten Spalte entsprechen. Werte sind gebundene Parameter.
 
-Eine Objektregel hat keinen SQL-Filter. Die Liste antwortet deshalb 403 mit dem Text `object-level policies block list endpoints until a query scope exists`. Ein einzelner abgelehnter Datensatz ist 404. Fremdschlüssel-Auswahlen auf ein solches Ziel sind ebenfalls 403. Es werden nie alle Zeilen einer ungeschützten Liste ohne Limit geladen: das Maximum ist 25.
+Eine gebundene Objektregel filtert Liste, Detail, PATCH, DELETE und die Fremdschlüssel-Auswahl über `QueryScope`. `total` verwendet denselben Filter. Ein einzelner abgelehnter Datensatz ist 404. Eine ungebundene Regel bleibt 403 mit `object policy is not bound`. Die Auswahl lädt höchstens 25 Zeilen und nur innerhalb des Scopes. Siehe [query-scopes.md](query-scopes.md).
 
 ## Privilegieneskalation
 
@@ -35,7 +35,7 @@ Normale Modellrechte öffnen das Verzeichnis nicht. Superuser-Vergabe ist blocki
 
 ## Tests
 
-Der SQLite-Test prüft anonyme Admin-Anfrage, fehlendes Staff, unbekanntes Modell, falsche Sortierung, falschen Filter, schreibgeschütztes `id`, Objektregel, fehlendes CSRF, altes CSRF nach Bootstrap und die Superuser-Sperre. Abgelaufene Sitzungen prüft der bestehende Auth-Test `expired_session_cookie_is_rejected`; der Admin nutzt dieselbe `authenticate`-Funktion.
+Der SQLite-Test prüft anonyme Admin-Anfrage, fehlendes Staff, unbekanntes Modell, falsche Sortierung, falschen Filter, schreibgeschütztes `id`, Objekt-Scope, fehlendes CSRF, dasselbe Token in zwei Abrufen, ein sitzungsfremdes Token und die Superuser-Sperre. Abgelaufene Sitzungen prüft `expired_session_cookie_is_rejected`. Assets prüft `admin_assets_reject_traversal_and_keep_the_api`.
 
 ## Grenzen
 
@@ -43,4 +43,4 @@ Das Login-Limit ist prozesslokal. Anonyme Demo-Schreibrouten außerhalb des Admi
 
 ## Später
 
-Query-Scopes, mehrere gleichzeitige CSRF-Token und ein vom Superuser getrennter Verzeichnis-Administrator.
+Ein vom Superuser getrennter Verzeichnis-Administrator. OAuth, MFA und einzeln widerrufbare CSRF-Tokens je Tab sind geplant und nicht implementiert.

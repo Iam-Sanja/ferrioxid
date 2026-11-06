@@ -19,7 +19,7 @@ Benutzer, Argon2id, serverseitige Sitzungen, HttpOnly-Cookies, CSRF für Cookie-
 
 ## Verbleibende Lücken (IST)
 
-Kein OAuth, kein MFA, kein Passwort-Reset, kein JWT für externe APIs und kein Admin-UI. Das Login-Rate-Limit gilt pro Prozess. Objektregeln haben keinen SQL-Filter; ihre Listen sind blockiert. `allow_anonymous` prüft kein CSRF, weil der Zugriff nicht am Cookie hängt. Parallele PATCH-Anweisungen haben kein Versionsfeld. Ferrum ist damit nicht als öffentlicher Internetdienst ohne zusätzlichen Proxy und Betriebsgrenzen beschrieben.
+Kein OAuth, kein MFA, kein Passwort-Reset und kein JWT für externe APIs. Das Login-Rate-Limit gilt pro Prozess. Objektregeln filtern über [query-scopes.md](query-scopes.md). Ohne ausdrücklichen Scope liefert die Liste keine Zeile. `allow_anonymous` prüft kein CSRF, weil der Zugriff nicht am Cookie hängt. Parallele PATCH-Anweisungen haben kein Versionsfeld. Ferrum ist damit nicht als öffentlicher Internetdienst ohne zusätzlichen Proxy und Betriebsgrenzen beschrieben.
 
 ## SOLL-Bedrohungsmodell
 

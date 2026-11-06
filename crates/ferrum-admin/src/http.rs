@@ -1,13 +1,15 @@
 //! Admin-HTTP. Sitzung, Staff-Flag, Modellrecht und CSRF kommen aus ferrum-auth.
 
-use crate::assets::{self, dist_dir};
+use crate::assets;
 use crate::registry::{redact, sensitive, AdminRegistry, ManagedModel};
 use axum::extract::{Extension, Path, Query, State};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::routing::{get, post};
 use axum::{Json, Router};
 use ferrum_auth::{AppState, AuthError, AuthService, AuthUser};
-use ferrum_core::{AdminFieldMeta, AdminModelMeta, ColumnKind, ColumnSpec, FerrumError};
+use ferrum_core::{
+    AdminFieldMeta, AdminModelMeta, ColumnKind, ColumnSpec, FerrumError, QueryScope,
+};
 use ferrum_db::DeleteOutcome;
 use sea_orm::Value as DbValue;
 use serde::Deserialize;
@@ -51,7 +53,6 @@ pub fn mount(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSta
 }
 
 async fn admin_asset(Path(path): Path<String>) -> axum::response::Response {
-    let _ = dist_dir();
     assets::asset(path).await
 }
 
@@ -145,9 +146,10 @@ async fn records(
     if list_blocked(model.as_ref()) {
         return failure(
             StatusCode::FORBIDDEN,
-            "object-level policies block list endpoints until a query scope exists",
+            "object policy is not bound; call add_policy",
         );
     }
+    let scope = access_scope(model.as_ref(), &user, false);
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(25).clamp(1, 100);
     let sort = params.sort.as_deref().unwrap_or("id");
@@ -191,10 +193,11 @@ async fn records(
             &filter_refs,
             u64::from(page - 1) * u64::from(page_size),
             u64::from(page_size),
+            &scope,
         )
         .await
     {
-        Ok((mut rows, has_more)) => {
+        Ok((mut rows, has_more, total)) => {
             for row in &mut rows {
                 redact(model.meta(), row);
             }
@@ -202,7 +205,8 @@ async fn records(
                 "data": rows,
                 "page": page,
                 "page_size": page_size,
-                "has_more": has_more
+                "has_more": has_more,
+                "total": total
             }))
             .into_response()
         }
@@ -290,8 +294,9 @@ async fn update_record(
     if let Err(message) = reject_locked(model.meta(), object, false) {
         return failure(StatusCode::UNPROCESSABLE_ENTITY, &message);
     }
+    let scope = access_scope(model.as_ref(), &user, true);
     if needs_object_check(model.as_ref(), &user) {
-        let current = match model.read(&state.db, id).await {
+        let current = match model.read(&state.db, id, &scope).await {
             Ok(Some(value)) => value,
             Ok(None) => return failure(StatusCode::NOT_FOUND, "Resource not found"),
             Err(error) => return ferrum_failure(error),
@@ -300,7 +305,7 @@ async fn update_record(
             return failure(StatusCode::NOT_FOUND, "Resource not found");
         }
     }
-    match model.update(&state.db, id, body).await {
+    match model.update(&state.db, id, body, &scope).await {
         Ok(mut updated) => {
             redact(model.meta(), &mut updated);
             Json(updated).into_response()
@@ -325,8 +330,9 @@ async fn delete_record(
     if let Err(error) = gate(&state, &user, model.as_ref(), "delete").await {
         return ferrum_failure(error);
     }
+    let scope = access_scope(model.as_ref(), &user, true);
     if needs_object_check(model.as_ref(), &user) {
-        let current = match model.read(&state.db, id).await {
+        let current = match model.read(&state.db, id, &scope).await {
             Ok(Some(value)) => value,
             Ok(None) => return failure(StatusCode::NOT_FOUND, "Resource not found"),
             Err(error) => return ferrum_failure(error),
@@ -335,7 +341,7 @@ async fn delete_record(
             return failure(StatusCode::NOT_FOUND, "Resource not found");
         }
     }
-    match model.remove(&state.db, id).await {
+    match model.remove(&state.db, id, &scope).await {
         Ok(DeleteOutcome::Deleted) => StatusCode::NO_CONTENT.into_response(),
         Ok(DeleteOutcome::Missing) => failure(StatusCode::NOT_FOUND, "Resource not found"),
         Err(error) => ferrum_failure(error),
@@ -384,12 +390,13 @@ async fn relation_options(
             "relation options require a registered admin model without an object policy",
         );
     };
-    if list_blocked(target.as_ref()) || target.descriptor().requires_object_policy {
+    if list_blocked(target.as_ref()) {
         return failure(
             StatusCode::FORBIDDEN,
-            "relation options are blocked until a query scope exists",
+            "object policy is not bound; call add_policy",
         );
     }
+    let scope = access_scope(target.as_ref(), &user, false);
     let Some(auth) = state.auth.as_ref() else {
         return failure(StatusCode::FORBIDDEN, "authentication is not configured");
     };
@@ -412,10 +419,20 @@ async fn relation_options(
         Vec::new()
     };
     match target
-        .page(&state.db, &search_columns, term, label, false, &[], 0, 25)
+        .page(
+            &state.db,
+            &search_columns,
+            term,
+            label,
+            false,
+            &[],
+            0,
+            25,
+            &scope,
+        )
         .await
     {
-        Ok((rows, _)) => {
+        Ok((rows, _, _)) => {
             let options: Vec<Value> = rows
                 .into_iter()
                 .filter_map(|row| {
@@ -732,7 +749,8 @@ async fn record_or_hidden(
             "object policy is not bound; call add_policy",
         );
     }
-    match model.read(&state.db, id).await {
+    let scope = access_scope(model, user, action != "read");
+    match model.read(&state.db, id, &scope).await {
         Ok(Some(mut value)) => {
             if needs_object_check(model, user) && !model.object_allows(user, action, &value) {
                 return failure(StatusCode::NOT_FOUND, "Resource not found");
@@ -746,7 +764,17 @@ async fn record_or_hidden(
 }
 
 fn list_blocked(model: &dyn ManagedModel) -> bool {
-    model.descriptor().requires_object_policy
+    model.descriptor().requires_object_policy && !model.policy_bound()
+}
+
+fn access_scope(model: &dyn ManagedModel, user: &AuthUser, write: bool) -> QueryScope {
+    if !model.policy_bound() || user.is_superuser {
+        QueryScope::All
+    } else if write {
+        model.write_scope(user)
+    } else {
+        model.read_scope(user)
+    }
 }
 
 fn needs_object_check(model: &dyn ManagedModel, user: &AuthUser) -> bool {
@@ -1002,10 +1030,13 @@ fn auth_failure(error: AuthError) -> axum::response::Response {
 
 fn failure(status: StatusCode, detail: &str) -> axum::response::Response {
     let title = match status {
+        StatusCode::BAD_REQUEST => "Bad request",
         StatusCode::UNAUTHORIZED => "Unauthorized",
         StatusCode::FORBIDDEN => "Forbidden",
         StatusCode::NOT_FOUND => "Not found",
+        StatusCode::CONFLICT => "Conflict",
         StatusCode::UNPROCESSABLE_ENTITY => "Validation failed",
+        StatusCode::TOO_MANY_REQUESTS => "Too many requests",
         _ => "Error",
     };
     (

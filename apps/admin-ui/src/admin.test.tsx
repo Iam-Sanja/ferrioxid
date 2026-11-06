@@ -1,11 +1,12 @@
 import { fireEvent, render, screen } from "@testing-library/react";
 import { MemoryRouter, Route, Routes } from "react-router-dom";
 import { beforeEach, expect, it, vi } from "vitest";
-import { fieldError, login, request } from "./api/client";
+import { fieldError, login, request, restoreSession } from "./api/client";
 import { AuthProvider } from "./auth/AuthProvider";
 import { LoginPage } from "./auth/LoginPage";
 import { DataTable } from "./components/DataTable";
 import { DynamicForm } from "./components/DynamicForm";
+import { FieldRenderer } from "./components/FieldRenderer";
 import { Sidebar } from "./components/Sidebar";
 import { ModelCreate } from "./pages/ModelCreate";
 import { ModelDetail } from "./pages/ModelDetail";
@@ -69,6 +70,7 @@ it("zeigt die Anmeldung und danach die Navigation", async () => {
   fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "secret" } });
   fireEvent.click(screen.getByRole("button", { name: "Anmelden" }));
   expect(await screen.findByRole("link", { name: "Produkte" })).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Benutzer und Rollen" })).not.toBeInTheDocument();
 });
 
 it("rendert Tabellen, leere Zustände und Formularvalidierung", async () => {
@@ -132,4 +134,75 @@ it("zeigt den Löschdialog erst nach Bestätigung", async () => {
   );
   fireEvent.click(await screen.findByRole("button", { name: "Löschen" }));
   expect(screen.getByText("Datensatz löschen?")).toBeInTheDocument();
+});
+
+it("stellt die Sitzung nach einem Reload her und behält dasselbe CSRF-Token", async () => {
+  vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "/auth/me") {
+      return json({ id: "1", email: "staff@example.com", is_active: true, is_staff: true, is_superuser: false });
+    }
+    if (url === "/auth/csrf") return json({ csrf_token: "stable" });
+    return json({ id: "1", email: "staff@example.com", is_active: true, is_staff: true, is_superuser: false });
+  });
+  expect((await restoreSession())?.email).toBe("staff@example.com");
+  expect((await restoreSession())?.email).toBe("staff@example.com");
+  await request("POST", "/admin/api/models/products/records", { name: "A" });
+  const headers = new Headers(vi.mocked(fetch).mock.calls.at(-1)?.[1]?.headers);
+  expect(headers.get("x-csrf-token")).toBe("stable");
+  expect(localStorage.getItem("csrf")).toBeNull();
+});
+
+it("gibt Fehlerantworten als Status und Detail weiter", async () => {
+  vi.mocked(fetch).mockImplementation(async () => json({ detail: "Access denied" }, 403));
+  await expect(request("GET", "/admin/api/models")).rejects.toMatchObject({
+    status: 403,
+    detail: "Access denied",
+  });
+});
+
+it("lädt Fremdschlüssel aus der Options-API", async () => {
+  vi.mocked(fetch).mockImplementation(async () => json({ options: [{ id: "c1", label: "Buecher" }] }));
+  render(
+    <FieldRenderer
+      model="products"
+      field={{ ...name, name: "category_id", label: "Kategorie", foreign_key: "admin_categories.id", nullable: true, required: false }}
+      value={null}
+      onChange={() => undefined}
+    />,
+  );
+  expect(await screen.findByRole("option", { name: "Buecher" })).toBeInTheDocument();
+});
+
+it("zeigt die Rollenverwaltung nach einem Superuser-Login", async () => {
+  vi.mocked(fetch).mockImplementation(async (input: RequestInfo | URL) => {
+    const url = String(input);
+    if (url === "/auth/me") return json({ detail: "unauthenticated" }, 401);
+    if (url === "/auth/login") {
+      return json({
+        user: { id: "1", email: "root@example.com", is_active: true, is_staff: true, is_superuser: true },
+        csrf_token: "root",
+      });
+    }
+    if (url === "/admin/api/me") {
+      return json({ id: "1", email: "root@example.com", is_active: true, is_staff: true, is_superuser: true });
+    }
+    return json({ models: [] });
+  });
+  render(
+    <MemoryRouter initialEntries={["/login"]}>
+      <AuthProvider>
+        <Routes>
+          <Route path="/login" element={<LoginPage />} />
+          <Route path="/" element={<Sidebar models={[]} />} />
+        </Routes>
+      </AuthProvider>
+    </MemoryRouter>,
+  );
+  expect(await screen.findByRole("button", { name: "Anmelden" })).toBeInTheDocument();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  fireEvent.change(screen.getByLabelText("E-Mail"), { target: { value: "root@example.com" } });
+  fireEvent.change(screen.getByLabelText("Passwort"), { target: { value: "secret" } });
+  fireEvent.click(screen.getByRole("button", { name: "Anmelden" }));
+  expect(await screen.findByRole("link", { name: "Benutzer und Rollen" })).toBeInTheDocument();
 });

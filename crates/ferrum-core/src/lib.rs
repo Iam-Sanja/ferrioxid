@@ -11,8 +11,28 @@ pub struct ModelDescriptor {
     /// `Some("authenticated")` verlangt eine aktive Sitzung.
     /// Jeder andere Wert ist der Ressourcenname für `{name}.read|create|update|delete`.
     pub permission: Option<&'static str>,
-    /// Listen bleiben blockiert. Einzelzugriffe prüfen `ObjectPolicy`.
+    /// Objektregeln liefern einen `QueryScope`. Ohne gebundene Policy bleiben die Routen gesperrt.
     pub requires_object_policy: bool,
+}
+
+/// Vergleichswert eines Query-Scopes. Er stammt aus der Policy, nicht aus der HTTP-Anfrage.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum ScopeValue {
+    Text(String),
+    Uuid(uuid::Uuid),
+    BigInt(i64),
+    Bool(bool),
+}
+
+/// Datenbankfilter einer Objektregel. `None` liefert keine Zeile. `All` nur, wenn die Policy das ausdrücklich sagt.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum QueryScope {
+    All,
+    None,
+    Equals {
+        column: &'static str,
+        value: ScopeValue,
+    },
 }
 
 /// Admin-Feld. Die Werte stammen aus demselben Modell wie das Schema.

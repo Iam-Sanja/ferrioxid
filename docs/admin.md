@@ -25,7 +25,7 @@ Rust-Struct → `FerrumModel` erzeugt `AdminModelMeta` neben dem bestehenden `Mo
 
 ## Konfiguration
 
-`App::with_admin(registry)` hängt die Admin-Routen an. `FERRUM_ADMIN_DIST` zeigt auf das gebaute Verzeichnis. Ohne die Variable sucht das Backend `apps/admin-ui/dist` relativ zur Crate. Fehlt das Verzeichnis, antwortet `/admin` mit 503 und dem Hinweis `npm run build`.
+`App::with_admin(registry)` hängt die Admin-Routen an. Das Frontend wird beim Rust-Build eingebettet. `FERRUM_ADMIN_DIST` bleibt ein Entwicklungs-Override. Fehlt beides, antwortet `/admin` mit 503. Der Ablauf steht in [admin-assets.md](admin-assets.md).
 
 ## Öffentliche Nutzung
 

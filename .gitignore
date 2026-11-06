@@ -1,4 +1,6 @@
 /target/
+.ferrum/
+crates/ferrum-admin/embedded-admin/
 apps/admin-ui/node_modules/
 apps/admin-ui/dist/
 *.sqlite3

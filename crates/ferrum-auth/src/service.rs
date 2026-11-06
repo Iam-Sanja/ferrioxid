@@ -213,7 +213,14 @@ impl AuthService {
         }
         let transaction = self.db.begin().await.map_err(AuthError::database)?;
         store::revoke_session(&transaction, current.id, now).await?;
-        let issued = insert_session(&transaction, current.user_id, now, current.expires_at).await?;
+        let issued = insert_session(
+            &transaction,
+            &self.config.csrf_secret,
+            current.user_id,
+            now,
+            current.expires_at,
+        )
+        .await?;
         transaction.commit().await.map_err(AuthError::database)?;
         let user = store::find_user_by_id(&self.db, current.user_id)
             .await?
@@ -348,9 +355,11 @@ impl AuthService {
         if !user.is_active {
             return Err(AuthError::Unauthenticated);
         }
-        let csrf_token = random_token();
-        store::update_csrf_hash(&self.db, session.id, &digest(&csrf_token)).await?;
-        Ok(csrf_token)
+        Ok(csrf_for_session(
+            &self.config.csrf_secret,
+            session.id,
+            &session.token_hash,
+        ))
     }
 
     pub async fn set_staff(&self, id: Uuid, staff: bool) -> Result<(), AuthError> {
@@ -423,7 +432,9 @@ impl AuthService {
             let session = store::find_session_by_hash(&self.db, &digest(&token))
                 .await?
                 .ok_or(AuthError::Unauthenticated)?;
-            if !constant_eq(&digest(supplied), &session.csrf_token_hash) {
+            let expected =
+                csrf_for_session(&self.config.csrf_secret, session.id, &session.token_hash);
+            if !constant_eq(supplied, &expected) {
                 return Err(AuthError::CsrfRejected);
             }
         }
@@ -432,7 +443,8 @@ impl AuthService {
 
     async fn issue(&self, user_id: Uuid, now: i64) -> Result<IssuedSession, AuthError> {
         let expires_at = now.saturating_add(self.config.session_ttl_secs);
-        let issued = insert_session(&self.db, user_id, now, expires_at).await?;
+        let issued =
+            insert_session(&self.db, &self.config.csrf_secret, user_id, now, expires_at).await?;
         let user = store::find_user_by_id(&self.db, user_id)
             .await?
             .ok_or(AuthError::Unauthenticated)?;
@@ -495,18 +507,21 @@ struct RawSession {
 
 async fn insert_session(
     db: &impl sea_orm::ConnectionTrait,
+    secret: &[u8; 32],
     user_id: Uuid,
     now: i64,
     expires_at: i64,
 ) -> Result<RawSession, AuthError> {
     let token = random_token();
-    let csrf_token = random_token();
+    let session_id = Uuid::new_v4();
+    let token_hash = digest(&token);
+    let csrf_token = csrf_for_session(secret, session_id, &token_hash);
     store::insert_session(
         db,
         &SessionRow {
-            id: Uuid::new_v4(),
+            id: session_id,
             user_id,
-            token_hash: digest(&token),
+            token_hash,
             csrf_token_hash: digest(&csrf_token),
             created_at: now,
             expires_at,
@@ -516,6 +531,15 @@ async fn insert_session(
     )
     .await?;
     Ok(RawSession { token, csrf_token })
+}
+
+fn csrf_for_session(secret: &[u8; 32], session_id: Uuid, token_hash: &str) -> String {
+    use hmac::{Hmac, Mac};
+    let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret).expect("csrf hmac key");
+    mac.update(b"ferrum-csrf-v1");
+    mac.update(session_id.as_bytes());
+    mac.update(token_hash.as_bytes());
+    base64url(&mac.finalize().into_bytes())
 }
 
 pub fn normalize_email(input: &str) -> Result<String, AuthError> {

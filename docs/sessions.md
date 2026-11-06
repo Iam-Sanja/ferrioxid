@@ -8,7 +8,7 @@ Das Admin- und Browser-Login nutzt serverseitige Sitzungen. JSON Web Tokens sind
 
 ## Architektur
 
-Der Login erzeugt 32 Byte aus `OsRng` für das Session-Token und weitere 32 Byte für das CSRF-Token. Beide werden Base64url-kodiert. Die Datenbank speichert SHA-256 als Hex. `last_seen_at` wird bei jeder erfolgreichen Prüfung gesetzt. `expires_at` wird dabei nicht verlängert.
+Der Login erzeugt 32 Byte aus `OsRng` für das Session-Token. Das CSRF-Token ist ein HMAC über Sitzungs-ID und Token-Hash, siehe [csrf.md](csrf.md). Die Datenbank speichert SHA-256 als Hex. `last_seen_at` wird bei jeder erfolgreichen Prüfung gesetzt. `expires_at` wird dabei nicht verlängert.
 
 `rotate_session` widerruft die aktuelle Zeile und legt eine neue mit demselben `expires_at` an. Eine bereits abgelaufene Sitzung wird nicht erneuert. Der Login legt immer eine neue Sitzung an. Eine automatische Rotation bei jedem Request ist ausgeschaltet, weil dabei das CSRF-Token ohne zuverlässigen Kanal wechseln würde.
 
@@ -70,4 +70,4 @@ Idle-Timeout und absolute Laufzeit werden beim nächsten Request geprüft, nicht
 
 ## Geplante Erweiterungen
 
-Geräteverwaltung und eine Sitzungsliste sind nicht umgesetzt. `GET /auth/csrf` rotiert nur den CSRF-Hash und lässt Ablauf sowie Sitzungstoken stehen. Die automatische Rotation je Request bleibt aus, damit ein Token für die folgende Admin-Aktion stabil ist. Ein Reload holt ein neues Token über denselben Endpunkt.
+Geräteverwaltung und eine Sitzungsliste sind nicht umgesetzt. `GET /auth/csrf` berechnet dasselbe Token erneut und schreibt die Sitzung nicht um. Mehrere Tabs bleiben gültig. Logout, Passwortwechsel und Ablauf machen das Token unbrauchbar, weil die Sitzung selbst endet. Die automatische Rotation je Request bleibt aus.

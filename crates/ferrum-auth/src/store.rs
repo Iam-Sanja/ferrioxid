@@ -238,20 +238,6 @@ pub async fn touch_session(
     execute(db, &query).await
 }
 
-pub async fn update_csrf_hash(
-    db: &impl ConnectionTrait,
-    id: Uuid,
-    csrf_token_hash: &str,
-) -> Result<(), AuthError> {
-    let mut query = Query::update();
-    query
-        .table(Alias::new(SESSIONS))
-        .values([(Alias::new("csrf_token_hash"), text(csrf_token_hash))])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
-        .and_where(Expr::col(Alias::new("revoked_at")).is_null());
-    execute(db, &query).await
-}
-
 pub async fn list_role_names(db: &impl ConnectionTrait) -> Result<Vec<(Uuid, String)>, AuthError> {
     let mut query = Query::select();
     query

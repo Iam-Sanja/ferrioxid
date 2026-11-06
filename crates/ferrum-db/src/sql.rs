@@ -1,7 +1,8 @@
 //! SeaQuery-backed CRUD and DDL for SQLite and PostgreSQL.
 
 use ferrum_core::{
-    ColumnKind, ColumnSpec, DatabaseKind, FerrumError, FerrumModel, ReferentialAction,
+    ColumnKind, ColumnSpec, DatabaseKind, FerrumError, FerrumModel, QueryScope, ReferentialAction,
+    ScopeValue,
 };
 use sea_orm::sea_query::{
     Alias, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Index, Order, PostgresQueryBuilder,
@@ -265,6 +266,7 @@ pub async fn list_records(
     db: &DatabaseConnection,
     table: &str,
     columns: &[ColumnSpec],
+    scope: &QueryScope,
 ) -> Result<ValuePage, FerrumError> {
     let mut query = Query::select();
     query
@@ -272,6 +274,9 @@ pub async fn list_records(
         .from(Alias::new(table))
         .order_by(Alias::new("id"), Order::Asc)
         .limit((LIST_LIMIT + 1) as u64);
+    if let Some(condition) = scope_condition(columns, scope)? {
+        query.and_where(condition);
+    }
     let rows = db
         .query_all(statement(db, &query)?)
         .await
@@ -297,12 +302,14 @@ pub struct AdminPageRequest<'a> {
     pub equal_filters: &'a [(&'a str, Value)],
     pub offset: u64,
     pub limit: u64,
+    pub scope: &'a QueryScope,
 }
 
 pub struct AdminPage {
     pub rows: Vec<Json>,
     pub limit: usize,
     pub has_more: bool,
+    pub total: i64,
 }
 
 pub async fn query_admin_page(
@@ -323,26 +330,47 @@ pub async fn query_admin_page(
             "page size must be between 1 and 100".into(),
         ));
     }
+    let mut count_query = Query::select();
+    count_query
+        .expr_as(
+            Expr::col(Alias::new("id")).count(),
+            Alias::new("scoped_count"),
+        )
+        .from(Alias::new(table));
+    constrain(
+        &mut count_query,
+        columns,
+        request.search_columns,
+        request.search,
+        request.equal_filters,
+        request.scope,
+    )?;
+    let count_row = db
+        .query_one(statement(db, &count_query)?)
+        .await
+        .map_err(FerrumError::database)?
+        .ok_or_else(|| {
+            FerrumError::database(std::io::Error::new(
+                std::io::ErrorKind::UnexpectedEof,
+                "count returned no row",
+            ))
+        })?;
+    let total = count_row
+        .try_get::<i64>("", "scoped_count")
+        .or_else(|_| count_row.try_get::<i32>("", "scoped_count").map(i64::from))
+        .map_err(FerrumError::database)?;
     let mut query = Query::select();
     query
         .columns(columns.iter().map(|column| Alias::new(column.name)))
         .from(Alias::new(table));
-    if let Some(term) = request.search.filter(|term| !term.is_empty()) {
-        let pattern = like_pattern(term);
-        let mut any = Vec::new();
-        for column in request.search_columns {
-            any.push(Expr::cust_with_values(
-                format!("LOWER(\"{column}\") LIKE LOWER(?) ESCAPE '\\'"),
-                [Value::from(pattern.clone())],
-            ));
-        }
-        if let Some(first) = any.into_iter().reduce(|left, right| left.or(right)) {
-            query.cond_where(first);
-        }
-    }
-    for (column, value) in request.equal_filters {
-        query.and_where(Expr::col(Alias::new(*column)).eq(value.clone()));
-    }
+    constrain(
+        &mut query,
+        columns,
+        request.search_columns,
+        request.search,
+        request.equal_filters,
+        request.scope,
+    )?;
     query.order_by(
         Alias::new(request.sort_column),
         if request.descending {
@@ -369,7 +397,39 @@ pub async fn query_admin_page(
         rows,
         limit: request.limit as usize,
         has_more,
+        total,
     })
+}
+
+fn constrain(
+    query: &mut sea_orm::sea_query::SelectStatement,
+    columns: &[ColumnSpec],
+    search_columns: &[&str],
+    search: Option<&str>,
+    equal_filters: &[(&str, Value)],
+    scope: &QueryScope,
+) -> Result<(), FerrumError> {
+    if let Some(term) = search.filter(|term| !term.is_empty()) {
+        let pattern = like_pattern(term);
+        let mut any = Vec::new();
+        for column in search_columns {
+            ensure_column(columns, column)?;
+            any.push(Expr::cust_with_values(
+                format!("LOWER(\"{column}\") LIKE LOWER(?) ESCAPE '\\'"),
+                [Value::from(pattern.clone())],
+            ));
+        }
+        if let Some(first) = any.into_iter().reduce(|left, right| left.or(right)) {
+            query.cond_where(first);
+        }
+    }
+    for (column, value) in equal_filters {
+        query.and_where(Expr::col(Alias::new(*column)).eq(value.clone()));
+    }
+    if let Some(condition) = scope_condition(columns, scope)? {
+        query.and_where(condition);
+    }
+    Ok(())
 }
 
 fn ensure_column(columns: &[ColumnSpec], name: &str) -> Result<(), FerrumError> {
@@ -379,6 +439,26 @@ fn ensure_column(columns: &[ColumnSpec], name: &str) -> Result<(), FerrumError> 
         Err(FerrumError::Validation(format!(
             "column {name} is not available"
         )))
+    }
+}
+
+fn scope_condition(
+    columns: &[ColumnSpec],
+    scope: &QueryScope,
+) -> Result<Option<sea_orm::sea_query::SimpleExpr>, FerrumError> {
+    match scope {
+        QueryScope::All => Ok(None),
+        QueryScope::None => Ok(Some(Expr::val(0).eq(1))),
+        QueryScope::Equals { column, value } => {
+            ensure_column(columns, column)?;
+            let expression = match value {
+                ScopeValue::Text(text) => Expr::col(Alias::new(*column)).eq(text.clone()),
+                ScopeValue::Uuid(id) => Expr::col(Alias::new(*column)).eq(*id),
+                ScopeValue::BigInt(number) => Expr::col(Alias::new(*column)).eq(*number),
+                ScopeValue::Bool(flag) => Expr::col(Alias::new(*column)).eq(*flag),
+            };
+            Ok(Some(expression))
+        }
     }
 }
 
@@ -404,12 +484,16 @@ pub async fn get_record(
     table: &str,
     columns: &[ColumnSpec],
     id: Uuid,
+    scope: &QueryScope,
 ) -> Result<Option<Json>, FerrumError> {
     let mut query = Query::select();
     query
         .columns(columns.iter().map(|column| Alias::new(column.name)))
         .from(Alias::new(table))
         .and_where(Expr::col(Alias::new("id")).eq(id));
+    if let Some(condition) = scope_condition(columns, scope)? {
+        query.and_where(condition);
+    }
     let row = db
         .query_one(statement(db, &query)?)
         .await
@@ -443,9 +527,10 @@ pub async fn update_record(
     columns: &[ColumnSpec],
     id: Uuid,
     changes: Vec<(&'static str, Value)>,
+    scope: &QueryScope,
 ) -> Result<Json, FerrumError> {
     if changes.is_empty() {
-        return get_record(db, table, columns, id)
+        return get_record(db, table, columns, id, scope)
             .await?
             .ok_or(FerrumError::NotFound);
     }
@@ -454,6 +539,9 @@ pub async fn update_record(
         .table(Alias::new(table))
         .and_where(Expr::col(Alias::new("id")).eq(id))
         .returning_all();
+    if let Some(condition) = scope_condition(columns, scope)? {
+        query.and_where(condition);
+    }
     for (name, value) in changes {
         query.value(Alias::new(name), value);
     }
@@ -469,11 +557,16 @@ pub async fn delete_record(
     db: &DatabaseConnection,
     table: &str,
     id: Uuid,
+    scope: &QueryScope,
+    columns: &[ColumnSpec],
 ) -> Result<u64, FerrumError> {
     let mut query = Query::delete();
     query
         .from_table(Alias::new(table))
         .and_where(Expr::col(Alias::new("id")).eq(id));
+    if let Some(condition) = scope_condition(columns, scope)? {
+        query.and_where(condition);
+    }
     let result = db
         .execute(statement(db, &query)?)
         .await

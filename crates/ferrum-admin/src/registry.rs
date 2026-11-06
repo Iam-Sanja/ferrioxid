@@ -1,7 +1,7 @@
 //! Explizite Admin-Registry. Nur Modelle mit `admin = true` werden aufgenommen.
 
 use ferrum_auth::{AuthUser, ObjectPolicy};
-use ferrum_core::{AdminModelMeta, ColumnSpec, FerrumError, ModelDescriptor};
+use ferrum_core::{AdminModelMeta, ColumnSpec, FerrumError, ModelDescriptor, QueryScope};
 use ferrum_db::{query_admin_page, AdminPageRequest, DeleteOutcome, ModelRepository};
 use sea_orm::DatabaseConnection;
 use serde_json::{Map, Value};
@@ -14,6 +14,8 @@ pub trait ManagedModel: Send + Sync {
     fn descriptor(&self) -> &'static ModelDescriptor;
     fn columns(&self) -> &'static [ColumnSpec];
     fn policy_bound(&self) -> bool;
+    fn read_scope(&self, user: &AuthUser) -> QueryScope;
+    fn write_scope(&self, user: &AuthUser) -> QueryScope;
     async fn page(
         &self,
         db: &DatabaseConnection,
@@ -24,11 +26,13 @@ pub trait ManagedModel: Send + Sync {
         filters: &[(&str, sea_orm::Value)],
         offset: u64,
         limit: u64,
-    ) -> Result<(Vec<Value>, bool), FerrumError>;
+        scope: &QueryScope,
+    ) -> Result<(Vec<Value>, bool, i64), FerrumError>;
     async fn read(
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
+        scope: &QueryScope,
     ) -> Result<Option<Value>, FerrumError>;
     async fn create(&self, db: &DatabaseConnection, body: Value) -> Result<Value, FerrumError>;
     async fn update(
@@ -36,11 +40,13 @@ pub trait ManagedModel: Send + Sync {
         db: &DatabaseConnection,
         id: uuid::Uuid,
         body: Value,
+        scope: &QueryScope,
     ) -> Result<Value, FerrumError>;
     async fn remove(
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
+        scope: &QueryScope,
     ) -> Result<DeleteOutcome, FerrumError>;
     fn object_allows(&self, user: &AuthUser, action: &str, record: &Value) -> bool;
 }
@@ -133,6 +139,12 @@ where
     fn policy_bound(&self) -> bool {
         false
     }
+    fn read_scope(&self, _user: &AuthUser) -> QueryScope {
+        QueryScope::All
+    }
+    fn write_scope(&self, user: &AuthUser) -> QueryScope {
+        self.read_scope(user)
+    }
     async fn page(
         &self,
         db: &DatabaseConnection,
@@ -143,7 +155,8 @@ where
         filters: &[(&str, sea_orm::Value)],
         offset: u64,
         limit: u64,
-    ) -> Result<(Vec<Value>, bool), FerrumError> {
+        scope: &QueryScope,
+    ) -> Result<(Vec<Value>, bool, i64), FerrumError> {
         load_page::<M>(
             db,
             search_columns,
@@ -153,6 +166,7 @@ where
             filters,
             offset,
             limit,
+            scope,
         )
         .await
     }
@@ -160,8 +174,9 @@ where
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
+        scope: &QueryScope,
     ) -> Result<Option<Value>, FerrumError> {
-        Ok(M::get(db, id).await?.map(json_of))
+        Ok(M::get_scoped(db, id, scope).await?.map(json_of))
     }
     async fn create(&self, db: &DatabaseConnection, body: Value) -> Result<Value, FerrumError> {
         let input = serde_json::from_value(body).map_err(|error| {
@@ -174,18 +189,20 @@ where
         db: &DatabaseConnection,
         id: uuid::Uuid,
         body: Value,
+        scope: &QueryScope,
     ) -> Result<Value, FerrumError> {
         let input = serde_json::from_value(body).map_err(|error| {
             FerrumError::Validation(format!("request body is invalid: {error}"))
         })?;
-        Ok(json_of(M::update(db, id, input).await?))
+        Ok(json_of(M::update_scoped(db, id, input, scope).await?))
     }
     async fn remove(
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
+        scope: &QueryScope,
     ) -> Result<DeleteOutcome, FerrumError> {
-        M::delete(db, id).await
+        M::delete_scoped(db, id, scope).await
     }
     fn object_allows(&self, _user: &AuthUser, _action: &str, _record: &Value) -> bool {
         true
@@ -210,6 +227,12 @@ where
     fn policy_bound(&self) -> bool {
         true
     }
+    fn read_scope(&self, user: &AuthUser) -> QueryScope {
+        P::read_scope(user)
+    }
+    fn write_scope(&self, user: &AuthUser) -> QueryScope {
+        P::write_scope(user)
+    }
     async fn page(
         &self,
         db: &DatabaseConnection,
@@ -220,7 +243,8 @@ where
         filters: &[(&str, sea_orm::Value)],
         offset: u64,
         limit: u64,
-    ) -> Result<(Vec<Value>, bool), FerrumError> {
+        scope: &QueryScope,
+    ) -> Result<(Vec<Value>, bool, i64), FerrumError> {
         load_page::<M>(
             db,
             search_columns,
@@ -230,6 +254,7 @@ where
             filters,
             offset,
             limit,
+            scope,
         )
         .await
     }
@@ -237,8 +262,9 @@ where
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
+        scope: &QueryScope,
     ) -> Result<Option<Value>, FerrumError> {
-        Ok(M::get(db, id).await?.map(json_of))
+        Ok(M::get_scoped(db, id, scope).await?.map(json_of))
     }
     async fn create(&self, db: &DatabaseConnection, body: Value) -> Result<Value, FerrumError> {
         let input = serde_json::from_value(body).map_err(|error| {
@@ -251,18 +277,20 @@ where
         db: &DatabaseConnection,
         id: uuid::Uuid,
         body: Value,
+        scope: &QueryScope,
     ) -> Result<Value, FerrumError> {
         let input = serde_json::from_value(body).map_err(|error| {
             FerrumError::Validation(format!("request body is invalid: {error}"))
         })?;
-        Ok(json_of(M::update(db, id, input).await?))
+        Ok(json_of(M::update_scoped(db, id, input, scope).await?))
     }
     async fn remove(
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
+        scope: &QueryScope,
     ) -> Result<DeleteOutcome, FerrumError> {
-        M::delete(db, id).await
+        M::delete_scoped(db, id, scope).await
     }
     fn object_allows(&self, user: &AuthUser, action: &str, record: &Value) -> bool {
         let Ok(model) = serde_json::from_value::<M>(record.clone()) else {
@@ -287,7 +315,8 @@ async fn load_page<M: ModelRepository>(
     filters: &[(&str, sea_orm::Value)],
     offset: u64,
     limit: u64,
-) -> Result<(Vec<Value>, bool), FerrumError> {
+    scope: &QueryScope,
+) -> Result<(Vec<Value>, bool, i64), FerrumError> {
     let page = query_admin_page(
         db,
         M::descriptor().table,
@@ -300,10 +329,11 @@ async fn load_page<M: ModelRepository>(
             equal_filters: filters,
             offset,
             limit,
+            scope,
         },
     )
     .await?;
-    Ok((page.rows, page.has_more))
+    Ok((page.rows, page.has_more, page.total))
 }
 
 fn json_of<M: serde::Serialize>(model: M) -> Value {

@@ -43,4 +43,4 @@ Der Localhost-Default bleibt `127.0.0.1:3000`. `0.0.0.0` ist keine produktionsre
 
 ## Admin
 
-`FERRUM_ADMIN_DIST` ist ein Verzeichnis mit `index.html`. Fehlt die Variable, gilt `apps/admin-ui/dist` neben der Crate. `FERRUM_COOKIE_SECURE` und `FERRUM_ENV=production` gelten für das Admin-Cookie genauso wie für die übrige Sitzung. Ein Theme-Wert im Browser ist kein Server-Secret.
+`FERRUM_ADMIN_DIST` ist ein optionales Verzeichnis mit `index.html` und überschreibt das eingebettete Frontend. Fehlt die Variable, dient der beim `cargo build` eingebettete Stand. `FERRUM_CSRF_SECRET` ist optional und muss 64 Hex-Zeichen lang sein. Ohne die Variable verwendet Ferrum `.ferrum/csrf.key`. `FERRUM_COOKIE_SECURE` und `FERRUM_ENV=production` gelten für das Admin-Cookie genauso wie für die übrige Sitzung. Ein Theme-Wert im Browser ist kein Server-Secret.

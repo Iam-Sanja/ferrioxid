@@ -13,6 +13,8 @@ pub trait ObjectPolicy<T> {
     fn can_read(user: &AuthUser, object: &T) -> bool;
     fn can_update(user: &AuthUser, object: &T) -> bool;
     fn can_delete(user: &AuthUser, object: &T) -> bool;
+    fn read_scope(user: &AuthUser) -> QueryScope { QueryScope::None }
+    fn write_scope(user: &AuthUser) -> QueryScope { Self::read_scope(user) }
 }
 ```
 
@@ -40,7 +42,7 @@ Die Regel hat keine eigene Tabelle. Sie sieht das bereits geladene Modell.
 
 ## Sicherheitsmechanismen
 
-Listen sind ohne SQL-Filter nicht sicher: eine Seite könnte fremde Zeilen enthalten oder durch die Filterung Lücken und falsche Längen erzeugen. Ferrum lädt solche Listen deshalb nicht. Normale Benutzer erhalten 403 mit dem Text, dass ein Query-Scope fehlt. Ein aktiver Superuser darf die ungefilterte Liste laden, weil die Objektregel für ihn keine Zeile ausschließt.
+Listen, Zähler und Schreibzugriffe verwenden `QueryScope`. Der Standard ist `None`, also keine Zeile. `All` muss die Regel ausdrücklich liefern. Ein aktiver Superuser erhält `All`. Die SQL-Form steht in [query-scopes.md](query-scopes.md).
 
 `register` und `register_policy` für denselben Pfad dürfen nicht beide aufgerufen werden. Axum behält sonst beide Routen.
 
@@ -49,8 +51,8 @@ Listen sind ohne SQL-Filter nicht sicher: eine Seite könnte fremde Zeilen entha
 | Fall | Antwort |
 |---|---|
 | Regel nicht gebunden | 403, `object policy is not bound` |
-| Liste ohne Superuser | 403, Query-Scope fehlt |
-| Datensatz fehlt oder Regel lehnt ab | 404 |
+| Scope ist `None` oder die Zeile gehört nicht dazu | leere Liste beziehungsweise 404 |
+| Datensatz fehlt oder `can_*` lehnt ab | 404 |
 | Create-Recht fehlt | 403 vor dem Schreiben |
 
 ## Beispiel
@@ -81,8 +83,8 @@ myshop selbst bindet keine Objektregel. `InternalNote` nutzt nur Rollen, damit L
 
 ## Einschränkungen
 
-Es gibt keinen SQL-Query-Scope. Listen mit Objektregeln sind deshalb nicht allgemein freigegeben. Eine Regel kann die Create-Entscheidung nicht am neuen Inhalt treffen. Feldweises Ausblenden fehlt.
+Der Scope kennt `All`, `None` und einen Gleichheitsvergleich. Joins und Oder-Verknüpfungen sind nicht umgesetzt. Eine Regel kann die Create-Entscheidung nicht am neuen Inhalt treffen. Feldweises Ausblenden fehlt.
 
 ## Geplante Erweiterungen
 
-Ein expliziter Query-Scope, der Pagination und Berechtigung in derselben Abfrage hält, ist die Voraussetzung für sichere Listen. Bis dahin antwortet auch der Admin auf Listen und Fremdschlüssel-Auswahlen mit 403. Ein abgelehnter Einzeldatensatz bleibt 404. Superuser überspringen die Objektprüfung beim Einzeldatensatz, nicht die Listensperre. Test: `admin_http.rs`.
+Scopes mit mehreren Spalten oder Joins sind geplant und nicht implementiert. Ein abgelehnter Einzeldatensatz bleibt 404. Superuser erhalten `All` und überspringen `can_*`. Test: `auth.rs` und `admin_http.rs`.

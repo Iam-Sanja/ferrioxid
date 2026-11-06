@@ -24,7 +24,7 @@ examples/myshop → ferrum (Fassade)
                     ├── ferrum-admin → ferrum-auth, ferrum-core, ferrum-db
                     └── ferrum-api → ferrum-admin, ferrum-auth, ferrum-core, ferrum-db, Axum
 ferrum-cli → ferrum-auth, ferrum-db, ferrum-migrations
-apps/admin-ui → gebautes Verzeichnis, vom Server unter `/admin` ausgeliefert
+apps/admin-ui → Vite-Build, beim Kompilieren in `ferrum-admin` eingebettet und unter `/admin` ausgeliefert
 ```
 
 Physische Crates: `crates/ferrum/`, `crates/ferrum-core/`, `crates/ferrum-macros/`, `crates/ferrum-db/`, `crates/ferrum-migrations/`, `crates/ferrum-auth/`, `crates/ferrum-api/`, `crates/ferrum-cli/`. `ferrum-auth` hängt nicht von `ferrum-api` ab. `Cargo.toml` legt Workspace Edition 2021 fest. Versionsangaben und Features stehen dort, nicht in dieser Dokumentation.

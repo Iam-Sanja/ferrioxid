@@ -24,6 +24,8 @@ pub struct AuthConfig {
     pub trust_proxy: bool,
     pub login_max_attempts: u32,
     pub login_window_secs: i64,
+    /// Stabiler HMAC-Schlüssel für sitzungsgebundene CSRF-Tokens. Ein Neustart darf ihn nicht neu würfeln.
+    pub csrf_secret: [u8; 32],
 }
 
 impl AuthConfig {
@@ -42,6 +44,7 @@ impl AuthConfig {
             trust_proxy: false,
             login_max_attempts: 5,
             login_window_secs: 15 * 60,
+            csrf_secret: *b"ferrum-dev-csrf-secret-32-bytes!",
         }
     }
 
@@ -66,6 +69,7 @@ impl AuthConfig {
         } else if environment == Environment::Production {
             config.allowed_origins.clear();
         }
+        config.csrf_secret = load_csrf_secret();
         config.trust_proxy = matches!(
             std::env::var("FERRUM_TRUST_PROXY").ok().as_deref(),
             Some("1" | "true" | "TRUE")
@@ -77,4 +81,42 @@ impl AuthConfig {
         }
         config
     }
+}
+
+fn load_csrf_secret() -> [u8; 32] {
+    if let Ok(value) = std::env::var("FERRUM_CSRF_SECRET") {
+        if let Some(secret) = decode_hex_32(&value) {
+            return secret;
+        }
+        tracing::warn!("FERRUM_CSRF_SECRET muss 64 Hex-Zeichen sein. Ferrum verwendet die gespeicherte Schlüsseldatei.");
+    }
+    let path = std::path::PathBuf::from(".ferrum/csrf.key");
+    if let Ok(bytes) = std::fs::read(&path) {
+        if bytes.len() == 32 {
+            let mut secret = [0u8; 32];
+            secret.copy_from_slice(&bytes);
+            return secret;
+        }
+    }
+    let mut secret = [0u8; 32];
+    getrandom::getrandom(&mut secret).expect("csrf secret");
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if std::fs::write(&path, secret).is_err() {
+        tracing::warn!("CSRF-Schlüsseldatei konnte nicht geschrieben werden. Der Prozessschlüssel gilt nur bis zum Neustart.");
+    }
+    secret
+}
+
+fn decode_hex_32(value: &str) -> Option<[u8; 32]> {
+    let value = value.trim();
+    if value.len() != 64 || !value.chars().all(|char| char.is_ascii_hexdigit()) {
+        return None;
+    }
+    let mut secret = [0u8; 32];
+    for (index, byte) in secret.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).ok()?;
+    }
+    Some(secret)
 }

@@ -69,6 +69,26 @@ pub trait ModelRepository: FerrumModel + Serialize + DeserializeOwned {
         input: Self::Update,
     ) -> Result<Self, FerrumError>;
     async fn delete(db: &DatabaseConnection, id: uuid::Uuid) -> Result<DeleteOutcome, FerrumError>;
+    async fn list_scoped(
+        db: &DatabaseConnection,
+        scope: &ferrum_core::QueryScope,
+    ) -> Result<ListPage<Self>, FerrumError>;
+    async fn get_scoped(
+        db: &DatabaseConnection,
+        id: uuid::Uuid,
+        scope: &ferrum_core::QueryScope,
+    ) -> Result<Option<Self>, FerrumError>;
+    async fn update_scoped(
+        db: &DatabaseConnection,
+        id: uuid::Uuid,
+        input: Self::Update,
+        scope: &ferrum_core::QueryScope,
+    ) -> Result<Self, FerrumError>;
+    async fn delete_scoped(
+        db: &DatabaseConnection,
+        id: uuid::Uuid,
+        scope: &ferrum_core::QueryScope,
+    ) -> Result<DeleteOutcome, FerrumError>;
 }
 
 /// SQLite file in the process working directory. Created on first connect.

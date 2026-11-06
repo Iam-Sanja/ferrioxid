@@ -22,7 +22,8 @@ let router = app.into_router();
 - `with_auth` hängt `AuthService` an. `into_router` mountet `/auth/login`, `/auth/logout`, `/auth/me` und `/auth/change-password`.
 - Bootstrap merkt sich Tabelle und `columns()`, unabhängig von der Freigabe, und rendert das DDL erst aus dem erkannten Datenbank-Backend.
 - `into_router()` hängt `GET /healthz` an. Der Axum-State ist `AppState` mit Datenbank und optionalem Auth-Service.
-- Cookie-Schreibzugriffe verlangen `x-csrf-token`. Anonyme Demo-Routen prüfen dieses Token nicht, weil sie das Session-Cookie nicht als Berechtigung verwenden.
+- Cookie-Schreibzugriffe verlangen `x-csrf-token`. Das Token ist je Sitzung stabil, siehe [csrf.md](csrf.md). Anonyme Demo-Routen prüfen dieses Token nicht, weil sie das Session-Cookie nicht als Berechtigung verwenden.
+- Ferrum-Fehler sind `application/problem+json` mit `type`, `title`, `status` und `detail`. 422 bleibt die Antwort für Validierung und unbekannte Sortier- oder Filterfelder. 409 ist reserviert und wird von den aktuellen Handlern nicht erzeugt. Axum-Rejections, zum Beispiel ungültiges JSON, behalten das Axum-Format und sind kein Ferrum-Problem-Detail. Datenbanktexte, Hashes, Tokens und Stacktraces gehen nicht an den Client.
 
 ### HTTP-API (IST)
 

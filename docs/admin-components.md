@@ -11,7 +11,7 @@ Die Oberfläche besteht aus wenigen eigenen Komponenten. Es gibt keine zusätzli
 | Komponente | Datei | Aufgabe |
 |---|---|---|
 | `Layout` | `src/components/Layout.tsx` | Sidebar, Inhaltsfläche, Heller/Dunkler Modus |
-| `Sidebar` | `src/components/Sidebar.tsx` | Modellnavigation und Abmelden |
+| `Sidebar` | `src/components/Sidebar.tsx` | Modellnavigation, Rollenlink nur für Superuser, Abmelden |
 | `DataTable` | `src/components/DataTable.tsx` | Spalten, Sortierknopf, Seitenwechsel, leerer Zustand |
 | `DynamicForm` | `src/components/DynamicForm.tsx` | Pflichtfeldprüfung und Speichern |
 | `FieldRenderer` | `src/components/FieldRenderer.tsx` | Text, Zahl, Checkbox, Fremdschlüssel |

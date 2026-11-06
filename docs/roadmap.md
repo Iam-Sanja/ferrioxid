@@ -7,7 +7,8 @@
 | v0.1 | Code vorhanden; SQLite ist der lokale Standard und wird im Workspace getestet | Typed Model, Liste, GET, POST, PATCH, DELETE, sichere Migrationen | Optionaler PostgreSQL-Lauf nur mit erreichbarem Server |
 | v0.6 | Implementiert und mit SQLite-Tests geprüft | Unique, zusammengesetzte Unique Constraints, Indizes, Foreign Keys, `restrict`/`cascade`/`set_null`, Belongs-To, Has-Many, Snapshot und Diff | Cargo-Version bleibt `0.1.0`. Many-to-Many, Eager Loading, `down` und PostgreSQL-Baseline fehlen |
 | v0.7 | Implementiert und mit SQLite-Tests geprüft | Argon2id, serverseitige Sitzungen, Cookies, CSRF, RBAC, Modellrechte, blockierte Objektlisten | Cargo-Version bleibt `0.1.0`. OAuth, MFA, JWT und Passwort-Reset fehlen |
-| v0.8 | Implementiert und mit SQLite- sowie Vitest-Tests geprüft | Admin-Metadaten, `/admin/api`, React-Oberfläche, CSRF-Bootstrap, Staff-Zugang | Cargo-Version bleibt `0.1.0`. Kein SQL-Scope für Objektregeln, keine Superuser-Vergabe im Admin |
+| v0.8 | Implementiert und mit SQLite- sowie Vitest-Tests geprüft | Admin-Metadaten, `/admin/api`, React-Oberfläche, CSRF-Bootstrap, Staff-Zugang | Cargo-Version bleibt `0.1.0`. Keine Superuser-Vergabe im Admin |
+| v0.8.1 | Implementiert | Stabiles CSRF, SQL-Query-Scopes, eingebettete Admin-Assets | Cargo-Version bleibt `0.1.0`. Kein OAuth, MFA, GraphQL oder JWT |
 
 ## v0.1 enthalten
 

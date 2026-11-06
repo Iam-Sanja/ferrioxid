@@ -10,7 +10,7 @@ Ferrum prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferru
 
 `ferrum-auth` hängt von `ferrum-core`, `ferrum-db` und `ferrum-migrations` ab, nicht von `ferrum-api`. `ferrum-api` hängt von `ferrum-auth` und registriert die Auth-Routen zusammen mit den Modellrouten. Die CLI ruft dieselben Service-Methoden auf.
 
-Passwörter werden mit Argon2id gehasht. Sitzungstoken und CSRF-Token werden nur als SHA-256-Hex gespeichert. Rollen und Berechtigungen liest jede Prüfung erneut aus der Datenbank.
+Passwörter werden mit Argon2id gehasht. Sitzungstoken werden nur als SHA-256-Hex gespeichert. Das CSRF-Token wird bei Bedarf aus dem Schlüssel und der Sitzung berechnet; gespeichert wird ebenfalls nur der Hash. Rollen und Berechtigungen liest jede Prüfung erneut aus der Datenbank.
 
 ## Zuständige Dateien
 
@@ -97,4 +97,4 @@ Mehrprozess-Rate-Limit, Passwort-Reset, MFA und OAuth bleiben späteren Versione
 
 ## Admin und CSRF-Bootstrap
 
-`GET /auth/csrf` erneuert das CSRF-Token einer bestehenden Sitzung. Die Sitzung selbst bleibt. Der Admin verlangt zusätzlich `is_staff`. Das Verzeichnis unter `/admin/api/directory` ist Superusern vorbehalten und kann `is_superuser` nicht setzen. Siehe [admin-security.md](admin-security.md). Der SQLite-Test `sqlite_admin_security_crud_and_csrf_bootstrap` prüft den Bootstrap.
+`GET /auth/csrf` liefert das zur Sitzung gehörende Token erneut. Die Sitzung selbst bleibt, und andere Tabs bleiben gültig. Details stehen in [csrf.md](csrf.md). Der Admin verlangt zusätzlich `is_staff`. Das Verzeichnis unter `/admin/api/directory` ist Superusern vorbehalten und kann `is_superuser` nicht setzen. Siehe [admin-security.md](admin-security.md). Der SQLite-Test `sqlite_admin_security_crud_and_csrf_bootstrap` prüft den Bootstrap.

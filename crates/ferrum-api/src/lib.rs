@@ -1,7 +1,7 @@
 //! Explizite Modellregistrierung erzeugt Listen-, Lese-, Anlage-, Änderungs- und Löschrouten.
 //!
 //! `allow_anonymous` bleibt die einzige öffentliche Freigabe. Jede andere Route prüft die
-//! Sitzung und die am Modell hinterlegte Berechtigung. Objektregeln ohne SQL-Scope blockieren Listen.
+//! Sitzung und die am Modell hinterlegte Berechtigung. Gebundene Objektregeln filtern über `QueryScope`.
 
 use axum::{
     extract::{Path, State},
@@ -12,7 +12,7 @@ use axum::{
 };
 use ferrum_admin::AdminRegistry;
 use ferrum_auth::{mount, AppState, AuthError, AuthService, AuthUser, ClientIp, ObjectPolicy};
-use ferrum_core::{ColumnSpec, FerrumError};
+use ferrum_core::{ColumnSpec, FerrumError, QueryScope};
 use ferrum_db::{kind_of, render_schema, DeleteOutcome, ModelRepository};
 use ferrum_migrations::history_exists;
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
@@ -92,7 +92,7 @@ impl App {
         self
     }
 
-    /// Bindet eine Objektregel. Listen bleiben blockiert, außer für aktive Superuser.
+    /// Bindet eine Objektregel. Listen und Schreibzugriffe verwenden denselben Query-Scope.
     ///
     /// `register_policy` ersetzt `register` für dasselbe Modell. Beide Aufrufe erzeugen doppelte Routen.
     pub fn register_policy<M, P>(mut self) -> Self
@@ -104,7 +104,7 @@ impl App {
         let detail_path = format!("{}/{{id}}", descriptor.api_path.trim_end_matches('/'));
         self.routes = self.routes.route(
             descriptor.api_path,
-            get(policy_list::<M>).post(guarded_create::<M>),
+            get(policy_list::<M, P>).post(guarded_create::<M>),
         );
         self.routes = self.routes.route(
             &detail_path,
@@ -280,19 +280,18 @@ async fn guarded_delete<M: ModelRepository>(
     }
 }
 
-async fn policy_list<M: ModelRepository>(
+async fn policy_list<M, P>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-) -> Result<Json<ferrum_db::ListPage<M>>, ApiError> {
+) -> Result<Json<ferrum_db::ListPage<M>>, ApiError>
+where
+    M: ModelRepository,
+    P: ObjectPolicy<M>,
+{
     let user = ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
-    if user.is_superuser {
-        return Ok(Json(M::list(&state.db).await?));
-    }
-    Err(FerrumError::Denied(
-        "object-level policies block list endpoints until a query scope exists".into(),
-    )
-    .into())
+    let scope = actor_scope::<M, P>(&user, false);
+    Ok(Json(M::list_scoped(&state.db, &scope).await?))
 }
 
 async fn policy_get<M, P>(
@@ -306,7 +305,10 @@ where
     P: ObjectPolicy<M>,
 {
     let user = ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
-    let model = M::get(&state.db, id).await?.ok_or(FerrumError::NotFound)?;
+    let scope = actor_scope::<M, P>(&user, false);
+    let model = M::get_scoped(&state.db, id, &scope)
+        .await?
+        .ok_or(FerrumError::NotFound)?;
     if !allows(user.is_superuser, P::can_read(&user, &model)) {
         return Err(FerrumError::NotFound.into());
     }
@@ -325,11 +327,14 @@ where
     P: ObjectPolicy<M>,
 {
     let user = ensure::<M>(&state, &headers, &Method::PATCH, &peer.0, "update").await?;
-    let current = M::get(&state.db, id).await?.ok_or(FerrumError::NotFound)?;
+    let scope = actor_scope::<M, P>(&user, true);
+    let current = M::get_scoped(&state.db, id, &scope)
+        .await?
+        .ok_or(FerrumError::NotFound)?;
     if !allows(user.is_superuser, P::can_update(&user, &current)) {
         return Err(FerrumError::NotFound.into());
     }
-    Ok(Json(M::update(&state.db, id, input).await?))
+    Ok(Json(M::update_scoped(&state.db, id, input, &scope).await?))
 }
 
 async fn policy_delete<M, P>(
@@ -343,13 +348,30 @@ where
     P: ObjectPolicy<M>,
 {
     let user = ensure::<M>(&state, &headers, &Method::DELETE, &peer.0, "delete").await?;
-    let current = M::get(&state.db, id).await?.ok_or(FerrumError::NotFound)?;
+    let scope = actor_scope::<M, P>(&user, true);
+    let current = M::get_scoped(&state.db, id, &scope)
+        .await?
+        .ok_or(FerrumError::NotFound)?;
     if !allows(user.is_superuser, P::can_delete(&user, &current)) {
         return Err(FerrumError::NotFound.into());
     }
-    match M::delete(&state.db, id).await? {
+    match M::delete_scoped(&state.db, id, &scope).await? {
         DeleteOutcome::Deleted => Ok(StatusCode::NO_CONTENT),
         DeleteOutcome::Missing => Err(FerrumError::NotFound.into()),
+    }
+}
+
+fn actor_scope<M, P>(user: &AuthUser, write: bool) -> QueryScope
+where
+    M: ModelRepository,
+    P: ObjectPolicy<M>,
+{
+    if user.is_superuser {
+        QueryScope::All
+    } else if write {
+        P::write_scope(user)
+    } else {
+        P::read_scope(user)
     }
 }
 

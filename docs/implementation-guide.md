@@ -4,7 +4,7 @@
 
 ## 1. Erst den vorhandenen Code verstehen
 
-Lies in dieser Reihenfolge `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [testing.md](testing.md), bevor du die betroffene Crate änderst. **Behaupte keine Feature-Vollständigkeit auf Basis einer SOLL-Dokumentation.** Auth-Tabellen laufen über `apply_directory_with_history` und `_ferrum_auth_migrations`. `0001_initial.json` wird nicht geändert.
+Lies in dieser Reihenfolge `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md), [testing.md](testing.md), bevor du die betroffene Crate änderst. **Behaupte keine Feature-Vollständigkeit auf Basis einer SOLL-Dokumentation.** Auth-Tabellen laufen über `apply_directory_with_history` und `_ferrum_auth_migrations`. `0001_initial.json` wird nicht geändert.
 
 ## 2. Modulgrenzen respektieren
 

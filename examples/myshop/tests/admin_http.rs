@@ -2,7 +2,7 @@
 
 use ferrum::admin::AdminRegistry;
 use ferrum::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
-use ferrum::core::FerrumModel;
+use ferrum::core::{FerrumModel, QueryScope, ScopeValue};
 use ferrum::db::ModelRepository;
 use ferrum::prelude::*;
 use std::io::{Read, Write};
@@ -91,11 +91,23 @@ impl ObjectPolicy<AdminSecret> for OwnerPolicy {
     fn can_delete(user: &AuthUser, object: &AdminSecret) -> bool {
         object.owner == user.id.to_string()
     }
+
+    fn read_scope(user: &AuthUser) -> QueryScope {
+        QueryScope::Equals {
+            column: "owner",
+            value: ScopeValue::Text(user.id.to_string()),
+        }
+    }
+
+    fn write_scope(user: &AuthUser) -> QueryScope {
+        Self::read_scope(user)
+    }
 }
 
 struct Reply {
     status: u16,
     headers: String,
+    body: String,
     json: serde_json::Value,
 }
 
@@ -146,6 +158,7 @@ fn http(port: u16, method: &str, path: &str, body: Option<&str>, extra: &str) ->
     Reply {
         status,
         headers: headers.to_owned(),
+        body: String::from_utf8_lossy(&payload).into_owned(),
         json,
     }
 }
@@ -242,7 +255,7 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
     let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
     ferrum::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
-    let _staff = auth
+    let staff = auth
         .create_user("staff@example.com", "correct-horse-battery", true, false)
         .await
         .unwrap();
@@ -269,6 +282,8 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
         "products.delete",
         "categories.read",
         "secrets.read",
+        "secrets.update",
+        "secrets.delete",
     ] {
         auth.ensure_permission(code).await.unwrap();
         auth.grant_permission("catalog", code).await.unwrap();
@@ -336,20 +351,38 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
     .unwrap();
     assert_eq!(refreshed.status, 200);
     let csrf = refreshed.json["csrf_token"].as_str().unwrap().to_owned();
-    assert_ne!(csrf, issued);
-    let stale = call(
+    assert_eq!(csrf, issued);
+    let second_tab = call(
+        "GET",
+        "/auth/csrf".into(),
+        None,
+        format!("Cookie: {staff_cookie}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(second_tab.json["csrf_token"].as_str(), Some(csrf.as_str()));
+    let same_session = call(
         "POST",
-        "/admin/api/models/admin_categories/records".into(),
-        Some(r#"{"name":"Alt"}"#.into()),
+        "/admin/api/models/admin_products/records".into(),
+        Some(r#"{"name":"Alt","price_cents":1}"#.into()),
         session(&staff_cookie, &issued),
     )
     .await
     .unwrap();
-    assert_eq!(stale.status, 403);
+    assert_eq!(same_session.status, 201, "{}", same_session.json);
+    let forged = call(
+        "POST",
+        "/admin/api/models/admin_products/records".into(),
+        Some(r#"{"name":"Falsch","price_cents":1}"#.into()),
+        session(&staff_cookie, "not-a-valid-csrf-token"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(forged.status, 403);
     let missing_csrf = call(
         "POST",
-        "/admin/api/models/admin_categories/records".into(),
-        Some(r#"{"name":"Ohne"}"#.into()),
+        "/admin/api/models/admin_products/records".into(),
+        Some(r#"{"name":"Ohne","price_cents":1}"#.into()),
         format!("Cookie: {staff_cookie}\r\n"),
     )
     .await
@@ -524,7 +557,7 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
     )
     .await
     .unwrap();
-    assert_eq!(blocked_list.status, 403);
+    assert_eq!(blocked_list.status, 200, "{}", blocked_list.json);
     let secret = AdminSecret::create(
         &db,
         AdminSecretCreate {
@@ -534,6 +567,46 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
     )
     .await
     .unwrap();
+    AdminSecret::create(
+        &db,
+        AdminSecretCreate {
+            owner: staff.id.to_string(),
+            title: "Eigen".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let scoped = call(
+        "GET",
+        "/admin/api/models/admin_secrets/records".into(),
+        None,
+        format!("Cookie: {staff_cookie}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(scoped.status, 200, "{}", scoped.json);
+    let scoped_rows = scoped.json["data"].as_array().unwrap();
+    assert_eq!(scoped_rows.len(), 1);
+    assert_eq!(scoped_rows[0]["title"], "Eigen");
+    assert_eq!(scoped.json["total"], 1);
+    let foreign_patch = call(
+        "PATCH",
+        format!("/admin/api/models/admin_secrets/records/{}", secret.id),
+        Some(r#"{"title":"Uebernommen"}"#.into()),
+        session(&staff_cookie, &csrf),
+    )
+    .await
+    .unwrap();
+    assert_eq!(foreign_patch.status, 404);
+    let foreign_delete = call(
+        "DELETE",
+        format!("/admin/api/models/admin_secrets/records/{}", secret.id),
+        None,
+        session(&staff_cookie, &csrf),
+    )
+    .await
+    .unwrap();
+    assert_eq!(foreign_delete.status, 404);
     let hidden = call(
         "GET",
         format!("/admin/api/models/admin_secrets/records/{}", secret.id),
@@ -561,8 +634,73 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
     .await
     .unwrap();
     assert_eq!(superuser_change.status, 403);
+    let crossed = call(
+        "POST",
+        "/admin/api/models/admin_categories/records".into(),
+        Some(r#"{"name":"Fremd"}"#.into()),
+        session(&root_cookie, &csrf),
+    )
+    .await
+    .unwrap();
+    assert_eq!(crossed.status, 403);
 
     server.abort();
+}
+
+#[tokio::test]
+async fn admin_assets_reject_traversal_and_keep_the_api() {
+    let dir = std::env::temp_dir().join(format!("ferrum-admin-assets-{}", std::process::id()));
+    let _ = std::fs::remove_dir_all(&dir);
+    std::fs::create_dir_all(dir.join("assets")).unwrap();
+    std::fs::write(
+        dir.join("index.html"),
+        "<!doctype html><title>Ferrum</title>",
+    )
+    .unwrap();
+    std::fs::write(dir.join("assets").join("app.js"), "console.log(1)").unwrap();
+    std::env::set_var("FERRUM_ADMIN_DIST", &dir);
+
+    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
+    let app = ferrum::App::new(db).with_admin(AdminRegistry::new());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
+    let call = |method: &'static str, path: String| {
+        tokio::task::spawn_blocking(move || http(port, method, &path, None, ""))
+    };
+
+    let page = call("GET", "/admin".into()).await.unwrap();
+    assert_eq!(page.status, 200);
+    assert!(page.headers.to_ascii_lowercase().contains("text/html"));
+    assert!(page.body.contains("Ferrum"));
+    let slash = call("GET", "/admin/".into()).await.unwrap();
+    assert_eq!(slash.status, 200);
+    assert!(slash.body.contains("Ferrum"));
+    let spa = call("GET", "/admin/products/new".into()).await.unwrap();
+    assert_eq!(spa.status, 200);
+    assert!(spa.body.contains("Ferrum"));
+    let script = call("GET", "/admin/assets/app.js".into()).await.unwrap();
+    assert_eq!(script.status, 200);
+    assert!(script
+        .headers
+        .to_ascii_lowercase()
+        .contains("text/javascript"));
+    assert!(script.body.contains("console.log"));
+    let missing = call("GET", "/admin/assets/missing.js".into())
+        .await
+        .unwrap();
+    assert_eq!(missing.status, 404);
+    let traversal = call("GET", "/admin/../Cargo.toml".into()).await.unwrap();
+    assert_ne!(traversal.status, 200);
+    assert!(!traversal.body.contains("[package]"));
+    let api = call("GET", "/admin/api/models".into()).await.unwrap();
+    assert_eq!(api.status, 403);
+    assert_eq!(api.json["detail"], "authentication is not configured");
+    assert!(!api.body.contains("<title>Ferrum</title>"));
+
+    server.abort();
+    std::env::remove_var("FERRUM_ADMIN_DIST");
+    let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[tokio::test]

@@ -36,7 +36,7 @@ npm run lint
 npm run build
 ```
 
-`lint` ist die TypeScript-Prüfung. Der Build schreibt `apps/admin-ui/dist`.
+`lint` ist die TypeScript-Prüfung. Der Build schreibt `apps/admin-ui/dist`. Der folgende `cargo build` bettet dieses Verzeichnis ein. Siehe [admin-assets.md](admin-assets.md).
 
 ## Formularfelder
 

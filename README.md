@@ -1,6 +1,6 @@
 # Ferrum — Model-first Rust backend (experimental)
 
-Funktionsstand v0.8. Die Cargo-Version bleibt `0.1.0`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`, die Beschreibung in `docs/admin.md`.
+Funktionsstand v0.8.1. Die Cargo-Version bleibt `0.1.0`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`, die Beschreibung in `docs/admin.md`. Vor `cargo build` einmal `npm run build` in `apps/admin-ui` ausführen, damit das Frontend im Binary liegt. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
 
 Authentifizierung, Sitzungen und Rollen beschreibt `docs/auth.md`. Geschützte myshop-Ressource ist `/api/v1/internal_notes`. Produkte und Kategorien bleiben ausdrücklich öffentliche Demo-Routen.
 

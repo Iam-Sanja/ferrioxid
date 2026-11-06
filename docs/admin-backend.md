@@ -57,7 +57,7 @@ Passwort-Hashes stehen nicht in `PublicUser`. Änderungen an `is_superuser` gibt
 
 ## Konfiguration
 
-`FERRUM_ADMIN_DIST` oder das gebaute Verzeichnis `apps/admin-ui/dist`. Node.js läuft nur beim Bauen.
+Eingebettetes Frontend aus `apps/admin-ui/dist` zum Compile-Zeitpunkt, sonst `FERRUM_ADMIN_DIST`. Node.js läuft nur beim Bauen. Siehe [admin-assets.md](admin-assets.md).
 
 ## Fehler
 

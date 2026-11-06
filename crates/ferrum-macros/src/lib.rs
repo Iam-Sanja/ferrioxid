@@ -692,7 +692,14 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             async fn list(db: &::ferrum::sea_orm::DatabaseConnection)
                 -> Result<::ferrum::db::ListPage<Self>, ::ferrum::core::FerrumError>
             {
-                let page = ::ferrum::db::list_records(db, #table, #columns_ident).await?;
+                Self::list_scoped(db, &::ferrum::core::QueryScope::All).await
+            }
+
+            async fn list_scoped(
+                db: &::ferrum::sea_orm::DatabaseConnection,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<::ferrum::db::ListPage<Self>, ::ferrum::core::FerrumError> {
+                let page = ::ferrum::db::list_records(db, #table, #columns_ident, scope).await?;
                 let data = page.rows.into_iter().map(|record| {
                     ::ferrum::serde_json::from_value::<Self>(record)
                         .map_err(::ferrum::core::FerrumError::database)
@@ -703,7 +710,15 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             async fn get(db: &::ferrum::sea_orm::DatabaseConnection, id: ::ferrum::uuid::Uuid)
                 -> Result<Option<Self>, ::ferrum::core::FerrumError>
             {
-                ::ferrum::db::get_record(db, #table, #columns_ident, id).await?
+                Self::get_scoped(db, id, &::ferrum::core::QueryScope::All).await
+            }
+
+            async fn get_scoped(
+                db: &::ferrum::sea_orm::DatabaseConnection,
+                id: ::ferrum::uuid::Uuid,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<Option<Self>, ::ferrum::core::FerrumError> {
+                ::ferrum::db::get_record(db, #table, #columns_ident, id, scope).await?
                     .map(|record| ::ferrum::serde_json::from_value::<Self>(record)
                         .map_err(::ferrum::core::FerrumError::database))
                     .transpose()
@@ -724,9 +739,18 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 id: ::ferrum::uuid::Uuid,
                 payload: Self::Update,
             ) -> Result<Self, ::ferrum::core::FerrumError> {
+                Self::update_scoped(db, id, payload, &::ferrum::core::QueryScope::All).await
+            }
+
+            async fn update_scoped(
+                db: &::ferrum::sea_orm::DatabaseConnection,
+                id: ::ferrum::uuid::Uuid,
+                payload: Self::Update,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<Self, ::ferrum::core::FerrumError> {
                 let mut changes: Vec<(&str, ::ferrum::sea_orm::Value)> = Vec::new();
                 #(#update_bindings)*
-                let record = ::ferrum::db::update_record(db, #table, #columns_ident, id, changes).await?;
+                let record = ::ferrum::db::update_record(db, #table, #columns_ident, id, changes, scope).await?;
                 ::ferrum::serde_json::from_value::<Self>(record)
                     .map_err(::ferrum::core::FerrumError::database)
             }
@@ -735,7 +759,15 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 db: &::ferrum::sea_orm::DatabaseConnection,
                 id: ::ferrum::uuid::Uuid,
             ) -> Result<::ferrum::db::DeleteOutcome, ::ferrum::core::FerrumError> {
-                let affected = ::ferrum::db::delete_record(db, #table, id).await?;
+                Self::delete_scoped(db, id, &::ferrum::core::QueryScope::All).await
+            }
+
+            async fn delete_scoped(
+                db: &::ferrum::sea_orm::DatabaseConnection,
+                id: ::ferrum::uuid::Uuid,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<::ferrum::db::DeleteOutcome, ::ferrum::core::FerrumError> {
+                let affected = ::ferrum::db::delete_record(db, #table, id, scope, #columns_ident).await?;
                 if affected == 0 {
                     Ok(::ferrum::db::DeleteOutcome::Missing)
                 } else {

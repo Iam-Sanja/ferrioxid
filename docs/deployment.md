@@ -13,6 +13,17 @@ cargo run -p myshop
 
 Der Server startet ohne automatische Migration. Zuerst `ferrum migrate up` ausführen. `myshop --bootstrap` ändert die Datei nicht. Die Datei `db.sqlite3` liegt im Arbeitsverzeichnis. Eine ältere Bootstrap-Datei ohne `_ferrum_migrations` wird nicht übernommen und nicht gelöscht.
 
+Das Admin-Frontend braucht keinen Node-Prozess zur Laufzeit. Vor dem Rust-Build:
+
+```powershell
+cd apps/admin-ui
+npm run build
+cd ../..
+cargo build --workspace
+```
+
+Ohne diesen Frontend-Build antwortet `/admin` mit 503. `FERRUM_CSRF_SECRET` in Produktion setzen. Die Datei `.ferrum/csrf.key` ist nur die lokale Quelle.
+
 Eine abweichende `BIND_ADDRESS`, insbesondere `0.0.0.0:3000`, kann den Dienst auf weiteren Netzwerken erreichbar machen. Mit dem anonymen Demo-Modell ist das kein Internetdeployment.
 
 ## Optionales PostgreSQL (IST)

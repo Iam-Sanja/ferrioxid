@@ -10,7 +10,7 @@
 
 - `connect(url)` öffnet SeaORM. URLs mit `sqlite:` setzen den Pool auf eine Verbindung und aktivieren `PRAGMA foreign_keys=ON`.
 - Ohne gesetzte `DATABASE_URL` verwendet myshop `DEFAULT_SQLITE_URL`: `sqlite://db.sqlite3?mode=rwc`. Der Pfad ist relativ zum Arbeitsverzeichnis des Prozesses.
-- `ModelRepository` bleibt die öffentliche Grenze für `list`, `get`, `create`, `update` und `delete`. Handler kennen den Dialekt nicht.
+- `ModelRepository` bleibt die öffentliche Grenze für `list`, `get`, `create`, `update` und `delete`. Dieselben Methoden gibt es mit `_scoped` und einem `QueryScope`. Handler kennen den Dialekt nicht. Siehe [query-scopes.md](query-scopes.md).
 - Es gibt eine Abfrageimplementierung. SeaQuery rendert SQLite oder PostgreSQL. MySQL wird abgelehnt.
 
 ```rust

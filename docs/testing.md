@@ -9,7 +9,7 @@
 3. **SQLite-HTTP:** `sqlite_http_roundtrip` nutzt `sqlite::memory:`, eine Pool-Verbindung und einen Axum-Listener auf einem zufälligen Localhost-Port. Die Datei `db.sqlite3` wird nicht verwendet.
 4. **DDL ohne Server:** `boolean_default_is_emitted_into_postgres_schema` prüft die gerenderte PostgreSQL- und SQLite-Definition von `active`.
 5. **Migrationen:** Snapshot, Diff, SQLite-Kette und `ferrum migrate` gegen eine temporäre Datei laufen in `cargo test --workspace`.
-6. **Auth:** Passwort-, Sitzungs-, Migrations- und HTTP-Tests in `ferrum-auth` und `examples/myshop/tests/auth.rs` nutzen SQLite. Sie sind nicht ignoriert.
+6. **Auth und Admin:** Passwort-, Sitzungs-, CSRF-, Scope- und Asset-Tests in `ferrum-auth`, `examples/myshop/tests/auth.rs` und `examples/myshop/tests/admin_http.rs` nutzen SQLite. Sie sind nicht ignoriert. Frontend-Tests liegen in `apps/admin-ui` und laufen mit `npm test`. Playwright ist nicht Teil des Workspace-Tests.
 7. **PostgreSQL, optional:** `postgres_http_roundtrip` und `postgres_migration_roundtrip` sind `#[ignore]`. Sie laufen nur mit `--ignored` und gesetzter `DATABASE_URL`.
 
 ### Lokale Befehle

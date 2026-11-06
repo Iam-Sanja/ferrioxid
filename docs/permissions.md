@@ -85,7 +85,7 @@ myshop schützt `InternalNote` mit `permissions = "notes"`. `Product` und `Categ
 
 ## Einschränkungen
 
-Feldrechte gibt es nicht. Berechtigungen sind globale Codes, keine Zeilenfilter. Dafür sind Objektregeln zuständig, und Listen bleiben dabei blockiert. Siehe [policies.md](policies.md).
+Feldrechte gibt es nicht. Berechtigungen sind globale Codes, keine Zeilenfilter. Dafür sind Objektregeln zuständig. Listen verwenden denselben `QueryScope` wie die REST-API. Siehe [policies.md](policies.md) und [query-scopes.md](query-scopes.md).
 
 ## Geplante Erweiterungen
 
