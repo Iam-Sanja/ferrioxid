@@ -9,9 +9,36 @@ pub struct ModelDescriptor {
     pub allow_anonymous: bool,
 }
 
+/// Backend, für den Ferrum DDL und Abfragen erzeugt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum DatabaseKind {
+    Sqlite,
+    Postgres,
+}
+
+/// Spaltentyp, unabhängig vom SQL-Dialekt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ColumnKind {
+    Uuid,
+    Text,
+    BigInt,
+    Boolean,
+}
+
+/// Metadaten einer Modellspalte. Das Makro erzeugt sie, die Datenbankschicht rendert sie.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ColumnSpec {
+    pub name: &'static str,
+    pub kind: ColumnKind,
+    pub nullable: bool,
+    pub primary_key: bool,
+    pub default_bool: Option<bool>,
+}
+
 pub trait FerrumModel: Send + Sync + 'static {
     fn descriptor() -> &'static ModelDescriptor;
-    fn schema_sql() -> &'static str;
+    fn columns() -> &'static [ColumnSpec];
+    fn schema_sql(kind: DatabaseKind) -> String;
 }
 
 #[derive(Debug, thiserror::Error)]

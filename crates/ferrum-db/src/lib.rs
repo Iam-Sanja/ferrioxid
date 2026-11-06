@@ -1,8 +1,15 @@
 //! Typed SeaORM-backed repository contract implemented by the model derive.
 
+mod sql;
+
 use ferrum_core::{FerrumError, FerrumModel};
 use sea_orm::DatabaseConnection;
 use serde::{de::DeserializeOwned, Serialize};
+pub use sql::{
+    delete_record, get_record, insert_record, kind_of, list_records, render_add_column,
+    render_create_table, render_drop_column, render_drop_table, render_schema, update_record,
+    PhysicalColumn, ValuePage,
+};
 
 #[derive(Debug, Serialize)]
 pub struct ListPage<T> {
@@ -62,8 +69,17 @@ pub trait ModelRepository: FerrumModel + Serialize + DeserializeOwned {
     async fn delete(db: &DatabaseConnection, id: uuid::Uuid) -> Result<DeleteOutcome, FerrumError>;
 }
 
+/// SQLite file in the process working directory. Created on first connect.
+pub const DEFAULT_SQLITE_URL: &str = "sqlite://db.sqlite3?mode=rwc";
+
 pub async fn connect(url: &str) -> Result<DatabaseConnection, sea_orm::DbErr> {
-    sea_orm::Database::connect(url).await
+    let mut options = sea_orm::ConnectOptions::new(url.to_owned());
+    if url.starts_with("sqlite:") {
+        // One connection keeps in-memory databases and file locks predictable.
+        options.max_connections(1);
+        options.map_sqlx_sqlite_opts(|sqlite| sqlite.pragma("foreign_keys", "ON"));
+    }
+    sea_orm::Database::connect(options).await
 }
 
 #[cfg(test)]

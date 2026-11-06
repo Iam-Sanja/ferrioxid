@@ -1,5 +1,24 @@
 # Changelog
 
+## Unreleased — Versionierte Migrationen
+
+- Neue Crate `ferrum-migrations` mit Snapshot, Diff, Checksum, Historie und Runner für SQLite und PostgreSQL.
+- CLI: `ferrum migrate make`, `ferrum migrate up`, `ferrum migrate status`. Modelle kommen über `ferrum.toml` und `myshop --print-schema`, nicht über Quelltextanalyse.
+- Sichere Operationen: neue Tabelle, nullable Spalte, boolesche NOT-NULL-Spalte mit Default. Löschungen nur mit `--allow-destructive`.
+- Typänderungen, Umbenennungen, Primärschlüsseländerungen und Tabellen-Neubau werden abgelehnt.
+- `myshop --bootstrap` legt nichts mehr an und markiert vorhandene Tabellen nicht als migriert.
+- Breaking Change: der bisherige Bootstrap-Start erzeugt kein Schema mehr. Neue Datenbanken brauchen `ferrum migrate up`.
+
+## Unreleased — SQLite als lokale Standarddatenbank
+
+- Ohne `DATABASE_URL` verwendet myshop `sqlite://db.sqlite3?mode=rwc` im Arbeitsverzeichnis.
+- PostgreSQL bleibt über `DATABASE_URL` unterstützt. Docker ist optional.
+- DDL und CRUD laufen über eine SeaQuery-Schicht in `crates/ferrum-db/src/sql.rs`. Handler bleiben dialektunabhängig.
+- SQLite speichert UUID als Text und Bool als Integer `0`/`1`. Die JSON-API bleibt für beide Backends gleich.
+- SQLite-Verbindungen nutzen eine Pool-Verbindung und `PRAGMA foreign_keys=ON`. `sqlite::memory:` bleibt dadurch eine Datenbank.
+- `sqlite_http_roundtrip` läuft in `cargo test --workspace` und fasst die lokale Datei nicht an. `postgres_http_roundtrip` bleibt ignoriert.
+- Breaking Change: `FerrumModel::schema_sql` erwartet `DatabaseKind` und liefert `String`. Das bisherige myshop-Default war eine PostgreSQL-URL.
+
 ## Unreleased — CRUD mit PATCH und DELETE
 
 - Jedes registrierte Modell erhält `PATCH /{id}` und `DELETE /{id}` zusätzlich zu Liste, Einzelabruf und POST.

@@ -1,0 +1,3 @@
+# Explizite Modellintegration. Die CLI liest keinen Rust-Quelltext.
+migrations_dir = "examples/myshop/migrations"
+schema_command = "cargo run -p myshop --quiet -- --print-schema"

@@ -9,8 +9,9 @@
 3. **Explizite Modellregistrierung:** Kein automatisches Scannen aller Crates.
 4. **Deny by default:** Ohne Demo-Freigabe antwortet die generierte Route 403.
 5. **Typen an Modulgrenzen:** `ModelRepository::create` erhält einen Create-Typ und liefert ein Model; `list` liefert `ListPage<Model>`.
-6. **Datenbankzugriffe parameterisieren:** SQL-Identifier stammen nur aus geprüften Makroattributen.
-7. **Bootstrap ist keine Migration.** Produktschemaänderungen dürfen nicht still per `CREATE TABLE IF NOT EXISTS` simuliert werden.
+6. **Datenbankzugriffe parameterisieren:** SQL-Identifier stammen nur aus geprüften Makroattributen. SeaQuery wählt den Dialekt.
+7. **Eine Repository-Implementierung:** Handler und Modelle unterscheiden SQLite und PostgreSQL nicht.
+8. **Schemaänderungen laufen über Migrationen.** `myshop --bootstrap` ist Legacy und schreibt weder Tabellen noch Historie.
 
 ## 2. Tatsächlicher Workspace (IST)
 
@@ -41,37 +42,41 @@ Makrocode: `crates/ferrum-macros/src/lib.rs`. Die Modell-Struct muss zusätzlich
 
 ```text
 myshop::main
-  ├─ DATABASE_URL lesen → ferrum::db::connect
+  ├─ DATABASE_URL oder sqlite://db.sqlite3?mode=rwc → ferrum::db::connect
   ├─ App::new(db.clone()).register::<Product>()
-  │    ├─ Register Route GET/POST (oder denied)
-  │    └─ schema_sql() in Bootstrap-Liste
-  ├─ --bootstrap? → CREATE TABLE IF NOT EXISTS → exit
+  │    ├─ Routen GET, GET /{id}, POST, PATCH, DELETE oder denied
+  │    └─ ColumnSpec für den Bootstrap merken
+  ├─ --bootstrap? → Abbruch ohne Schemaänderung
+  ├─ --print-schema? → Snapshot-JSON der registrierten Modelle
   └─ BIND_ADDRESS lesen → TcpListener → axum::serve
 
+ferrum migrate make|up|status
+  → ferrum.toml oder --schema-file
+  → Snapshot, Diff, Datei, Historie `_ferrum_migrations`
+
 POST /api/v1/products
-  → Axum Json<ProductCreate> (Axum-Rejection bei ungültigem JSON)
-  → Ferrum-Handler create::<Product>
-  → Product::create(db, ProductCreate)
-  → Validierung der Makro-generierten Regeln
-  → Parametrisiertes INSERT ... RETURNING to_jsonb(...)
-  → serde_json::from_value<Product>
+  → Axum Json<ProductCreate>
+  → create::<Product>
+  → Product::create
+  → Validierung
+  → SeaQuery INSERT ... RETURNING, Dialekt aus der Verbindung
+  → interne Deserialisierung zum Model
   → HTTP 201 + Json<Product>
 
 PATCH /api/v1/products/{id}
   → Path<Uuid> + Json<ProductUpdate>
-  → Product::update mit einem UPDATE ... WHERE "id" = $n
-  → HTTP 200 + Json<Product>, 404 wenn keine Zeile, 422 bei PatchField::Null auf NOT NULL
+  → leeres Patch: SELECT; sonst UPDATE nur geänderter Spalten WHERE "id"
+  → HTTP 200, 404 oder 422
 
 DELETE /api/v1/products/{id}
-  → DELETE FROM "products" WHERE "id" = $1
-  → rows_affected 1: HTTP 204 ohne Körper
-  → rows_affected 0: HTTP 404
+  → DELETE WHERE "id" mit gebundenem Wert
+  → eine Zeile: HTTP 204 ohne Körper
+  → keine Zeile: HTTP 404
 
 GET /api/v1/products
-  → Product::list(db)
-  → SELECT ... ORDER BY id LIMIT 101
-  → deserialize records into Product
-  → return {data:[max 100],limit:100,truncated:boolean}
+  → Product::list
+  → SELECT ... ORDER BY "id" LIMIT 101
+  → höchstens 100 Modelle, truncated als Boolean
 ```
 
 Die Prüfung `allow_anonymous` geschieht **beim Registrieren der Route**. Ohne Freigabe werden ausschließlich 403-Handler registriert. Es existieren keine Identitäten oder RBAC-Policies.
@@ -80,8 +85,8 @@ Die Prüfung `allow_anonymous` geschieht **beim Registrieren der Route**. Ohne F
 
 | Producer | Consumer | Vertrag | Datei |
 |---|---|---|---|
-| `ferrum-macros` | `ferrum-core` | `FerrumModel::descriptor/schema_sql` | `crates/ferrum-core/src/lib.rs` |
-| `ferrum-macros` | `ferrum-db` | `ModelRepository::Create/list/create` | `crates/ferrum-db/src/lib.rs` |
+| `ferrum-macros` | `ferrum-core` | `FerrumModel::descriptor/columns/schema_sql(DatabaseKind)` | `crates/ferrum-core/src/lib.rs` |
+| `ferrum-macros` | `ferrum-db` | `ModelRepository` und SeaQuery-CRUD | `crates/ferrum-db/src/lib.rs`, `crates/ferrum-db/src/sql.rs` |
 | `ferrum-api` | `ferrum-db` | generische `M: ModelRepository` | `crates/ferrum-api/src/lib.rs` |
 | `myshop` | `ferrum` | `prelude`, `db::connect`, `App` | `crates/ferrum/src/lib.rs` |
 

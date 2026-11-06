@@ -4,19 +4,18 @@
 
 ## Tatsächlicher Funktionsumfang (IST)
 
-Der einzige Subcommand ist `ferrum doctor`. Die Binary nutzt `clap` und druckt feste Setup-Hinweise. **Sie untersucht weder Rust-Toolchain noch Datenbankzustand** und darf daher nicht als Diagnosetool bezeichnet werden.
+`ferrum doctor` druckt den Funktionsumfang. Es prüft weder Toolchain noch eine live Datenbank.
 
-```bash
+```powershell
 cargo run -p ferrum-cli -- doctor
+cargo run -p ferrum-cli -- migrate make <name>
+cargo run -p ferrum-cli -- migrate up
+cargo run -p ferrum-cli -- migrate status
 ```
 
-Der `--bootstrap`-Parameter gehört **zur `myshop`-Binary**, nicht zur Ferrum-CLI:
+`migrate` liest `ferrum.toml` oder die Flags `--schema-file`, `--migrations-dir` und `--database-url`. Die Ausführung beschreibt [migrations.md](migrations.md). `--bootstrap` gehört zur `myshop`-Binary, ist Legacy und führt keine Migration aus.
 
-```bash
-cargo run -p myshop -- --bootstrap
-```
-
-Nicht existent: `ferrum new`, `ferrum dev`, `ferrum migrate`, `ferrum generate`, `ferrum build`, `ferrum admin create-user`.
+Nicht existent: `ferrum new`, `ferrum dev`, `ferrum generate`, `ferrum build`, `ferrum migrate down`, `ferrum admin create-user`.
 
 ## SOLL: CLI-Kommandostruktur
 
@@ -26,7 +25,8 @@ ferrum
 ├─ doctor                      Reale Umgebungsprüfung
 ├─ dev                         Entwicklungsprozess starten
 ├─ generate model <name>       Kompilierbare Modelldatei erstellen
-├─ migrate make|up|down|status Migrationen verwalten
+├─ migrate make|up|status      IST, siehe migrations.md
+├─ migrate down                nicht implementiert
 └─ build                       Definierter Release-Build
 ```
 

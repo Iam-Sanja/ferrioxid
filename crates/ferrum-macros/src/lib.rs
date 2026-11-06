@@ -69,17 +69,13 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             ))
         }
     };
-    let mut sql_columns = Vec::new();
-    let mut names = Vec::new();
+    let mut column_specs = Vec::new();
     let mut dto_fields = Vec::new();
     let mut values = Vec::new();
     let mut checks = Vec::new();
     let mut update_fields = Vec::new();
     let mut update_bindings = Vec::new();
-    let mut update_values = Vec::new();
-    let mut update_assignments = Vec::new();
     let mut seen_id = false;
-    let mut parameter = 1usize;
     for field in fields {
         let ident = field.ident.unwrap();
         let field_name = ident.to_string();
@@ -87,11 +83,11 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             return Err(syn::Error::new_spanned(ident, "invalid column name"));
         }
         let (type_name, nullable, value_ty) = field_type(&field.ty)?;
-        let sql_ty = match type_name.as_str() {
-            "Uuid" => "UUID",
-            "String" => "TEXT",
-            "i64" => "BIGINT",
-            "bool" => "BOOLEAN",
+        let column_kind = match type_name.as_str() {
+            "Uuid" => quote! { ::ferrum::core::ColumnKind::Uuid },
+            "String" => quote! { ::ferrum::core::ColumnKind::Text },
+            "i64" => quote! { ::ferrum::core::ColumnKind::BigInt },
+            "bool" => quote! { ::ferrum::core::ColumnKind::Boolean },
             _ => {
                 return Err(syn::Error::new_spanned(
                     &field.ty,
@@ -192,23 +188,19 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 ));
             }
         }
-        let mut column_sql = if nullable {
-            format!("\"{field_name}\" {sql_ty}")
-        } else {
-            format!("\"{field_name}\" {sql_ty} NOT NULL")
+        let default_token = match default_bool {
+            Some(value) => quote! { ::core::option::Option::Some(#value) },
+            None => quote! { ::core::option::Option::None },
         };
-        if primary {
-            column_sql.push_str(" PRIMARY KEY");
-        }
-        if let Some(default) = default_bool {
-            column_sql.push_str(if default {
-                " DEFAULT TRUE"
-            } else {
-                " DEFAULT FALSE"
-            });
-        }
-        sql_columns.push(column_sql);
-        names.push(field_name.clone());
+        column_specs.push(quote! {
+            ::ferrum::core::ColumnSpec {
+                name: #field_name,
+                kind: #column_kind,
+                nullable: #nullable,
+                primary_key: #primary,
+                default_bool: #default_token,
+            }
+        });
         let null_sql = null_value(&type_name);
         if primary {
             values.push(quote! { ::ferrum::sea_orm::Value::from(::ferrum::uuid::Uuid::new_v4()) });
@@ -268,7 +260,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             #[serde(default)]
             pub #ident: ::ferrum::db::PatchField<#value_ty>
         });
-        let (binding, apply_token, value_token) = update_binding(PatchRules {
+        update_bindings.push(update_binding(PatchRules {
             ident: &ident,
             field_name: &field_name,
             type_name: &type_name,
@@ -277,17 +269,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             min_length,
             max_length,
             min,
-        });
-        update_bindings.push(binding);
-        update_values.push(apply_token);
-        update_values.push(value_token);
-        let cast = sql_cast(&type_name);
-        let flag = parameter;
-        let value_slot = parameter + 1;
-        update_assignments.push(format!(
-            "\"{field_name}\" = CASE WHEN ${flag}::boolean THEN ${value_slot}::{cast} ELSE \"{field_name}\" END"
-        ));
-        parameter += 2;
+        }));
     }
     if !seen_id {
         return Err(syn::Error::new_spanned(
@@ -297,37 +279,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     }
     let create_dto = format_ident!("{}Create", name);
     let update_dto = format_ident!("{}Update", name);
-    let id_slot = if update_assignments.is_empty() {
-        1
-    } else {
-        parameter
-    };
-    let update_sql = if update_assignments.is_empty() {
-        format!("UPDATE \"{table}\" SET \"id\" = \"id\" WHERE \"id\" = $1 RETURNING to_jsonb(\"{table}\") AS record")
-    } else {
-        format!(
-            "UPDATE \"{table}\" SET {} WHERE \"id\" = ${id_slot} RETURNING to_jsonb(\"{table}\") AS record",
-            update_assignments.join(", ")
-        )
-    };
-    let delete_sql = format!("DELETE FROM \"{table}\" WHERE \"id\" = $1");
-    let descriptors = format!(
-        "CREATE TABLE IF NOT EXISTS \"{table}\" ({})",
-        sql_columns.join(", ")
-    );
-    let columns = names
-        .iter()
-        .map(|n| format!("\"{n}\""))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let placeholders = (1..=names.len())
-        .map(|i| format!("${i}"))
-        .collect::<Vec<_>>()
-        .join(", ");
-    let insert_sql = format!("INSERT INTO \"{table}\" ({columns}) VALUES ({placeholders}) RETURNING to_jsonb(\"{table}\") AS record");
-    let list_sql =
-        format!("SELECT to_jsonb(t) AS record FROM \"{table}\" t ORDER BY \"id\" LIMIT 101");
-    let get_sql = format!("SELECT to_jsonb(t) AS record FROM \"{table}\" t WHERE \"id\" = $1");
+    let columns_ident = format_ident!("__FERRUM_COLUMNS_{}", name.to_string().to_uppercase());
     Ok(quote! {
         #[derive(::ferrum::serde::Deserialize)]
         #[serde(crate = "::ferrum::serde", deny_unknown_fields)]
@@ -337,6 +289,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         #[serde(crate = "::ferrum::serde", deny_unknown_fields)]
         pub struct #update_dto { #(#update_fields,)* }
 
+        const #columns_ident: &[::ferrum::core::ColumnSpec] = &[#(#column_specs),*];
+
         impl ::ferrum::core::FerrumModel for #name {
             fn descriptor() -> &'static ::ferrum::core::ModelDescriptor {
                 static DESCRIPTOR: ::ferrum::core::ModelDescriptor = ::ferrum::core::ModelDescriptor {
@@ -344,7 +298,10 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 };
                 &DESCRIPTOR
             }
-            fn schema_sql() -> &'static str { #descriptors }
+            fn columns() -> &'static [::ferrum::core::ColumnSpec] { #columns_ident }
+            fn schema_sql(kind: ::ferrum::core::DatabaseKind) -> ::std::string::String {
+                ::ferrum::db::render_schema(kind, #table, #columns_ident)
+            }
         }
 
         #[::ferrum::async_trait::async_trait]
@@ -355,52 +312,29 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             async fn list(db: &::ferrum::sea_orm::DatabaseConnection)
                 -> Result<::ferrum::db::ListPage<Self>, ::ferrum::core::FerrumError>
             {
-                use ::ferrum::sea_orm::ConnectionTrait;
-                let statement = ::ferrum::sea_orm::Statement::from_string(
-                    ::ferrum::sea_orm::DbBackend::Postgres, #list_sql);
-                let rows = db.query_all(statement).await
-                    .map_err(::ferrum::core::FerrumError::database)?;
-                let truncated = rows.len() > 100;
-                let data = rows.into_iter().take(100).map(|row| {
-                    let record: ::ferrum::serde_json::Value = row.try_get("", "record")
-                        .map_err(::ferrum::core::FerrumError::database)?;
+                let page = ::ferrum::db::list_records(db, #table, #columns_ident).await?;
+                let data = page.rows.into_iter().map(|record| {
                     ::ferrum::serde_json::from_value::<Self>(record)
                         .map_err(::ferrum::core::FerrumError::database)
                 }).collect::<Result<Vec<_>, _>>()?;
-                Ok(::ferrum::db::ListPage { data, limit: 100, truncated })
+                Ok(::ferrum::db::ListPage { data, limit: page.limit, truncated: page.truncated })
             }
 
             async fn get(db: &::ferrum::sea_orm::DatabaseConnection, id: ::ferrum::uuid::Uuid)
                 -> Result<Option<Self>, ::ferrum::core::FerrumError>
             {
-                use ::ferrum::sea_orm::ConnectionTrait;
-                let statement = ::ferrum::sea_orm::Statement::from_sql_and_values(
-                    ::ferrum::sea_orm::DbBackend::Postgres, #get_sql,
-                    vec![::ferrum::sea_orm::Value::from(id)],
-                );
-                let row = db.query_one(statement).await
-                    .map_err(::ferrum::core::FerrumError::database)?;
-                row.map(|row| {
-                    let record: ::ferrum::serde_json::Value = row.try_get("", "record")
-                        .map_err(::ferrum::core::FerrumError::database)?;
-                    ::ferrum::serde_json::from_value::<Self>(record)
-                        .map_err(::ferrum::core::FerrumError::database)
-                }).transpose()
+                ::ferrum::db::get_record(db, #table, #columns_ident, id).await?
+                    .map(|record| ::ferrum::serde_json::from_value::<Self>(record)
+                        .map_err(::ferrum::core::FerrumError::database))
+                    .transpose()
             }
 
             async fn create(db: &::ferrum::sea_orm::DatabaseConnection, payload: Self::Create)
                 -> Result<Self, ::ferrum::core::FerrumError>
             {
-                use ::ferrum::sea_orm::ConnectionTrait;
                 #(#checks)*
                 let values: Vec<::ferrum::sea_orm::Value> = vec![#(#values),*];
-                let statement = ::ferrum::sea_orm::Statement::from_sql_and_values(
-                    ::ferrum::sea_orm::DbBackend::Postgres, #insert_sql, values,
-                );
-                let row = db.query_one(statement).await.map_err(::ferrum::core::FerrumError::database)?
-                    .ok_or_else(|| ::ferrum::core::FerrumError::Validation("no row returned".into()))?;
-                let record: ::ferrum::serde_json::Value = row.try_get("", "record")
-                    .map_err(::ferrum::core::FerrumError::database)?;
+                let record = ::ferrum::db::insert_record(db, #table, #columns_ident, values).await?;
                 ::ferrum::serde_json::from_value::<Self>(record)
                     .map_err(::ferrum::core::FerrumError::database)
             }
@@ -410,16 +344,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 id: ::ferrum::uuid::Uuid,
                 payload: Self::Update,
             ) -> Result<Self, ::ferrum::core::FerrumError> {
-                use ::ferrum::sea_orm::ConnectionTrait;
+                let mut changes: Vec<(&str, ::ferrum::sea_orm::Value)> = Vec::new();
                 #(#update_bindings)*
-                let values: Vec<::ferrum::sea_orm::Value> = vec![#(#update_values,)* ::ferrum::sea_orm::Value::from(id)];
-                let statement = ::ferrum::sea_orm::Statement::from_sql_and_values(
-                    ::ferrum::sea_orm::DbBackend::Postgres, #update_sql, values,
-                );
-                let row = db.query_one(statement).await.map_err(::ferrum::core::FerrumError::database)?
-                    .ok_or(::ferrum::core::FerrumError::NotFound)?;
-                let record: ::ferrum::serde_json::Value = row.try_get("", "record")
-                    .map_err(::ferrum::core::FerrumError::database)?;
+                let record = ::ferrum::db::update_record(db, #table, #columns_ident, id, changes).await?;
                 ::ferrum::serde_json::from_value::<Self>(record)
                     .map_err(::ferrum::core::FerrumError::database)
             }
@@ -428,13 +355,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 db: &::ferrum::sea_orm::DatabaseConnection,
                 id: ::ferrum::uuid::Uuid,
             ) -> Result<::ferrum::db::DeleteOutcome, ::ferrum::core::FerrumError> {
-                use ::ferrum::sea_orm::ConnectionTrait;
-                let statement = ::ferrum::sea_orm::Statement::from_sql_and_values(
-                    ::ferrum::sea_orm::DbBackend::Postgres, #delete_sql,
-                    vec![::ferrum::sea_orm::Value::from(id)],
-                );
-                let result = db.execute(statement).await.map_err(::ferrum::core::FerrumError::database)?;
-                if result.rows_affected() == 0 {
+                let affected = ::ferrum::db::delete_record(db, #table, id).await?;
+                if affected == 0 {
                     Ok(::ferrum::db::DeleteOutcome::Missing)
                 } else {
                     Ok(::ferrum::db::DeleteOutcome::Deleted)
@@ -498,16 +420,6 @@ fn null_value(type_name: &str) -> proc_macro2::TokenStream {
     }
 }
 
-fn sql_cast(type_name: &str) -> &'static str {
-    match type_name {
-        "String" => "text",
-        "i64" => "bigint",
-        "bool" => "boolean",
-        "Uuid" => "uuid",
-        _ => "text",
-    }
-}
-
 fn push_string_checks(
     checks: &mut Vec<proc_macro2::TokenStream>,
     ident: &syn::Ident,
@@ -562,13 +474,7 @@ struct PatchRules<'a> {
     min: Option<i64>,
 }
 
-fn update_binding(
-    rules: PatchRules<'_>,
-) -> (
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-    proc_macro2::TokenStream,
-) {
+fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
     let PatchRules {
         ident,
         field_name,
@@ -579,9 +485,6 @@ fn update_binding(
         max_length,
         min,
     } = rules;
-    let apply_ident = format_ident!("{ident}_apply");
-    let value_ident = format_ident!("{ident}_value");
-    let null_sql = null_value(type_name);
     let mut value_checks = Vec::new();
     if type_name == "String" {
         if required {
@@ -606,7 +509,8 @@ fn update_binding(
         } });
     }
     let null_arm = if nullable {
-        quote! { ::ferrum::db::PatchField::Null => (true, #null_sql), }
+        let null_sql = null_value(type_name);
+        quote! { ::ferrum::db::PatchField::Null => { changes.push((#field_name, #null_sql)); } }
     } else {
         quote! {
             ::ferrum::db::PatchField::Null => {
@@ -614,19 +518,14 @@ fn update_binding(
             }
         }
     };
-    let binding = quote! {
-        let (#apply_ident, #value_ident) = match payload.#ident {
-            ::ferrum::db::PatchField::Missing => (false, #null_sql),
+    quote! {
+        match payload.#ident {
+            ::ferrum::db::PatchField::Missing => {}
             #null_arm
             ::ferrum::db::PatchField::Value(value) => {
                 #(#value_checks)*
-                (true, ::ferrum::sea_orm::Value::from(value))
+                changes.push((#field_name, ::ferrum::sea_orm::Value::from(value)));
             }
         };
-    };
-    (
-        binding,
-        quote! { ::ferrum::sea_orm::Value::from(#apply_ident) },
-        quote! { #value_ident },
-    )
+    }
 }

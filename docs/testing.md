@@ -1,24 +1,26 @@
 # Tests, Qualität und Continuous Integration
 
-[Zur Übersicht](index.md) · **IST-Dateien:** `.github/workflows/rust.yml`, `examples/myshop/tests/postgres_api.rs`.
+[Zur Übersicht](index.md) · **IST-Dateien:** `.github/workflows/rust.yml`, `examples/myshop/tests/postgres_api.rs`, `crates/ferrum-db/src/lib.rs`.
 
 ## Teststufen (IST)
 
-1. **Build/Static:** Cargo und Clippy prüfen den gesamten Workspace.
-2. **Rust-Tests:** `cargo test --workspace` führt Rust-Tests aus; ein mit `#[ignore]` markierter PostgreSQL-Test läuft nicht standardmäßig.
-3. **Echter HTTP/PostgreSQL-Test:** Der optionale Test `postgres_http_roundtrip` startet einen Axum-Listener auf einem zufälligen Localhost-Port, führt SQL-Bootstrap aus und testet POST/GET.
-4. **Schema-Test:** `boolean_default_is_emitted_into_postgres_schema` prüft die DDL-Zeichenkette ohne Datenbank.
+1. **Build und Lint:** `cargo fmt`, Clippy mit `-D warnings` und `cargo build --workspace`.
+2. **Workspace-Tests:** `cargo test --workspace` führt Unit-Tests und `sqlite_http_roundtrip` aus.
+3. **SQLite-HTTP:** `sqlite_http_roundtrip` nutzt `sqlite::memory:`, eine Pool-Verbindung und einen Axum-Listener auf einem zufälligen Localhost-Port. Die Datei `db.sqlite3` wird nicht verwendet.
+4. **DDL ohne Server:** `boolean_default_is_emitted_into_postgres_schema` prüft die gerenderte PostgreSQL- und SQLite-Definition von `active`.
+5. **Migrationen:** Snapshot, Diff, SQLite-Kette und `ferrum migrate` gegen eine temporäre Datei laufen in `cargo test --workspace`.
+6. **PostgreSQL, optional:** `postgres_http_roundtrip` und `postgres_migration_roundtrip` sind `#[ignore]`. Sie laufen nur mit `--ignored` und gesetzter `DATABASE_URL`.
 
-### Lokale Befehle (Projekt-Root)
+### Lokale Befehle
 
-```bash
-cargo fmt --all --check
+```powershell
+cargo fmt --all
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo build --workspace
 ```
 
-PowerShell für optionale DB-Prüfung:
+Optionaler PostgreSQL-Lauf, nur gegen eine entbehrliche Datenbank:
 
 ```powershell
 docker compose up -d db
@@ -26,53 +28,46 @@ $env:DATABASE_URL="postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum"
 cargo test -p myshop --test postgres_api -- --ignored --nocapture
 ```
 
-Linux/macOS:
+Der ignorierte Test verlangt `DATABASE_URL` und bricht ohne sie ab. Er löscht vor und nach dem Lauf die Tabellen `ferrum_v01_integration_products`, `ferrum_v01_required_only`, `ferrum_v01_private_products` und `ferrum_v01_notes`. Das ist kein Nachweis, solange kein PostgreSQL-Server erreichbar ist. Ein früherer Lauf ohne Server endete mit `PoolTimedOut`.
 
-```bash
-docker compose up -d db
-DATABASE_URL=postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum cargo test -p myshop --test postgres_api -- --ignored --nocapture
-```
+## Abgedeckte SQLite-Fälle (IST)
 
-**WARNUNG:** Der Test entfernt die festen Tabellen `ferrum_v01_integration_products` und `ferrum_v01_required_only` mit `DROP TABLE IF EXISTS` vor/nach dem Lauf. Nur auf einer **entbehrlichen lokalen Entwicklungsdatenbank** ausführen. Wenn `DATABASE_URL` fehlt, beendet sich der ignorierte Test nach Aktivierung ohne eigentliche DB-Prüfung: Das ist **kein** Nachweis einer erfolgreichen Datenbankintegration.
+Dieselben HTTP-Prüfungen laufen im SQLite-Test:
 
-## Bereits abgedeckte Fälle (Quellcode)
+- GET-Liste, GET nach UUID, POST, PATCH und DELETE.
+- POST 201 mit UUID, Feldern und Bool-Default `true`.
+- Leerer oder nur aus Leerzeichen bestehender Name und negativer Preis ergeben 422.
+- `#[field(required)]` ohne `min_length`.
+- PATCH nur mit `name`, leeres `{}`, leerer Name, negativer Preis und unbekannte UUID.
+- DELETE 204 ohne Körper, folgendes GET 404 und zweites DELETE 404.
+- Nicht freigegebenes Modell: Liste, Detail, PATCH und DELETE mit 403 und Ferrum-JSON.
+- Nullable `note`: fehlender Schlüssel, Wert und JSON-`null`.
+- Nach mehr als 100 Zeilen: `limit` 100, `truncated: true`, genau 100 Objekte.
+- `PRAGMA foreign_keys` ist auf der Testverbindung `1`.
+- `PatchField` unterscheidet fehlend, `null` und Wert. Das Update-DTO lehnt `id` und `readonly` ab.
 
-- 201 bei Create, servergenerierte UUID, Felder und Bool-Default.
-- GET liefert 200, `limit:100`, initial `truncated:false`.
-- Invalid Create: leerer/Whitespace-Name und negativer Preis → 422.
-- `#[field(required)]` ohne `min_length` wird im zweiten Testmodell geprüft.
-- PATCH nur `name`, leeres `{}`, leerer Name, negativer Preis, unbekannte UUID.
-- DELETE mit 204 ohne Körper, folgendes GET und zweites DELETE mit 404.
-- Privates Modell: PATCH und DELETE liefern 403 mit `title`, `status` und `detail`.
-- Nullable `note`: fehlendes Feld, Wert und JSON-`null`.
-- Typisierte Repository-Liste wird gelesen.
-- Nach über 100 Datensätzen: `truncated:true`, genau 100 Datenobjekte.
-- DDL enthält `BOOLEAN NOT NULL DEFAULT TRUE`.
-- Unit-Tests ohne Datenbank: `PatchField`-Deserialisierung und Ablehnung von `id` sowie `readonly` im Update-DTO.
+Die JSON-Struktur ist für beide Backends dieselbe, weil die Handler dialektunabhängig sind. Der PostgreSQL-Test führt denselben Ablauf aus, wurde in diesem Arbeitsgang aber nicht gegen einen Server ausgeführt.
 
-## CI-Zustand (IST)
+## CI (IST)
 
-`.github/workflows/rust.yml` startet rustfmt, Clippy und `cargo test --workspace` auf Ubuntu. **Es startet keinen PostgreSQL-Service.** Die DB/HTTP-Prüfung ist daher nicht Teil der Standard-CI.
+`.github/workflows/rust.yml` startet rustfmt, Clippy und `cargo test --workspace`. Dabei läuft der SQLite-Test. Es wird kein PostgreSQL-Service gestartet.
 
-Lokaler Lauf in diesem Workspace nach dem CRUD-Ausbau: `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings` und `cargo test --workspace` waren erfolgreich. Bestanden haben die Unit-Tests `patch_field_distinguishes_missing_null_and_value`, `boolean_default_is_emitted_into_postgres_schema` und `patch_dto_distinguishes_missing_null_value_and_rejects_readonly_fields`. `postgres_http_roundtrip` blieb ignoriert. Ein früherer Versuch mit gesetzter `DATABASE_URL` ohne laufenden Server endete mit `PoolTimedOut` und zählt nicht als bestandener Datenbanktest. Auf diesem Rechner sind weder Docker noch PostgreSQL installiert.
+Die Migrations-Tests prüfen gleiche Snapshots, deterministische Spaltenreihenfolge, doppelte Namen, unbekannte Versionen, neue Tabelle, neue Spalte, gelöschte Spalte, Typ- und Default-Änderung, leeren Diff, riskante Änderung, Umbenennungsverweigerung, Erstanwendung, zweite Migration mit erhaltenen Zeilen, wiederholtes `up`, manipulierte Datei, ungültige Änderung und vorhandene Tabellen ohne Historie. Der CLI-Test `migrate_make_up_and_status_use_a_temporary_sqlite_database` nutzt eine temporäre SQLite-Datei.
 
-## Geplanter Testausbau (SOLL)
+PostgreSQL-Migrations- und HTTP-Tests bleiben ignoriert, solange kein Server läuft. Ein ignorierter Test zählt nicht als bestanden.
+
+Nach dieser Umsetzung endeten `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` und `cargo build --workspace` mit Exit-Code 0. Ignoriert blieben `postgres_http_roundtrip` und `postgres_migration_roundtrip`. Auf diesem Rechner sind weder Docker noch PostgreSQL installiert. Zusätzlich wurden `ferrum migrate up`, `status` und ein zweites `up` gegen eine temporäre SQLite-Datei ausgeführt; die erste Migration wurde angewendet, der zweite Lauf fand nichts Ausstehendes.
+
+## Geplanter Ausbau (SOLL)
 
 | Bereich | Tests | Akzeptanz |
 |---|---|---|
-| Makros | Compile-Pass/Compile-Fail | Ungültige Attribute → klare Diagnostics |
-| Core | Model Registry | Deterministische, eindeutige Registrierung |
-| DB | PostgreSQL E2E/Transaction | Parametrisierung, Rollback, Fehlermapping |
-| API | Status, DTO, JSON-Fehler, Grenzen | Identischer dokumentierter Contract |
-| Migrationen | Diff, Drift, Locks, Failure Recovery | Kein stiller Datenverlust |
-| Auth | 401/403, Session, CSRF, IDOR | Kein Rechte-Bypass |
-| Admin | E2E für UI/Backend | Policy auch serverseitig durchgesetzt |
-| Deployment | Container/Proxy | Kein anonymer Public-Default |
+| Makros | Compile-Fail | Ungültige Attribute erzeugen klare Diagnostics |
+| Migrationen | Diff, Drift, Locks | Kein stiller Datenverlust |
+| DB | Transaktionen, Constraint-Mapping | Gleiche Fehlercodes auf beiden Backends |
+| Auth | 401/403, Session, CSRF | Kein Rechte-Bypass |
+| Admin und Deployment | UI und Container | Policy serverseitig, keine anonyme Produktion |
 
-## Berichtspflicht für Coding-KIs
+## Berichtspflicht
 
-Nach jeder Änderung: vollständige Befehle, Exit-Codes und relevante Fehlermeldungen angeben; nicht ausgeführte Prüfungen ausdrücklich als **nicht ausgeführt** markieren. Kein `#[allow(dead_code)]` zur Warnungsunterdrückung, wenn stattdessen echte typsichere Nutzung möglich ist.
-
-## Ergänzte Detail- und Sicherheitstests (Code vorhanden, Lauf noch ausstehend)
-
-Der ignorierte PostgreSQL-HTTP-Test prüft zusätzlich GET per UUID (200), eine nicht vorhandene UUID (404) sowie anonyme Listen- und Detailzugriffe auf ein Modell ohne Freigabe (403). Wenn der Test manuell mit `--ignored` gestartet wird, ist `DATABASE_URL` Pflicht: fehlende Konfiguration gilt als Fehler, nicht als bestandener Test.
+Ausgeführte Befehle, Exit-Codes und relevante Fehler nennen. Nicht ausgeführte Prüfungen als nicht ausgeführt kennzeichnen. Kein pauschales `allow(dead_code)`, wenn der Wert typsicher verwendet werden kann.

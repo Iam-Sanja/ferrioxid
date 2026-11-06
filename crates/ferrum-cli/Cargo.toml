@@ -10,3 +10,6 @@ path = "src/main.rs"
 
 [dependencies]
 clap.workspace = true
+ferrum-db = { path = "../ferrum-db" }
+ferrum-migrations = { path = "../ferrum-migrations" }
+tokio.workspace = true

@@ -15,13 +15,24 @@ pub struct ModelDescriptor {
     pub api_path: &'static str,
     pub allow_anonymous: bool,
 }
+pub enum DatabaseKind { Sqlite, Postgres }
+pub enum ColumnKind { Uuid, Text, BigInt, Boolean }
+pub struct ColumnSpec {
+    pub name: &'static str,
+    pub kind: ColumnKind,
+    pub nullable: bool,
+    pub primary_key: bool,
+    pub default_bool: Option<bool>,
+}
 pub trait FerrumModel: Send + Sync + 'static {
     fn descriptor() -> &'static ModelDescriptor;
-    fn schema_sql() -> &'static str;
+    fn columns() -> &'static [ColumnSpec];
+    fn schema_sql(kind: DatabaseKind) -> String;
 }
 pub enum FerrumError {
     Validation(String),
     Forbidden,
+    NotFound,
     Database(Box<dyn Error + Send + Sync>),
 }
 ```
@@ -34,9 +45,10 @@ Hinweis: Das obige `Error` ist zur Lesbarkeit abgekürzt; in der Quelldatei steh
 - `table`: bereits makroseitig validierter SQL-Tabellenname.
 - `api_path`: statischer Pfad, z. B. `/api/v1/products`.
 - `allow_anonymous`: explizite Freigabe für Demo-Routen; Standard `false`.
-- `schema_sql`: SQL-Text aus der Modelldefinition; ausschließlich für expliziten Entwicklungs-Bootstrap.
+- `columns`: dialektunabhängige Spaltenmetadaten aus dem Makro.
+- `schema_sql(kind)`: Bootstrap-DDL für SQLite oder PostgreSQL. Der Text kommt aus SeaQuery, nicht aus einem gespeicherten SQL-String.
 
-Keine Feldmetadaten, Relationships, Registry-Container oder Policies in v0.1.
+Beziehungen, Unique-Constraints, Indizes und Policies sind keine `ColumnSpec`-Felder. `DateTime` ist kein `ColumnKind`. Migrationen bauen ihren Snapshot aus diesen Metadaten und erfinden keine zweite Spaltenbeschreibung.
 
 ## Fehlersemantik (IST)
 
@@ -44,19 +56,20 @@ Keine Feldmetadaten, Relationships, Registry-Container oder Policies in v0.1.
 |---|---|---|
 | `Validation` | ungültige Eingaben | 422 |
 | `Forbidden` | Zugriff nicht freigegeben | 403 |
+| `NotFound` | Zeile fehlt | 404 |
 | `Database` | Datenbank, Query oder Daten-Deserialisierung | 500, internes Detail nur im Log |
 
 Die Umwandlung zu HTTP findet **nicht** in `ferrum-core`, sondern ausschließlich in `ferrum-api` statt; siehe [api.md](api.md).
 
 ## Erweiterungsentwurf (SOLL)
 
-1. `FieldDescriptor` mit eindeutigem Feldnamen, Typ, Nullbarkeit, Default, Constraints und API-Sichtbarkeit.
+1. Reichere Feldmetadaten über `ColumnSpec` hinaus: Constraints, API-Sichtbarkeit und Defaults außer Bool.
 2. `RelationDescriptor` mit Relationstyp und FK-Referenz.
 3. `ModelSchema` mit Tabelle, PK, Feldern, Indizes und Constraints.
 4. `Registry` für **explizit registrierte** Modelle.
 5. Deskriptor-Schema-Version zur stabilen Weiterentwicklung des Formats.
 
-Designregeln: keine SQL-Strings als alleinige kanonische Repräsentation; keine dynamisch geleakten `&'static str`; Reihenfolge und Hashing deterministisch; deskriptorbasierte Erweiterungen versionierbar; Feldtypen müssen SQLite/MySQL nicht vorzeitig abstrahieren.
+Designregeln: Spaltenmetadaten bleiben die kanonische Darstellung. SQL entsteht erst für einen konkreten `DatabaseKind`. MySQL ist nicht vorgesehen, solange es keine eigene Abbildung und Tests gibt.
 
 ## Tests und Abnahme
 
@@ -66,6 +79,6 @@ Designregeln: keine SQL-Strings als alleinige kanonische Repräsentation; keine 
 
 **Nicht hier implementieren:** SQL-Ausführung, Axum-Handler, CLI-Parsing oder React-Code.
 
-## Fehlererweiterung (implementiert, noch nicht lokal kompiliert)
+## NotFound (IST)
 
-`FerrumError::NotFound` stellt den domänenweiten Fehler für fehlende Ressourcen dar. Die Axum-Adapter liefern dafür `404` mit demselben JSON-Fehlerformat wie für `Validation` und `Forbidden`.
+`FerrumError::NotFound` ist der Fehler für fehlende Ressourcen. Die Axum-Adapter liefern dafür `404` mit demselben JSON-Format wie für `Validation` und `Forbidden`.

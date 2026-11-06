@@ -55,13 +55,12 @@ pub struct Product {
 
 - Identifikatoren: ASCII-Buchstaben/Unterstrich zuerst, danach Buchstaben/Ziffern/Unterstrich; SQL-Namen sind mit `"` gequotet.
 - API-Pfad: statische Abschnitte mit denselben Identifier-Regeln; keine Platzhalter, `*` oder `?`.
-- DDL: `CREATE TABLE IF NOT EXISTS "..." (...)`.
-- INSERT: Platzhalter `$1`, `$2` usw. und `RETURNING to_jsonb("table") AS record`.
-- LIST: `SELECT to_jsonb(t) ... ORDER BY "id" LIMIT 101`, danach max. 100 Ergebnisse und `truncated`.
-- GET: `SELECT ... WHERE "id" = $1`.
-- UPDATE: ein `UPDATE` mit `CASE WHEN` pro änderbarer Spalte und `WHERE "id" = $n`.
-- DELETE: `DELETE FROM ... WHERE "id" = $1`, danach `rows_affected`.
-- Rückgabe wird aus `serde_json::Value` **intern** in den konkreten Rust-Model-Typ deserialisiert.
+- DDL für den Legacy-Bootstrap: `schema_sql(DatabaseKind)` ruft `render_schema` auf. Migrationen verwenden dieselben Spaltenmetadaten, aber die Crate `ferrum-migrations`.
+- INSERT, LIST, GET, UPDATE und DELETE rufen `ferrum::db` auf. SeaQuery bindet Werte und quotet Bezeichner.
+- LIST liest 101 Zeilen, gibt höchstens 100 zurück und setzt `truncated`.
+- UPDATE schreibt nur Spalten, deren `PatchField` nicht `Missing` ist. Ein leeres Patch liest die Zeile.
+- DELETE filtert über die gebundene UUID und wertet `rows_affected` aus.
+- Die Datenbankschicht baut intern JSON und deserialisiert es in den Model-Typ. `to_jsonb` wird nicht verwendet.
 
 ## Grenzen und bekannte Risiken (IST)
 

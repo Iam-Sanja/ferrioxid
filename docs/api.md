@@ -17,7 +17,7 @@ let router = app.into_router();
 - `register<M: ModelRepository>(self)` liest `M::descriptor()`.
 - `allow_anonymous == true`: GET `list::<M>`, POST `create::<M>`, sowie auf `/{id}` GET `get_one::<M>`, PATCH `update::<M>` und DELETE `delete_one::<M>`.
 - Andernfalls: dieselben Methoden über `denied`, jeweils 403 mit Ferrum-JSON-Fehlerkörper.
-- `schema_sql()` wird für einen expliziten Bootstrap gesammelt, unabhängig von der Freigabe.
+- Bootstrap merkt sich Tabelle und `columns()`, unabhängig von der Freigabe, und rendert das DDL erst aus dem erkannten Datenbank-Backend.
 - `into_router()` hängt `GET /healthz` an und setzt die DB als Axum-State.
 
 ### HTTP-API (IST)

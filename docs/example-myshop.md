@@ -4,38 +4,49 @@
 
 ## Zweck
 
-`myshop` prüft, ob die **öffentlichen** Ferrum-Komponenten gemeinsam funktionieren. Das Beispiel darf keine privaten Sonderwege erhalten, die gewöhnlichen Anwendern fehlen.
+`myshop` prüft, ob die öffentlichen Ferrum-Komponenten gemeinsam funktionieren. Das Beispiel nutzt dieselbe Fassade wie andere Anwendungen und enthält keine privaten Datenbankzugriffe.
 
 ## Modell (IST)
 
-`Product` hat `id: Uuid`, `name: String`, `price_cents: i64`, `active: bool`. Die Attribute setzen UUID-Auto-ID, Pflichtname mit 3–150 Zeichen, nichtnegativen Preis und `DEFAULT TRUE` für `active`. Die API ist für die lokal begrenzte Demo ausdrücklich anonym unter `/api/v1/products` freigegeben.
+`Product` hat `id: Uuid`, `name: String`, `price_cents: i64`, `active: bool`. Die Attribute setzen eine automatische UUID, einen Pflichtnamen mit 3–150 Zeichen, einen nichtnegativen Preis und den Bool-Default `true`. Die Demo-API `/api/v1/products` ist ausdrücklich anonym. Das gilt nur für den lokalen Prozess.
 
-## Startablauf (IST)
+## Start mit SQLite (IST)
 
-```bash
-docker compose up -d db
-cargo check --workspace
+```powershell
+cargo run -p ferrum-cli -- migrate up
+cargo run -p myshop
+```
+
+Die Befehle gehören ins Workspace-Root, weil dort `ferrum.toml` liegt. Ohne `DATABASE_URL` verwenden CLI und myshop `sqlite://db.sqlite3?mode=rwc` im Arbeitsverzeichnis. `examples/myshop/migrations/0001_initial.json` legt `products` an. Der Server startet auf `127.0.0.1:3000`, sofern `BIND_ADDRESS` nicht gesetzt ist, und migriert nicht selbst.
+
+`cargo run -p myshop -- --bootstrap` bricht ab. Er löscht keine Datei, legt keine Tabelle an und schreibt keine Historie. `cargo run -p myshop -- --print-schema` gibt den Snapshot von `Product` aus. Das ist die Registrierung, die `schema_command` aufruft.
+
+PostgreSQL ist optional:
+
+```powershell
+$env:DATABASE_URL="postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum"
 cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-`DATABASE_URL` ist optional, weil `main.rs` ein **lokales Demo-Default** verwendet. Für andere Umgebungen explizit setzen. Bind-Default `127.0.0.1:3000`, Überschreibung mit `BIND_ADDRESS` möglich und potentiell gefährlich. Bootstrap öffnet die DB, registriert das Modell, führt dessen `schema_sql()` aus, liest danach die typisierte Liste, loggt Zeilen nur auf Debug-Niveau und beendet sich.
+`.env.example` wird nicht geladen. Docker ist für den SQLite-Ablauf nicht erforderlich.
 
 ### API-Probe
 
-```bash
-curl -i -X POST http://127.0.0.1:3000/api/v1/products -H 'Content-Type: application/json' -d '{"name":"Laptop","price_cents":1250}'
-curl -i http://127.0.0.1:3000/api/v1/products
+```powershell
+curl.exe -i -X POST http://127.0.0.1:3000/api/v1/products -H "Content-Type: application/json" -d "{\"name\":\"Laptop\",\"price_cents\":1250}"
+curl.exe -i http://127.0.0.1:3000/api/v1/products
 ```
 
-Erwartung: POST 201 mit UUID und `active:true`, GET 200 mit `{data, limit:100, truncated:false}` (sofern insgesamt ≤ 100 Einträge). `PATCH /api/v1/products/{id}` mit `{"name":"Notebook"}` liefert 200 und behält `price_cents` sowie `active`. `DELETE /api/v1/products/{id}` liefert 204 ohne Körper. Das sind **erwartete Ergebnisse**. Der PostgreSQL-Integrationstest, der sie prüft, wurde auf diesem Rechner nicht erfolgreich ausgeführt.
+POST antwortet 201 mit UUID und `active: true`. GET antwortet 200 mit `data`, `limit: 100` und `truncated: false`, solange höchstens 100 Zeilen existieren. `PATCH /api/v1/products/{id}` mit `{"name":"Notebook"}` antwortet 200 und behält Preis und `active`. `DELETE` antwortet 204 ohne Körper. Dieselben Antworten prüft `sqlite_http_roundtrip` in `cargo test --workspace`. Der PostgreSQL-Test bleibt getrennt und ignoriert.
 
-## Anti-Ziele
+## Grenzen
 
-- Keine produktionsreife Demo, keine echte Shop-Anwendung.
-- Kein Admin, Login oder Migration Engine. PATCH und DELETE kommen aus `register::<Product>()`, nicht aus eigenen Handlern.
-- Kein öffentliches Deployment mit `allow_anonymous=true`.
+- Keine produktionsreife Shop-Anwendung.
+- Kein Admin und kein Login. Die fünf Routen kommen aus `register::<Product>()`.
+- Schemaänderungen kommen aus `ferrum migrate`, nicht aus `--bootstrap`. Eine ältere `products`-Tabelle ohne Historie wird nicht nachträglich als migriert behandelt.
+- `allow_anonymous=true` nicht öffentlich betreiben.
 
 ## Tests
 
-Optionaler DB/HTTP-Test: `examples/myshop/tests/postgres_api.rs`. Er verwendet eigenständige Testtabellen und löscht sie. [testing.md](testing.md) enthält den ausführbaren Befehl. `--bootstrap` niemals gegen ungesicherte Produktionsdatenbanken einsetzen.
+`examples/myshop/tests/postgres_api.rs` enthält den SQLite-HTTP-Test und den ignorierten PostgreSQL-Test. Nur der PostgreSQL-Lauf löscht feste Testtabellen in der durch `DATABASE_URL` gewählten Datenbank. `--bootstrap` nicht gegen eine ungesicherte Produktionsdatenbank ausführen. Details stehen in [testing.md](testing.md).

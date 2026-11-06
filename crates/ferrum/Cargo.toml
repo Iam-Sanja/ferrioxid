@@ -8,6 +8,7 @@ license.workspace = true
 ferrum-core = { path = "../ferrum-core" }
 ferrum-macros = { path = "../ferrum-macros" }
 ferrum-db = { path = "../ferrum-db" }
+ferrum-migrations = { path = "../ferrum-migrations" }
 ferrum-api = { path = "../ferrum-api" }
 sea-orm.workspace = true
 serde.workspace = true

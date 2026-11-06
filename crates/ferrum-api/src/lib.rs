@@ -6,15 +6,16 @@ use axum::{
     routing::get,
     Json, Router,
 };
-use ferrum_core::FerrumError;
-use ferrum_db::{DeleteOutcome, ModelRepository};
-use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement};
+use ferrum_core::{ColumnSpec, FerrumError};
+use ferrum_db::{kind_of, render_schema, DeleteOutcome, ModelRepository};
+use ferrum_migrations::history_exists;
+use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::json;
 
 pub struct App {
     db: DatabaseConnection,
     routes: Router<DatabaseConnection>,
-    schemas: Vec<&'static str>,
+    schemas: Vec<(&'static str, &'static [ColumnSpec])>,
 }
 
 impl App {
@@ -46,15 +47,28 @@ impl App {
                 .routes
                 .route(&detail_path, get(denied).patch(denied).delete(denied));
         }
-        self.schemas.push(M::schema_sql());
+        self.schemas.push((descriptor.table, M::columns()));
         self
     }
 
-    /// Explicit, non-destructive bootstrap for development. Not a migration engine.
+    /// Legacy-Helfer für leere Testdatenbanken. Keine Migrationshistorie und kein Schema-Diff.
+    ///
+    /// Existiert `_ferrum_migrations`, wird nichts verändert.
     pub async fn bootstrap_schema(&self) -> Result<(), FerrumError> {
-        for sql in &self.schemas {
+        if history_exists(&self.db)
+            .await
+            .map_err(FerrumError::database)?
+        {
+            return Err(FerrumError::Validation(
+                "migration history exists; bootstrap will not create or relabel tables".into(),
+            ));
+        }
+        let backend = self.db.get_database_backend();
+        let kind = kind_of(backend)?;
+        for (table, columns) in &self.schemas {
+            let sql = render_schema(kind, table, columns);
             self.db
-                .execute(Statement::from_string(DbBackend::Postgres, *sql))
+                .execute(Statement::from_string(backend, sql))
                 .await
                 .map_err(FerrumError::database)?;
         }

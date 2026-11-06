@@ -1,19 +1,30 @@
 # Ferrum v0.1 — Model-first Rust backend (experimental)
 
-> **Status: source-code prototype; detail-route extension not yet compiled in this environment.** The initial release compiled in the user's Cursor environment after an orphan-trait fix. The new changes in this archive have not been compiled in the generation environment (Rust/Cargo unavailable). Run the commands below locally and resolve any incompatibilities before use.
->
-> This is **not** a complete Django replacement. The first milestone covers a Rust derive macro, shared model metadata, a PostgreSQL repository, and generated list/create/detail API routes.
+> This is **not** a complete Django replacement. The current milestone covers a Rust derive macro, shared model metadata, one SeaORM/SeaQuery repository for SQLite and PostgreSQL, and generated list, detail, create, patch and delete routes.
 
-## Quick start (Linux/macOS; VS Code terminal)
+SQLite is the default local database. Docker and PostgreSQL are optional.
 
-Prerequisites: current stable Rust/Cargo, Docker with Compose, free localhost ports 5432 and 3000.
+## Quick start
 
-```bash
-docker compose up -d db
-cargo check --workspace
+Prerequisites: current stable Rust and Cargo. No database server is required.
+
+```powershell
 cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
+
+Unset `DATABASE_URL` uses `sqlite://db.sqlite3?mode=rwc` in the process working directory. The file is created on first connect and is gitignored.
+
+Create and update the schema with migrations, from the workspace root:
+
+```powershell
+cargo run -p ferrum-cli -- migrate make initial
+cargo run -p ferrum-cli -- migrate up
+cargo run -p ferrum-cli -- migrate status
+cargo run -p myshop
+```
+
+`myshop` already contains `examples/myshop/migrations/0001_initial.json`. On a new SQLite file, `migrate up` is enough. `ferrum.toml` points the CLI at the myshop model registry. The CLI does not parse Rust source. `--bootstrap` is legacy: it no longer creates tables, does not write migration history, and does not delete existing files.
 
 In another terminal:
 
@@ -26,7 +37,7 @@ curl -i -X POST http://127.0.0.1:3000/api/v1/products \
 curl http://127.0.0.1:3000/api/v1/products
 ```
 
-The bootstrap command uses `CREATE TABLE IF NOT EXISTS` and is **not** a migration engine. Bootstrap before serving.
+`myshop --bootstrap` does not create or migrate a schema. Use `ferrum migrate up` before serving.
 
 ### Project files
 
@@ -34,6 +45,7 @@ The bootstrap command uses `CREATE TABLE IF NOT EXISTS` and is **not** a migrati
 - `crates/ferrum-macros/src/lib.rs` — Rust derive macro
 - `crates/ferrum-core/src/lib.rs` — descriptors, errors and core trait
 - `crates/ferrum-db/src/lib.rs` — repository contract and database connection
+- `crates/ferrum-db/src/sql.rs` — SeaQuery DDL and CRUD for SQLite and PostgreSQL
 - `crates/ferrum-api/src/lib.rs` — route registration, handler adapters and bootstrap
 - `crates/ferrum/src/lib.rs` — public framework API
 - `crates/ferrum-cli/src/main.rs` — experimental informational `ferrum doctor` CLI
@@ -86,9 +98,9 @@ store the original text.
 
 ## Scope and limitations
 
-**Included in source:** workspace; macros for `Uuid`, `String`, `i64`, `bool` and `Option` of those types except a nullable `id`; typed create and update DTOs; `PatchField` for missing, null and value; trimmed string validation; Boolean SQL defaults; generated list, read-by-UUID, create, patch and delete; parameterized SQL; SeaORM PostgreSQL; explicit dev schema bootstrap; Docker Compose database; example app and CLI doctor.
+**Included in source:** workspace; macros for `Uuid`, `String`, `i64`, `bool` and `Option` of those types except a nullable `id`; typed create and update DTOs; `PatchField`; trimmed string validation; Boolean defaults rendered per dialect; generated list, read-by-UUID, create, patch and delete; SeaQuery SQL for SQLite and PostgreSQL; versioned migrations for create-table, safe add-column, and explicit destructive drops; SQLite migration and HTTP tests in `cargo test --workspace`; optional Docker Compose PostgreSQL; example app and CLI.
 
-**Not included:** real schema-diff migrations; relationships; admin UI; auth; RBAC; OpenAPI; pagination beyond an explicit 100-row limit with `truncated` indication; sorting/filter UI; optimistic version columns; PostgreSQL integration tests in default CI (optional local test is provided and was not executed successfully on a machine without PostgreSQL); Dockerfile for the API; multi-database support. Do not assume otherwise.
+**Not included:** column rename, table rebuild, `migrate down`, migration baseline for an existing bootstrap database, relationships, admin UI, auth, RBAC, OpenAPI, pagination beyond 100 rows, optimistic version columns, `DateTime` or JSON columns, unique or index metadata, MySQL, and a Dockerfile for the API. The ignored PostgreSQL tests are not part of the default run. Do not assume otherwise.
 
 ## Development checks
 
@@ -114,33 +126,26 @@ GET requests return `{ "data": [...], "limit": 100, "truncated": false }`.
 
 `#[field(required)]` on a String rejects blank/whitespace-only text, and length
 constraints count trimmed Unicode characters. Boolean defaults are persisted
-in SQL DDL, but `CREATE TABLE IF NOT EXISTS` **does not update old tables**.
-If you bootstrapped a table before this change, recreate it **only in disposable
-local development databases** to get the new `DEFAULT TRUE` constraint.
+in SQL DDL. PostgreSQL stores them as boolean defaults. SQLite stores them as integer `1` or `0`. `CREATE TABLE IF NOT EXISTS` **does not update old tables**.
 
-## Optional PostgreSQL integration test
+## Databases
 
-Start PostgreSQL with `docker compose up -d db`, then run this command in the
-workspace root (Linux/macOS):
+| Backend | How to select it | Role |
+|---|---|---|
+| SQLite file | leave `DATABASE_URL` unset | default local development |
+| SQLite memory | `sqlite::memory:` | tests; Ferrum uses one pooled connection |
+| PostgreSQL | `DATABASE_URL=postgres://...` | supported server backend |
 
-```bash
-DATABASE_URL=postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum cargo test -p myshop --test postgres_api -- --ignored --nocapture
-```
-
-PowerShell:
+Optional PostgreSQL, after a server is actually running:
 
 ```powershell
-$env:DATABASE_URL="postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum"; cargo test -p myshop --test postgres_api -- --ignored --nocapture
+docker compose up -d db
+$env:DATABASE_URL="postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum"
+cargo test -p myshop --test postgres_api -- --ignored --nocapture
 ```
 
-The ignored integration test **requires `DATABASE_URL`** (and fails if unset); it **drops its own fixed test table**
-`ferrum_v01_integration_products`; use only a disposable development database.
-It checks HTTP POST/GET, UUID/values, failed validation, the optional Boolean
-default, and the 100-record truncation indicator. Normal CI does not run it.
+The ignored test **requires `DATABASE_URL`** and drops its fixed test tables. Use only a disposable database. `cargo test --workspace` already runs the same HTTP flow against SQLite memory and does not need this step.
 
-`ferrum doctor` currently prints setup hints only; it is **not** a diagnostic.
-`.env.example` is documentation and is not loaded automatically.
+`ferrum doctor` prints setup hints only. `.env.example` is not loaded automatically.
 
-### Update-Hinweis für bestehende Cursor-Projekte
-
-Vor dem Überschreiben lokale Änderungen sichern, insbesondere `crates/ferrum-api/src/lib.rs` und `Cargo.lock`. Dieses Archiv enthält kein `Cargo.lock`; die vorhandene lokale Datei beibehalten. `target/` nicht ersetzen. Danach `cargo fmt --all`, Clippy und die Tests ausführen.
+`FerrumModel::schema_sql` now takes `DatabaseKind` and returns `String`. Callers of the old `schema_sql() -> &'static str` must pass the backend.

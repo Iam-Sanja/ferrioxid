@@ -1,0 +1,18 @@
+[package]
+name = "ferrum-migrations"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferrum-core = { path = "../ferrum-core" }
+ferrum-db = { path = "../ferrum-db" }
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+
+[dev-dependencies]
+sea-orm.workspace = true

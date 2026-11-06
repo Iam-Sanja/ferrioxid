@@ -1,0 +1,81 @@
+{
+  "format_version": 1,
+  "id": "0001_initial",
+  "name": "initial",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": []
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "products",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "price_cents",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "create_table",
+      "table": {
+        "name": "products",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "price_cents",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          }
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "06393cd03c3d2afb2e4fbe111d0cf8430caf2ef0eaeda3c503d21edaf3f7a026"
+}

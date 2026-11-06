@@ -1,26 +1,36 @@
 # Konfiguration und Laufzeitumgebung
 
-[Zur Übersicht](index.md) · **IST:** `examples/myshop/src/main.rs`, `.env.example`, `compose.yaml`.
+[Zur Übersicht](index.md) · **IST:** `examples/myshop/src/main.rs`, `crates/ferrum-db/src/lib.rs`, `.env.example`, `compose.yaml`.
 
 ## Tatsächliche Variablen (IST)
 
 | Name | Einleser | Default | Verwendung |
 |---|---|---|---|
-| `DATABASE_URL` | `myshop/src/main.rs` | `postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum` | DB-Verbindung |
+| `DATABASE_URL` | `myshop/src/main.rs` | `sqlite://db.sqlite3?mode=rwc` | Verbindung. Der Dateipfad ist relativ zum Arbeitsverzeichnis. |
 | `BIND_ADDRESS` | `myshop/src/main.rs` | `127.0.0.1:3000` | TCP-Listener |
-| `POSTGRES_PASSWORD` | Docker Compose | `ferrum_dev_only` | Postgres-Container |
+| `POSTGRES_PASSWORD` | Docker Compose | `ferrum_dev_only` | Nur der optionale Postgres-Container |
+| `RUST_LOG` | Tracing-Subscriber über die Umgebungsfilter-Voreinstellung `info` | `info` in `.env.example` | Log-Niveau, wenn der Prozess es exportiert sieht |
 
-`.env.example` wird nicht automatisch eingelesen. Umgebungswerte müssen tatsächlich exportiert werden. Das Beispielpasswort ist **nur** für lokale Entwicklung bestimmt. `DATABASE_URL` samt Passwort niemals vollständig protokollieren.
+`.env.example` wird nicht automatisch geladen. Werte müssen in der Shell gesetzt sein. Eine gesetzte `DATABASE_URL` ersetzt SQLite:
 
-## SOLL: Konfigurationsschema
+```text
+DATABASE_URL=postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum
+```
 
-- Zentraler, typisierter `FerrumConfig` (server, database, logs, security, admin).
-- Reihenfolge der Quellen ausdrücklich definieren (z. B. Defaults → Datei → Env → CLI).
-- Produktion: fehlende Secrets als Startfehler statt Demo-Defaults.
-- Fehlkonfiguration mit Feldname, nicht mit Geheimnisinhalt melden.
-- Profile `development`/`production` nicht implizit anhand bloßer Bind-Adresse erraten.
-- Pro Wert dokumentieren: Typ, Default, Pflicht ab welcher Phase, Sicherheitswirkung, Beispiel.
+Tests können `sqlite::memory:` verwenden. Diese URL erzeugt eine private Speicherdatenbank. `connect` setzt für jede `sqlite:`-URL `max_connections(1)` und `PRAGMA foreign_keys=ON`. Dadurch bleiben Bootstrap, Repository und HTTP-Handler auf derselben Verbindung. Das Beispielpasswort gilt nur für lokale PostgreSQL-Entwicklung. `DATABASE_URL` niemals vollständig protokollieren.
+
+Die SQLite-Datei `db.sqlite3` sowie Journal-, WAL- und SHM-Dateien sind von Git ausgeschlossen. Wer myshop aus einem anderen Arbeitsverzeichnis startet, erhält eine andere Datei.
+
+`ferrum.toml` ist keine Geheimnisdatei. Sie nennt `migrations_dir` und `schema_command`. Die CLI startet diesen Befehl im Verzeichnis der TOML-Datei und liest das Schema von stdout. `DATABASE_URL` bleibt die einzige Verbindungszeichenkette und wird von `migrate status` nicht gedruckt.
+
+## Nicht implementiert (SOLL)
+
+- Zentraler typisierter `FerrumConfig`.
+- Feste Quellenreihenfolge aus Defaults, Datei, Umgebung und CLI.
+- Produktionsstart, der fehlende Secrets ablehnt.
+- Profile `development` und `production`.
+- Einstellbare Pool-Größe, Timeouts und Read-Replicas.
 
 ## Abnahme
 
-Test für Localhost-Default; Test für ungültige Bind-Adresse; keine API-Bind-Adresse mit `0.0.0.0` als produktionssicher ausgeben. Vergleiche [deployment.md](deployment.md) und [security.md](security.md).
+Der Localhost-Default bleibt `127.0.0.1:3000`. `0.0.0.0` ist keine produktionsreife Bind-Adresse. Vergleiche [deployment.md](deployment.md) und [security.md](security.md).

@@ -1,40 +1,56 @@
 # Deployment und Betrieb
 
-[Zur Übersicht](index.md) · **IST:** nur Docker Compose für PostgreSQL; **SOLL:** App-Container/Reverse-Proxy-Konzept.
+[Zur Übersicht](index.md) · **IST:** lokaler Prozess mit SQLite. Docker ist optional und startet nur PostgreSQL. **SOLL:** App-Container und Reverse Proxy.
 
-## Entwicklung (IST)
+## Lokale Entwicklung (IST)
 
-`compose.yaml` startet `postgres:16-alpine` mit Datenbank, User, Volume und `pg_isready`-Healthcheck. Portfreigabe ist auf `127.0.0.1:5432:5432` beschränkt. Das Projekt stellt **keinen** Dockerfile für den Ferrum-API-Server bereit.
+SQLite ist die Standarddatenbank. Rust und Cargo reichen aus. Docker und PostgreSQL müssen nicht installiert sein.
 
-```bash
-docker compose up -d db
+```powershell
 cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-Die Beispielanwendung läuft direkt auf dem Host und bindet standardmäßig an `127.0.0.1:3000`. Jede abweichende `BIND_ADDRESS`, insbesondere `0.0.0.0:3000`, kann einen Dienst auf zusätzlichen Netzwerken exponieren. Mit dem anonymen Demo-Modell ist das **nicht** für ein Internetdeployment geeignet.
+Der Server startet ohne automatische Migration. Zuerst `ferrum migrate up` ausführen. `myshop --bootstrap` ändert die Datei nicht. Die Datei `db.sqlite3` liegt im Arbeitsverzeichnis. Eine ältere Bootstrap-Datei ohne `_ferrum_migrations` wird nicht übernommen und nicht gelöscht.
 
-## SOLL: Produktionsarchitektur
+Eine abweichende `BIND_ADDRESS`, insbesondere `0.0.0.0:3000`, kann den Dienst auf weiteren Netzwerken erreichbar machen. Mit dem anonymen Demo-Modell ist das kein Internetdeployment.
+
+## Optionales PostgreSQL (IST)
+
+`compose.yaml` startet `postgres:16-alpine` mit Datenbank, User, Volume und `pg_isready`. Der Port ist auf `127.0.0.1:5432:5432` beschränkt. Das Repository enthält kein Dockerfile für den API-Server.
+
+```powershell
+docker compose up -d db
+$env:DATABASE_URL="postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum"
+cargo run -p myshop -- --bootstrap
+cargo run -p myshop
+```
+
+Dieselbe registrierte Anwendung spricht danach PostgreSQL. Die Handler bleiben unverändert. Docker ist ein optionales Werkzeug für diesen Server, nicht die Voraussetzung für Ferrum.
+
+## Produktionsarchitektur (SOLL, nicht implementiert)
 
 ```text
 TLS-Client → Reverse Proxy → Ferrum-App → PostgreSQL
                                   └→ Log-/Metrics-Ziel
 ```
 
-1. Multi-Stage-Dockerfile: Rust-Build und schlankes Runtime-Image mit Non-Root-User.
-2. Ein `ferrum`-App-Container, PostgreSQL nach Möglichkeit separat verwaltet.
-3. Readiness-Endpoint mit Datenbankcheck; `/healthz` ist derzeit nur Prozess-Liveness.
-4. Graceful Shutdown und sinnvolle Timeouts/Connection-Limits.
-5. Forwarded-Header nur von konfigurierten Trusted Proxies auswerten.
-6. HTTPS am Proxy; sichere Session-Cookies und CSRF-Schutz erst mit implementiertem Auth-System.
-7. Secrets über Orchestrator/Environment, nie im Image oder Repo.
-8. Migrationen als gesonderten Review-/Deploy-Schritt, niemals blind beim Start.
-9. Kein produktives `allow_anonymous=true` für CRUD ohne explizites Security-Review.
+1. Multi-Stage-Image mit Non-Root-User.
+2. Ein App-Container und ein getrennt verwaltetes PostgreSQL.
+3. Readiness inklusive Datenbank. `/healthz` prüft derzeit nur, dass der Prozess antwortet.
+4. Graceful Shutdown, Timeouts und einstellbare Connection-Limits.
+5. Forwarded-Header nur von vertrauenswürdigen Proxies.
+6. HTTPS am Proxy. Sessions und CSRF erst zusammen mit Authentifizierung.
+7. Secrets über die Einsatzumgebung, nicht im Image oder Repository.
+8. Schemaänderungen bleiben ein eigener Schritt über `ferrum migrate up`, nicht beim Prozessstart. `down`, Rename und Tabellen-Neubau sind nicht Teil dieses Schritts.
+9. Kein produktives `allow_anonymous=true` ohne Sicherheitsreview.
 
-## Docker + Portainer / Nginx Proxy Manager (SOLL)
+SQLite kann lokale Entwicklung und Tests tragen. Für mehrere App-Prozesse ist es nicht die vorgesehene Produktionsdatenbank: der Pool hat eine Verbindung, und Schreibzugriffe serialisieren sich über die Datei. PostgreSQL bleibt dafür das unterstützte Server-Backend, sobald es betrieben wird.
 
-Dokumentiere später ein nachvollziehbares Compose-Setup, bei dem die App nur in einem internen Docker-Netz erreichbar ist und Nginx Proxy Manager auf den Containernamen leitet. NPM-TLS, Proxy-Header, Websocket-Konfiguration (falls benötigt) und vertrauenswürdige Netzwerke als eigene Optionen dokumentieren. Diese Anleitung ist **kein** Hinweis darauf, dass eine solche Konfiguration bereits im Repository implementiert wurde.
+## Docker, Portainer und Nginx Proxy Manager (SOLL)
 
-## Abnahmekriterien
+Ein internes Compose-Netz und Nginx Proxy Manager sind nicht implementiert. Eine spätere Anleitung muss TLS, Proxy-Header und die beabsichtigte Erreichbarkeit einzeln beschreiben.
 
-Image startet mit gültiger Konfiguration, stoppt sauber, Healthcheck erkennt Ausfälle, API ohne Auth bleibt nicht öffentlich, Secrets sind nicht im Log, Migrationen werden separat freigegeben und ein Netzwerktest bestätigt die beabsichtigte Exposition.
+## Abnahme
+
+Der lokale SQLite-Start braucht keinen Datenbankserver. Ein optionales PostgreSQL-Setup bleibt auf localhost beschränkt. Secrets erscheinen nicht im Log. Es gibt keinen App-Container und keine automatische Migration.

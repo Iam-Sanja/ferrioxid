@@ -1,10 +1,11 @@
-//! Optional end-to-end test against a disposable local PostgreSQL database.
-//! Run: cargo test -p myshop --test postgres_api -- --ignored --nocapture
+//! HTTP coverage for SQLite, plus an ignored PostgreSQL run.
+//! SQLite: cargo test -p myshop --test postgres_api sqlite_http_roundtrip
+//! PostgreSQL: cargo test -p myshop --test postgres_api -- --ignored
 
 use ferrum::db::ModelRepository;
 use ferrum::prelude::*;
 use std::io::{Read, Write};
-use std::net::{Shutdown, TcpStream};
+use std::net::TcpStream;
 
 #[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize, Debug)]
 #[ferrum(
@@ -89,6 +90,25 @@ fn http_request(
     )
 }
 
+fn http_message_complete(response: &[u8]) -> bool {
+    let Some(header_end) = response.windows(4).position(|bytes| bytes == b"\r\n\r\n") else {
+        return false;
+    };
+    let header = String::from_utf8_lossy(&response[..header_end]).to_ascii_lowercase();
+    let body = &response[header_end + 4..];
+    if header.contains("transfer-encoding: chunked") {
+        return body.windows(5).any(|bytes| bytes == b"0\r\n\r\n");
+    }
+    let length = header
+        .lines()
+        .find_map(|line| line.strip_prefix("content-length:"))
+        .and_then(|value| value.trim().parse::<usize>().ok());
+    match length {
+        Some(length) => body.len() >= length,
+        None => true,
+    }
+}
+
 fn http_exchange(port: u16, method: &str, path: &str, body: Option<&str>) -> (u16, Vec<u8>) {
     let mut stream = TcpStream::connect(("127.0.0.1", port)).expect("connect to test API");
     stream
@@ -102,17 +122,34 @@ fn http_exchange(port: u16, method: &str, path: &str, body: Option<&str>) -> (u1
     stream
         .write_all(request.as_bytes())
         .expect("write HTTP request");
-    stream
-        .shutdown(Shutdown::Write)
-        .expect("finish HTTP request");
+    // Do not half-close the socket. On Windows that drops the response.
     let mut response = Vec::new();
-    stream
-        .read_to_end(&mut response)
-        .expect("read HTTP response");
+    let mut buffer = [0_u8; 4096];
+    loop {
+        match stream.read(&mut buffer) {
+            Ok(0) => break,
+            Ok(count) => {
+                response.extend_from_slice(&buffer[..count]);
+                if http_message_complete(&response) {
+                    break;
+                }
+            }
+            Err(error)
+                if error.kind() == std::io::ErrorKind::WouldBlock
+                    || error.kind() == std::io::ErrorKind::TimedOut =>
+            {
+                if http_message_complete(&response) {
+                    break;
+                }
+                panic!("timed out reading HTTP response: {error}");
+            }
+            Err(error) => panic!("read HTTP response: {error}"),
+        }
+    }
     let header_end = response
         .windows(4)
         .position(|x| x == b"\r\n\r\n")
-        .expect("HTTP headers");
+        .unwrap_or_else(|| panic!("HTTP headers in {:?}", String::from_utf8_lossy(&response)));
     let header = std::str::from_utf8(&response[..header_end]).expect("valid HTTP headers");
     let status: u16 = header.split_whitespace().nth(1).unwrap().parse().unwrap();
     let body = &response[header_end + 4..];
@@ -148,30 +185,51 @@ fn http_exchange(port: u16, method: &str, path: &str, body: Option<&str>) -> (u1
 }
 
 #[tokio::test]
+async fn sqlite_http_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
+    run_http_roundtrip("sqlite::memory:").await
+}
+
+#[tokio::test]
 #[ignore = "requires DATABASE_URL and a running local PostgreSQL database"]
 async fn postgres_http_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
     let url = std::env::var("DATABASE_URL")
         .expect("DATABASE_URL must be set to run the ignored PostgreSQL integration test");
-    let db = ferrum::db::connect(&url).await?;
+    run_http_roundtrip(&url).await
+}
+
+async fn run_http_roundtrip(url: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let db = ferrum::db::connect(url).await?;
+    if url.starts_with("sqlite:") {
+        use ferrum::sea_orm::ConnectionTrait;
+        let row = db
+            .query_one(ferrum::sea_orm::Statement::from_string(
+                db.get_database_backend(),
+                "PRAGMA foreign_keys",
+            ))
+            .await?
+            .expect("pragma row");
+        let enabled: i32 = row.try_get("", "foreign_keys")?;
+        assert_eq!(enabled, 1);
+    }
     // Dedicated test table. This test must run against a disposable development database.
     use ferrum::sea_orm::ConnectionTrait;
     db.execute(ferrum::sea_orm::Statement::from_string(
-        ferrum::sea_orm::DbBackend::Postgres,
+        db.get_database_backend(),
         "DROP TABLE IF EXISTS \"ferrum_v01_integration_products\"",
     ))
     .await?;
     db.execute(ferrum::sea_orm::Statement::from_string(
-        ferrum::sea_orm::DbBackend::Postgres,
+        db.get_database_backend(),
         "DROP TABLE IF EXISTS \"ferrum_v01_required_only\"",
     ))
     .await?;
     db.execute(ferrum::sea_orm::Statement::from_string(
-        ferrum::sea_orm::DbBackend::Postgres,
+        db.get_database_backend(),
         "DROP TABLE IF EXISTS \"ferrum_v01_private_products\"",
     ))
     .await?;
     db.execute(ferrum::sea_orm::Statement::from_string(
-        ferrum::sea_orm::DbBackend::Postgres,
+        db.get_database_backend(),
         "DROP TABLE IF EXISTS \"ferrum_v01_notes\"",
     ))
     .await?;
@@ -442,32 +500,52 @@ async fn postgres_http_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
 
     server.abort();
     db.execute(ferrum::sea_orm::Statement::from_string(
-        ferrum::sea_orm::DbBackend::Postgres,
+        db.get_database_backend(),
         "DROP TABLE IF EXISTS \"ferrum_v01_required_only\"",
     ))
     .await?;
     db.execute(ferrum::sea_orm::Statement::from_string(
-        ferrum::sea_orm::DbBackend::Postgres,
+        db.get_database_backend(),
         "DROP TABLE IF EXISTS \"ferrum_v01_integration_products\"",
     ))
     .await?;
     db.execute(ferrum::sea_orm::Statement::from_string(
-        ferrum::sea_orm::DbBackend::Postgres,
+        db.get_database_backend(),
         "DROP TABLE IF EXISTS \"ferrum_v01_private_products\"",
     ))
     .await?;
     db.execute(ferrum::sea_orm::Statement::from_string(
-        ferrum::sea_orm::DbBackend::Postgres,
+        db.get_database_backend(),
         "DROP TABLE IF EXISTS \"ferrum_v01_notes\"",
     ))
     .await?;
     Ok(())
 }
 
+fn column_definition(sql: &str, column: &str) -> String {
+    let lower = sql.to_ascii_lowercase();
+    let marker = format!("\"{column}\"");
+    let start = lower
+        .find(&marker)
+        .unwrap_or_else(|| panic!("missing {column} in {sql}"));
+    let after = &lower[start..];
+    let end = after.find([',', ')']).unwrap_or(after.len());
+    after[..end].to_owned()
+}
+
 #[test]
 fn boolean_default_is_emitted_into_postgres_schema() {
-    let sql = <TestProduct as ferrum::core::FerrumModel>::schema_sql();
-    assert!(sql.contains("\"active\" BOOLEAN NOT NULL DEFAULT TRUE"));
+    let sql = <TestProduct as ferrum::core::FerrumModel>::schema_sql(
+        ferrum::core::DatabaseKind::Postgres,
+    );
+    let active = column_definition(&sql, "active");
+    assert!(active.contains("not null"), "{active}");
+    assert!(active.contains("true"), "{active}");
+    let sqlite =
+        <TestProduct as ferrum::core::FerrumModel>::schema_sql(ferrum::core::DatabaseKind::Sqlite);
+    let sqlite_active = column_definition(&sqlite, "active");
+    assert!(sqlite_active.contains("integer"), "{sqlite_active}");
+    assert!(sqlite_active.contains("default 1"), "{sqlite_active}");
 }
 
 #[test]
@@ -500,9 +578,11 @@ fn patch_dto_distinguishes_missing_null_value_and_rejects_readonly_fields() {
     assert_eq!(note.title, PatchField::Missing);
     let valued: NoteItemUpdate = serde_json::from_str(r#"{"note":"hello"}"#).unwrap();
     assert_eq!(valued.note, PatchField::Value("hello".to_owned()));
-    let sql = <NoteItem as ferrum::core::FerrumModel>::schema_sql();
-    assert!(sql.contains("\"note\" TEXT"));
-    assert!(!sql.contains("\"note\" TEXT NOT NULL"));
+    let sql =
+        <NoteItem as ferrum::core::FerrumModel>::schema_sql(ferrum::core::DatabaseKind::Postgres);
+    let note = column_definition(&sql, "note");
+    assert!(note.contains("text"), "{note}");
+    assert!(!note.contains("not null"), "{note}");
 
     let locked: LockedItemUpdate = serde_json::from_str(r#"{"name":"ok"}"#).unwrap();
     assert_eq!(locked.name, PatchField::Value("ok".to_owned()));

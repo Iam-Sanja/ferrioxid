@@ -1,13 +1,13 @@
-# ferrum-db – Typisierte Repository-Grenze und PostgreSQL
+# ferrum-db – Eine Repository-Schicht für SQLite und PostgreSQL
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-db/src/lib.rs`. Makro-Repository-Implementierung liegt in `crates/ferrum-macros/src/lib.rs`.
+[Zur Übersicht](index.md) · **IST-Dateien:** `crates/ferrum-db/src/lib.rs`, `crates/ferrum-db/src/sql.rs`. Die Repository-Implementierung erzeugt `crates/ferrum-macros/src/lib.rs`.
 
 ## Verantwortung (IST)
 
-- `connect(url: &str)` ruft `sea_orm::Database::connect(url).await` auf.
-- `ModelRepository` beschreibt typisierte `list`-, `get`-, `create`-, `update`- und `delete`-Operationen.
-- `ListPage<T>` beschreibt die Listenantwort als generischen Rust-Typ.
-- Die Makro-Crate implementiert das Trait für jedes Model.
+- `connect(url)` öffnet SeaORM. URLs mit `sqlite:` setzen den Pool auf eine Verbindung und aktivieren `PRAGMA foreign_keys=ON`.
+- Ohne gesetzte `DATABASE_URL` verwendet myshop `DEFAULT_SQLITE_URL`: `sqlite://db.sqlite3?mode=rwc`. Der Pfad ist relativ zum Arbeitsverzeichnis des Prozesses.
+- `ModelRepository` bleibt die öffentliche Grenze für `list`, `get`, `create`, `update` und `delete`. Handler kennen den Dialekt nicht.
+- Es gibt eine Abfrageimplementierung. SeaQuery rendert SQLite oder PostgreSQL. MySQL wird abgelehnt.
 
 ```rust
 #[async_trait::async_trait]
@@ -22,57 +22,70 @@ pub trait ModelRepository: FerrumModel + Serialize + DeserializeOwned {
 }
 ```
 
-`ListPage<T>` enthält `data: Vec<T>`, `limit: usize`, `truncated: bool`. `DeleteOutcome` ist `Deleted` oder `Missing`. `get` bleibt `Option`, die API macht daraus 404. `update` liefert das Model oder `FerrumError::NotFound`. Öffentliche Grenzen verwenden kein `serde_json::Value`.
+`ListPage<T>` enthält `data: Vec<T>`, `limit: usize`, `truncated: bool`. `DeleteOutcome` ist `Deleted` oder `Missing`. Öffentliche Methoden liefern das Model, kein `serde_json::Value`. Die JSON-Abbildung bleibt innerhalb von `ferrum-db`.
+
+## Dialekt und Typen (IST)
+
+`DatabaseKind` ist `Sqlite` oder `Postgres`. `ColumnSpec` beschreibt Name, `ColumnKind`, Nullbarkeit, Primärschlüssel und ein optionales Bool-Default. Das Makro legt diese Metadaten fest. `render_schema` baut daraus `CREATE TABLE IF NOT EXISTS`.
+
+| Modelltyp | PostgreSQL | SQLite | JSON-API |
+|---|---|---|---|
+| `Uuid` | `uuid` | `text` | String |
+| `String` | `text` | `text` | String |
+| `i64` | `bigint` | `bigint` | Zahl |
+| `bool` | `bool`, Default `TRUE`/`FALSE` | `integer`, Default `1`/`0` | `true`/`false` |
+| `Option<T>` | Spalte ohne `NOT NULL` | Spalte ohne `NOT NULL` | Wert oder `null` |
+
+`DateTime`, `Decimal`, JSON-Spalten und Fremdschlüsselbeziehungen sind nicht implementiert. SeaQuery bestimmt die genaue Schreibweise der Schlüsselwörter. Der Vertrag ist das Typ-Mapping, nicht eine feste DDL-Zeichenkette.
+
+Parameter kommen von SeaQuery: PostgreSQL `$1`, `$2`, SQLite `?`. Bezeichner stammen nur aus geprüften Makroattributen und werden gequotet. Rückgaben von Insert und Update nutzen `RETURNING`. Die gebündelte SQLite-Bibliothek von sqlx unterstützt das. Zeilen werden spaltenweise gelesen und danach in das Model deserialisiert. Ein leeres PATCH führt kein Update aus, sondern liest die Zeile. Ein nicht leeres PATCH schreibt nur geänderte Spalten.
 
 ## Abfrageverhalten (IST)
 
 ### Create
 
-1. DTO aus HTTP-Payload oder direktem Rust-Aufruf.
-2. Generierte `required`/Längen-/`min`-Prüfung.
-3. UUID mit `Uuid::new_v4()` erstellen.
-4. `Statement::from_sql_and_values(DbBackend::Postgres, insert_sql, values)` erzeugen.
-5. `INSERT ... RETURNING to_jsonb(...) AS record`.
-6. Rückgabe von `to_jsonb` intern zu `Self` deserialisieren; Fehler als `FerrumError::Database`.
+1. DTO aus HTTP oder direktem Rust-Aufruf.
+2. Generierte `required`-, Längen- und `min`-Prüfung.
+3. UUID mit `Uuid::new_v4()`.
+4. SeaQuery-`INSERT` mit gebundenen Werten und `RETURNING`.
+5. Interne Deserialisierung zum Model. Fehler werden `FerrumError::Database`.
 
 ### Update
 
-1. `PatchField` auswerten: `Missing` lässt die Spalte stehen, `Null` setzt nur bei nullable Spalten SQL `NULL`, `Value` validiert und schreibt den Originalwert.
-2. Eine einzelne `UPDATE ... SET "spalte" = CASE WHEN $n::boolean THEN $m::<typ> ELSE "spalte" END WHERE "id" = $id RETURNING to_jsonb(...)`.
-3. Keine Zeile ergibt `NotFound`. PostgreSQL sperrt die betroffene Zeile für die Dauer der Anweisung. Ohne Versionsfeld gewinnt die zuletzt festgeschriebene Anweisung.
+1. `PatchField::Missing` lässt die Spalte unverändert.
+2. `PatchField::Null` ist bei `NOT NULL` ein Validierungsfehler und schreibt bei nullable Spalten SQL `NULL`.
+3. `PatchField::Value` prüft und speichert den Originalwert.
+4. Keine geänderte Spalte: `get`. Sonst ein `UPDATE ... WHERE "id" = ... RETURNING`.
+5. Keine Zeile ergibt `NotFound`. Es gibt kein Versionsfeld. Die zuletzt festgeschriebene Anweisung gewinnt.
 
-### Delete
+### Delete, Get, List
 
-`DELETE FROM "tabelle" WHERE "id" = $1`. `rows_affected() == 0` wird `DeleteOutcome::Missing`, sonst `Deleted`. Es gibt keine Löschung ohne diese WHERE-Bedingung.
+`DELETE` filtert ausschließlich über die gebundene UUID. `rows_affected() == 0` wird `Missing`. `get` liefert `Ok(None)`, wenn keine Zeile existiert. `list` sortiert nach `"id"` und liest 101 Zeilen. Die Antwort enthält höchstens 100 Objekte. `truncated` ist wahr, wenn mehr Zeilen vorhanden waren. Die UUID-Reihenfolge ist nicht die Erstellungszeit. Es gibt keine Pagination.
 
-### List
+## Einrichtung
 
-- `ORDER BY "id" LIMIT 101`.
-- Maximal 100 Objekte zurückgeben; bei 101 Zeilen `truncated = true`.
-- Keine Pagination und kein garantierter Snapshot zwischen konkurrierenden Änderungen.
-- UUID-Sortierung ist stabil, aber nicht automatisch Erstellungszeitreihenfolge.
+SQLite ist der lokale Standard. Eine Installation und Docker sind dafür nicht nötig. sqlx bringt SQLite mit. Schemaänderungen für Anwendungen laufen über [migrations.md](migrations.md). `render_schema` bleibt der Legacy-Bootstrap mit `IF NOT EXISTS` für leere Testdatenbanken. Migrationen verwenden `CREATE TABLE` ohne `IF NOT EXISTS`.
 
-### Sicherheit
+```text
+sqlite://db.sqlite3?mode=rwc
+sqlite::memory:
+postgres://user:password@localhost:5432/ferrum
+```
 
-Bezeichner (Tabellen-/Spaltennamen) sind beim Kompilieren validiert und werden gequotet, Client-Werte werden parameterisiert. Keine SQL-Fragmente aus HTTP-Parametern zusammensetzen. Secrets der `DATABASE_URL` nicht loggen.
+`sqlite::memory:` ist eine eigene Datenbank je Verbindung. Ferrum begrenzt SQLite-Pools auf eine Verbindung, damit Tests und die Anwendung dieselbe Datenbank sehen. Die Datei `db.sqlite3` entsteht im Arbeitsverzeichnis und ist in `.gitignore` enthalten. PostgreSQL bleibt ein unterstütztes Backend und wird über `DATABASE_URL` gewählt. `compose.yaml` kann den Server optional starten. Bootstrap führt nur `CREATE TABLE IF NOT EXISTS` aus, löscht vorhandene Zeilen nicht und ändert bestehende Tabellen nicht. Das ist keine Migrations-Engine.
 
-## SOLL: Entkopplung und Transaktionen
+## Fehler und Sicherheit (IST)
 
-1. Connection-Konfiguration mit Pool-Limits und Timeout als explizite Options.
-2. Eine Modelschema-Repräsentation ohne direkt eingebettete SQL-Texte.
-3. Transaktionskontext für zusammenhängende Operationen; keine stillen globalen Transaktionen.
-4. Beziehungen erst nach festgelegter FK- und Loading-Semantik.
-5. Fehler- und Constraint-Mapping: Unique-Verletzung → definierter Anwendungscode, ohne sensible SQL-Details.
-6. Gezielt indexierte Abfragen; keine unlimitierte Collection-API.
+SQL- und Deserialisierungsfehler werden `FerrumError::Database`. Die HTTP-Schicht antwortet mit 500 und einem generischen Text. Das Datenbankdetail geht ins Tracing-Log, nicht in die Antwort. `DATABASE_URL` wird nicht protokolliert. Ungültige Modelleingaben bleiben 422, fehlende Zeilen 404, nicht freigegebene Routen 403. SQLite-Fremdschlüssel sind eingeschaltet. Aktuelle Modelle erzeugen noch keine Fremdschlüsselspalten. SQLite prüft Typen schwächer als PostgreSQL. Ferrum prüft die unterstützten Werte vor dem Schreiben in Rust. Das ersetzt keine Datenbank-Constraints für künftige direkte SQL-Zugriffe.
+
+## Nicht implementiert (SOLL)
+
+- `migrate down`, Rename, Tabellen-Neubau und eine Transaktions-API für mehrere Modelle außerhalb einer einzelnen Migration. Die sichere Migrationsausführung ist in [migrations.md](migrations.md) beschrieben.
+- Abbildung von Unique- und Constraint-Verletzungen auf eigene Fehlercodes.
+- `DateTime`, JSON-Spalten, Beziehungen, MySQL.
+- Pool-Größen und Timeouts als Anwendungskonfiguration außer dem festen SQLite-Limit von einer Verbindung.
+- Optimistisches Sperren.
 
 ## Tests
 
-- IST: Der optionale End-to-End-Test prüft Create, Read, PATCH, DELETE, 403 und Nullable-Felder gegen PostgreSQL. Ohne laufende Datenbank ist er ignoriert und kein Erfolgsnachweis.
-- SOLL: Race Conditions, Constraint-Fehler, Transaktionen, Pool-Timeouts und temporäre Datenbankausfälle abdecken.
-- Keine vermeintlichen CI-Postgres-Tests behaupten: `.github/workflows/rust.yml` startet aktuell keinen DB-Service.
-
-Siehe [migrations.md](migrations.md) und [testing.md](testing.md).
-
-## Einzelabruf
-
-`ModelRepository::get` erzeugt `SELECT to_jsonb(t) AS record FROM "<tabelle>" t WHERE "id" = $1` und bindet die UUID. Keine Zeile ergibt `Ok(None)`. Die HTTP-Schicht macht daraus 404. SQL- oder JSON-Fehler bleiben `FerrumError::Database`.
+`cargo test --workspace` führt `sqlite_http_roundtrip` gegen `sqlite::memory:` aus. Der Test verändert `db.sqlite3` nicht. `postgres_http_roundtrip` bleibt `#[ignore]` und verlangt eine gesetzte `DATABASE_URL`. Ohne laufenden PostgreSQL-Server ist er kein Erfolgsnachweis. Die CI startet keinen Datenbankserver. Siehe [testing.md](testing.md).

@@ -21,7 +21,7 @@ Lies in dieser Reihenfolge `Cargo.toml`, [architecture.md](architecture.md), [co
 2. Öffentliches API-/Datenmodell auf Breaking Changes prüfen.
 3. Kleinste korrekte Implementierung wählen.
 4. Tests für Positiv-, Negativ- und Sicherheitsfall ergänzen.
-5. `cargo fmt --all --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, ggf. DB-Test ausführen.
+5. `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` und `cargo build --workspace` ausführen. Der SQLite-HTTP-Test gehört zu `cargo test`. PostgreSQL nur mit laufendem Server und `--ignored` prüfen.
 6. Jedes ausgeführte Kommando mit Ergebnis dokumentieren; fehlende Tools oder DB offen benennen.
 7. Betroffene Dokumentationsseiten in IST/SOLL aktualisieren und Cross-Links prüfen.
 
@@ -67,4 +67,4 @@ Vorgeschlagene ADR-Themen: Macro ↔ ORM-Strategie; Schema-Format; Zugriffspolic
 
 ## 7. Aktueller Schwerpunkt
 
-Die v0.1-Basis vor neuen Features lokal verifizieren und dokumentieren: `ModelRepository`-Typen, Fehler-JSON, PostgreSQL-Integration, Clippy. Danach geplante Features nur nach expliziter Beauftragung umsetzen; die Roadmap ist keine Freigabe für beliebige Features.
+SQLite ist die lokale Standarddatenbank. PostgreSQL bleibt über `DATABASE_URL` unterstützt. Neue Spaltenabbildungen gehören nach `crates/ferrum-db/src/sql.rs`. Neue Migrationsregeln gehören nach `crates/ferrum-migrations` und müssen unsichere SQLite-Umbauten ablehnen, statt sie halb auszuführen. Authentifizierung, Admin und zusätzliche REST-Funktionen nur nach ausdrücklicher Beauftragung. Die Roadmap ist keine Freigabe.

@@ -6,6 +6,7 @@ pub use ferrum_api::App;
 pub use ferrum_core as core;
 pub use ferrum_db as db;
 pub use ferrum_macros::FerrumModel;
+pub use ferrum_migrations as migrations;
 pub use sea_orm;
 pub use serde;
 pub use serde_json;
