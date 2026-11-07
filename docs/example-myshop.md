@@ -53,4 +53,4 @@ POST antwortet 201 mit UUID und `active: true`. GET antwortet 200 mit `data`, `l
 
 ## Admin
 
-`Product`, `Category` und `InternalNote` tragen `admin = true`. `main.rs` registriert sie in `AdminRegistry`. Öffentliche Produkt- und Kategorierouten bleiben anonym. Interne Notizen bleiben über `notes` geschützt. Die Admin-Oberfläche verlangt Staff und das jeweilige Modellrecht. Nach `npm run build` in `apps/admin-ui` liefert der Server `http://127.0.0.1:3000/admin`. Die Migrationen ändern sich dadurch nicht.
+`Product`, `Category` und `InternalNote` tragen `admin = true`. `main.rs` registriert sie in `AdminRegistry`. Öffentliche Produkt- und Kategorierouten bleiben anonym. Interne Notizen bleiben über `notes` geschützt. Die Admin-Oberfläche verlangt Staff und das jeweilige Modellrecht. Sie liegt unter `http://127.0.0.1:3000/admin` und braucht kein Node.js. Die Migrationen ändern sich dadurch nicht.

@@ -10,7 +10,7 @@
 4. **DDL ohne Server:** `boolean_default_is_emitted_into_postgres_schema` prüft die gerenderte PostgreSQL- und SQLite-Definition von `active`.
 5. **Migrationen:** Snapshot, Diff, SQLite-Kette und `ferrum migrate` gegen eine temporäre Datei laufen in `cargo test --workspace`.
 6. **Formulare, Staticfiles, Speicher und Middleware:** `ferrum-forms`, `ferrum-static`, `ferrum-storage` und `ferrum-middleware` laufen mit SQLite oder ohne Datenbank. PostgreSQL wird dafür nicht gestartet.
-7. **Auth und Admin:** Passwort-, Sitzungs-, CSRF-, Scope- und Asset-Tests in `ferrum-auth`, `examples/myshop/tests/auth.rs` und `examples/myshop/tests/admin_http.rs` nutzen SQLite. Sie sind nicht ignoriert. Frontend-Tests liegen in `apps/admin-ui` und laufen mit `npm test`. Sie prüfen Kataloggleichheit, Formate, Sprachwechsel und abgelehnte Branding-Farben. `ferrum-core` prüft die Fehlercodes. Playwright ist nicht Teil des Workspace-Tests.
+7. **Auth und Admin:** Passwort-, Sitzungs-, CSRF-, Scope- und Asset-Tests in `ferrum-auth`, `examples/myshop/tests/auth.rs`, `examples/myshop/tests/admin_http.rs` und `examples/myshop/tests/admin_html.rs` nutzen SQLite. Sie sind nicht ignoriert. `admin_html` prüft Formulare ohne JavaScript. `ferrum-core` prüft die Fehlercodes. Playwright ist nicht Teil des Workspace-Tests.
 8. **PostgreSQL, optional:** `postgres_http_roundtrip` und `postgres_migration_roundtrip` sind `#[ignore]`. Sie laufen nur mit `--ignored` und gesetzter `DATABASE_URL`.
 9. **Generator:** `crates/ferrum-cli/tests/generator.rs` legt Projekte außerhalb des Workspaces an, prüft `doctor`, `check`, `dev` und `build` und übersetzt beide Vorlagen. `check` darf die Migrationsdatei nicht verändern. Settings- und Vorlagentests liegen in `project.rs` und `pages.rs`.
 
@@ -77,4 +77,4 @@ Ausgeführte Befehle, Exit-Codes und relevante Fehler nennen. Nicht ausgeführte
 
 ## Admin
 
-SQLite: `cargo test -p myshop --test admin_http`. Frontend: in `apps/admin-ui` die Skripte `test`, `typecheck`, `lint` und `build`. `seed_file_database_when_requested` tut ohne `FERRUM_E2E_DATABASE` nichts. PostgreSQL-Admin-Tests gibt es nicht.
+SQLite: `cargo test -p myshop --test admin_http` und `cargo test -p myshop --test admin_html`. `seed_file_database_when_requested` tut ohne `FERRUM_E2E_DATABASE` nichts. PostgreSQL-Admin-Tests gibt es nicht. Ein Browserlauf ist kein Ersatz für diese HTTP-Tests.

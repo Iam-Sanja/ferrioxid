@@ -4,9 +4,7 @@
 
 ## Formate
 
-`formatNumber`, `formatDecimal`, `formatDate`, `formatTime`, `formatDateTime` und `formatCurrency` liegen in `apps/admin-ui/src/i18n/format.ts`. Deutsch nutzt `de-DE`, Englisch `en-US`.
-
-Die Währung kommt aus `branding.currency` und nie aus der Sprache. Der Default ist `EUR`. Felder, deren Name auf `_cents` endet, werden aus der ganzen Cent-Zahl angezeigt. Der API-Wert bleibt diese ganze Zahl. Andere Integer-Felder werden nur als Zahl formatiert. ISO-Texte in Feldern auf `_at` werden als Datum mit Uhrzeit gezeigt.
+Der HTML-Admin formatiert Zahlen in `display_cell`. Deutsch gruppiert mit Punkt, Englisch mit Komma. Felder auf `_cents` werden mit der Projektwährung und zwei Nachkommastellen gezeigt. Der gespeicherte Wert bleibt die ganze Cent-Zahl. Datumswerte aus der Datenbank bleiben der ausgegebene Text. Es gibt keinen `Intl`-Aufruf im Server.
 
 ## Sprache der Startseite
 
@@ -21,8 +19,8 @@ Der Wert wird in den Tera-Kontext als `locale` geschrieben. Er wird nicht an ein
 
 ## CLI
 
-`FERRUM_LOCALE=en` oder `de` überschreibt `default_locale`. Übersetzt sind die Meldungen für erzeugtes Projekt, erzeugtes Modell, Start und Stopp des Entwicklungsservers und der Hinweis auf fehlende Admin-Assets. `ferrum dev` gibt die Zeile `Ferrum lauscht` des generierten Programms unverändert aus. Migrationsstatus, `Angewendet` und `Keine Schemaänderung` bleiben unverändert.
+`FERRUM_LOCALE=en` oder `de` überschreibt `default_locale`. Übersetzt sind die Meldungen für erzeugtes Projekt, erzeugtes Modell und Start und Stopp des Entwicklungsservers. `ferrum dev` gibt die Zeile `Ferrum lauscht` des generierten Programms unverändert aus. Migrationsstatus, `Angewendet` und `Keine Schemaänderung` bleiben unverändert.
 
 ## Tests
 
-`apps/admin-ui/src/admin.test.tsx` vergleicht die Katalogschlüssel, Interpolation, Währung, Datum, den Sprachwechsel und eine abgelehnte Farbe. `crates/ferrum-api/src/pages.rs` prüft den englischen Fallback und eine ungültige Locale.
+`examples/myshop/tests/admin_html.rs` prüft die deutsche Anmeldung, `Accept-Language: en` und den Sprachwechsel auf Englisch. `crates/ferrum-api/src/pages.rs` prüft den englischen Fallback und eine ungültige Locale. Abgelehnte Branding-Farben prüft die Registry in `ferrum-admin`.

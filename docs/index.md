@@ -1,6 +1,6 @@
 # Ferrum – Dokumentationsportal
 
-**Projektstand:** Funktionsstand v0.12. Die Cargo-Version bleibt `0.1.0`. SQLite ist die lokale Standarddatenbank, PostgreSQL das optionale Backend. **Dokumentationssprache:** Deutsch
+**Projektstand:** Funktionsstand v0.13. Die Cargo-Version bleibt `0.1.0`. Der Admin ist serverseitiges HTML: [admin-native.md](admin-native.md). SQLite ist die lokale Standarddatenbank, PostgreSQL das optionale Backend. **Dokumentationssprache:** Deutsch
 
 ## Wie dieses Handbuch zu lesen ist
 
@@ -32,7 +32,7 @@ Jedes Dokument trennt **IST** von **SOLL (Entwurf)**. SOLL bezeichnet eine Archi
 | Staticfiles | IST v0.12 | [staticfiles.md](staticfiles.md) | Projekt-CSS und JavaScript, getrennt vom Admin |
 | Speicher und Uploads | IST v0.12, S3 geplant | [storage.md](storage.md), [uploads.md](uploads.md) | Lokaler Speicher, private Dateien |
 | Middleware | IST v0.12 | [middleware.md](middleware.md), [request-lifecycle.md](request-lifecycle.md) | Request-ID, Log, Limits, Header |
-| Admin | IST v0.11 | [admin.md](admin.md), [admin-backend.md](admin-backend.md), [admin-frontend.md](admin-frontend.md), [admin-security.md](admin-security.md), [admin-components.md](admin-components.md), [admin-directory.md](admin-directory.md), [admin-customization.md](admin-customization.md), [admin-assets.md](admin-assets.md) | Metadaten, API, React-Oberfläche, Verzeichnis, eingebettete Assets |
+| Admin | IST v0.13 | [admin.md](admin.md), [admin-native.md](admin-native.md), [admin-routing.md](admin-routing.md), [admin-templates.md](admin-templates.md), [admin-design-system.md](admin-design-system.md), [admin-backend.md](admin-backend.md), [admin-security.md](admin-security.md), [admin-directory.md](admin-directory.md), [admin-migration-from-react.md](admin-migration-from-react.md) | HTML-Oberfläche, JSON-API, Rechte, Verzeichnis |
 | OpenAPI | **nur SOLL** | [openapi.md](openapi.md) | Dokumentation aus DTOs |
 | Erweiterungen | **nur SOLL** | [extensions.md](extensions.md) | Hooks, Plugin-Grenzen |
 | Deployment | IST SQLite, optionales Docker-PostgreSQL, SOLL App | [deployment.md](deployment.md) | Lokaler Start, Proxy, Produktion |

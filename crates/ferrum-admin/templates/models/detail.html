@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="crumbs"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ list_path }}">{{ model_label }}</a></nav>
+<dl class="card">
+{% for field in fields %}
+<dt>{{ field.label }}{% if field.readonly %} <span class="hint">{{ i18n.readonly }}</span>{% endif %}</dt>
+<dd>{{ field.value }}</dd>
+{% endfor %}
+</dl>
+<div class="actions">
+<a class="button ghost" href="{{ list_path }}">{{ i18n.back }}</a>
+{% if can_update %}<a class="button" href="{{ list_path }}/{{ id }}/edit">{{ i18n.edit }}</a>{% endif %}
+{% if can_delete %}<a class="button danger" href="{{ list_path }}/{{ id }}/delete">{{ i18n.delete }}</a>{% endif %}
+</div>
+{% endblock %}

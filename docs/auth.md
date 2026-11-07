@@ -4,7 +4,7 @@
 
 ## Zweck
 
-Ferrum prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferrum-auth` hängt nicht am React-Admin. Generierte CRUD-Routen nutzen dieselbe Prüfung. Auth-Fehler laufen über `problem_json`. `Invalid email or password` bleibt für unbekannte Benutzer und falsche Passwörter gleich und trägt `auth.invalid_credentials`. Das Verzeichnis hängt Rollennamen an, ohne `PublicUser` von `/auth/me` zu verändern.
+Ferrum prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferrum-auth` hängt nicht an der HTML-Oberfläche. Der Admin ruft dieselben Methoden auf. Generierte CRUD-Routen nutzen dieselbe Prüfung. Auth-Fehler laufen über `problem_json`. `Invalid email or password` bleibt für unbekannte Benutzer und falsche Passwörter gleich und trägt `auth.invalid_credentials`. Das Verzeichnis hängt Rollennamen an, ohne `PublicUser` von `/auth/me` zu verändern.
 
 ## Architektur
 
@@ -26,7 +26,7 @@ Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Di
 
 ## Öffentliche API
 
-- `AuthConfig`, `AuthConfig::development`, `AuthConfig::from_env`
+- `AuthConfig`, `AuthConfig::development`, `AuthConfig::from_env`, `AuthConfig::apply_bound_address`
 - `AuthService::create_user`, `list_users`, `set_user_active`
 - `login`, `logout`, `authenticate_token`, `change_password`, `rotate_session`
 - `authorize`, `ensure_role`, `grant_permission`, `revoke_permission`, `assign_role`, `revoke_role`
@@ -51,7 +51,8 @@ Ein neues Passwort hat 12 bis 128 Zeichen. Der Hash nutzt Argon2id, Version `0x1
 - Eine Passwortänderung widerruft alle Sitzungen des Benutzers.
 - Login ist pro Prozess auf fünf Fehlversuche in 15 Minuten begrenzt. Der Schlüssel ist Peer plus normalisierte E-Mail.
 - `X-Forwarded-For` gilt nur, wenn `FERRUM_TRUST_PROXY` ausdrücklich `1` oder `true` ist. Gewertet wird der erste Hop.
-- Sicherheitslogs nennen keine Passwörter und keine Session-Tokens.
+- Sicherheitslogs nennen keine Passwörter, Session-Tokens, Login-CSRF-Cookies oder Formular-Tokens.
+- Liegt `FERRUM_ALLOWED_ORIGINS` nicht vor, ersetzt `AuthConfig::apply_bound_address` die Entwicklungsliste durch die Loopback-Origins der Adresse, an die der Prozess bindet. Öffentliche Hosts und der Host-Header einer Anfrage werden nicht in diese Liste übernommen. `Origin: null` bleibt ungültig. Eine Anfrage ohne Origin und ohne Referer bleibt erlaubt, das Login-CSRF-Cookie aber nicht.
 
 ## Fehlerfälle
 

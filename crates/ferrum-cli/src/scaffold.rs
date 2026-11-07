@@ -239,7 +239,9 @@ fn env_example() -> &'static str {
 fn readme(name: &str, template: Template) -> String {
     let frontend = match template {
         Template::Api => "Dieses API-Projekt braucht kein Node.js.\n",
-        Template::Fullstack => "Vor dem ersten Release-Build muss im Ferrum-Repository `apps/admin-ui` mit `npm run build` gebaut sein. Der laufende Server braucht kein Node.js.\n",
+        Template::Fullstack => {
+            "Der Admin wird mit dem Rust-Binary ausgeliefert. Node.js ist nicht erforderlich.\n"
+        }
     };
     format!(
         r#"# {name}
@@ -265,6 +267,12 @@ fn product_model(template: Template) -> String {
             "    table = \"products\",\n    api = \"/api/v1/products\",\n    allow_anonymous = true,\n    admin = true,\n    admin_label = \"Produkte\",\n    admin_permission = \"products\""
         }
     };
+    let name_admin = match template {
+        Template::Api => "",
+        Template::Fullstack => {
+            "#[admin(list_display, searchable, sortable, label = \"Name\")]\n    "
+        }
+    };
     format!(
         r#"use ferrum::prelude::*;
 use serde::{{Deserialize, Serialize}};
@@ -278,7 +286,7 @@ pub struct Product {{
     pub id: Uuid,
 
     #[field(required, min_length = 1, max_length = 150)]
-    pub name: String,
+    {name_admin}pub name: String,
 }}
 "#
     )
@@ -290,6 +298,7 @@ fn main_rs(name: &str, template: Template) -> String {
         Template::Fullstack => r#"
     let mut auth_config = ferrum::auth::AuthConfig::from_env();
     auth_config.apply_project_session(settings.session_hours, settings.idle_minutes);
+    auth_config.apply_bound_address(&address);
     let auth = ferrum::auth::AuthService::new(db.clone(), auth_config);
     let admin = ferrum::admin::AdminRegistry::new()
         .with_branding(ferrum::admin::AdminBranding {
@@ -341,14 +350,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     tracing_subscriber::fmt().with_env_filter("info").init();
     let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| settings.database_url.clone());
     let db = ferrum::db::connect(&url).await?;
-    {auth}
-    let app = ferrum::App::new(db)
-        {chain};
     let address = std::env::var("BIND_ADDRESS")
         .unwrap_or_else(|_| format!("{{}}:{{}}", settings.host, settings.port));
     if address.starts_with("0.0.0.0") {{
         return Err("Ferrum bindet neue Projekte nicht an 0.0.0.0.".into());
     }}
+    {auth}
+    let app = ferrum::App::new(db)
+        {chain};
     let listener = tokio::net::TcpListener::bind(&address).await?;
     println!("Ferrum lauscht auf http://{{address}}");
     let router = ferrum::pages::mount_pages(app.into_router(), &settings)?;

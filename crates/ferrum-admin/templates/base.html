@@ -1,0 +1,67 @@
+<!DOCTYPE html>
+<html lang="{{ locale }}" data-theme="{{ theme }}">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>{{ title }} · {{ site_title }}</title>
+<link rel="stylesheet" href="/admin/assets/admin.css">
+<style>:root { --brand: {{ primary_color }}; }</style>
+</head>
+<body>
+<a class="skip" href="#content">{{ i18n.open }}</a>
+<div class="shell">
+{% if signed_in %}
+<aside class="sidebar">
+<p class="brand">{{ app_name }}</p>
+<nav aria-label="{{ i18n.dashboard }}">
+<a href="/admin">{{ i18n.dashboard }}</a>
+<a href="/admin/models">{{ i18n.models }}</a>
+{% if superuser %}
+<a href="/admin/directory/users">{{ i18n.users }}</a>
+<a href="/admin/directory/roles">{{ i18n.roles }}</a>
+<a href="/admin/directory/permissions">{{ i18n.permissions }}</a>
+{% endif %}
+</nav>
+</aside>
+{% endif %}
+<div class="main">
+<header class="top">
+<div>
+<p class="eyebrow">{{ site_header }}</p>
+<h1>{{ title }}</h1>
+</div>
+{% if signed_in %}
+<div class="tools">
+<form method="post" action="/admin/preferences">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="next" value="{{ current_path }}">
+<label>{{ i18n.language }}
+<select name="locale">
+<option value="de" {% if locale == "de" %}selected{% endif %}>Deutsch</option>
+<option value="en" {% if locale == "en" %}selected{% endif %}>English</option>
+</select>
+</label>
+<label>{{ i18n.theme }}
+<select name="theme">
+<option value="system" {% if theme == "system" %}selected{% endif %}>{{ i18n.system }}</option>
+<option value="light" {% if theme == "light" %}selected{% endif %}>{{ i18n.light }}</option>
+<option value="dark" {% if theme == "dark" %}selected{% endif %}>{{ i18n.dark }}</option>
+</select>
+</label>
+<button type="submit">{{ i18n.apply }}</button>
+</form>
+<form method="post" action="/admin/logout">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<button type="submit" class="ghost">{{ i18n.logout }}</button>
+</form>
+</div>
+{% endif %}
+</header>
+{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if alert %}<p class="alert" role="alert">{{ alert }}</p>{% endif %}
+<main id="content">{% block content %}{% endblock %}</main>
+</div>
+</div>
+<script src="/admin/assets/admin.js" defer></script>
+</body>
+</html>

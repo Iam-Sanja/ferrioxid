@@ -1,0 +1,13 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="card" method="post" action="/admin/directory/roles">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>{{ i18n.add_role }} <input name="name" required></label>
+<button type="submit">{{ i18n.save }}</button>
+</form>
+<ul class="cards">
+{% for role in roles %}
+<li class="card"><h2>{{ role.name }}</h2><a href="/admin/directory/permissions?role={{ role.name }}">{{ i18n.permissions }}</a></li>
+{% endfor %}
+</ul>
+{% endblock %}

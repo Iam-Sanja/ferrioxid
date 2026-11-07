@@ -385,34 +385,26 @@ impl AuthService {
     }
 
     pub fn presented_origin_allowed(&self, headers: &HeaderMap) -> Result<(), AuthError> {
-        let presented = headers
-            .get("origin")
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned)
-            .or_else(|| referer_origin(headers));
-        let Some(origin) = presented else {
-            return Ok(());
-        };
-        if self.config.allowed_origins.contains(&origin) {
-            Ok(())
-        } else {
-            Err(AuthError::OriginRejected)
-        }
+        self.allow_presented(headers)
     }
 
     pub fn origin_allowed(&self, headers: &HeaderMap, method: &Method) -> Result<(), AuthError> {
         if method.is_safe() {
             return Ok(());
         }
-        let presented = headers
-            .get("origin")
-            .and_then(|value| value.to_str().ok())
-            .map(str::to_owned)
-            .or_else(|| referer_origin(headers));
-        let Some(origin) = presented else {
+        self.allow_presented(headers)
+    }
+
+    /// Origin oder Referer müssen exakt auf der Liste stehen. Der Host-Header wird nicht gelesen.
+    /// `Origin: null` gilt nur zusammen mit `Sec-Fetch-Site: same-origin`: Browser setzen genau
+    /// diese Kombination bei einem Same-Origin-Formular, wenn `Referrer-Policy: no-referrer` gilt.
+    fn allow_presented(&self, headers: &HeaderMap) -> Result<(), AuthError> {
+        let Some(origin) = presented_origin(headers) else {
             return Ok(());
         };
-        if self.config.allowed_origins.contains(&origin) {
+        if origin_on_list(&self.config.allowed_origins, &origin)
+            || nulled_same_origin(headers, &origin)
+        {
             Ok(())
         } else {
             Err(AuthError::OriginRejected)
@@ -665,6 +657,13 @@ fn base64url(bytes: &[u8]) -> String {
     output
 }
 
+fn presented_origin(headers: &HeaderMap) -> Option<String> {
+    if let Some(value) = headers.get("origin").and_then(|value| value.to_str().ok()) {
+        return Some(value.to_owned());
+    }
+    referer_origin(headers)
+}
+
 fn referer_origin(headers: &HeaderMap) -> Option<String> {
     let referer = headers.get("referer")?.to_str().ok()?;
     let (scheme, rest) = referer.split_once("://")?;
@@ -673,6 +672,45 @@ fn referer_origin(headers: &HeaderMap) -> Option<String> {
         return None;
     }
     Some(format!("{scheme}://{host}"))
+}
+
+fn nulled_same_origin(headers: &HeaderMap, origin: &str) -> bool {
+    origin.trim().eq_ignore_ascii_case("null")
+        && headers
+            .get("sec-fetch-site")
+            .and_then(|value| value.to_str().ok())
+            .is_some_and(|value| value.eq_ignore_ascii_case("same-origin"))
+}
+
+fn origin_on_list(allowed: &[String], presented: &str) -> bool {
+    let Some(presented) = canonical_origin(presented) else {
+        return false;
+    };
+    allowed
+        .iter()
+        .any(|item| canonical_origin(item).as_deref() == Some(presented.as_str()))
+}
+
+fn canonical_origin(value: &str) -> Option<String> {
+    let value = value.trim();
+    if value.is_empty() || value.eq_ignore_ascii_case("null") {
+        return None;
+    }
+    let (scheme, rest) = value.split_once("://")?;
+    if !scheme.eq_ignore_ascii_case("http") && !scheme.eq_ignore_ascii_case("https") {
+        return None;
+    }
+    if rest.is_empty()
+        || rest.contains(['/', '?', '#', '@', ' ', '\\'])
+        || rest.chars().any(|char| char.is_control())
+    {
+        return None;
+    }
+    Some(format!(
+        "{}://{}",
+        scheme.to_ascii_lowercase(),
+        rest.to_ascii_lowercase()
+    ))
 }
 
 pub fn csrf_header_name() -> &'static str {

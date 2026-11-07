@@ -1,0 +1,5 @@
+{% extends "base.html" %}
+{% block content %}
+<p class="empty">{{ message }}</p>
+{% if signed_in %}<a href="/admin">{{ i18n.dashboard }}</a>{% else %}<a href="/admin/login">{{ i18n.login }}</a>{% endif %}
+{% endblock %}

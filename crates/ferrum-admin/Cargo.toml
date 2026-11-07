@@ -18,6 +18,6 @@ sea-orm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true
+tera.workspace = true
 tracing.workspace = true
 uuid.workspace = true
-include_dir = "0.7"

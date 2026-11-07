@@ -686,7 +686,7 @@ async fn admin_assets_reject_traversal_and_keep_the_api() {
     std::fs::create_dir_all(dir.join("assets")).unwrap();
     std::fs::write(
         dir.join("index.html"),
-        "<!doctype html><title>Ferrum</title>",
+        "<!doctype html><title>Fremd</title>",
     )
     .unwrap();
     std::fs::write(dir.join("assets").join("app.js"), "console.log(1)").unwrap();
@@ -702,33 +702,37 @@ async fn admin_assets_reject_traversal_and_keep_the_api() {
     };
 
     let page = call("GET", "/admin".into()).await.unwrap();
-    assert_eq!(page.status, 200);
-    assert!(page.headers.to_ascii_lowercase().contains("text/html"));
-    assert!(page.body.contains("Ferrum"));
+    assert_eq!(page.status, 403);
+    assert!(page.body.contains("authentication is not configured"));
+    assert!(!page.body.contains("Fremd"));
     let slash = call("GET", "/admin/".into()).await.unwrap();
-    assert_eq!(slash.status, 200);
-    assert!(slash.body.contains("Ferrum"));
-    let spa = call("GET", "/admin/products/new".into()).await.unwrap();
-    assert_eq!(spa.status, 200);
-    assert!(spa.body.contains("Ferrum"));
-    let script = call("GET", "/admin/assets/app.js".into()).await.unwrap();
+    assert_eq!(slash.status, 403);
+    let style = call("GET", "/admin/assets/admin.css".into()).await.unwrap();
+    assert_eq!(style.status, 200);
+    assert!(style.headers.to_ascii_lowercase().contains("text/css"));
+    assert!(style.body.contains(".shell"));
+    let script = call("GET", "/admin/assets/admin.js".into()).await.unwrap();
     assert_eq!(script.status, 200);
     assert!(script
         .headers
         .to_ascii_lowercase()
         .contains("text/javascript"));
-    assert!(script.body.contains("console.log"));
+    let foreign = call("GET", "/admin/assets/app.js".into()).await.unwrap();
+    assert_eq!(foreign.status, 404);
+    assert!(!foreign.body.contains("console.log"));
     let missing = call("GET", "/admin/assets/missing.js".into())
         .await
         .unwrap();
     assert_eq!(missing.status, 404);
-    let traversal = call("GET", "/admin/../Cargo.toml".into()).await.unwrap();
+    let traversal = call("GET", "/admin/assets/../admin.css".into())
+        .await
+        .unwrap();
     assert_ne!(traversal.status, 200);
     assert!(!traversal.body.contains("[package]"));
     let api = call("GET", "/admin/api/models".into()).await.unwrap();
     assert_eq!(api.status, 403);
     assert_eq!(api.json["detail"], "authentication is not configured");
-    assert!(!api.body.contains("<title>Ferrum</title>"));
+    assert!(!api.body.contains("<title>"));
 
     server.abort();
     std::env::remove_var("FERRUM_ADMIN_DIST");

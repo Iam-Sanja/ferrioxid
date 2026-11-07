@@ -1,0 +1,45 @@
+{% extends "base.html" %}
+{% block content %}
+<form method="get" class="toolbar">
+<label>{{ i18n.search }} <input name="q" value="{{ query }}"></label>
+<button type="submit">{{ i18n.search }}</button>
+</form>
+<p class="meta">{{ i18n.total }}: {{ total }}</p>
+<div class="table-wrap">
+<table>
+<thead><tr><th><a href="?q={{ query }}&sort=email&dir={{ email_dir }}">{{ i18n.email }}</a></th><th>{{ i18n.active }}</th><th>{{ i18n.staff }}</th><th>{{ i18n.roles }}</th><th>{{ i18n.actions }}</th></tr></thead>
+<tbody>
+{% for user in users %}
+<tr>
+<td>{{ user.email }}</td>
+<td>{% if user.is_active %}{{ i18n.active }}{% else %}{{ i18n.inactive }}{% endif %}</td>
+<td>{% if user.is_staff %}{{ i18n.yes }}{% else %}{{ i18n.no }}{% endif %}{% if user.is_superuser %} · {{ i18n.superuser }}{% endif %}</td>
+<td>{{ user.roles }}</td>
+<td>
+{% if user.mutable %}
+<form method="post" action="/admin/directory/users/{{ user.id }}/active">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="active" value="{% if user.is_active %}false{% else %}true{% endif %}">
+<button type="submit">{% if user.is_active %}{{ i18n.deactivate }}{% else %}{{ i18n.activate }}{% endif %}</button>
+</form>
+<form method="post" action="/admin/directory/users/{{ user.id }}/staff">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="staff" value="{% if user.is_staff %}false{% else %}true{% endif %}">
+<button type="submit">{% if user.is_staff %}{{ i18n.remove_staff }}{% else %}{{ i18n.make_staff }}{% endif %}</button>
+</form>
+{% else %}<span class="hint">{{ i18n.blocked }}</span>{% endif %}
+</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+<nav class="pager">{% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% endif %}{% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% endif %}</nav>
+<form class="card" method="post" action="/admin/directory/assignments">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<label>{{ i18n.email }} <input name="email" type="email" required></label>
+<label>{{ i18n.role }} <input name="role" required></label>
+<button name="action" value="assign" type="submit">{{ i18n.assign }}</button>
+<button name="action" value="revoke" type="submit" class="ghost">{{ i18n.revoke }}</button>
+</form>
+{% endblock %}

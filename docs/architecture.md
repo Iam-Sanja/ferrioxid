@@ -30,7 +30,7 @@ examples/myshop → ferrum (Fassade)
                     ├── ferrum-storage → ferrum-auth, ferrum-core
                     └── ferrum-middleware → Axum, tracing
 ferrum-cli → ferrum-auth, ferrum-db, ferrum-migrations
-apps/admin-ui → Vite-Build, beim Kompilieren in `ferrum-admin` eingebettet und unter `/admin` ausgeliefert
+ferrum-admin → Tera-HTML und CSS unter `/admin`, JSON unter `/admin/api`
 ```
 
 Physische Crates: `crates/ferrum/`, `crates/ferrum-core/`, `crates/ferrum-macros/`, `crates/ferrum-db/`, `crates/ferrum-migrations/`, `crates/ferrum-auth/`, `crates/ferrum-api/`, `crates/ferrum-cli/`, `crates/ferrum-forms/`, `crates/ferrum-static/`, `crates/ferrum-storage/`, `crates/ferrum-middleware/`. `ferrum-forms` hängt nicht von Axum ab. `ferrum-storage` hängt nicht von `ferrum-api` ab. `ferrum-auth` hängt nicht von `ferrum-api` ab. `Cargo.toml` legt Workspace Edition 2021 fest. Versionsangaben und Features stehen dort, nicht in dieser Dokumentation.
@@ -108,7 +108,7 @@ Rust-Modelle + Makros
  → reichhaltige Model Registry (Fields, Relations, Constraints, Policies)
  → DB / Migrations / Validierung / Auth
  → REST + OpenAPI + Admin-Metadaten
- → React Admin (schema-driven)
+ → serverseitiger Admin (seit v0.13 vorhanden)
  → CLI / Docker-Deployment / Plugins
 ```
 

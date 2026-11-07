@@ -18,6 +18,7 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 pub fn mount(router: Router<AppState>, registry: AdminRegistry) -> Router<AppState> {
+    let router = crate::html::routes(router, registry.clone());
     let api = Router::new()
         .route("/config", get(public_config))
         .route("/me", get(me))
@@ -48,9 +49,7 @@ pub fn mount(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSta
         .layer(Extension(registry));
     router
         .nest("/admin/api", api)
-        .route("/admin", get(assets::index))
-        .route("/admin/", get(assets::index))
-        .route("/admin/{*path}", get(admin_asset))
+        .route("/admin/assets/{*path}", get(admin_asset))
 }
 
 async fn admin_asset(Path(path): Path<String>) -> axum::response::Response {
@@ -802,11 +801,11 @@ async fn record_or_hidden(
     }
 }
 
-fn list_blocked(model: &dyn ManagedModel) -> bool {
+pub(crate) fn list_blocked(model: &dyn ManagedModel) -> bool {
     model.descriptor().requires_object_policy && !model.policy_bound()
 }
 
-fn access_scope(model: &dyn ManagedModel, user: &AuthUser, write: bool) -> QueryScope {
+pub(crate) fn access_scope(model: &dyn ManagedModel, user: &AuthUser, write: bool) -> QueryScope {
     if !model.policy_bound() || user.is_superuser {
         QueryScope::All
     } else if write {
@@ -820,7 +819,7 @@ fn needs_object_check(model: &dyn ManagedModel, user: &AuthUser) -> bool {
     model.policy_bound() && model.descriptor().requires_object_policy && !user.is_superuser
 }
 
-async fn gate(
+pub(crate) async fn gate(
     state: &AppState,
     user: &AuthUser,
     model: &dyn ManagedModel,
@@ -839,7 +838,7 @@ async fn gate(
     permit(auth, user, model.meta(), action).await
 }
 
-async fn permit(
+pub(crate) async fn permit(
     auth: &AuthService,
     user: &AuthUser,
     meta: &AdminModelMeta,
@@ -890,7 +889,7 @@ fn superuser_only(user: &AuthUser) -> Result<(), axum::response::Response> {
     }
 }
 
-fn reject_locked(
+pub(crate) fn reject_locked(
     meta: &AdminModelMeta,
     object: &Map<String, Value>,
     creating: bool,
@@ -909,7 +908,7 @@ fn reject_locked(
     Ok(())
 }
 
-fn filters_from(
+pub(crate) fn filters_from(
     raw: &str,
     columns: &[ColumnSpec],
     meta: &AdminModelMeta,
@@ -936,6 +935,9 @@ fn filters_from(
             return Err("filter field is not allowed".into());
         };
         let value = urlencoding_decode(value);
+        if value.is_empty() {
+            continue;
+        }
         filters.push((meta_field.name, filter_value(column, &value)?));
     }
     Ok(filters)
@@ -959,7 +961,7 @@ fn filter_value(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
     }
 }
 
-fn display_column(meta: &AdminModelMeta) -> Option<&'static str> {
+pub(crate) fn display_column(meta: &AdminModelMeta) -> Option<&'static str> {
     meta.fields
         .iter()
         .find_map(|field| (field.searchable && !field.hidden).then_some(field.name))

@@ -22,10 +22,10 @@ Eigenes Deaktivieren und der Entzug des eigenen Staff-Zugangs antworten 422. Än
 
 ## Oberfläche
 
-`apps/admin-ui/src/pages/Directory.tsx` sucht E-Mail, filtert Rollen und Berechtigungscodes, sortiert E-Mails und blättert lokal mit acht Zeilen. Die Auswahl einer Zeile zeigt Status und Rollen. Deaktivieren, Staff-Entzug, Rechteentzug und das Lösen einer Rolle öffnen einen Dialog. Escape und Abbrechen schließen ihn. Der Fokus liegt zuerst auf Abbrechen.
+`/admin/directory/users` sucht die E-Mail serverseitig, sortiert sie und zeigt 25 Zeilen je Seite. Status und Rollen stehen in der Tabelle. Deaktivieren, Staff ändern, Rechte vergeben und Rollen zuweisen sind POST-Formulare mit CSRF. Abbrechen ist der Link zurück, kein Dialog.
 
-Passwort ändern, Benutzer anlegen und Superuser vergeben bleiben bei der Kommandozeile. Dafür gibt es keine Admin-Schaltfläche.
+Die HTML-Sperre für die eigene Deaktivierung und für Superuser antwortet 403. Passwort ändern, Benutzer anlegen und Superuser vergeben bleiben bei der Kommandozeile. Dafür gibt es keine Admin-Schaltfläche.
 
 ## Tests
 
-Die Vitest-Prüfung filtert `ada@example.com` und erwartet die leeren Zustände. `examples/myshop/tests/admin_http.rs` prüft die serverseitigen Sperren unverändert.
+`examples/myshop/tests/admin_html.rs` sucht einen Benutzer, legt eine Rolle an, vergibt und entzieht eine Berechtigung und weist die Rolle zu. `examples/myshop/tests/admin_http.rs` prüft die JSON-Sperren.

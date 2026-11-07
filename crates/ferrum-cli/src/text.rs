@@ -14,14 +14,14 @@ fn line_for(locale: &str, key: &str) -> &'static str {
         ("de", "dev_stop_hint") => "Beenden mit Strg+C.",
         ("de", "dev_stopped") => "Entwicklungsserver beendet.",
         ("de", "dev_test_stopped") => "Entwicklungsserver nach Testfrist beendet.",
-        ("de", "admin_assets_missing") => "Admin-Assets fehlen. Starte npm run build.",
+        ("de", "admin_assets_missing") => "Der Admin wird mit dem Rust-Binary ausgeliefert.",
         ("en", "project_created") => "Created project:",
         ("en", "model_created") => "Created model:",
         ("en", "dev_started") => "Development server for",
         ("en", "dev_stop_hint") => "Stop with Ctrl+C.",
         ("en", "dev_stopped") => "Development server stopped.",
         ("en", "dev_test_stopped") => "Development server stopped after the test limit.",
-        ("en", "admin_assets_missing") => "Admin assets are missing. Starting npm run build.",
+        ("en", "admin_assets_missing") => "The admin ships inside the Rust binary.",
         _ => "missing message",
     }
 }

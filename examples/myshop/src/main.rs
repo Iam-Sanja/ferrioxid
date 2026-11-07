@@ -47,7 +47,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         std::env::var("DATABASE_URL").unwrap_or_else(|_| ferrum::db::DEFAULT_SQLITE_URL.to_owned());
     let db = ferrum::db::connect(&url).await?;
     // register::<Product>() exposes GET, GET /{id}, POST, PATCH /{id} and DELETE /{id}.
-    let auth = ferrum::auth::AuthService::new(db.clone(), ferrum::auth::AuthConfig::from_env());
+    let address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
+    let mut auth_config = ferrum::auth::AuthConfig::from_env();
+    auth_config.apply_bound_address(&address);
+    tracing::info!(
+        bound = %address,
+        origin_count = auth_config.allowed_origins.len(),
+        "Login-Origins aus der Bind-Adresse vorbereitet."
+    );
+    let auth = ferrum::auth::AuthService::new(db.clone(), auth_config);
     let branding = ferrum::migrations::discover_project(std::path::Path::new("."))
         .map(|project| ferrum::admin::AdminBranding {
             site_title: project.site_title,
@@ -108,7 +116,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         );
     }
 
-    let address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let listener = tokio::net::TcpListener::bind(&address).await?;
     println!("Ferrum myshop at http://{address}");
     let static_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");

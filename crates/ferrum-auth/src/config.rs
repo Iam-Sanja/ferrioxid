@@ -97,6 +97,71 @@ impl AuthConfig {
             self.idle_timeout_secs = i64::from(idle_minutes) * 60;
         }
     }
+
+    /// Ersetzt die Entwicklungsliste durch die Loopback-Origins der Prozessadresse.
+    /// `FERRUM_ALLOWED_ORIGINS` bleibt unverändert. Der Host-Header einer Anfrage wird nicht gelesen.
+    pub fn apply_bound_address(&mut self, address: &str) {
+        if std::env::var_os("FERRUM_ALLOWED_ORIGINS").is_some() {
+            return;
+        }
+        let _ = self.with_loopback_address(address);
+    }
+
+    /// Setzt die erlaubten Origins auf die Loopback-Namen des Ports.
+    /// Öffentliche Hosts werden nicht übernommen. `0.0.0.0` und `::` werden nur als Bind gelesen
+    /// und ergeben `127.0.0.1` sowie `localhost`, nie sich selbst als Origin.
+    pub fn with_loopback_address(&mut self, address: &str) -> bool {
+        let Some(origins) = loopback_http_origins(address) else {
+            tracing::warn!("Die Bind-Adresse ergibt keine lokalen Login-Origins.");
+            return false;
+        };
+        self.allowed_origins = origins;
+        true
+    }
+}
+
+/// Loopback-Origins aus der Adresse, an die der Prozess selbst bindet.
+pub(crate) fn loopback_http_origins(address: &str) -> Option<Vec<String>> {
+    let address = address.trim();
+    if address.is_empty()
+        || address.contains("://")
+        || address.contains(['/', '?', '#', '@', ' ', '\\'])
+    {
+        return None;
+    }
+    let (host, port) = split_host_port(address)?;
+    let port: u16 = port.parse().ok()?;
+    if port == 0 {
+        return None;
+    }
+    let host = host.trim_matches(['[', ']']);
+    if !(is_loopback_host(host) || host == "0.0.0.0" || host == "::") {
+        return None;
+    }
+    let mut origins = vec![
+        format!("http://127.0.0.1:{port}"),
+        format!("http://localhost:{port}"),
+    ];
+    if host == "::1" || host == "::" {
+        origins.push(format!("http://[::1]:{port}"));
+    }
+    Some(origins)
+}
+
+fn split_host_port(address: &str) -> Option<(&str, &str)> {
+    if let Some(rest) = address.strip_prefix('[') {
+        let (host, port) = rest.split_once("]:")?;
+        return Some((host, port));
+    }
+    let (host, port) = address.rsplit_once(':')?;
+    if host.is_empty() || port.is_empty() || host.contains(':') {
+        return None;
+    }
+    Some((host, port))
+}
+
+fn is_loopback_host(host: &str) -> bool {
+    host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1"
 }
 
 fn env_range(name: &str, min: u32, max: u32) -> Option<u32> {
@@ -146,4 +211,52 @@ fn decode_hex_32(value: &str) -> Option<[u8; 32]> {
         *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).ok()?;
     }
     Some(secret)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn loopback_origins_follow_the_bound_port() {
+        assert_eq!(
+            loopback_http_origins("127.0.0.1:3000"),
+            Some(vec![
+                "http://127.0.0.1:3000".to_owned(),
+                "http://localhost:3000".to_owned()
+            ])
+        );
+        assert_eq!(
+            loopback_http_origins("localhost:4400"),
+            Some(vec![
+                "http://127.0.0.1:4400".to_owned(),
+                "http://localhost:4400".to_owned()
+            ])
+        );
+        assert_eq!(
+            loopback_http_origins("[::1]:3000"),
+            Some(vec![
+                "http://127.0.0.1:3000".to_owned(),
+                "http://localhost:3000".to_owned(),
+                "http://[::1]:3000".to_owned(),
+            ])
+        );
+    }
+
+    #[test]
+    fn loopback_origins_reject_public_hosts_and_port_zero() {
+        let wildcard = loopback_http_origins("0.0.0.0:3017").unwrap();
+        assert!(wildcard.iter().all(|origin| !origin.contains("0.0.0.0")));
+        assert_eq!(wildcard[0], "http://127.0.0.1:3017");
+        assert!(loopback_http_origins("203.0.113.10:3000").is_none());
+        assert!(loopback_http_origins("127.0.0.1:0").is_none());
+        assert!(loopback_http_origins("http://127.0.0.1:3000").is_none());
+        assert!(loopback_http_origins("").is_none());
+        let mut config = AuthConfig::development();
+        assert!(!config.with_loopback_address("203.0.113.10:8080"));
+        assert!(config
+            .allowed_origins
+            .iter()
+            .any(|origin| origin == "http://127.0.0.1:3000"));
+    }
 }

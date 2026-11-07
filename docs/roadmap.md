@@ -13,6 +13,7 @@
 | v0.10 | Implementiert | Settings, Tera-Startseite, Admin-Suche und Filter, I18n-Katalog `de`/`en` | Weitere Sprachen bleiben erweiterbar |
 | v0.11 | Implementiert | Admin-Übersetzung `de`/`en`, stabile Fehlercodes, Branding-Endpunkt, lokalisierte Formate, Verzeichnis mit Rollen | Cargo-Version bleibt `0.1.0`. CLI-`migrate`-Texte und weitere Sprachen sind offen |
 | v0.12 | Implementiert | Formulare, Staticfiles, lokaler Upload-Speicher, Request-ID und Logging | Cargo-Version bleibt `0.1.0`. S3, Virenscanner und Formular-Derive sind geplant |
+| v0.13 | Implementiert | Serverseitiger Admin mit Axum und Tera, ohne React, Vite oder Node.js | Cargo-Version bleibt `0.1.0`. Die JSON-API bleibt |
 
 ## v0.1 enthalten
 
@@ -34,7 +35,7 @@
 3. **Migrationen erweitern**: `down`, Sperren und eine PostgreSQL-Baseline. Explizite Umbenennung, der geprüfte SQLite-Umbau und die SQLite-Baseline sind vorhanden.
 4. **DTO-/HTTP-Operationen erweitern**: PATCH/DELETE, Error Contracts, OpenAPI.
 5. **Authentifizierung und Berechtigungen** als harte API-Grenze.
-6. **Admin-Schema-Backend und React-Frontend** erst auf abgesicherten APIs.
+6. **Admin** ist seit v0.13 serverseitiges HTML auf der bestehenden API.
 7. **Erweiterungen und Deployment** zum Schluss production-orientiert testen.
 
 Die einzelnen Ziele und Abnahmen sind in den jeweiligen Teilbereichs-Dokumenten beschrieben. Keine Fertigstellungszeit und keine Build-Erfolge behaupten, solange sie nicht nachgewiesen sind.

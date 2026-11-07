@@ -26,7 +26,7 @@ Gelesen wird `ferrum.toml`. `DATABASE_URL` darf den Datenbankeintrag ersetzen. `
 
 ## Datenfluss
 
-`doctor` ruft `rustc` und `cargo` mit `--version` auf. Danach sucht es `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` und das Migrationsverzeichnis. SQLite wird als konfiguriert gemeldet. Eine noch nicht vorhandene Datei ist eine Warnung und wird nicht angelegt. PostgreSQL ist eine Warnung ohne Verbindung. Node.js und npm werden nur bei `template = "fullstack"` oder `embedded_assets = true` geprüft. Ihr Fehlen ist eine Warnung.
+`doctor` ruft `rustc` und `cargo` mit `--version` auf. Danach sucht es `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` und das Migrationsverzeichnis. SQLite wird als konfiguriert gemeldet. Eine noch nicht vorhandene Datei ist eine Warnung und wird nicht angelegt. PostgreSQL ist eine Warnung ohne Verbindung. Bei einem Fullstack-Projekt meldet `doctor`, dass der Admin im Rust-Binary liegt. Node.js wird nicht verlangt.
 
 `check` prüft die Umgebung, liest die Migrationsdateien und ihre Prüfsummen und führt `cargo check` aus. Es ruft `migrate up` nicht auf und löscht nichts.
 

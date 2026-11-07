@@ -42,7 +42,7 @@ Kein OAuth, kein MFA, kein Passwort-Reset und kein JWT für externe APIs. Das Lo
 - `auth` und Policies sind getrennte Konzepte: Authentifizierung stellt Identität fest, Autorisierung entscheidet Zugriff.
 - RBAC allein genügt nicht für Object-Level/Field-Level-Policies.
 - Standardmäßig kein anonymes CRUD und keine automatisch exportierten sensiblen Felder.
-- React-UI darf Berechtigungen nur visualisieren; die Serverprüfung bleibt maßgeblich.
+- Die Oberfläche darf Berechtigungen nur anzeigen. Die Serverprüfung bleibt maßgeblich.
 - Auth-Kontext darf nicht über Clientfelder oder Header mit ungeprüfter Vertrauenskette entstehen.
 - Vor jedem produktiven Release Security-Review, Dependency-Audit und dokumentierte Threat-Model-Annahmen.
 

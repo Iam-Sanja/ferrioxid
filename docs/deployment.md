@@ -13,16 +13,7 @@ cargo run -p myshop
 
 Ein generiertes Projekt startet mit `ferrum dev` im Projektverzeichnis. Windows und Linux nutzen denselben Befehl. Der Server startet ohne automatische Migration. Zuerst `ferrum migrate up` ausführen. Generierte Anwendungen binden nicht an `0.0.0.0`. `myshop --bootstrap` ändert die Datei nicht. Die Datei `db.sqlite3` liegt im Arbeitsverzeichnis. Eine ältere Bootstrap-Datei ohne `_ferrum_migrations` wird nicht übernommen und nicht gelöscht.
 
-Das Admin-Frontend braucht keinen Node-Prozess zur Laufzeit. Ein Projekt mit Feature `admin-ui` verlangt vor dem Rust-Build:
-
-```powershell
-cd apps/admin-ui
-npm run build
-cd ../..
-cargo build --workspace
-```
-
-Ohne diesen Frontend-Build antwortet `/admin` mit 503. `FERRUM_CSRF_SECRET` in Produktion setzen. Die Datei `.ferrum/csrf.key` ist nur die lokale Quelle.
+Der Admin braucht keinen Node-Prozess. `cargo build` genügt. `FERRUM_CSRF_SECRET` in Produktion setzen. Die Datei `.ferrum/csrf.key` ist nur die lokale Quelle.
 
 Eine abweichende `BIND_ADDRESS`, insbesondere `0.0.0.0:3000`, kann den Dienst auf weiteren Netzwerken erreichbar machen. Mit dem anonymen Demo-Modell ist das kein Internetdeployment.
 
@@ -68,4 +59,4 @@ Der lokale SQLite-Start braucht keinen Datenbankserver. Ein optionales PostgreSQ
 
 ## Admin ausliefern
 
-Vor dem Start `npm run build` in `apps/admin-ui` ausführen oder `FERRUM_ADMIN_DIST` setzen. Der Rust-Prozess braucht danach kein Node.js. `/admin` liefert `index.html` für unbekannte Oberflächenpfade. `/admin/api` bleibt die JSON-API und wird vor dem Datei-Fallback registriert. Pfade mit `..` werden abgelehnt. Fehlt das Build, ist die Antwort 503.
+`/admin` rendert HTML aus dem Binary. Unbekannte Asset-Pfade sind 404. `/admin/api` bleibt die JSON-API. Pfade mit `..` werden nicht als Dateien gelesen.

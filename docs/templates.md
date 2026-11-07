@@ -4,7 +4,7 @@
 
 ## Aufgabe
 
-Normale Seiten außerhalb des Admins werden serverseitig mit Tera gerendert. Tera entspricht dem Jinja- und Django-Modell: Vererbung über `extends`, Bausteine über `include`, Variablen in `{{ }}`. Formular-HTML aus `ferrum::forms::render_form` ist zusätzlich verfügbar und escaped Feldwerte. Die Kontaktseite des Generators und von myshop nutzt diesen Weg. Das Stylesheet liegt unter `/static/css/app.css`.
+Normale Seiten außerhalb des Admins werden serverseitig mit Tera gerendert. Die Admin-Vorlagen liegen getrennt in `crates/ferrum-admin/templates` und werden nicht aus dem Projektordner geladen. Siehe [admin-templates.md](admin-templates.md). Tera entspricht dem Jinja- und Django-Modell: Vererbung über `extends`, Bausteine über `include`, Variablen in `{{ }}`. Formular-HTML aus `ferrum::forms::render_form` ist zusätzlich verfügbar und escaped Feldwerte. Die Kontaktseite des Generators und von myshop nutzt diesen Weg. Das Stylesheet liegt unter `/static/css/app.css`.
 
 ## Zuständige Dateien
 

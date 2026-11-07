@@ -94,7 +94,7 @@ Designregeln: Spaltenmetadaten bleiben die kanonische Darstellung. SQL entsteht 
 - SOLL: Unit-Tests für eindeutige Tabellen-/Feldnamen, stabile Registry-Reihenfolge und eindeutige Model-IDs.
 - Für neue öffentliche Typen: SemVer-Auswirkung und Migration von alten Descriptor-Aufrufen dokumentieren.
 
-**Nicht hier implementieren:** SQL-Ausführung, Axum-Handler, CLI-Parsing oder React-Code.
+**Nicht hier implementieren:** SQL-Ausführung, Axum-Handler, CLI-Parsing oder HTML-Vorlagen.
 
 ## NotFound (IST)
 

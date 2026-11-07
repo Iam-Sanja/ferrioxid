@@ -14,7 +14,7 @@
 | `RUST_LOG` | Tracing-Subscriber über die Umgebungsfilter-Voreinstellung `info` | `info` in `.env.example` | Log-Niveau, wenn der Prozess es exportiert sieht |
 | `FERRUM_ENV` | `AuthConfig::from_env` | `development` | `production` setzt `Secure` als Default und leert erlaubte Origins, wenn keine Liste gesetzt ist |
 | `FERRUM_COOKIE_SECURE` | `AuthConfig::from_env` | nur in Produktion wahr | `1` oder `true` erzwingt `Secure`. Nicht von `BIND_ADDRESS` abgeleitet |
-| `FERRUM_ALLOWED_ORIGINS` | `AuthConfig::from_env` | `http://127.0.0.1:3000`, `http://localhost:3000` | kommagetrennte Origins für Login und Cookie-Schreibzugriffe |
+| `FERRUM_ALLOWED_ORIGINS` | `AuthConfig::from_env` | Loopback der Bind-Adresse | kommagetrennte Origins. Ist die Variable gesetzt, ersetzt sie die Liste vollständig. Sonst setzt `apply_bound_address` `http://127.0.0.1:{port}` und `http://localhost:{port}` aus `BIND_ADDRESS` oder `ferrum.toml`. Der Host-Header wird nicht übernommen. |
 | `FERRUM_TRUST_PROXY` | `AuthConfig::from_env` | falsch | nur dann gilt der erste `X-Forwarded-For`-Hop |
 
 `.env.example` wird nicht automatisch geladen. Werte müssen in der Shell gesetzt sein. Eine gesetzte `DATABASE_URL` ersetzt SQLite:
@@ -45,4 +45,4 @@ Der Localhost-Default bleibt `127.0.0.1:3000`. `0.0.0.0` ist keine produktionsre
 
 ## Admin
 
-`FERRUM_ADMIN_DIST` ist ein optionales Verzeichnis mit `index.html` und überschreibt das eingebettete Frontend. Fehlt die Variable, dient der beim `cargo build` eingebettete Stand. `FERRUM_CSRF_SECRET` ist optional und muss 64 Hex-Zeichen lang sein. Ohne die Variable verwendet Ferrum `.ferrum/csrf.key`. `FERRUM_COOKIE_SECURE` und `FERRUM_ENV=production` gelten für das Admin-Cookie genauso wie für die übrige Sitzung. Ein Theme-Wert im Browser ist kein Server-Secret.
+`FERRUM_ADMIN_DIST` wird nicht mehr gelesen. CSS und Vorlagen kommen aus dem Binary. `FERRUM_CSRF_SECRET` ist optional und muss 64 Hex-Zeichen lang sein. Ohne die Variable verwendet Ferrum `.ferrum/csrf.key`. `FERRUM_COOKIE_SECURE` und `FERRUM_ENV=production` gelten für das Admin-Cookie genauso wie für die übrige Sitzung. Theme und Sprache liegen in den Cookies `ferrum_theme` und `ferrum_locale`.

@@ -1,76 +1,24 @@
-# Admin-Assets im Binary
+# Admin-Assets
 
-[Zur Übersicht](index.md) · [admin-frontend.md](admin-frontend.md) · [deployment.md](deployment.md)
+[Zur Übersicht](admin.md) · Nativ: [admin-native.md](admin-native.md)
 
-## Zweck
+## Aufgabe
 
-Ein produktiver Ferrum-Prozess soll HTML, CSS und JavaScript des Admins ausliefern, ohne dass Node.js läuft.
+CSS und das optionale Script werden mit dem Rust-Binary ausgeliefert. Node.js startet dafür weder beim Bauen noch zur Laufzeit.
 
-## Architektur
+## Dateien
 
-Das Feature `embedded-admin` auf `ferrum-admin` und das Feature `admin-ui` auf `ferrum` sind nicht Standard. `examples/myshop` und generierte Fullstack-Projekte aktivieren `admin-ui`. Ist das Feature aktiv und fehlt `apps/admin-ui/dist/index.html`, bricht `build.rs` mit einem deutschen Hinweis auf `npm run build` ab. Ohne das Feature bleibt ein fehlendes Verzeichnis ein leeres Embed. `/admin` antwortet dann mit 503, sofern `FERRUM_ADMIN_DIST` nicht gesetzt ist.
-
-`crates/ferrum-admin/build.rs` kopiert `apps/admin-ui/dist` nach `crates/ferrum-admin/embedded-admin`, wenn dort `index.html` liegt. `include_dir` bettet dieses Verzeichnis ein. `embedded-admin` ist generiert und steht in `.gitignore`. Ein Workspace-Build aktiviert das Feature, weil myshop es anfordert. Ein separates API-Projekt ohne das Feature braucht dafür kein Node.js.
-
-Zur Laufzeit gilt:
-
-1. Ist `FERRUM_ADMIN_DIST` ein Verzeichnis, wird nur dieses ausgeliefert.
-2. Sonst das eingebettete Verzeichnis.
-3. Fehlt `index.html`, antwortet `/admin` mit 503.
-
-## Verantwortliche Dateien
-
-- `crates/ferrum-admin/build.rs`
+- `crates/ferrum-admin/static/css/admin.css`
+- `crates/ferrum-admin/static/js/admin.js`
 - `crates/ferrum-admin/src/assets.rs`
-- `apps/admin-ui/package.json`
-- `apps/admin-ui/vite.config.ts`
+- `crates/ferrum-admin/build.rs`
 
-## Öffentliche APIs
+`assets.rs` bindet die beiden Dateien mit `include_str!` ein und liefert nur `admin.css` und `admin.js`. Jeder andere Pfad, auch mit `..`, ist 404. Es gibt kein Verzeichnis-Override und kein `FERRUM_ADMIN_DIST`.
 
-- `FERRUM_ADMIN_DIST`
-- `GET /admin`, `GET /admin/` und `GET /admin/{*path}`
-- `/admin/api` ist davor gemountet und wird nicht vom Dateihandler übernommen
+## Feature
 
-## Datenfluss
+`admin-ui` auf `ferrum` schaltet `ferrum-admin/embedded-admin` ein. Dieses Feature ist leer. Bestehende Fullstack-Projekte, die es in der `Cargo.toml` nennen, kompilieren weiter. Ein API-Projekt ohne das Feature kompiliert ebenfalls. Der Admin wird in beiden Fällen nicht aus einem Frontend-Build gelesen. Ob die Routen existieren, entscheidet `App::with_admin`.
 
-Vite schreibt gehashte Dateien unter `dist/assets`. Der Rust-Build kopiert sie. Anfragen ohne Dateiendung fallen auf `index.html` zurück. Eine fehlende Datei mit Endung, zum Beispiel `.js` oder `.css`, ist 404. Der Content-Type folgt der Endung.
+## Test
 
-## Sicherheitsregeln
-
-- `..` und absolute Pfade werden abgelehnt.
-- Ausgeliefert wird nur das Override-Verzeichnis oder das eingebettete Frontend.
-- Private Quelldateien liegen nicht in diesem Baum.
-- Node.js wird zur Laufzeit nicht gestartet.
-
-## Fehlerfälle
-
-| Fall | Antwort |
-|---|---|
-| Weder Override noch eingebettetes `index.html` | 503 |
-| Unbekanntes Asset mit Endung | 404 |
-| Path-Traversal | 404, kein Dateiinhalt aus dem Repository |
-| `/admin/api/...` ohne Sitzung | JSON-Fehler, kein HTML |
-
-## Beispiel
-
-```powershell
-cd apps/admin-ui
-npm run build
-cd ../..
-cargo build --workspace
-```
-
-Entwicklung mit einem frischen Frontend, ohne das Binary neu zu bauen:
-
-```powershell
-$env:FERRUM_ADMIN_DIST = "D:\04_Projekte_Arbeit\Projekte\ferrum\apps\admin-ui\dist"
-cargo run -p myshop
-```
-
-## Tests
-
-`admin_assets_reject_traversal_and_keep_the_api` in `examples/myshop/tests/admin_http.rs` setzt `FERRUM_ADMIN_DIST` auf ein temporäres Verzeichnis und prüft HTML, die SPA-Unterseite, `text/javascript`, einen unbekannten Asset-Pfad, Traversal und dass `/admin/api/models` JSON bleibt.
-
-## Einschränkungen
-
-Ein Projekt mit `admin-ui` kompiliert ohne `dist/index.html` nicht. Ein Projekt ohne das Feature kompiliert und antwortet auf `/admin` mit 503. Der Embed entsteht beim Kompilieren. Ein späteres `npm run build` allein ändert ein bereits gebautes Binary nicht. `FERRUM_ADMIN_DIST` bleibt der explizite Entwicklungs-Override.
+`admin_assets_reject_traversal_and_keep_the_api` prüft, dass ein gesetztes `FERRUM_ADMIN_DIST` die Antworten nicht verändert, dass CSS und Script aus dem Binary kommen, unbekannte Pfade 404 sind und `/admin/api/models` JSON bleibt.

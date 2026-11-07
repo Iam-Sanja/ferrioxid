@@ -4,7 +4,7 @@
 
 ## Aufgabe
 
-`ferrum new` legt ein eigenständiges Ferrum-Projekt an. Es kompiliert außerhalb des Ferrum-Workspaces, nutzt SQLite und registriert ein Beispielmodell. Fullstack-Projekte übergeben Branding und Währung an `AdminRegistry::with_branding`. Die Startseite enthält feste Sprachlinks und einen lokalisierten 500-Text. Bereits erzeugte Projekte übernehmen das nicht automatisch. Seit v0.12 legt der Generator `static/css/app.css`, `static/js/app.js` und `media/.gitkeep` an. `media/*` ist ignoriert. `ferrum.toml` enthält `[static]` und `[storage]`. Fullstack-Projekte haben `/contact`. Die API-Vorlage montiert das Formular nicht.
+`ferrum new` legt ein eigenständiges Ferrum-Projekt an. Es kompiliert außerhalb des Ferrum-Workspaces, nutzt SQLite und registriert ein Beispielmodell. Fullstack-Projekte übergeben Branding und Währung an `AdminRegistry::with_branding` und brauchen für den Admin kein Node.js. Die Startseite enthält feste Sprachlinks und einen lokalisierten 500-Text. Bereits erzeugte Projekte übernehmen das nicht automatisch. Seit v0.12 legt der Generator `static/css/app.css`, `static/js/app.js` und `media/.gitkeep` an. `media/*` ist ignoriert. `ferrum.toml` enthält `[static]` und `[storage]`. Fullstack-Projekte haben `/contact`. Die API-Vorlage montiert das Formular nicht.
 
 ## Zuständige Dateien
 

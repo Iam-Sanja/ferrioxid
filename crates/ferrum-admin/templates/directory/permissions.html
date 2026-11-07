@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+{% block content %}
+{% for role in roles %}
+<section class="card">
+<h2>{{ role.name }}</h2>
+<ul>
+{% for code in role.permissions %}
+<li>{{ code }}
+<form method="post" action="/admin/directory/roles/{{ role.name }}/permissions">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="code" value="{{ code }}">
+<input type="hidden" name="action" value="revoke">
+<button type="submit">{{ i18n.revoke }}</button>
+</form>
+</li>
+{% endfor %}
+</ul>
+<form method="post" action="/admin/directory/roles/{{ role.name }}/permissions">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="action" value="grant">
+<label>{{ i18n.permission_code }} <input name="code" required pattern="[A-Za-z0-9_.]+"></label>
+<button type="submit">{{ i18n.grant }}</button>
+</form>
+</section>
+{% endfor %}
+{% endblock %}

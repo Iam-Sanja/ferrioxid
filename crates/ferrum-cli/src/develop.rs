@@ -1,4 +1,4 @@
-//! Entwicklungsserver und Release-Build. Node.js läuft nur, wenn Assets fehlen.
+//! Entwicklungsserver und Release-Build. Der Admin steckt im Rust-Binary.
 
 use ferrum_migrations::discover_project;
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
@@ -111,12 +111,6 @@ pub fn build() -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    if project.embedded_assets {
-        if let Err(error) = ensure_admin_assets(&project.root) {
-            eprintln!("{error}");
-            return ExitCode::from(1);
-        }
-    }
     let status = Command::new("cargo")
         .args(["build", "--release"])
         .current_dir(&project.root)
@@ -186,64 +180,6 @@ fn binary_path(root: &Path, package: &str) -> PathBuf {
         .map(PathBuf::from)
         .unwrap_or_else(|| root.join("target"));
     base.join("debug").join(file)
-}
-
-fn ensure_admin_assets(root: &Path) -> Result<(), String> {
-    let Some(ferrum) = ferrum_crate_path(root)? else {
-        return Err("Die Ferrum-Abhängigkeit wurde in der Cargo.toml nicht gefunden.".to_owned());
-    };
-    let repository = ferrum
-        .parent()
-        .and_then(Path::parent)
-        .ok_or_else(|| "Der Ferrum-Pfad hat kein Repository-Wurzelverzeichnis.".to_owned())?;
-    let index = repository.join("apps/admin-ui/dist/index.html");
-    if index.is_file() {
-        return Ok(());
-    }
-    let admin = repository.join("apps/admin-ui");
-    if !admin.join("package.json").is_file() {
-        return Err(
-            "Admin-Assets fehlen. Im Ferrum-Repository apps/admin-ui mit npm run build bauen."
-                .to_owned(),
-        );
-    }
-    println!("{}", crate::text::line("admin_assets_missing"));
-    let mut command = if cfg!(windows) {
-        Command::new("npm.cmd")
-    } else {
-        Command::new("npm")
-    };
-    let status = command
-        .args(["run", "build"])
-        .current_dir(admin)
-        .status()
-        .map_err(|_| {
-            "npm fehlt. Installiere Node.js oder baue das Admin-Frontend vorab.".to_owned()
-        })?;
-    if status.success() && index.is_file() {
-        Ok(())
-    } else {
-        Err("Der Admin-Build hat kein index.html erzeugt.".to_owned())
-    }
-}
-
-fn ferrum_crate_path(root: &Path) -> Result<Option<PathBuf>, String> {
-    let text =
-        std::fs::read_to_string(root.join("Cargo.toml")).map_err(|error| error.to_string())?;
-    for line in text.lines() {
-        let Some(start) = line.find("path = \"") else {
-            continue;
-        };
-        if !line.contains("ferrum") {
-            continue;
-        }
-        let rest = &line[start + "path = \"".len()..];
-        let Some(end) = rest.find('"') else {
-            continue;
-        };
-        return Ok(Some(root.join(&rest[..end])));
-    }
-    Ok(None)
 }
 
 fn package_name(root: &Path) -> Result<String, String> {

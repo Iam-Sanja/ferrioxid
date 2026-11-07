@@ -1,0 +1,43 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="crumbs" aria-label="Breadcrumb"><a href="/admin">{{ i18n.dashboard }}</a> / <span>{{ model_label }}</span></nav>
+<div class="toolbar">
+<form method="get" action="{{ list_path }}">
+<label>{{ i18n.search }} <input name="q" value="{{ query }}"></label>
+{% for filter in filters %}
+<label>{{ filter.label }} <input name="filter.{{ filter.name }}" value="{{ filter.value }}"></label>
+{% endfor %}
+<button type="submit">{{ i18n.filter }}</button>
+</form>
+{% if can_create %}<a class="button" href="{{ list_path }}/new">{{ i18n.new_record }}</a>{% endif %}
+</div>
+<p class="meta">{{ i18n.total }}: {{ total }} · {{ i18n.results }}: {{ shown }} · {{ i18n.page }} {{ page }}</p>
+{% if rows | length == 0 %}
+<p class="empty">{{ i18n.empty }}</p>
+{% else %}
+<div class="table-wrap">
+<table>
+<thead>
+<tr>
+{% for column in columns %}
+<th><a href="{{ column.sort_href }}">{{ column.label }}{% if column.mark %} {{ column.mark }}{% endif %}</a></th>
+{% endfor %}
+<th>{{ i18n.actions }}</th>
+</tr>
+</thead>
+<tbody>
+{% for row in rows %}
+<tr>
+{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
+<td><a href="{{ list_path }}/{{ row.id }}">{{ i18n.detail }}</a></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endif %}
+<nav class="pager" aria-label="{{ i18n.page }}">
+{% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% endif %}
+{% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% endif %}
+</nav>
+{% endblock %}

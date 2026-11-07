@@ -1,10 +1,13 @@
-//! Admin-API und Auslieferung der gebauten Oberfläche.
+//! Admin-API und serverseitige HTML-Oberfläche.
 //!
 //! Datenzugriff, Validierung und Sitzungen bleiben in den vorhandenen Ferrum-Crates.
 
 mod assets;
+mod html;
 mod http;
+mod localization;
 mod registry;
+mod rendering;
 
 pub use registry::{AdminBranding, AdminRegistry};
 

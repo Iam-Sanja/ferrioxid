@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="card narrow" method="post" action="/admin/login">
+<input type="hidden" name="csrf_token" value="{{ login_csrf }}">
+<input type="hidden" name="next" value="{{ next }}">
+<label for="email">{{ i18n.email }}</label>
+<input id="email" name="email" type="email" autocomplete="username" required value="{{ email }}">
+<label for="password">{{ i18n.password }}</label>
+<input id="password" name="password" type="password" autocomplete="current-password" required>
+<button type="submit">{{ i18n.login }}</button>
+</form>
+{% endblock %}

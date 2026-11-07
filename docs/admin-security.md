@@ -21,6 +21,8 @@ Ein aktiver Superuser überspringt Modellrechte, wenn die Ressource gesetzt ist.
 
 `GET /auth/csrf` funktioniert nur mit gültiger Sitzung. Origin oder Referer müssen erlaubt sein, wenn sie gesendet werden. Ein fehlender Origin ist erlaubt, weil keine offene CORS-Policy existiert. Der Aufruf berechnet dasselbe HMAC-Token erneut. Sitzungstoken und Ablauf bleiben. Gleichzeitige Tabs bleiben gültig. Details stehen in [csrf.md](csrf.md).
 
+Die HTML-Anmeldung prüft zusätzlich `ferrum_login_csrf` gegen das Formularfeld. Die erlaubten Origins folgen der Bind-Adresse und nicht einem fest verdrahteten Port 3000. Der Host-Header wird dafür nicht gelesen. Logs enthalten den Grundcode, nicht das Cookie und nicht das Token.
+
 Das Token steht nicht in `localStorage` und nicht in der URL. Das Sitzungscookie bleibt `HttpOnly`.
 
 ## Listen und Fremdschlüssel
@@ -35,7 +37,7 @@ Normale Modellrechte öffnen das Verzeichnis nicht. Superuser-Vergabe ist blocki
 
 ## Tests
 
-Der SQLite-Test prüft anonyme Admin-Anfrage, fehlendes Staff, unbekanntes Modell, falsche Sortierung, falschen Filter, schreibgeschütztes `id`, Objekt-Scope, fehlendes CSRF, dasselbe Token in zwei Abrufen, ein sitzungsfremdes Token und die Superuser-Sperre. Abgelaufene Sitzungen prüft `expired_session_cookie_is_rejected`. Assets prüft `admin_assets_reject_traversal_and_keep_the_api`.
+Der JSON-Test prüft anonyme Admin-Anfrage, fehlendes Staff, unbekanntes Modell, falsche Sortierung, falschen Filter, schreibgeschütztes `id`, Objekt-Scope, fehlendes CSRF, dasselbe Token in zwei Abrufen, ein sitzungsfremdes Token und die Superuser-Sperre. `admin_html.rs` prüft dieselben Regeln über Formulare, dazu offene Weiterleitungen und escaptes HTML. Assets prüft `admin_assets_reject_traversal_and_keep_the_api`.
 
 ## Grenzen
 

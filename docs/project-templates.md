@@ -55,7 +55,7 @@ Ein ungültiger Modellname, eine fehlende Markierung oder ein bereits registrier
 
 ## Sicherheitsregeln
 
-Die API-Vorlage verlangt das Admin-Feature nicht. Ein Workspace-Build des Ferrum-Repositories selbst aktiviert das Feature, weil `examples/myshop` es anfordert. Ein generiertes API-Projekt tut das nicht und kompiliert ohne Node.js. Fullstack-Projekte erhalten beim Kompilieren einen Build-Fehler, wenn `apps/admin-ui/dist/index.html` fehlt.
+Die API-Vorlage verlangt das Admin-Feature nicht und hängt keine Admin-Routen ein. Fullstack-Projekte aktivieren das leere Feature `admin-ui` und registrieren den Admin. Beide Vorlagen kompilieren ohne Node.js. Das Frontend-Verzeichnis `apps/admin-ui` gibt es nicht mehr.
 
 ## Beispiel
 

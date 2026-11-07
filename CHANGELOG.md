@@ -1,5 +1,19 @@
 # Changelog
 
+## Unreleased — Admin-Login und lokale Origins (v0.13.1)
+
+- `POST /admin/login` scheitert nicht mehr, nur weil die erlaubten Origins fest auf Port 3000 stehen. Die Loopback-Origins kommen aus der Bind-Adresse des Prozesses (`ferrum.toml` oder `BIND_ADDRESS`).
+- `FERRUM_ALLOWED_ORIGINS` bleibt die explizite Liste und wird nicht erweitert. Der Host-Header der Anfrage fließt nicht in die Liste ein. `Origin: null` bleibt abgelehnt.
+- Eine abgelehnte HTML-Anmeldung protokolliert nur einen Grundcode (`origin_rejected`, `form_token_missing`, `login_csrf_missing`, `login_csrf_mismatch`), nie Cookie oder Token.
+- Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Nativer Admin (v0.13)
+
+- Die Oberfläche unter `/admin` ist serverseitiges HTML. Axum, Tera, CSS und ein optionales Script ersetzen React, Vite und Node.js. Die JSON-API unter `/admin/api` bleibt.
+- Login nutzt das kurzlebige Cookie `ferrum_login_csrf`, solange noch keine Sitzung existiert. Schreibende Formulare verwenden das bestehende Sitzungs-HMAC im Feld `csrf_token`. `next` bleibt auf interne `/admin`-Pfade beschränkt.
+- Listen, Formulare, Details, Löschen und das Benutzerverzeichnis laufen über GET und POST. Erfolg antwortet mit 303. Deutsch und Englisch kommen aus einem festen Katalog. Theme und Sprache liegen in HttpOnly-Cookies.
+- `apps/admin-ui` ist entfernt. Das Feature `admin-ui` bleibt leer, damit bestehende Projektdateien weiter kompilieren. Die Cargo-Version bleibt `0.1.0`.
+
 ## Unreleased — Formulare, Staticfiles, Uploads und Middleware (v0.12)
 
 - Typisierte Formulare prüfen Pflicht, Länge, Zahl, Bool, UUID, E-Mail, URL und Kreuzfelder. HTML wird escaped. Unbekannte Felder werden abgelehnt. Ein Derive-Makro gibt es nicht.

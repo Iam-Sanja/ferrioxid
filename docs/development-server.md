@@ -22,7 +22,7 @@ Beide Befehle lesen `ferrum.toml` im Arbeitsverzeichnis oder einem Elternverzeic
 
 ## Konfiguration
 
-`BIND_ADDRESS` und `DATABASE_URL` gelten für den gestarteten Prozess. Ein Fullstack-Projekt mit `embedded_assets = true` verlangt vor dem Release-Build `apps/admin-ui/dist/index.html` im referenzierten Ferrum-Repository. Fehlt es, führt `ferrum build` dort `npm run build` aus. Der laufende Server startet Node.js nicht.
+`BIND_ADDRESS` und `DATABASE_URL` gelten für den gestarteten Prozess. `ferrum build` und `ferrum dev` starten kein Node.js. Der Admin ist im Rust-Binary enthalten.
 
 ## Datenfluss
 
@@ -36,12 +36,12 @@ Ein Neustart lädt auch die Tera-Vorlagen neu. `dev` startet die Binary aus `tar
 |---|---|
 | Keine `ferrum.toml` | Abbruch mit Hinweis |
 | Übersetzungsfehler | Meldung, der alte Prozess ist beendet, kein Neustart bis zur nächsten Änderung |
-| Admin-Assets fehlen und `npm run build` scheitert | `ferrum build` endet mit Fehler |
+| Der Admin fehlt im Binary | Das passiert nicht durch ein fehlendes Frontend. Ein Compile-Fehler von Rust bleibt ein Compile-Fehler. |
 | Adresse beginnt mit `0.0.0.0` | Die generierte Anwendung beendet sich |
 
 ## Sicherheitsregeln
 
-Der Wächter startet keine Shell mit dem Dateinamen. Kindprozesse werden beim Beenden der CLI beendet. Produktionsbuilds binden das Frontend ein und brauchen danach kein Node.js.
+Der Wächter startet keine Shell mit dem Dateinamen. Kindprozesse werden beim Beenden der CLI beendet. Der Admin ist bereits im Binary.
 
 ## Beispiele
 
@@ -63,4 +63,4 @@ Die Integration in `crates/ferrum-cli/tests/generator.rs` setzt `FERRUM_DEV_EXIT
 
 ## Einschränkungen
 
-Frontend-Änderungen starten Vite nicht automatisch. Dafür ist ein separater `npm run dev` in `apps/admin-ui` vorgesehen, zusammen mit `FERRUM_ADMIN_DIST`. `FERRUM_DEV_EXIT_MS` ist nur eine Testhilfe und kein Benutzerbefehl.
+Vorlagen und CSS ändern sich mit dem nächsten Rust-Build. `FERRUM_DEV_EXIT_MS` ist nur eine Testhilfe und kein Benutzerbefehl.

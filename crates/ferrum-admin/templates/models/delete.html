@@ -1,0 +1,12 @@
+{% extends "base.html" %}
+{% block content %}
+<form class="card narrow" method="post" action="{{ action }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<p>{{ i18n.confirm_delete }}</p>
+<p><strong>{{ label }}</strong></p>
+<div class="actions">
+<button class="danger" type="submit">{{ i18n.delete }}</button>
+<a class="button ghost" href="{{ cancel }}">{{ i18n.cancel }}</a>
+</div>
+</form>
+{% endblock %}

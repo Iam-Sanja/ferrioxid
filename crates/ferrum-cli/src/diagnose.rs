@@ -109,17 +109,7 @@ pub fn doctor() -> ExitCode {
                 );
             }
             if project.template.as_deref() == Some("fullstack") || project.embedded_assets {
-                match command_version("node") {
-                    Some(version) => report("ok", &format!("Node.js für den Frontend-Build: {version}")),
-                    None => report(
-                        "warnung",
-                        "Node.js fehlt. Es wird nur zum Bauen des Admin-Frontends gebraucht, nicht zum Starten.",
-                    ),
-                }
-                match command_version("npm") {
-                    Some(_) => report("ok", "npm ist verfügbar."),
-                    None => report("warnung", "npm fehlt für einen neuen Admin-Build."),
-                }
+                report("ok", "Der Admin wird mit dem Rust-Binary ausgeliefert.");
             }
         }
         Err(error) => {

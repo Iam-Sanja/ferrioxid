@@ -57,7 +57,7 @@ Passwort-Hashes stehen nicht in `PublicUser`. Änderungen an `is_superuser` gibt
 
 ## Konfiguration
 
-Eingebettetes Frontend aus `apps/admin-ui/dist` zum Compile-Zeitpunkt, sonst `FERRUM_ADMIN_DIST`. Node.js läuft nur beim Bauen. Siehe [admin-assets.md](admin-assets.md).
+Die HTML-Oberfläche kommt aus dem Binary. Siehe [admin-assets.md](admin-assets.md) und [admin-routing.md](admin-routing.md). Die JSON-Routen dieser Datei bleiben.
 
 ## Fehler
 
@@ -65,7 +65,7 @@ Ungültige Filter und Sortierungen sind 422. Schreibversuche auf Primärschlüss
 
 ## Tests
 
-`sqlite_admin_security_crud_and_csrf_bootstrap` in `examples/myshop/tests/admin_http.rs`.
+`sqlite_admin_security_crud_and_csrf_bootstrap` in `examples/myshop/tests/admin_http.rs`. Die HTML-Wege prüft `examples/myshop/tests/admin_html.rs`. Die HTML-Fremdschlüsselauswahl lädt höchstens 100 Zeilen.
 
 ## Grenzen
 

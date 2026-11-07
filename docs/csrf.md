@@ -18,14 +18,16 @@ Logout, Passwortwechsel und Ablauf widerrufen oder verwerfen die Sitzung. Danach
 - `crates/ferrum-auth/src/config.rs`
 - `crates/ferrum-auth/src/routes.rs`
 - `crates/ferrum-auth/src/cookie.rs`
-- `apps/admin-ui/src/api/client.ts`
+- `crates/ferrum-admin/src/html.rs`
 
 ## Öffentliche APIs
 
 - `AuthConfig.csrf_secret`
 - `AuthService::refresh_csrf`
 - `GET /auth/csrf` liefert `{ "csrf_token": "..." }`
-- Header `x-csrf-token` bei unsicheren Methoden
+- Header `x-csrf-token` bei unsicheren JSON-Methoden
+- HTML-Feld `csrf_token` mit demselben HMAC
+- Cookie `ferrum_login_csrf` nur für `POST /admin/login`, bevor eine Sitzung existiert. Es ist 64 Hex-Zeichen, HttpOnly, `Path=/`, SameSite aus der Auth-Konfiguration, `Secure` nur bei `cookie_secure` und `Max-Age=600`. Ein gültiges Cookie wird für weitere Tabs wiederverwendet.
 
 ## Datenfluss
 
@@ -36,7 +38,9 @@ Logout, Passwortwechsel und Ablauf widerrufen oder verwerfen die Sitzung. Danach
 
 ## Sicherheitsregeln
 
-- Tokens stehen nicht in URLs und werden nicht geloggt.
+- Tokens stehen nicht in URLs und werden nicht geloggt. Eine abgelehnte HTML-Anmeldung nennt intern nur `origin_rejected`, `form_token_missing`, `login_csrf_missing` oder `login_csrf_mismatch`.
+- Sendet der Browser `Origin` oder `Referer`, muss der Wert exakt zu den erlaubten Origins passen. Die Liste kommt aus `FERRUM_ALLOWED_ORIGINS` oder aus der Loopback-Bind-Adresse, nicht aus dem Host-Header. `http://127.0.0.1:3000` gilt nur, wenn der Prozess wirklich an Port 3000 gebunden ist oder die Variable ihn nennt.
+- `Referrer-Policy: no-referrer` lässt Browser bei einem HTML-Formular-POST `Origin: null` senden, auch wenn die Seite same-origin ist. Das gilt nur, wenn zusätzlich `Sec-Fetch-Site: same-origin` steht. Diesen Header kann eine Seite nicht selbst setzen. `null` mit `cross-site`, `same-site` oder ohne diesen Header bleibt abgelehnt. `null` steht nicht auf der Allowlist.
 - Das Session-Cookie bleibt `HttpOnly`.
 - Der Vergleich nutzt `constant_eq`.
 - Entwicklung verwendet den festen Schlüssel `ferrum-dev-csrf-secret-32-bytes!`.
@@ -71,7 +75,7 @@ x-csrf-token: ...
 
 ## Tests
 
-`examples/myshop/tests/admin_http.rs` prüft zwei Abrufe, einen erfolgreichen Schreibzugriff mit dem Login-Token, ein gefälschtes Token, einen sitzungsfremden Token und den Admin-Schreibweg. `examples/myshop/tests/auth.rs` prüft Logout, fehlenden Header und eine abgelaufene Sitzung.
+`examples/myshop/tests/admin_http.rs` prüft zwei Abrufe, einen erfolgreichen JSON-Schreibzugriff, ein gefälschtes Token und einen sitzungsfremden Token. `examples/myshop/tests/admin_html.rs` prüft das Login-Cookie, ein falsches Token, das Sitzungsfeld, Logout und eine abgelaufene Sitzung. `html_login_csrf_respects_the_bound_port` prüft `127.0.0.1` und `localhost` am gebundenen Port, den alten Port 3000 als fremde Origin, fehlendes und manipuliertes Cookie, fehlendes und falsches Formularfeld, eine fremde Origin, zwei Tabs, Login, Logout und erneuten Login. `examples/myshop/tests/auth.rs` prüft den JSON-Logout. JSON `POST /auth/login` verlangt weiter kein CSRF-Cookie.
 
 ## Einschränkungen
 
