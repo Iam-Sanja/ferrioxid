@@ -4,12 +4,13 @@
 
 ## Verantwortung (IST)
 
-Die Crate stellt `App` als Builder für Registrierung, Entwicklungs-Bootstrap und Axum-Router bereit. Sie darf nicht versuchen, Datenbank-Models automatisch im Workspace zu entdecken.
+Die Crate stellt `App` als Builder für Registrierung, Entwicklungs-Bootstrap und Axum-Router bereit. Sie darf nicht versuchen, Datenbank-Models automatisch im Workspace zu entdecken. `ApiError` antwortet mit `problem_json` aus `ferrum-core`. Die Codes stehen in [error-codes.md](error-codes.md). `detail` bleibt der Fallback für bestehende Tests.
 
 ```rust
 let app = ferrum::App::new(db.clone()).register::<Product>();
 app.bootstrap_schema().await?;  // separat, nur Demo/Entwicklung
 let router = app.into_router();
+let router = ferrum::web::prepare(router, &settings);
 ```
 
 ### Registrierung

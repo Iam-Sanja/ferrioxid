@@ -4,7 +4,7 @@
 
 ## Zweck
 
-`myshop` prüft, ob die öffentlichen Ferrum-Komponenten gemeinsam funktionieren. Das Beispiel nutzt dieselbe Fassade wie andere Anwendungen und enthält keine privaten Datenbankzugriffe. Es aktiviert das Feature `admin-ui`. Ein neues eigenständiges Projekt erzeugt `ferrum new`, beschrieben in [project-generator.md](project-generator.md). myshop selbst bindet keine Objektregel an Produkt oder Kategorie. Die Create-Policy wird in den Tests `auth.rs` und `admin_http.rs` geprüft.
+`myshop` prüft, ob die öffentlichen Ferrum-Komponenten gemeinsam funktionieren. Das Beispiel nutzt dieselbe Fassade wie andere Anwendungen und enthält keine privaten Datenbankzugriffe. Es aktiviert das Feature `admin-ui`. Ein neues eigenständiges Projekt erzeugt `ferrum new`, beschrieben in [project-generator.md](project-generator.md). myshop selbst bindet keine Objektregel an Produkt oder Kategorie. Die Create-Policy wird in den Tests `auth.rs` und `admin_http.rs` geprüft. Seit v0.12 liefert `/` eine Seite mit `/static/css/app.css`. `/contact` prüft `ContactForm` und versendet keine E-Mail. `POST /uploads` ist nur mit Sitzung erreichbar. Request-ID und Sicherheitsheader kommen aus `ferrum-middleware`.
 
 ## Modell (IST)
 

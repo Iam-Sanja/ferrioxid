@@ -1,10 +1,20 @@
+mod contact;
+
 use ferrum::core::FerrumModel;
+use ferrum::middleware::{apply, Standard};
 use ferrum::migrations::{history_exists, table_exists, RegisteredModel, SchemaSnapshot};
+use ferrum::static_files::{mount, StaticOptions};
+use ferrum::storage::LocalStorage;
 use ferrum::App;
 use myshop::models::category::Category;
 use myshop::models::internal_note::InternalNote;
 use myshop::models::product::Product;
 use std::net::SocketAddr;
+use std::sync::Arc;
+
+async fn home() -> axum::response::Html<&'static str> {
+    axum::response::Html("<!DOCTYPE html><html lang=\"de\"><head><meta charset=\"utf-8\"><title>myshop</title><link rel=\"stylesheet\" href=\"/static/css/app.css\"></head><body><main><h1>myshop</h1><p><a href=\"/contact\">Kontakt</a></p></main></body></html>")
+}
 
 fn registered_schema() -> Result<SchemaSnapshot, Box<dyn std::error::Error>> {
     Ok(SchemaSnapshot::from_registered(&[
@@ -38,13 +48,40 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let db = ferrum::db::connect(&url).await?;
     // register::<Product>() exposes GET, GET /{id}, POST, PATCH /{id} and DELETE /{id}.
     let auth = ferrum::auth::AuthService::new(db.clone(), ferrum::auth::AuthConfig::from_env());
+    let branding = ferrum::migrations::discover_project(std::path::Path::new("."))
+        .map(|project| ferrum::admin::AdminBranding {
+            site_title: project.site_title,
+            site_header: project.site_header,
+            app_name: project.app_name,
+            primary_color: project.primary_color,
+            default_locale: project.default_locale,
+            fallback_locale: project.fallback_locale,
+            currency: project.currency,
+        })
+        .unwrap_or_default();
     let admin = ferrum::admin::AdminRegistry::new()
+        .with_branding(branding)
         .add::<Category>()
         .add::<Product>()
         .add::<InternalNote>();
+    let media = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("media");
+    let storage = LocalStorage::open(
+        &media,
+        1024 * 1024,
+        &["text/plain", "image/png", "image/jpeg", "application/pdf"],
+    )?;
     let app = App::new(db.clone())
         .with_auth(auth)
         .with_admin(admin)
+        .merge(
+            axum::Router::new()
+                .route("/", axum::routing::get(home))
+                .route(
+                    "/contact",
+                    axum::routing::get(contact::show).post(contact::submit),
+                ),
+        )
+        .merge(ferrum::storage::routes(Arc::new(storage)))
         .register::<Category>()
         .register::<Product>()
         .register::<InternalNote>();
@@ -74,10 +111,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
     let listener = tokio::net::TcpListener::bind(&address).await?;
     println!("Ferrum myshop at http://{address}");
+    let static_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");
+    let router = mount(app.into_router(), StaticOptions::new(static_root));
+    let router = apply(
+        router,
+        Standard {
+            body_limit: 2 * 1024 * 1024,
+        },
+    );
     axum::serve(
         listener,
-        app.into_router()
-            .into_make_service_with_connect_info::<SocketAddr>(),
+        router.into_make_service_with_connect_info::<SocketAddr>(),
     )
     .await?;
     Ok(())

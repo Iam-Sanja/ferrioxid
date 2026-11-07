@@ -8,7 +8,7 @@
 
 ## Verantwortung
 
-`ferrum-core` enthält die gemeinsamen, von HTTP und ORM unabhängigen Vertragstypen. Die Crate darf **keine** Abhängigkeit auf `ferrum-api`, Axum oder eine konkrete Datenbankanbindung annehmen.
+`ferrum-core` enthält die gemeinsamen, von HTTP und ORM unabhängigen Vertragstypen. Die Crate darf **keine** Abhängigkeit auf `ferrum-api`, Axum oder eine konkrete Datenbankanbindung annehmen. Seit v0.12 liegen die Formularfeldregeln in `validation.rs`. Das Modellmakro ruft sie noch nicht auf. Die Beschreibung steht in [forms-validation.md](forms-validation.md).
 
 ## Tatsächliche öffentliche Typen (IST)
 

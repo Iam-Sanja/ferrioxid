@@ -77,6 +77,8 @@ fn generated_api_and_fullstack_projects_compile() {
         .success());
     let api = root.join("demo_api");
     assert!(api.join("migrations/0001_initial.json").is_file());
+    assert!(api.join("templates/index.html").is_file());
+    assert!(api.join("templates/errors/404.html").is_file());
     assert!(api.join("ferrum.toml").is_file());
     assert!(!std::fs::read_to_string(api.join("ferrum.toml"))
         .unwrap()

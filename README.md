@@ -1,6 +1,6 @@
 # Ferrum — Model-first Rust backend (experimental)
 
-Funktionsstand v0.9. Die Cargo-Version bleibt `0.1.0`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`, die Beschreibung in `docs/admin.md`. Das Feature `admin-ui` verlangt vor dem Build `npm run build` in `apps/admin-ui`. Reine API-Projekte ohne dieses Feature brauchen kein Node.js. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
+Funktionsstand v0.12. Die Cargo-Version bleibt `0.1.0`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware ergänzen API und Admin. Die Beschreibung steht in `docs/forms.md`, `docs/staticfiles.md`, `docs/uploads.md` und `docs/middleware.md`. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Die Beschreibung steht in `docs/i18n.md` und `docs/error-codes.md`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`, die Beschreibung in `docs/admin.md`. Das Feature `admin-ui` verlangt vor dem Build `npm run build` in `apps/admin-ui`. Reine API-Projekte ohne dieses Feature brauchen kein Node.js. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
 
 Ein neues Projekt außerhalb dieses Workspaces:
 

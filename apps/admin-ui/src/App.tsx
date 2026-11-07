@@ -9,11 +9,13 @@ import { ModelCreate } from "./pages/ModelCreate";
 import { ModelDetail } from "./pages/ModelDetail";
 import { ModelEdit } from "./pages/ModelEdit";
 import { ModelList } from "./pages/ModelList";
+import { useI18n } from "./i18n";
 import { Forbidden, NotFound } from "./pages/StatusPages";
 
 function Guard({ children }: { children: ReactElement }) {
   const { user, ready } = useAuth();
-  if (!ready) return <p>Sitzung wird geprüft.</p>;
+  const { t } = useI18n();
+  if (!ready) return <p role="status">{t("auth.session")}</p>;
   if (!user) return <Navigate to="/login" replace />;
   return children;
 }

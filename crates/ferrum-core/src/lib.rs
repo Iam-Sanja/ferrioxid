@@ -1,5 +1,11 @@
 //! Shared contracts, independent of HTTP and database implementations.
 
+mod problem;
+mod validation;
+
+pub use problem::problem_json;
+pub use validation::{is_email, is_http_url, parse_bool, parse_i64, parse_uuid, text_code};
+
 #[derive(Debug, Clone, Copy)]
 pub struct ModelDescriptor {
     pub name: &'static str,

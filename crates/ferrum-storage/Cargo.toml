@@ -1,0 +1,20 @@
+[package]
+name = "ferrum-storage"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+axum.workspace = true
+ferrum-auth = { path = "../ferrum-auth" }
+ferrum-core = { path = "../ferrum-core" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+ferrum-db = { path = "../ferrum-db" }
+tower = { version = "0.5", features = ["util"] }

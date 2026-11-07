@@ -68,6 +68,23 @@ pub fn doctor() -> ExitCode {
                     &format!("Serverbindung ist {}:{}", project.host, project.port),
                 );
             }
+            if project.templates_enabled {
+                if project.templates_directory().is_dir() {
+                    report("ok", "Vorlagenverzeichnis ist vorhanden.");
+                } else {
+                    errors += 1;
+                    report(
+                        "fehler",
+                        "templates.enabled ist wahr, aber das Vorlagenverzeichnis fehlt.",
+                    );
+                }
+            }
+            if std::env::var("DATABASE_URL").is_ok() {
+                report(
+                    "ok",
+                    "DATABASE_URL überschreibt die URL aus ferrum.toml. Der Wert wird nicht angezeigt.",
+                );
+            }
             if project.database_url.starts_with("sqlite:") {
                 report(
                     "ok",

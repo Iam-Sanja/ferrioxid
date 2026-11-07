@@ -74,12 +74,39 @@ impl AuthConfig {
             std::env::var("FERRUM_TRUST_PROXY").ok().as_deref(),
             Some("1" | "true" | "TRUE")
         );
+        if let Some(hours) = env_range("FERRUM_SESSION_HOURS", 1, 168) {
+            config.session_ttl_secs = i64::from(hours) * 3600;
+        }
+        if let Some(minutes) = env_range("FERRUM_IDLE_MINUTES", 1, 1440) {
+            config.idle_timeout_secs = i64::from(minutes) * 60;
+        }
         if environment == Environment::Production && !config.cookie_secure {
             tracing::warn!(
                 "FERRUM_COOKIE_SECURE ist in Produktion aus. Session-Cookies werden ohne Secure gesendet."
             );
         }
         config
+    }
+
+    /// Dateiwerte gelten nur, wenn die Umgebung sie nicht bereits gesetzt hat.
+    pub fn apply_project_session(&mut self, session_hours: u32, idle_minutes: u32) {
+        if std::env::var("FERRUM_SESSION_HOURS").is_err() {
+            self.session_ttl_secs = i64::from(session_hours) * 3600;
+        }
+        if std::env::var("FERRUM_IDLE_MINUTES").is_err() {
+            self.idle_timeout_secs = i64::from(idle_minutes) * 60;
+        }
+    }
+}
+
+fn env_range(name: &str, min: u32, max: u32) -> Option<u32> {
+    let value = std::env::var(name).ok()?;
+    match value.parse::<u32>() {
+        Ok(number) if (min..=max).contains(&number) => Some(number),
+        _ => {
+            tracing::warn!("{name} liegt außerhalb von {min} bis {max} und wird ignoriert.");
+            None
+        }
     }
 }
 

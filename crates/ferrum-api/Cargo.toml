@@ -10,7 +10,10 @@ ferrum-auth = { path = "../ferrum-auth" }
 ferrum-admin = { path = "../ferrum-admin" }
 ferrum-db = { path = "../ferrum-db" }
 ferrum-migrations = { path = "../ferrum-migrations" }
+ferrum-static = { path = "../ferrum-static" }
+ferrum-middleware = { path = "../ferrum-middleware" }
 axum.workspace = true
+tera.workspace = true
 sea-orm.workspace = true
 serde_json.workspace = true
 tracing.workspace = true

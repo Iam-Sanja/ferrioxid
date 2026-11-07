@@ -7,10 +7,11 @@
 - Ohne `allow_anonymous = true` werden GET, POST, PATCH und DELETE als 403 registriert. Der JSON-Körper ist derselbe `ApiError`-Vertrag.
 - Create- und Update-Validierung prüft bekannte Felder gemäß Makroregeln. `deny_unknown_fields` verhindert, dass `id` oder `readonly`-Felder im JSON ankommen.
 - INSERT, UPDATE und DELETE binden Werte über SeaORM. Die DELETE- und UPDATE-Anweisungen enthalten immer `WHERE "id" = $1`. Tabellen- und Spaltennamen stammen nur aus geprüften Makroattributen.
-- `ApiError` loggt DB-Details intern und liefert bei 500 nur generische Informationen nach außen.
+- `ApiError` loggt DB-Details intern und liefert bei 500 nur generische Informationen nach außen. Seit v0.11 trägt dieselbe Antwort einen stabilen `code`. SQL und Hashes werden auch dann ersetzt, wenn ein Freitext sie enthielte.
 - Axums JSON-Extractor verwendet standardmäßig Serde-DTOs mit `deny_unknown_fields` auf dem Create-Typ.
 - Demo-Bind ist `127.0.0.1:3000`; Docker-Postgres-Port ist auf `127.0.0.1` publiziert.
 - `can_create` prüft die Create-Eingabe vor dem INSERT. Eine fremde Besitzer-ID wird abgelehnt, wenn die Regel das verlangt. Der Standard der Methode ist `false`. Generierte Projekte binden nicht an `0.0.0.0` und enthalten kein Standardpasswort.
+- Seit v0.12 bleiben Staticfiles im konfigurierten Root. Uploads verwenden UUID-Namen, prüfen den Dateiinhalt und gehören dem angemeldeten Benutzer. Die Request-ID kommt vom Server. Logs enthalten keinen Query-String. Details stehen in [staticfiles.md](staticfiles.md), [uploads.md](uploads.md) und [middleware.md](middleware.md).
 
 ## Authentifizierung (IST, v0.7)
 

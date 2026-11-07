@@ -1,0 +1,9 @@
+[package]
+name = "ferrum-forms"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferrum-core = { path = "../ferrum-core" }
+uuid.workspace = true

@@ -36,4 +36,6 @@ export type PublicUser = {
 export type ApiError = {
   status: number;
   detail: string;
+  code?: string;
+  field?: string;
 };

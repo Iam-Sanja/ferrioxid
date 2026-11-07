@@ -10,6 +10,9 @@
 | v0.8 | Implementiert und mit SQLite- sowie Vitest-Tests geprüft | Admin-Metadaten, `/admin/api`, React-Oberfläche, CSRF-Bootstrap, Staff-Zugang | Cargo-Version bleibt `0.1.0`. Keine Superuser-Vergabe im Admin |
 | v0.8.1 | Implementiert | Stabiles CSRF, SQL-Query-Scopes, eingebettete Admin-Assets | Cargo-Version bleibt `0.1.0`. Kein OAuth, MFA, GraphQL oder JWT |
 | v0.9 | Implementiert | Create-Policy, Feature `admin-ui`, `ferrum new`, `dev`, `doctor`, `check`, `generate model`, `build` | Cargo-Version bleibt `0.1.0`. Besitzer-ID aus der Sitzung ist geplant |
+| v0.10 | Implementiert | Settings, Tera-Startseite, Admin-Suche und Filter, I18n-Katalog `de`/`en` | Weitere Sprachen bleiben erweiterbar |
+| v0.11 | Implementiert | Admin-Übersetzung `de`/`en`, stabile Fehlercodes, Branding-Endpunkt, lokalisierte Formate, Verzeichnis mit Rollen | Cargo-Version bleibt `0.1.0`. CLI-`migrate`-Texte und weitere Sprachen sind offen |
+| v0.12 | Implementiert | Formulare, Staticfiles, lokaler Upload-Speicher, Request-ID und Logging | Cargo-Version bleibt `0.1.0`. S3, Virenscanner und Formular-Derive sind geplant |
 
 ## v0.1 enthalten
 

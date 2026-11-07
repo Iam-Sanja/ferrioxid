@@ -4,7 +4,7 @@
 
 ## Aufgabe
 
-Zwei Vorlagen unterscheiden eine reine API von einer Anwendung mit Authentifizierung und Admin.
+Zwei Vorlagen unterscheiden eine reine API von einer Anwendung mit Authentifizierung und Admin. Beide erhalten Staticfiles und einen leeren Medienordner. Nur Fullstack registriert `/contact` und den Admin. Uploads werden nicht automatisch öffentlich gemacht.
 
 ## Zuständige Dateien
 
@@ -43,7 +43,7 @@ meinprojekt/
 
 ## Konfiguration
 
-API: `admin.enabled` und `embedded_assets` sind falsch. Fullstack: beide sind wahr. Das Produktmodell der API ist anonym. Das Fullstack-Modell ist zusätzlich im Admin sichtbar. Die generierte Binary lehnt eine Bind-Adresse ab, die mit `0.0.0.0` beginnt.
+Beide Vorlagen aktivieren Tera und eine Startseite. API: `admin.enabled` und `embedded_assets` sind falsch, der Admin-Link fehlt. Fullstack: Admin und Auth sind wahr. Das Produktmodell der API ist anonym. Das Fullstack-Modell ist zusätzlich im Admin sichtbar. Die generierte Binary lehnt eine Bind-Adresse ab, die mit `0.0.0.0` beginnt.
 
 ## Datenfluss
 

@@ -255,12 +255,7 @@ fn error_response(
 ) -> axum::response::Response {
     (
         status,
-        Json(json!({
-            "type": "about:blank",
-            "title": title,
-            "status": status.as_u16(),
-            "detail": detail
-        })),
+        Json(ferrum_core::problem_json(status.as_u16(), title, detail)),
     )
         .into_response()
 }

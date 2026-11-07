@@ -56,14 +56,95 @@ pub trait ManagedModel: Send + Sync {
     fn object_allows(&self, user: &AuthUser, action: &str, record: &Value) -> bool;
 }
 
+#[derive(Clone, Debug)]
+pub struct AdminBranding {
+    pub site_title: String,
+    pub site_header: String,
+    pub app_name: String,
+    pub primary_color: String,
+    pub default_locale: String,
+    pub fallback_locale: String,
+    pub currency: String,
+}
+
+impl Default for AdminBranding {
+    fn default() -> Self {
+        Self {
+            site_title: "Ferrum Admin".to_owned(),
+            site_header: "Ferrum Verwaltung".to_owned(),
+            app_name: "Ferrum".to_owned(),
+            primary_color: "#0f172a".to_owned(),
+            default_locale: "de".to_owned(),
+            fallback_locale: "en".to_owned(),
+            currency: "EUR".to_owned(),
+        }
+    }
+}
+
+impl AdminBranding {
+    /// Verwirft Farben, Sprachen und Währungen, die nicht dem öffentlichen Vertrag entsprechen.
+    pub fn sanitized(mut self) -> Self {
+        let fallback = Self::default();
+        if !is_public_label(&self.site_title) {
+            self.site_title = fallback.site_title;
+        }
+        if !is_public_label(&self.site_header) {
+            self.site_header = fallback.site_header;
+        }
+        if !is_public_label(&self.app_name) {
+            self.app_name = fallback.app_name;
+        }
+        if !is_hex_color(&self.primary_color) {
+            self.primary_color = fallback.primary_color;
+        }
+        if self.default_locale != "de" && self.default_locale != "en" {
+            self.default_locale = fallback.default_locale;
+        }
+        if self.fallback_locale != "de" && self.fallback_locale != "en" {
+            self.fallback_locale = fallback.fallback_locale;
+        }
+        if self.currency.len() != 3 || !self.currency.chars().all(|char| char.is_ascii_uppercase())
+        {
+            self.currency = fallback.currency;
+        }
+        self
+    }
+}
+
+fn is_public_label(value: &str) -> bool {
+    let trimmed = value.trim();
+    !trimmed.is_empty()
+        && trimmed.len() <= 80
+        && !trimmed
+            .chars()
+            .any(|char| char.is_control() || char == '<' || char == '>')
+}
+
+fn is_hex_color(value: &str) -> bool {
+    let Some(hex) = value.strip_prefix('#') else {
+        return false;
+    };
+    matches!(hex.len(), 3 | 6) && hex.chars().all(|char| char.is_ascii_hexdigit())
+}
+
 #[derive(Clone, Default)]
 pub struct AdminRegistry {
     models: Arc<Vec<Arc<dyn ManagedModel>>>,
+    branding: AdminBranding,
 }
 
 impl AdminRegistry {
     pub fn new() -> Self {
         Self::default()
+    }
+
+    pub fn with_branding(mut self, branding: AdminBranding) -> Self {
+        self.branding = branding.sanitized();
+        self
+    }
+
+    pub fn branding(&self) -> &AdminBranding {
+        &self.branding
     }
 
     pub fn add<M>(self) -> Self
@@ -386,4 +467,23 @@ pub fn sensitive(name: &str) -> bool {
             | "csrf_token"
             | "csrf_token_hash"
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::AdminBranding;
+
+    #[test]
+    fn branding_rejects_css_and_unknown_locale() {
+        let branding = AdminBranding {
+            primary_color: "red;background:url(x)".to_owned(),
+            currency: "euro".to_owned(),
+            default_locale: "../de".to_owned(),
+            ..AdminBranding::default()
+        }
+        .sanitized();
+        assert_eq!(branding.primary_color, "#0f172a");
+        assert_eq!(branding.currency, "EUR");
+        assert_eq!(branding.default_locale, "de");
+    }
 }

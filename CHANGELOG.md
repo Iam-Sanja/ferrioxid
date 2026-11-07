@@ -1,5 +1,31 @@
 # Changelog
 
+## Unreleased — Formulare, Staticfiles, Uploads und Middleware (v0.12)
+
+- Typisierte Formulare prüfen Pflicht, Länge, Zahl, Bool, UUID, E-Mail, URL und Kreuzfelder. HTML wird escaped. Unbekannte Felder werden abgelehnt. Ein Derive-Makro gibt es nicht.
+- HTML-Formulare verwenden das bestehende HMAC-CSRF, sobald eine Sitzung vorhanden ist. Öffentliche Formulare ohne Cookie bleiben ohne zweiten Mechanismus. Das Kontaktbeispiel versendet keine E-Mail.
+- Statische Dateien kommen nur aus dem konfigurierten Root, mit MIME, Länge, Cache und ETag. Admin-Assets bleiben unter `/admin`.
+- Lokaler Speicher nutzt UUID-Dateinamen, Inhaltserkennung, Größenlimit und Owner-Isolation. Uploads sind nicht montiert, bis `routes` eingehängt wird. S3 und Virenscanner sind nicht enthalten. Metadaten liegen neben der Datei, ohne neue Migration.
+- Request-ID, Access-Log, Sicherheitsheader und Body-Limit laufen über Axum und Tower. Eingehende Request-IDs werden ignoriert. Query, Cookies und Tokens werden nicht protokolliert.
+- Neue Projekte erhalten `static/`, `media/` und die Abschnitte `[static]` und `[storage]`. Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Internationalisierung, Settings-Anbindung und Admin (v0.11)
+
+- Der Admin übersetzt sichtbare Texte über Kataloge unter `apps/admin-ui/src/i18n/locales/{de,en}`. Ein Wechsel speichert `ferrum-locale` und setzt `lang` am Dokument, ohne die Seite neu zu laden.
+- API-, Auth- und Admin-Fehler enthalten `code`, optional `field` und leere `params`. `detail` und die HTTP-Statuscodes bleiben. Falsche E-Mail und falsches Passwort teilen sich weiter `auth.invalid_credentials` und denselben Text. SQL und `password_hash` werden nicht ausgegeben.
+- `GET /admin/api/config` ist öffentlich und enthält nur Titel, Kopfzeile, Anwendungsname, geprüfte Farbe, Sprachen und Währung. Die Farbe muss `#rgb` oder `#rrggbb` sein.
+- Startseiten wählen die Sprache über `?lang=`, danach `Accept-Language`, dann `default_locale`, dann `fallback_locale`. Der Wert wird nicht als Dateipfad verwendet.
+- `branding.currency` ist ein ISO-4217-Code. Die Oberfläche formatiert Zahlen, Datum und Währung mit `Intl`. Cent-Beträge an Feldern auf `_cents` bleiben ganze Zahlen.
+- Das Benutzerverzeichnis zeigt Rollen, sortiert und blättert lokal und bestätigt Deaktivieren, Staff-Entzug, Rechteentzug und das Aufheben einer Rollenzuordnung.
+- Die CLI übersetzt die zentralen Erfolgsmeldungen von `new`, `generate model` und `dev` über `FERRUM_LOCALE` oder `default_locale`. Befehlsnamen und die Ausgaben von `migrate` bleiben stabil.
+- Die Cargo-Version bleibt `0.1.0`. Nicht enthalten bleiben OAuth, MFA, GraphQL, WebSockets, Mandanten, Plugins, Cloud-Deployments und `migrate down`.
+
+## Unreleased — Settings, Vorlagen und Admin-Oberfläche (v0.10)
+
+- `ferrum.toml` kennt Projekt, Server, Auth, Vorlagen und Branding. Unbekannte Schlüssel bleiben Fehler. `DATABASE_URL`, `FERRUM_SESSION_HOURS` und `FERRUM_IDLE_MINUTES` überschreiben die Datei.
+- Neue Projekte rendern `/` mit Tera. Dazu gehören Layout, Startseite, 404 und 500. API-Projekte verlinken den Admin nicht.
+- Die Admin-Oberfläche hat gemeinsame Buttons, Felder, Suche, Filter, Trefferzahl und ein durchsuchbares Benutzer- und Rollenverzeichnis. Deutsch und Englisch sind als Katalog vorbereitet. Die Cargo-Version bleibt `0.1.0`.
+
 ## Unreleased — Entwicklerwerkzeuge und Create-Policies (v0.9)
 
 - `ObjectPolicy::can_create` prüft Create-Eingaben vor dem INSERT. Der Standard ist Ablehnung. Superuser folgen der bisherigen Semantik und überspringen die Objektregel. REST und Admin verwenden dieselbe Regel. Die Antwort ist 403, `create policy rejected the record`. Fehlende Pflichtfelder bleiben 422.

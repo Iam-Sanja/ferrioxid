@@ -6,7 +6,7 @@ mod assets;
 mod http;
 mod registry;
 
-pub use registry::AdminRegistry;
+pub use registry::{AdminBranding, AdminRegistry};
 
 pub fn mount(
     router: axum::Router<ferrum_auth::AppState>,

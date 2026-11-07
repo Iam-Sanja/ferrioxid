@@ -12,6 +12,10 @@ ferrum-migrations = { path = "../ferrum-migrations" }
 ferrum-api = { path = "../ferrum-api" }
 ferrum-auth = { path = "../ferrum-auth" }
 ferrum-admin = { path = "../ferrum-admin" }
+ferrum-forms = { path = "../ferrum-forms" }
+ferrum-static = { path = "../ferrum-static" }
+ferrum-storage = { path = "../ferrum-storage" }
+ferrum-middleware = { path = "../ferrum-middleware" }
 sea-orm.workspace = true
 serde.workspace = true
 serde_json.workspace = true

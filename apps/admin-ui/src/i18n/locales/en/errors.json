@@ -1,0 +1,47 @@
+{
+  "unknown": "The action failed.",
+  "validation": {
+    "required": "This field is required",
+    "field": "The value for {field} is invalid.",
+    "password": "The password must contain 12 to 128 characters.",
+    "failed": "The input is invalid."
+  },
+  "auth": {
+    "forbidden": "Access denied",
+    "required": "Sign-in is required",
+    "invalid_credentials": "The email or password is incorrect.",
+    "csrf": "The security check failed. Reload the page.",
+    "origin": "The request origin is not allowed.",
+    "not_configured": "Sign-in is not configured.",
+    "rate_limited": "Too many sign-in attempts. Please wait.",
+    "rejected": "The request was rejected."
+  },
+  "resource": {
+    "not_found": "The entry was not found."
+  },
+  "database": {
+    "failed": "The database action failed."
+  },
+  "server": {
+    "error": "An internal error occurred."
+  },
+  "policy": {
+    "unbound": "This model has no bound object policy.",
+    "create_rejected": "The object policy rejected the new record."
+  },
+  "list": {
+    "sort": "This sort field is not allowed.",
+    "filter": "This filter field is not allowed.",
+    "search": "Search is not available for this model.",
+    "relation": "The choices are not available for this model."
+  },
+  "directory": {
+    "self_deactivate": "You cannot deactivate your own account here.",
+    "self_staff": "You cannot remove your own staff access here.",
+    "superuser_blocked": "Superuser accounts cannot be changed here."
+  },
+  "request": {
+    "failed": "The request failed.",
+    "rejected": "The request was rejected."
+  }
+}

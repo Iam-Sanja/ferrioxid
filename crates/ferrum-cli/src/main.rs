@@ -4,6 +4,7 @@ mod develop;
 mod diagnose;
 mod models;
 mod scaffold;
+mod text;
 
 use clap::{Parser, Subcommand};
 use ferrum_migrations::{
@@ -221,7 +222,7 @@ fn main() -> ExitCode {
             ferrum_path,
         } => match scaffold::new_project(&name, &template, ferrum_path.as_deref()) {
             Ok(path) => {
-                println!("Projekt erzeugt: {}", path.display());
+                println!("{} {}", text::line("project_created"), path.display());
                 ExitCode::SUCCESS
             }
             Err(error) => {
@@ -236,7 +237,7 @@ fn main() -> ExitCode {
         Command::Generate { action } => match action {
             GenerateCommand::Model { name } => match models::generate_model(&name) {
                 Ok(path) => {
-                    println!("Modell erzeugt: {}", path.display());
+                    println!("{} {}", text::line("model_created"), path.display());
                     ExitCode::SUCCESS
                 }
                 Err(error) => {

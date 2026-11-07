@@ -102,6 +102,10 @@ impl AuthService {
         Ok(rows.iter().map(public_user).collect())
     }
 
+    pub async fn list_user_role_names(&self) -> Result<Vec<(Uuid, String)>, AuthError> {
+        store::list_user_role_names(&self.db).await
+    }
+
     pub async fn set_user_active(&self, email: &str, active: bool) -> Result<(), AuthError> {
         let email = normalize_email(email)?;
         let user = store::find_user_by_email(&self.db, &email)
@@ -420,15 +424,25 @@ impl AuthService {
         headers: &HeaderMap,
         method: &Method,
     ) -> Result<AuthUser, AuthError> {
+        let supplied = headers
+            .get(csrf_header_name())
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("");
+        self.authenticate_csrf(headers, method, supplied).await
+    }
+
+    /// Dieselbe HMAC-Prüfung wie der Header. HTML-Formulare übergeben das Token als Feld.
+    pub async fn authenticate_csrf(
+        &self,
+        headers: &HeaderMap,
+        method: &Method,
+        supplied: &str,
+    ) -> Result<AuthUser, AuthError> {
         self.origin_allowed(headers, method)?;
         let token =
             read_cookie(headers, &self.config.cookie_name).ok_or(AuthError::Unauthenticated)?;
         let user = self.authenticate_token(&token).await?;
         if !method.is_safe() {
-            let supplied = headers
-                .get(csrf_header_name())
-                .and_then(|value| value.to_str().ok())
-                .unwrap_or("");
             let session = store::find_session_by_hash(&self.db, &digest(&token))
                 .await?
                 .ok_or(AuthError::Unauthenticated)?;
@@ -439,6 +453,12 @@ impl AuthService {
             }
         }
         Ok(user)
+    }
+
+    pub async fn csrf_from_request(&self, headers: &HeaderMap) -> Result<String, AuthError> {
+        let token =
+            read_cookie(headers, &self.config.cookie_name).ok_or(AuthError::Unauthenticated)?;
+        self.refresh_csrf(&token).await
     }
 
     async fn issue(&self, user_id: Uuid, now: i64) -> Result<IssuedSession, AuthError> {

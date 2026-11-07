@@ -4,7 +4,7 @@
 
 ## Aufgabe
 
-`ferrum new` legt ein eigenständiges Ferrum-Projekt an. Es kompiliert außerhalb des Ferrum-Workspaces, nutzt SQLite und registriert ein Beispielmodell.
+`ferrum new` legt ein eigenständiges Ferrum-Projekt an. Es kompiliert außerhalb des Ferrum-Workspaces, nutzt SQLite und registriert ein Beispielmodell. Fullstack-Projekte übergeben Branding und Währung an `AdminRegistry::with_branding`. Die Startseite enthält feste Sprachlinks und einen lokalisierten 500-Text. Bereits erzeugte Projekte übernehmen das nicht automatisch. Seit v0.12 legt der Generator `static/css/app.css`, `static/js/app.js` und `media/.gitkeep` an. `media/*` ist ignoriert. `ferrum.toml` enthält `[static]` und `[storage]`. Fullstack-Projekte haben `/contact`. Die API-Vorlage montiert das Formular nicht.
 
 ## Zuständige Dateien
 
@@ -24,7 +24,7 @@ Das Standardtemplate ist `fullstack`. `--ferrum-path` zeigt auf das lokale Ferru
 
 ## Konfiguration
 
-Das erzeugte `ferrum.toml` enthält `[project]`, `[database]`, `[server]` und `[admin]`. Die Datenbank-URL ist `sqlite://db.sqlite3?mode=rwc`. Der Server ist `127.0.0.1:3000`. Secrets stehen nicht in der Datei. `.env.example` nennt `DATABASE_URL`, `BIND_ADDRESS` und auskommentierte Hinweise auf `FERRUM_CSRF_SECRET` und `FERRUM_PASSWORD`.
+Das erzeugte `ferrum.toml` enthält Projekt, Datenbank, Server, Admin, Auth, Vorlagen und Branding. Dazu kommt `templates/` mit `base.html`, `index.html` und `errors/`. Die Datenbank-URL ist `sqlite://db.sqlite3?mode=rwc`. Der Server ist `127.0.0.1:3000`. Secrets stehen nicht in der Datei. `.env.example` nennt `DATABASE_URL`, `BIND_ADDRESS` und auskommentierte Hinweise auf `FERRUM_CSRF_SECRET` und `FERRUM_PASSWORD`.
 
 ## Datenfluss
 

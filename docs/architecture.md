@@ -13,6 +13,7 @@
 7. **Eine Repository-Implementierung:** Handler und Modelle unterscheiden SQLite und PostgreSQL nicht.
 8. **Schemaänderungen laufen über Migrationen.** `myshop --bootstrap` ist Legacy und schreibt weder Tabellen noch Historie.
 9. **Create-Policies gelten vor dem INSERT.** REST und Admin rufen dieselbe `can_create`-Regel auf. Der Standard ist Ablehnung.
+10. **Eine Settings-Datei.** `ferrum.toml` ist die Projektkonfiguration. HTML-Seiten außerhalb des Admins rendert Tera.
 
 ## 2. Tatsächlicher Workspace (IST)
 
@@ -23,12 +24,16 @@ examples/myshop → ferrum (Fassade)
                     ├── ferrum-db → ferrum-core, SeaORM
                     ├── ferrum-auth → ferrum-core, ferrum-db, ferrum-migrations
                     ├── ferrum-admin → ferrum-auth, ferrum-core, ferrum-db
-                    └── ferrum-api → ferrum-admin, ferrum-auth, ferrum-core, ferrum-db, Axum
+                    ├── ferrum-api → ferrum-admin, ferrum-auth, ferrum-core, ferrum-db, ferrum-static, ferrum-middleware, Axum
+                    ├── ferrum-forms → ferrum-core
+                    ├── ferrum-static → Axum
+                    ├── ferrum-storage → ferrum-auth, ferrum-core
+                    └── ferrum-middleware → Axum, tracing
 ferrum-cli → ferrum-auth, ferrum-db, ferrum-migrations
 apps/admin-ui → Vite-Build, beim Kompilieren in `ferrum-admin` eingebettet und unter `/admin` ausgeliefert
 ```
 
-Physische Crates: `crates/ferrum/`, `crates/ferrum-core/`, `crates/ferrum-macros/`, `crates/ferrum-db/`, `crates/ferrum-migrations/`, `crates/ferrum-auth/`, `crates/ferrum-api/`, `crates/ferrum-cli/`. `ferrum-auth` hängt nicht von `ferrum-api` ab. `Cargo.toml` legt Workspace Edition 2021 fest. Versionsangaben und Features stehen dort, nicht in dieser Dokumentation.
+Physische Crates: `crates/ferrum/`, `crates/ferrum-core/`, `crates/ferrum-macros/`, `crates/ferrum-db/`, `crates/ferrum-migrations/`, `crates/ferrum-auth/`, `crates/ferrum-api/`, `crates/ferrum-cli/`, `crates/ferrum-forms/`, `crates/ferrum-static/`, `crates/ferrum-storage/`, `crates/ferrum-middleware/`. `ferrum-forms` hängt nicht von Axum ab. `ferrum-storage` hängt nicht von `ferrum-api` ab. `ferrum-auth` hängt nicht von `ferrum-api` ab. `Cargo.toml` legt Workspace Edition 2021 fest. Versionsangaben und Features stehen dort, nicht in dieser Dokumentation.
 
 ## 3. Compile-time-Verarbeitung (IST)
 

@@ -12,11 +12,14 @@ use axum::{
 };
 use ferrum_admin::AdminRegistry;
 use ferrum_auth::{mount, AppState, AuthError, AuthService, AuthUser, ClientIp, ObjectPolicy};
-use ferrum_core::{ColumnSpec, FerrumError, QueryScope};
+use ferrum_core::{problem_json, ColumnSpec, FerrumError, QueryScope};
 use ferrum_db::{kind_of, render_schema, DeleteOutcome, ModelRepository};
 use ferrum_migrations::history_exists;
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::json;
+
+pub mod pages;
+pub mod web;
 
 pub struct App {
     db: DatabaseConnection,
@@ -44,6 +47,12 @@ impl App {
 
     pub fn with_admin(mut self, registry: AdminRegistry) -> Self {
         self.admin = Some(registry);
+        self
+    }
+
+    /// Hängt zusätzliche Routen an, bevor der Zustand gebunden wird.
+    pub fn merge(mut self, router: Router<AppState>) -> Self {
+        self.routes = self.routes.merge(router);
         self
     }
 
@@ -439,15 +448,6 @@ impl IntoResponse for ApiError {
                 )
             }
         };
-        (
-            status,
-            Json(json!({
-                "type": "about:blank",
-                "title": title,
-                "status": status.as_u16(),
-                "detail": detail
-            })),
-        )
-            .into_response()
+        (status, Json(problem_json(status.as_u16(), title, detail))).into_response()
     }
 }

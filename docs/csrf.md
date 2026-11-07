@@ -8,7 +8,7 @@ Schreibende Cookie-Anfragen brauchen ein CSRF-Token, das an die gültige Sitzung
 
 ## Architektur
 
-Das Token ist ein HMAC-SHA256 über den festen Präfix `ferrum-csrf-v1`, die Sitzungs-ID und den SHA-256-Hex des Session-Tokens. Der Schlüssel ist 32 Byte. Dieselbe Sitzung ergibt deshalb immer dasselbe Token. `GET /auth/csrf` schreibt die Datenbank nicht.
+Das Token ist ein HMAC-SHA256 über den festen Präfix `ferrum-csrf-v1`, die Sitzungs-ID und den SHA-256-Hex des Session-Tokens. Der Schlüssel ist 32 Byte. Dieselbe Sitzung ergibt deshalb immer dasselbe Token. `GET /auth/csrf` schreibt die Datenbank nicht. Seit v0.12 akzeptiert `authenticate_csrf` dasselbe Token aus einem HTML-Feld. `authenticate` liest weiter nur `x-csrf-token`. Eine Anfrage ohne Sitzungscookie bleibt für öffentliche Formulare ohne diese Prüfung.
 
 Logout, Passwortwechsel und Ablauf widerrufen oder verwerfen die Sitzung. Danach schlägt die Prüfung fehl, bevor das Token überhaupt verglichen wird. Ein Token einer anderen Sitzung passt nicht, weil ID und Token-Hash in den HMAC eingehen.
 

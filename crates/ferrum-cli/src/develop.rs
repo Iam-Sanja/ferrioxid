@@ -50,7 +50,11 @@ pub fn dev() -> ExitCode {
         eprintln!("Abbruchsignal konnte nicht gesetzt werden: {error}");
         return ExitCode::from(1);
     }
-    println!("Entwicklungsserver für {package}. Beenden mit Strg+C.");
+    println!(
+        "{} {package}. {}",
+        crate::text::line("dev_started"),
+        crate::text::line("dev_stop_hint")
+    );
     let exit_after = std::env::var("FERRUM_DEV_EXIT_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
@@ -73,7 +77,7 @@ pub fn dev() -> ExitCode {
                 }
                 std::thread::sleep(limit);
                 stop_child(&mut child);
-                println!("Entwicklungsserver nach Testfrist beendet.");
+                println!("{}", crate::text::line("dev_test_stopped"));
                 return ExitCode::SUCCESS;
             }
         }
@@ -86,7 +90,7 @@ pub fn dev() -> ExitCode {
         match control_rx.recv_timeout(Duration::from_millis(200)) {
             Ok(Signal::Stop) => {
                 stop_child(&mut child);
-                println!("Entwicklungsserver beendet.");
+                println!("{}", crate::text::line("dev_stopped"));
                 return ExitCode::SUCCESS;
             }
             Ok(Signal::Changed) => dirty = true,
@@ -203,7 +207,7 @@ fn ensure_admin_assets(root: &Path) -> Result<(), String> {
                 .to_owned(),
         );
     }
-    println!("Admin-Assets fehlen. Starte npm run build.");
+    println!("{}", crate::text::line("admin_assets_missing"));
     let mut command = if cfg!(windows) {
         Command::new("npm.cmd")
     } else {

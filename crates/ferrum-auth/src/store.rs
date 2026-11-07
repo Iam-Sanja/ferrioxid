@@ -4,6 +4,7 @@ use crate::error::AuthError;
 use crate::schema::{PERMISSIONS, ROLES, ROLE_PERMISSIONS, SESSIONS, USERS, USER_ROLES};
 use sea_orm::sea_query::{Alias, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder};
 use sea_orm::{ConnectionTrait, DatabaseBackend, QueryResult, Statement, Value};
+use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -124,6 +125,33 @@ pub async fn list_user_rows(db: &impl ConnectionTrait) -> Result<Vec<UserRow>, A
         .order_by(Alias::new("email"), Order::Asc);
     let rows = all(db, &query).await?;
     rows.iter().map(read_user).collect()
+}
+
+/// Rollennamen je Benutzer. Das Passwort-Hash wird nicht gelesen.
+pub async fn list_user_role_names(
+    db: &impl ConnectionTrait,
+) -> Result<Vec<(Uuid, String)>, AuthError> {
+    let mut roles = Query::select();
+    roles
+        .columns([Alias::new("id"), Alias::new("name")])
+        .from(Alias::new(ROLES));
+    let mut names = HashMap::new();
+    for row in all(db, &roles).await? {
+        names.insert(required_uuid(&row, "id")?, required_text(&row, "name")?);
+    }
+    let mut links = Query::select();
+    links
+        .columns([Alias::new("user_id"), Alias::new("role_id")])
+        .from(Alias::new(USER_ROLES));
+    let mut pairs = Vec::new();
+    for row in all(db, &links).await? {
+        let user_id = required_uuid(&row, "user_id")?;
+        let role_id = required_uuid(&row, "role_id")?;
+        if let Some(name) = names.get(&role_id) {
+            pairs.push((user_id, name.clone()));
+        }
+    }
+    Ok(pairs)
 }
 
 pub async fn update_password(

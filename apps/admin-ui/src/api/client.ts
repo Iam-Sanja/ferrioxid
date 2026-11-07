@@ -37,11 +37,14 @@ export async function request(method: string, path: string, body?: unknown): Pro
   });
   const payload = await parse(response);
   if (!response.ok) {
-    const detail =
-      payload && typeof payload === "object" && "detail" in payload
-        ? String((payload as { detail: unknown }).detail)
-        : response.statusText;
-    const error: ApiError = { status: response.status, detail };
+    const record = payload && typeof payload === "object" ? (payload as Record<string, unknown>) : {};
+    const detail = typeof record.detail === "string" ? record.detail : response.statusText;
+    const error: ApiError = {
+      status: response.status,
+      detail,
+      code: typeof record.code === "string" ? record.code : undefined,
+      field: typeof record.field === "string" ? record.field : undefined,
+    };
     throw error;
   }
   return payload;

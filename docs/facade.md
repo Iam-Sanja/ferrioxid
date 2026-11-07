@@ -8,7 +8,8 @@ Die `ferrum`-Crate ist der öffentliche Einstiegspunkt. Sie exportiert `App`, `F
 
 ### Aktuelle Exporte
 
-- `ferrum::App`
+- `ferrum::App`, `ferrum::pages`, `ferrum::web`
+- `ferrum::forms`, `ferrum::static_files`, `ferrum::storage`, `ferrum::middleware`
 - `ferrum::core` (`ferrum-core`)
 - `ferrum::db` (`ferrum-db`)
 - `ferrum::FerrumModel` (Makro)

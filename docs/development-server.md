@@ -26,7 +26,7 @@ Beide Befehle lesen `ferrum.toml` im Arbeitsverzeichnis oder einem Elternverzeic
 
 ## Datenfluss
 
-`dev` startet die Binary aus `target/debug` oder aus `CARGO_TARGET_DIR/debug`, wenn diese Variable gesetzt ist. Der Wächter beobachtet das Projekt rekursiv. `target`, `node_modules`, `.git`, `dist` und `embedded-admin` werden ignoriert. Nur `.rs`, `.toml` und `.json` lösen einen Neustart aus. Zwischen zwei Starts liegen mindestens 400 Millisekunden. Die CLI startet `cargo build --bin <paket>` und danach die Binary. Ein Absturz startet den Server nicht erneut, bis sich eine Datei ändert. Strg+C beendet den Kindprozess. Es läuft höchstens eine Serverinstanz.
+Ein Neustart lädt auch die Tera-Vorlagen neu. `dev` startet die Binary aus `target/debug` oder aus `CARGO_TARGET_DIR/debug`, wenn diese Variable gesetzt ist. Der Wächter beobachtet das Projekt rekursiv. `target`, `node_modules`, `.git`, `dist` und `embedded-admin` werden ignoriert. Nur `.rs`, `.toml` und `.json` lösen einen Neustart aus. Zwischen zwei Starts liegen mindestens 400 Millisekunden. Die CLI startet `cargo build --bin <paket>` und danach die Binary. Ein Absturz startet den Server nicht erneut, bis sich eine Datei ändert. Strg+C beendet den Kindprozess. Es läuft höchstens eine Serverinstanz.
 
 `build` prüft bei eingebetteten Assets das Frontend und führt danach `cargo build --release` aus. Das Ergebnisverzeichnis wird ausgegeben. Liegt `CARGO_TARGET_DIR` in der Umgebung, ist das der Release-Ordner dort.
 

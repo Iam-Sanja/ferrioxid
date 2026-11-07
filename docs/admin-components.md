@@ -4,7 +4,7 @@
 
 ## Zweck
 
-Die Oberfläche besteht aus wenigen eigenen Komponenten. Es gibt keine zusätzliche UI-Bibliothek.
+Die Oberfläche besteht aus wenigen eigenen Komponenten. Es gibt keine zusätzliche UI-Bibliothek. `ConfirmDialog` fängt Escape, setzt den Fokus auf Abbrechen und bestätigt Löschen sowie kritische Verzeichnisaktionen. `DataTable` sucht, sortiert, blättert und formatiert Integer, `_cents` und `_at`. `DynamicForm` zeigt Pflichtfelder und übersetzte Feldfehler. `Sidebar` markiert den aktiven Link.
 
 ## Dateien
 
@@ -12,7 +12,8 @@ Die Oberfläche besteht aus wenigen eigenen Komponenten. Es gibt keine zusätzli
 |---|---|---|
 | `Layout` | `src/components/Layout.tsx` | Sidebar, Inhaltsfläche, Heller/Dunkler Modus |
 | `Sidebar` | `src/components/Sidebar.tsx` | Modellnavigation, Rollenlink nur für Superuser, Abmelden |
-| `DataTable` | `src/components/DataTable.tsx` | Spalten, Sortierknopf, Seitenwechsel, leerer Zustand |
+| `DataTable` | `src/components/DataTable.tsx` | Spalten, Sortierung, Trefferbereich, leerer Zustand |
+| Schaltflächen | `src/styles/app.css` | `.btn-primary`, `.btn-secondary`, `.btn-danger` |
 | `DynamicForm` | `src/components/DynamicForm.tsx` | Pflichtfeldprüfung und Speichern |
 | `FieldRenderer` | `src/components/FieldRenderer.tsx` | Text, Zahl, Checkbox, Fremdschlüssel |
 | `AuthProvider` | `src/auth/AuthProvider.tsx` | Benutzer nach `/auth/me` und `/auth/csrf` |

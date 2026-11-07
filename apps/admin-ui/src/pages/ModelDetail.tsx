@@ -1,9 +1,12 @@
 import { useEffect, useState } from "react";
 import { Link, useNavigate, useParams } from "react-router-dom";
 import { modelSchema, request } from "../api/client";
+import { ConfirmDialog } from "../components/ConfirmDialog";
+import { useI18n } from "../i18n";
 import type { Schema } from "../types";
 
 export function ModelDetail() {
+  const { t } = useI18n();
   const { model = "", id = "" } = useParams();
   const navigate = useNavigate();
   const [schema, setSchema] = useState<Schema | null>(null);
@@ -15,13 +18,13 @@ export function ModelDetail() {
       request("GET", `/admin/api/models/${model}/records/${id}`) as Promise<Record<string, unknown>>,
     ]).then(([loaded, row]) => { setSchema(loaded); setRecord(row); });
   }, [model, id]);
-  if (!schema || !record) return <p>Detail wird geladen.</p>;
+  if (!schema || !record) return <p role="status">{t("admin.loadingDetail")}</p>;
   return (
     <section>
-      <div className="mb-4 flex gap-3">
+      <div className="mb-4 flex flex-wrap gap-3">
         <h2 className="text-3xl font-semibold">{schema.label}</h2>
-        {schema.actions.includes("update") ? <Link className="rounded-lg border px-3 py-2" to={`/models/${model}/${id}/edit`}>Bearbeiten</Link> : null}
-        {schema.actions.includes("delete") ? <button className="rounded-lg bg-red-700 px-3 py-2 text-white" type="button" onClick={() => setOpen(true)}>Löschen</button> : null}
+        {schema.actions.includes("update") ? <Link className="btn btn-secondary" to={`/models/${model}/${id}/edit`}>{t("admin.edit")}</Link> : null}
+        {schema.actions.includes("delete") ? <button className="btn btn-danger" type="button" onClick={() => setOpen(true)}>{t("admin.delete")}</button> : null}
       </div>
       <dl className="grid gap-3 rounded-2xl bg-white p-6 dark:bg-slate-900">
         {schema.fields.filter((field) => field.list_display || field.name === "id").map((field) => (
@@ -29,18 +32,15 @@ export function ModelDetail() {
         ))}
       </dl>
       {open ? (
-        <dialog open className="fixed inset-0 grid place-items-center bg-black/40" aria-labelledby="delete-title">
-          <form method="dialog" className="rounded-2xl bg-white p-6 dark:bg-slate-900">
-            <h3 id="delete-title" className="text-xl font-semibold">Datensatz löschen?</h3>
-            <p className="mt-2">Diese Aktion kann nicht rückgängig gemacht werden.</p>
-            <div className="mt-4 flex gap-3">
-              <button type="button" onClick={() => setOpen(false)}>Abbrechen</button>
-              <button type="button" className="rounded-lg bg-red-700 px-3 py-2 text-white" onClick={() => {
-                void request("DELETE", `/admin/api/models/${model}/records/${id}`).then(() => navigate(`/models/${model}`));
-              }}>Endgültig löschen</button>
-            </div>
-          </form>
-        </dialog>
+        <ConfirmDialog
+          title={t("admin.deleteTitle")}
+          body={t("admin.deleteBody")}
+          confirmLabel={t("admin.deleteForever")}
+          onCancel={() => setOpen(false)}
+          onConfirm={() => {
+            void request("DELETE", `/admin/api/models/${model}/records/${id}`).then(() => navigate(`/models/${model}`));
+          }}
+        />
       ) : null}
     </section>
   );

@@ -4,7 +4,7 @@
 
 ## Zweck
 
-Der Admin ist eine zweite Tür vor denselben Benutzern, Sitzungen und Rechten. Er lockert keine öffentliche Route und übernimmt keine anonyme Freigabe.
+Der Admin ist eine zweite Tür vor denselben Benutzern, Sitzungen und Rechten. Er lockert keine öffentliche Route und übernimmt keine anonyme Freigabe. `GET /admin/api/config` ist die einzige Admin-Route ohne Staff-Prüfung und enthält keine Secrets. Farben und Texte werden vor der Ausgabe geprüft. Das Verzeichnis bleibt Staff und Superuser. Passwort-Hashes verlassen den Server nicht. Fehlercodes ersetzen keine Statuscodes und machen falsche E-Mail und falsches Passwort nicht unterscheidbar.
 
 ## Prüfung je Request
 

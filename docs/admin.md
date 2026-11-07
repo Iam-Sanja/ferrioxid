@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Backend: [admin-backend.md](admin-backend.md) · Oberfläche: [admin-frontend.md](admin-frontend.md) · Sicherheit: [admin-security.md](admin-security.md)
 
-**Stand:** implementiert in v0.8, Create-Policy und Asset-Feature in v0.9. Die Cargo-Version bleibt `0.1.0`. Admin-Metadaten ändern das Datenbankschema nicht. Admin-Create verwendet dieselbe `can_create`-Regel wie REST.
+**Stand:** implementiert in v0.8, Create-Policy und Asset-Feature in v0.9, Oberfläche in v0.10, Übersetzung und Branding in v0.11. Die Cargo-Version bleibt `0.1.0`. Admin-Metadaten ändern das Datenbankschema nicht. Admin-Create verwendet dieselbe `can_create`-Regel wie REST. Listen senden Suche, Sortierung und `filter.`-Parameter an die vorhandene Admin-API. Das Verzeichnis zeigt Rollen und bestätigt kritische Änderungen. Superuser bleiben serverseitig geschützt. Öffentliche Darstellung kommt von `AdminRegistry::with_branding` und `GET /admin/api/config`.
 
 ## Zweck
 

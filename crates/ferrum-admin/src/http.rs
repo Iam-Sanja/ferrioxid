@@ -8,7 +8,7 @@ use axum::routing::{get, post};
 use axum::{Json, Router};
 use ferrum_auth::{AppState, AuthError, AuthService, AuthUser};
 use ferrum_core::{
-    AdminFieldMeta, AdminModelMeta, ColumnKind, ColumnSpec, FerrumError, QueryScope,
+    problem_json, AdminFieldMeta, AdminModelMeta, ColumnKind, ColumnSpec, FerrumError, QueryScope,
 };
 use ferrum_db::DeleteOutcome;
 use sea_orm::Value as DbValue;
@@ -19,6 +19,7 @@ use uuid::Uuid;
 
 pub fn mount(router: Router<AppState>, registry: AdminRegistry) -> Router<AppState> {
     let api = Router::new()
+        .route("/config", get(public_config))
         .route("/me", get(me))
         .route("/models", get(models))
         .route("/models/{model}/schema", get(schema))
@@ -63,6 +64,20 @@ struct ListParams {
     sort: Option<String>,
     dir: Option<String>,
     q: Option<String>,
+}
+
+async fn public_config(Extension(registry): Extension<AdminRegistry>) -> Json<Value> {
+    let branding = registry.branding();
+    Json(json!({
+        "site_title": branding.site_title,
+        "site_header": branding.site_header,
+        "app_name": branding.app_name,
+        "primary_color": branding.primary_color,
+        "default_locale": branding.default_locale,
+        "fallback_locale": branding.fallback_locale,
+        "supported_locales": ["de", "en"],
+        "currency": branding.currency
+    }))
 }
 
 async fn me(State(state): State<AppState>, headers: HeaderMap) -> axum::response::Response {
@@ -464,10 +479,34 @@ async fn list_users(State(state): State<AppState>, headers: HeaderMap) -> axum::
     let Some(auth) = state.auth.as_ref() else {
         return failure(StatusCode::FORBIDDEN, "authentication is not configured");
     };
-    match auth.list_users().await {
-        Ok(users) => Json(json!({ "users": users })).into_response(),
-        Err(error) => auth_failure(error),
+    let users = match auth.list_users().await {
+        Ok(users) => users,
+        Err(error) => return auth_failure(error),
+    };
+    let links = match auth.list_user_role_names().await {
+        Ok(links) => links,
+        Err(error) => return auth_failure(error),
+    };
+    let mut roles_by_user: HashMap<Uuid, Vec<String>> = HashMap::new();
+    for (user_id, name) in links {
+        roles_by_user.entry(user_id).or_default().push(name);
     }
+    let users: Vec<Value> = users
+        .into_iter()
+        .map(|user| {
+            let mut roles = roles_by_user.remove(&user.id).unwrap_or_default();
+            roles.sort();
+            json!({
+                "id": user.id,
+                "email": user.email,
+                "is_active": user.is_active,
+                "is_staff": user.is_staff,
+                "is_superuser": user.is_superuser,
+                "roles": roles
+            })
+        })
+        .collect();
+    Json(json!({ "users": users })).into_response()
 }
 
 async fn set_active(
@@ -1039,16 +1078,7 @@ fn failure(status: StatusCode, detail: &str) -> axum::response::Response {
         StatusCode::TOO_MANY_REQUESTS => "Too many requests",
         _ => "Error",
     };
-    (
-        status,
-        Json(json!({
-            "type": "about:blank",
-            "title": title,
-            "status": status.as_u16(),
-            "detail": detail
-        })),
-    )
-        .into_response()
+    (status, Json(problem_json(status.as_u16(), title, detail))).into_response()
 }
 
 use axum::response::IntoResponse;

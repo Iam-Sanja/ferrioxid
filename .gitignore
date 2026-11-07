@@ -10,6 +10,8 @@ apps/admin-ui/dist/
 .env
 .env.*
 !.env.example
+examples/myshop/media/*
+!examples/myshop/media/.gitkeep
 .idea/
 .vscode/
 .DS_Store

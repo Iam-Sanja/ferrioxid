@@ -4,13 +4,13 @@
 
 ## Zweck
 
-Ferrum prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferrum-auth` hängt nicht am React-Admin. Generierte CRUD-Routen nutzen dieselbe Prüfung.
+Ferrum prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferrum-auth` hängt nicht am React-Admin. Generierte CRUD-Routen nutzen dieselbe Prüfung. Auth-Fehler laufen über `problem_json`. `Invalid email or password` bleibt für unbekannte Benutzer und falsche Passwörter gleich und trägt `auth.invalid_credentials`. Das Verzeichnis hängt Rollennamen an, ohne `PublicUser` von `/auth/me` zu verändern.
 
 ## Architektur
 
 `ferrum-auth` hängt von `ferrum-core`, `ferrum-db` und `ferrum-migrations` ab, nicht von `ferrum-api`. `ferrum-api` hängt von `ferrum-auth` und registriert die Auth-Routen zusammen mit den Modellrouten. Die CLI ruft dieselben Service-Methoden auf.
 
-Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Die CLI liest sie verdeckt oder aus `FERRUM_PASSWORD`. Sitzungstoken werden nur als SHA-256-Hex gespeichert. Objektregeln prüfen Create-Eingaben über `can_create`, bevor eine Zeile entsteht. Das Setzen der Besitzer-ID aus der Sitzung ist geplant. Das CSRF-Token wird bei Bedarf aus dem Schlüssel und der Sitzung berechnet; gespeichert wird ebenfalls nur der Hash. Rollen und Berechtigungen liest jede Prüfung erneut aus der Datenbank.
+Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Die CLI liest sie verdeckt oder aus `FERRUM_PASSWORD`. Sitzungstoken werden nur als SHA-256-Hex gespeichert. Objektregeln prüfen Create-Eingaben über `can_create`, bevor eine Zeile entsteht. Das Setzen der Besitzer-ID aus der Sitzung ist geplant. Das CSRF-Token wird bei Bedarf aus dem Schlüssel und der Sitzung berechnet; gespeichert wird ebenfalls nur der Hash. HTML-Formulare übergeben dasselbe Token als Feld `csrf_token` an `authenticate_csrf`. Ein zweiter CSRF-Mechanismus existiert nicht. Rollen und Berechtigungen liest jede Prüfung erneut aus der Datenbank.
 
 ## Zuständige Dateien
 

@@ -4,7 +4,7 @@
 
 ## Zweck
 
-`apps/admin-ui` ist eine React-Anwendung mit TypeScript, Vite und Tailwind. Sie wird gebaut und vom Rust-Server unter `/admin` ausgeliefert. Im Betrieb läuft kein Vite-Prozess.
+`apps/admin-ui` ist eine React-Anwendung mit TypeScript, Vite und Tailwind. Sie wird gebaut und vom Rust-Server unter `/admin` ausgeliefert. Im Betrieb läuft kein Vite-Prozess. Sichtbare Texte kommen aus `src/i18n/locales`. `I18nProvider` lädt `GET /admin/api/config`, setzt den Dokumenttitel und `--brand` nur für eine geprüfte Hex-Farbe. Der Sprachwechsel braucht keinen Reload.
 
 ## Dateien
 
@@ -15,6 +15,7 @@
 | `apps/admin-ui/src/api/client.ts` | `fetch` mit Cookie und CSRF im Speicher |
 | `apps/admin-ui/src/auth/` | Sitzungswiederherstellung und Login |
 | `apps/admin-ui/src/pages/` | Übersicht, Liste, Anlegen, Detail, Bearbeiten, Verzeichnis, 403, 404 |
+| `apps/admin-ui/src/i18n/` | Kataloge `de` und `en`, Umschalter |
 | `apps/admin-ui/vite.config.ts` | `base: "/admin/"` |
 
 ## Datenfluss
