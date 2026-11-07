@@ -58,6 +58,14 @@ Issue forms do not assign labels. Create `dependencies` before expecting Dependa
 - It does not turn milestone labels such as v0.27.1 into releases.
 - It does not rewrite Git history. A secret already present in history would remain after `.gitignore` changes.
 
+## Branch protection availability
+
+The repository is currently private. GitHub API queries during the initial setup returned a plan restriction: private-repository rulesets require an eligible paid GitHub plan. GitHub Free supports branch protection on public repositories; paid plans also support private repositories. Do **not** change repository visibility just to satisfy a branch-protection checklist.
+
+Track eligibility and eventual enforcement in [issue #12](https://github.com/Iam-Sanja/neravol/issues/12). Until protection is available, maintainers should voluntarily use pull requests and avoid direct pushes or force pushes to `main`. Once eligible, configure protection in GitHub Settings and verify it actually applies; documentation is not enforcement.
+
+Avoid requiring another person's approval in a single-maintainer repository unless a separate reviewer is available. CI and review rules should be enabled only when the corresponding checks and reviewers exist.
+
 ## Issue-to-pull-request workflow
 
 Use one issue for a coherent bug or feature. Open a focused branch and PR for the implementation rather than committing directly to `main`.
