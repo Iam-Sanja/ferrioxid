@@ -13,6 +13,13 @@ cargo run -p ferrum-cli -- check
 cargo run -p ferrum-cli -- dev
 cargo run -p ferrum-cli -- build
 cargo run -p ferrum-cli -- generate model Customer
+cargo run -p ferrum-cli -- generate model Product --timestamps
+cargo run -p ferrum-cli -- worker
+cargo run -p ferrum-cli -- jobs list
+cargo run -p ferrum-cli -- generate app shop
+cargo run -p ferrum-cli -- generate worker
+cargo run -p ferrum-cli -- jobs inspect <id>
+cargo run -p ferrum-cli -- jobs inspect <id> --show-payload
 cargo run -p ferrum-cli -- migrate make <name>
 cargo run -p ferrum-cli -- migrate up
 cargo run -p ferrum-cli -- migrate status
@@ -34,7 +41,9 @@ cargo run -p ferrum-cli -- auth assign-role --email admin@example.com --role edi
 
 `create-user` liest das Passwort verdeckt und verlangt die Wiederholung. Es akzeptiert kein Passwortargument. Ist `FERRUM_PASSWORD` gesetzt, muss der Wert mindestens 12 Zeichen haben. Es gibt kein Standardpasswort. `migrate up` wendet zuerst die Auth-Migrationen an. Schreibende Auth-Befehle legen die Auth-Tabellen ebenfalls an, wenn sie fehlen. `list-users` zeigt keine Hashes.
 
-Nicht existent: `ferrum migrate down`. Vite startet `ferrum dev` nicht mit. Der Generator-Integrationstest begrenzt eigene Cargo-Builds auf zwei Jobs, weil ein unbegrenzter Release-Build auf Windows rustc 1.98.1 abstürzen ließ. Das Produktkommando `ferrum build` bleibt ein Release-Build. `ferrum dev` warnt vor ausstehenden Migrationen und wendet sie nicht an.
+`generate worker` schreibt `src/bin/worker.rs` und überschreibt eine vorhandene Datei nicht. `jobs inspect` verbirgt die Payload. `--show-payload` zeigt sie und weist darauf hin, dass sie personenbezogene Daten enthalten kann. Das Lease-Token bleibt in beiden Ausgaben weg. `ferrum worker` führt weiterhin nur den Mail-Handler aus.
+
+Nicht existent: `ferrum migrate down`. `ferrum dev` startet keinen Worker. Vite startet `ferrum dev` nicht mit. Der Generator-Integrationstest begrenzt eigene Cargo-Builds auf zwei Jobs, weil ein unbegrenzter Release-Build auf Windows rustc 1.98.1 abstürzen ließ. Das Produktkommando `ferrum build` bleibt ein Release-Build. `ferrum dev` warnt vor ausstehenden Migrationen und wendet sie nicht an.
 
 Exitcodes der Prüfung: `0` ohne Fehler, Warnungen eingeschlossen. `1` bei Konflikten, einer nicht lesbaren vorhandenen Datenbank oder einem fehlgeschlagenen `cargo check`. `migrate status` nutzt `1` auch, wenn die SQLite-Datei fehlt, und legt sie nicht an. `check --strict` nutzt `2`, wenn nur Warnungen bleiben. `upgrade` nutzt `1` bei Dateikonflikten und schreibt dann nichts.
 

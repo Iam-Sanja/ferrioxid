@@ -87,6 +87,23 @@ pub fn fail(
     respond(headers, request_id, status, code, detail, debug)
 }
 
+pub async fn require_mutation(
+    auth: Option<&AuthService>,
+    headers: &HeaderMap,
+    token: &str,
+) -> Result<AuthUser, ViewError> {
+    let Some(auth) = auth else {
+        return Err(ViewError::new(
+            StatusCode::UNAUTHORIZED,
+            "auth.not_configured",
+            "authentication is not configured",
+        ));
+    };
+    auth.authenticate_csrf(headers, &axum::http::Method::POST, token)
+        .await
+        .map_err(from_auth)
+}
+
 pub async fn require_user(
     auth: Option<&AuthService>,
     headers: &HeaderMap,
@@ -368,12 +385,20 @@ fn escape(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{fail, form_fields, redirect_to, require_staff, validation};
+    use super::{fail, form_fields, redirect_to, require_mutation, require_staff, validation};
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use ferrum_middleware::{apply, Standard};
     use http_body_util::BodyExt;
     use tower::ServiceExt;
+
+    #[tokio::test]
+    async fn mutation_without_auth_stays_unauthorized() {
+        let headers = axum::http::HeaderMap::new();
+        let error = require_mutation(None, &headers, "token").await.unwrap_err();
+        assert_eq!(error.status, StatusCode::UNAUTHORIZED);
+        assert_eq!(error.code, "auth.not_configured");
+    }
 
     #[test]
     fn redirect_rejects_external_targets() {

@@ -1,0 +1,22 @@
+[package]
+name = "ferrum-jobs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+ferrum-core = { path = "../ferrum-core" }
+ferrum-db = { path = "../ferrum-db" }
+ferrum-mail = { path = "../ferrum-mail" }
+ferrum-migrations = { path = "../ferrum-migrations" }
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+ferrum-auth = { path = "../ferrum-auth" }

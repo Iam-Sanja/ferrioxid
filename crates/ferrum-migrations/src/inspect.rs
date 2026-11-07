@@ -4,6 +4,7 @@
 
 use crate::error::MigrationError;
 use crate::history::{self, AUTH_HISTORY_TABLE, HISTORY_TABLE};
+use crate::packages::{package_reports, PackageMigration};
 use crate::runner::{migration_status_in, StatusReport};
 use crate::snapshot::SchemaSnapshot;
 use std::path::Path;
@@ -34,10 +35,17 @@ pub struct Diagnostic {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PackageStatus {
+    pub name: String,
+    pub status: StatusReport,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DualReport {
     pub backend: String,
     pub auth: StatusReport,
     pub app: StatusReport,
+    pub packages: Vec<PackageStatus>,
     pub diagnostics: Vec<Diagnostic>,
 }
 
@@ -48,6 +56,13 @@ impl DualReport {
 
     pub fn pending_app(&self) -> usize {
         pending_lines(&self.app)
+    }
+
+    pub fn pending_packages(&self) -> usize {
+        self.packages
+            .iter()
+            .map(|package| pending_lines(&package.status))
+            .sum()
     }
 
     pub fn has_error(&self) -> bool {
@@ -93,7 +108,17 @@ pub async fn inspect_migrations(
     app_dir: &Path,
     current: Option<&SchemaSnapshot>,
 ) -> Result<DualReport, MigrationError> {
-    diagnose(db, auth_dir, app_dir, current)
+    inspect_migrations_with_packages(db, auth_dir, app_dir, current, &[]).await
+}
+
+pub async fn inspect_migrations_with_packages(
+    db: &sea_orm::DatabaseConnection,
+    auth_dir: &Path,
+    app_dir: &Path,
+    current: Option<&SchemaSnapshot>,
+    packages: &[PackageMigration],
+) -> Result<DualReport, MigrationError> {
+    diagnose(db, auth_dir, app_dir, current, packages)
         .await
         .map_err(as_unavailable)
 }
@@ -103,12 +128,21 @@ async fn diagnose(
     auth_dir: &Path,
     app_dir: &Path,
     current: Option<&SchemaSnapshot>,
+    packages: &[PackageMigration],
 ) -> Result<DualReport, MigrationError> {
     let auth = migration_status_in(db, auth_dir, AUTH_HISTORY_TABLE, None).await?;
     let app = migration_status_in(db, app_dir, HISTORY_TABLE, current).await?;
     let mut diagnostics = Vec::new();
+    let package_status = package_reports(db, packages).await?;
+    let packages = package_status
+        .into_iter()
+        .map(|(name, status)| PackageStatus { name, status })
+        .collect::<Vec<_>>();
     diagnostics.extend(line_diagnostics(MigrationScope::Auth, &auth));
     diagnostics.extend(line_diagnostics(MigrationScope::App, &app));
+    for package in &packages {
+        diagnostics.extend(line_diagnostics(MigrationScope::App, &package.status));
+    }
     if !history::history_exists_in(db, AUTH_HISTORY_TABLE).await?
         && auth.lines.iter().any(|line| line.state == "ausstehend")
     {
@@ -145,6 +179,7 @@ async fn diagnose(
         backend: app.backend.clone(),
         auth,
         app,
+        packages,
         diagnostics,
     })
 }
@@ -164,6 +199,15 @@ pub fn render_diagnosis(locale: &str, report: &DualReport) -> String {
         "App migrations",
         &report.app,
     ));
+    for package in &report.packages {
+        text.push('\n');
+        text.push_str(&section(
+            locale,
+            &format!("App {}", package.name),
+            &format!("App {}", package.name),
+            &package.status,
+        ));
+    }
     text.push('\n');
     let errors: Vec<&Diagnostic> = report
         .diagnostics
@@ -178,7 +222,7 @@ pub fn render_diagnosis(locale: &str, report: &DualReport) -> String {
             text.push_str(&format!("  {} {}\n", item.code, item.description));
         }
     }
-    let pending = report.pending_auth() + report.pending_app();
+    let pending = report.pending_auth() + report.pending_app() + report.pending_packages();
     text.push_str(&format!(
         "{} {pending}\n",
         phrase(locale, "Ausstehende Migrationen:", "Pending migrations:")
@@ -207,7 +251,12 @@ pub fn render_diagnosis(locale: &str, report: &DualReport) -> String {
 
 pub fn dev_notice(locale: &str, report: &Result<DualReport, MigrationError>) -> String {
     match report {
-        Ok(report) if report.pending_auth() == 0 && report.pending_app() == 0 && !report.has_error() => {
+        Ok(report)
+            if report.pending_auth() == 0
+                && report.pending_app() == 0
+                && report.pending_packages() == 0
+                && !report.has_error() =>
+        {
             String::new()
         }
         Ok(report) if report.has_error() => phrase(

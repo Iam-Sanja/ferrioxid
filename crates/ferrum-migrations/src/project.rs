@@ -48,7 +48,24 @@ pub struct ProjectConfig {
     pub mail_timeout_secs: u64,
     pub mail_public_origin: String,
     pub mail_reset_ttl_minutes: u32,
+    pub jobs_enabled: bool,
+    pub jobs_poll_ms: u64,
+    pub jobs_concurrency: u16,
+    pub jobs_lease_secs: u64,
+    pub jobs_max_attempts: u32,
+    pub jobs_retention_hours: u32,
+    pub jobs_jitter: bool,
     pub custom: BTreeMap<String, BTreeMap<String, String>>,
+    /// Migrationsverzeichnisse. Die Liste lädt keinen Rust-Code.
+    pub apps: Vec<DeclaredApp>,
+}
+
+/// Deklariertes Migrationsverzeichnis einer App. Es aktiviert keine Rust-App.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct DeclaredApp {
+    pub name: String,
+    pub migrations: PathBuf,
+    pub depends_on: Vec<String>,
 }
 
 impl std::fmt::Debug for ProjectConfig {
@@ -287,7 +304,15 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let mut mail_timeout_secs = 15_u64;
     let mut mail_public_origin = String::new();
     let mut mail_reset_ttl_minutes = 30_u32;
+    let mut jobs_enabled = true;
+    let mut jobs_poll_ms = 1000_u64;
+    let mut jobs_concurrency = 1_u16;
+    let mut jobs_lease_secs = 60_u64;
+    let mut jobs_max_attempts = 5_u32;
+    let mut jobs_retention_hours = 168_u32;
+    let mut jobs_jitter = true;
     let mut custom: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
+    let mut declared: BTreeMap<String, (Option<String>, Vec<String>)> = BTreeMap::new();
     for (line_number, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -295,13 +320,26 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         }
         if line.starts_with('[') && line.ends_with(']') {
             section = line[1..line.len() - 1].trim().to_owned();
+            if section == "app" {
+                return Err(MigrationError::new(format!(
+                    "{}:{line_number}: [app] braucht einen Namen, zum Beispiel [app.shop].",
+                    path.display()
+                )));
+            }
             if section == "custom" {
                 return Err(MigrationError::new(format!(
                     "{}:{line_number}: [custom] braucht einen Namen, zum Beispiel [custom.shop].",
                     path.display()
                 )));
             }
-            if let Some(name) = section.strip_prefix("custom.") {
+            if let Some(name) = section.strip_prefix("app.") {
+                if !valid_custom_name(name) {
+                    return Err(MigrationError::new(format!(
+                        "{}:{line_number}: app.{name} ist kein gültiger Abschnitt.",
+                        path.display()
+                    )));
+                }
+            } else if let Some(name) = section.strip_prefix("custom.") {
                 if !valid_custom_name(name) {
                     return Err(MigrationError::new(format!(
                         "{}:{line_number}: custom.{name} ist kein gültiger Abschnitt.",
@@ -320,6 +358,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
                     | "static"
                     | "storage"
                     | "mail"
+                    | "jobs"
             ) {
                 return Err(MigrationError::new(format!(
                     "{}:{line_number}: unbekannter Abschnitt `[{section}]`.",
@@ -341,6 +380,43 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
                 path.display()
             ))
         })?;
+        if let Some(name) = section.strip_prefix("app.") {
+            let entry = declared.entry(name.to_owned()).or_default();
+            match key {
+                "migrations" => {
+                    if !relative_dir(&value) {
+                        return Err(MigrationError::new(format!(
+                            "{}:{line_number}: app.{name}.migrations muss ein relativer Ordner ohne .. sein.",
+                            path.display()
+                        )));
+                    }
+                    entry.0 = Some(value);
+                }
+                "depends_on" => {
+                    entry.1 = value
+                        .split(',')
+                        .map(str::trim)
+                        .filter(|item| !item.is_empty())
+                        .map(str::to_owned)
+                        .collect();
+                    for dependency in &entry.1 {
+                        if !valid_custom_name(dependency) {
+                            return Err(MigrationError::new(format!(
+                                "{}:{line_number}: Abhängigkeit `{dependency}` ist kein gültiger App-Name.",
+                                path.display()
+                            )));
+                        }
+                    }
+                }
+                _ => {
+                    return Err(MigrationError::new(format!(
+                        "{}:{line_number}: unbekannter Schlüssel `app.{name}.{key}`.",
+                        path.display()
+                    )));
+                }
+            }
+            continue;
+        }
         if let Some(name) = section.strip_prefix("custom.") {
             if secret_config_key(key) {
                 return Err(MigrationError::new(
@@ -453,6 +529,48 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
                 })?;
             }
             "mail.public_origin" => mail_public_origin = value,
+            "jobs.enabled" => jobs_enabled = parse_bool(&value)?,
+            "jobs.poll_ms" => {
+                jobs_poll_ms = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: jobs.poll_ms muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
+            "jobs.concurrency" => {
+                jobs_concurrency = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: jobs.concurrency muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
+            "jobs.lease_secs" => {
+                jobs_lease_secs = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: jobs.lease_secs muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
+            "jobs.max_attempts" => {
+                jobs_max_attempts = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: jobs.max_attempts muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
+            "jobs.retention_hours" => {
+                jobs_retention_hours = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: jobs.retention_hours muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
+            "jobs.jitter" => jobs_jitter = parse_bool(&value)?,
             "mail.reset_ttl_minutes" => {
                 mail_reset_ttl_minutes = value.parse().map_err(|_| {
                     MigrationError::new(format!(
@@ -555,6 +673,31 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "storage.max_upload_size_mb muss zwischen 1 und 100 liegen.".to_owned(),
         ));
     }
+    if !(50..=60_000).contains(&jobs_poll_ms) {
+        return Err(MigrationError::new(
+            "jobs.poll_ms muss zwischen 50 und 60000 liegen.".to_owned(),
+        ));
+    }
+    if !(1..=4).contains(&jobs_concurrency) {
+        return Err(MigrationError::new(
+            "jobs.concurrency muss zwischen 1 und 4 liegen.".to_owned(),
+        ));
+    }
+    if !(5..=600).contains(&jobs_lease_secs) {
+        return Err(MigrationError::new(
+            "jobs.lease_secs muss zwischen 5 und 600 liegen.".to_owned(),
+        ));
+    }
+    if !(1..=20).contains(&jobs_max_attempts) {
+        return Err(MigrationError::new(
+            "jobs.max_attempts muss zwischen 1 und 20 liegen.".to_owned(),
+        ));
+    }
+    if !(1..=2160).contains(&jobs_retention_hours) {
+        return Err(MigrationError::new(
+            "jobs.retention_hours muss zwischen 1 und 2160 liegen.".to_owned(),
+        ));
+    }
     validate_mail(MailFields {
         backend: &mail_backend,
         host: &mail_host,
@@ -566,6 +709,18 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         origin: &mail_public_origin,
         ttl_minutes: mail_reset_ttl_minutes,
     })?;
+    let mut apps = Vec::new();
+    for (name, (migrations, depends_on)) in declared {
+        let Some(migrations) = migrations else {
+            return Err(MigrationError::new(format!("app.{name}.migrations fehlt.")));
+        };
+        apps.push(DeclaredApp {
+            name,
+            migrations: root.join(migrations),
+            depends_on,
+        });
+    }
+    apps.sort_by(|left, right| left.name.cmp(&right.name));
     if host == "0.0.0.0" {
         return Err(MigrationError::new(
             "server.host darf nicht 0.0.0.0 sein.".to_owned(),
@@ -612,7 +767,15 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         mail_timeout_secs,
         mail_public_origin,
         mail_reset_ttl_minutes,
+        jobs_enabled,
+        jobs_poll_ms,
+        jobs_concurrency,
+        jobs_lease_secs,
+        jobs_max_attempts,
+        jobs_retention_hours,
+        jobs_jitter,
         custom,
+        apps,
     })
 }
 
@@ -884,7 +1047,23 @@ mod tests {
         assert_eq!(config.currency, "EUR");
         assert!(!config.static_enabled);
         assert_eq!(config.storage_backend, "local");
+        assert!(config.jobs_enabled);
+        assert_eq!(config.jobs_poll_ms, 1000);
+        assert_eq!(config.jobs_concurrency, 1);
+        assert_eq!(config.jobs_max_attempts, 5);
+        let jobs = write_manifest(
+            "migrations_dir = \"migrations\"\n[jobs]\nenabled = false\npoll_ms = 250\nconcurrency = 2\nlease_secs = 30\nmax_attempts = 3\nretention_hours = 24\njitter = false\n",
+        );
+        let parsed = parse_manifest(&jobs).expect("jobs");
+        assert!(!parsed.jobs_enabled);
+        assert_eq!(parsed.jobs_poll_ms, 250);
+        assert!(!parsed.jobs_jitter);
+        let rejected =
+            write_manifest("migrations_dir = \"migrations\"\n[jobs]\nmax_attempts = 100\n");
+        assert!(parse_manifest(&rejected).is_err());
         let _ = fs::remove_dir_all(path.parent().unwrap());
+        let _ = fs::remove_dir_all(jobs.parent().unwrap());
+        let _ = fs::remove_dir_all(rejected.parent().unwrap());
     }
 
     #[test]
@@ -935,6 +1114,28 @@ primary_color = "#0f172a"
         let unknown = write_manifest("migrations_dir = \"migrations\"\nsecret = \"no\"\n");
         assert!(parse_manifest(&unknown).is_err());
         let _ = fs::remove_dir_all(unknown.parent().unwrap());
+    }
+
+    #[test]
+    fn declared_apps_need_a_relative_migration_directory() {
+        let path = write_manifest(
+            "migrations_dir = \"migrations\"\n[app.shop]\nmigrations = \"src/apps/shop/migrations\"\ndepends_on = \"accounts\"\n",
+        );
+        let config = parse_manifest(&path).expect("app");
+        assert_eq!(config.apps.len(), 1);
+        assert_eq!(config.apps[0].name, "shop");
+        assert_eq!(config.apps[0].depends_on, vec!["accounts".to_owned()]);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+        let bare =
+            write_manifest("migrations_dir = \"migrations\"\n[app]\nmigrations = \"migrations\"\n");
+        let error = parse_manifest(&bare).unwrap_err();
+        assert!(error.0.contains("[app] braucht einen Namen"));
+        let _ = fs::remove_dir_all(bare.parent().unwrap());
+        let escape = write_manifest(
+            "migrations_dir = \"migrations\"\n[app.shop]\nmigrations = \"../secret\"\n",
+        );
+        assert!(parse_manifest(&escape).is_err());
+        let _ = fs::remove_dir_all(escape.parent().unwrap());
     }
 
     #[test]

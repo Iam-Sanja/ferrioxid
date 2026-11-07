@@ -5,7 +5,9 @@ members = [
   "crates/ferrum-db", "crates/ferrum-api", "crates/ferrum-cli",
   "crates/ferrum-migrations", "crates/ferrum-auth", "crates/ferrum-admin",
   "crates/ferrum-forms", "crates/ferrum-static", "crates/ferrum-storage",
-  "crates/ferrum-middleware", "crates/ferrum-mail", "examples/myshop"
+  "crates/ferrum-middleware", "crates/ferrum-mail", "crates/ferrum-jobs",
+  "examples/myshop",
+  "examples/notes"
 ]
 
 [workspace.package]

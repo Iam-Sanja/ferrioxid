@@ -4,12 +4,19 @@ use axum::extract::Request;
 use axum::response::{Html, IntoResponse, Response};
 use axum::{routing::get, Router};
 use ferrum_migrations::ProjectConfig;
+use std::collections::HashMap;
 use std::path::Path;
 use std::sync::Arc;
 use tera::{Context, Tera};
 
 #[derive(Debug)]
 pub struct PageError(String);
+
+impl PageError {
+    pub(crate) fn new(detail: impl Into<String>) -> Self {
+        Self(detail.into())
+    }
+}
 
 impl std::fmt::Display for PageError {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
@@ -45,10 +52,30 @@ impl Site {
         Ok(Self { tera })
     }
 
+    pub fn from_named(
+        files: &[(String, String)],
+        routes: &crate::urls::RouteMap,
+    ) -> Result<Self, PageError> {
+        let mut tera = Tera::default();
+        for (name, body) in files {
+            tera.add_raw_template(name, body)
+                .map_err(|error| PageError(format!("Vorlage `{name}` ist ungültig: {error}")))?;
+        }
+        let mut site = Self { tera };
+        site.set_routes(routes.clone());
+        Ok(site)
+    }
+
+    pub fn set_routes(&mut self, routes: crate::urls::RouteMap) {
+        let routes = Arc::new(routes);
+        self.tera.register_function("url", UrlFunction { routes });
+    }
+
     pub fn render(&self, name: &str, context: &Context) -> Result<String, PageError> {
         self.tera.render(name, context).map_err(|error| {
             PageError(format!(
-                "Vorlage `{name}` konnte nicht gerendert werden: {error}"
+                "Vorlage `{name}` konnte nicht gerendert werden: {}",
+                error_chain(&error)
             ))
         })
     }
@@ -247,6 +274,55 @@ pub fn message(locale: &str, key: &str) -> &'static str {
     }
 }
 
+fn error_chain(error: &dyn std::error::Error) -> String {
+    let mut detail = error.to_string();
+    let mut source = error.source();
+    while let Some(inner) = source {
+        detail.push_str(": ");
+        detail.push_str(&inner.to_string());
+        source = inner.source();
+    }
+    detail
+}
+
+struct UrlFunction {
+    routes: Arc<crate::urls::RouteMap>,
+}
+
+impl tera::Function for UrlFunction {
+    fn call(&self, args: &HashMap<String, serde_json::Value>) -> tera::Result<serde_json::Value> {
+        let name = args
+            .get("name")
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| tera::Error::msg("url braucht name."))?;
+        let mut params = Vec::new();
+        for (key, value) in args {
+            if key == "name" {
+                continue;
+            }
+            let text = match value {
+                serde_json::Value::String(text) => text.clone(),
+                serde_json::Value::Number(number) => number.to_string(),
+                serde_json::Value::Bool(flag) => flag.to_string(),
+                _ => {
+                    return Err(tera::Error::msg(
+                        "Ein URL-Parameter muss Text, Zahl oder Wahrheitswert sein.",
+                    ))
+                }
+            };
+            params.push((key.clone(), text));
+        }
+        let pairs: Vec<(&str, &str)> = params
+            .iter()
+            .map(|(key, value)| (key.as_str(), value.as_str()))
+            .collect();
+        match self.routes.path(name, &pairs) {
+            Ok(path) => Ok(serde_json::Value::String(path)),
+            Err(error) => Err(tera::Error::msg(error.detail)),
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::{home_context, message, negotiate_locale, Site};
@@ -268,6 +344,47 @@ mod tests {
             );
             assert_eq!(negotiate_locale(Some("fr"), None, &settings), "de");
         }
+    }
+
+    #[test]
+    fn named_url_renders_without_listing_the_map() {
+        let routes = crate::urls::UrlSet::new()
+            .route(
+                "shop.detail",
+                "/shop/items/{id}",
+                axum::routing::get(|| async { "ok" }),
+            )
+            .unwrap()
+            .into_parts()
+            .1;
+        let site = Site::from_named(
+            &[(
+                "shop/item.html".to_owned(),
+                "{{ url(name=\"shop.detail\", id=id) }}".to_owned(),
+            )],
+            &routes,
+        )
+        .unwrap();
+        let mut context = tera::Context::new();
+        context.insert("id", "sku-1");
+        assert_eq!(
+            site.render("shop/item.html", &context).unwrap(),
+            "&#x2F;shop&#x2F;items&#x2F;sku-1"
+        );
+        let missing = Site::from_named(
+            &[(
+                "shop/item.html".to_owned(),
+                "{{ url(name=\"missing\") }}".to_owned(),
+            )],
+            &routes,
+        )
+        .unwrap();
+        let error = missing
+            .render("shop/item.html", &tera::Context::new())
+            .unwrap_err()
+            .to_string();
+        assert!(error.contains("missing"), "{error}");
+        assert!(!error.contains("shop.detail"), "{error}");
     }
 
     #[test]

@@ -13,7 +13,11 @@ clap.workspace = true
 ctrlc = "3.4"
 ferrum-auth = { path = "../ferrum-auth" }
 ferrum-db = { path = "../ferrum-db" }
+ferrum-jobs = { path = "../ferrum-jobs" }
+ferrum-mail = { path = "../ferrum-mail" }
 ferrum-migrations = { path = "../ferrum-migrations" }
 notify = "6"
 rpassword.workspace = true
 tokio.workspace = true
+sea-orm.workspace = true
+uuid.workspace = true

@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Admin-Vergleich: [admin-django-parity.md](admin-django-parity.md) · UX-Backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
 
-**Stand:** Funktionsstand v0.24 ergänzt Settings, benannte Routen und Views. Funktionsstand v0.23 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Dieser Text trennt umgesetzte Meilensteine von geplanten Phasen. Eine geplante Phase ist keine Freigabe und kein fertiges Feature.
+**Stand:** Funktionsstand v0.27.1 ergänzt Anwendungs-Worker. Funktionsstand v0.27 ergänzt persistente Jobs. Funktionsstand v0.26 ergänzt Modellfelder und den geprüften App-Start. Funktionsstand v0.25 bleibt gültig. Funktionsstand v0.24 bleibt gültig. Funktionsstand v0.23 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Dieser Text trennt umgesetzte Meilensteine von geplanten Phasen. Eine geplante Phase ist keine Freigabe und kein fertiges Feature.
 
 ## Produktentscheidung
 
@@ -31,11 +31,34 @@ Langfristig soll der Admin die relevanten Funktionen des Django-Admins funktions
 | v0.21.1 | Abgeschlossen | Generator-Test begrenzt verschachtelte Release-Builds auf zwei Jobs. Uneingeschränkter Workspace-Test danach grün | rustc-Absturz `0xc0000005` und `0xc0000409` ist nicht ursächlich geklärt |
 | v0.22 | Abgeschlossen | Öffentliche Admin-Erweiterung: Seiten, Aktionen, Filter, Widgets, Vorlagen | Keine zweite Admin-Engine. PostgreSQL-Laufzeit ungetestet. Der rustc-Absturz bleibt ungeklärt |
 | v0.23 | Abgeschlossen | E-Mail-Dienst, Self-Service-Passwort-Reset, typisierte Hinweise | Keine Zustellgarantie. Kein Admin-Benachrichtigungscenter. PostgreSQL-Laufzeit ungetestet |
-| v0.24 | Abgeschlossen | Typisierte Settings, `[custom.*]`, `UrlSet`, View-Helfer, Generatorstruktur | Keine Tera-`reverse`-Funktion. `require_user` prüft kein CSRF. API-Vorlagen behalten HTML-Startseiten. PostgreSQL-Laufzeit ungetestet |
+| v0.24 | Abgeschlossen | Typisierte Settings, `[custom.*]`, `UrlSet`, View-Helfer, Generatorstruktur | `require_user` prüft kein CSRF. API-Vorlagen behalten HTML-Startseiten. PostgreSQL-Laufzeit ungetestet |
+| v0.25 | Abgeschlossen | `App::install`, App-Migrationen, Tera-`url`, App-Vorlagen und Staticfiles, `ferrum generate app` | `merge` eines rohen Routers sieht keine Namen. PostgreSQL-Laufzeit ungetestet |
+| v0.27 | Abgeschlossen | Persistente Queue, Lease, begrenzte Retries, Worker, gewöhnliche Mail-Jobs | Cron fehlt. Reset-Tokens bleiben außerhalb der Queue. PostgreSQL-Laufzeit ungetestet |
+| v0.27.1 | Abgeschlossen | `WorkerHost`, `ferrum generate worker`, App-Handler, verdeckte Job-Payload | CLI-Worker lädt keinen Anwendungscode. Exactly once fehlt. PostgreSQL-Laufzeit ungetestet |
+| v0.26 | Abgeschlossen | Geprüfter App-Start, Abgleich von Rust- und TOML-Migrationen, flache Feldgruppen, verwaltete Zeitstempel | Soft Delete fehlt. PostgreSQL-Laufzeit ungetestet |
+
+## Offen nach v0.27.1
+
+- Cron-Syntax.
+- Soft Delete.
+- PostgreSQL-Laufzeit gegen einen laufenden Server.
+- Der CLI-Worker führt nur den Mail-Handler aus. Anwendungs-Handler bleiben im Projekt-Binary.
+
+## Offen nach v0.26
+
+- Soft Delete, einschließlich Abfragen, Restore, Audit und Fremdschlüsseln.
+- `merge` eines rohen Routers sieht keine Routennamen.
+- Die CLI führt App-Code nicht aus. Den Abgleich macht der Prozessstart.
+
+## Offen nach v0.25
+
+- `views::fail` nutzt eine eigene HTML-Seite und nicht `templates/errors/`.
+- `require_user` authentifiziert weiterhin mit GET. Mutationen nutzen `require_mutation`.
+- Seit v0.26 vergleicht der Prozessstart beide Listen. Die CLI bleibt bei `ferrum.toml`.
+- `ferrum new` erzeugt noch kein `src/apps/`.
 
 ## Offen nach v0.24
 
-- Benannte Routen sind nicht automatisch im Tera-Kontext.
 - `views::fail` nutzt eine eigene HTML-Seite und nicht `templates/errors/`.
 - `require_user` authentifiziert mit GET und prüft dabei kein CSRF.
 - Die API-Vorlage schreibt weiterhin `templates/index.html`, weil die Startseite aktiv bleibt.

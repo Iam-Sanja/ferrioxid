@@ -8,6 +8,16 @@
 
 Das entspricht konzeptionell Djangos `urls.py` und `reverse`. Ferrum versteckt `Router<AppState>` dabei nicht.
 
+Eine App hängt ihr `UrlSet` über `Registration::routes` ein. Der Namensraum muss der App-Name sein. Ein schon belegter Pfad, auch ein Modellpfad, ist `url.duplicate`. `App::merge` eines rohen Routers sieht diese Namen nicht.
+
+In einer App-Vorlage löst Tera den Namen auf:
+
+```text
+<a href="{{ url(name="shop.detail", id=product.id) }}">Produkt</a>
+```
+
+Tera kodiert das Ergebnis. Ein Schrägstrich erscheint als `&#x2F;`. In einem `href` bleibt das ein relativer Pfad. Die Funktion ist nicht als HTML-sicher markiert. Fehlt die Route oder ein Parameter, nennt der Fehler nur den angeforderten Namen und nicht die übrigen Routen. Parameter bleiben bei Buchstaben, Ziffern, `-` und `_`.
+
 ## Registrieren
 
 ```rust

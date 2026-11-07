@@ -235,3 +235,71 @@ impl FerrumError {
         Self::Database(Box::new(error))
     }
 }
+
+/// Modelle mit den beiden verwalteten Zeitstempeln.
+pub trait HasTimestamps {
+    fn created_at(&self) -> chrono::DateTime<chrono::Utc>;
+    fn updated_at(&self) -> chrono::DateTime<chrono::Utc>;
+}
+
+thread_local! {
+    static FIXED_CLOCK: std::cell::Cell<Option<chrono::DateTime<chrono::Utc>>> =
+        const { std::cell::Cell::new(None) };
+}
+
+/// UTC-Zeitpunkt für verwaltete Felder. Tests können ihn über [`set_test_clock`] festlegen.
+pub fn utc_now() -> chrono::DateTime<chrono::Utc> {
+    FIXED_CLOCK.with(|slot| slot.get().unwrap_or_else(chrono::Utc::now))
+}
+
+/// Setzt die Uhr für den aktuellen Thread. `None` verwendet wieder die Systemzeit.
+pub fn set_test_clock(now: Option<chrono::DateTime<chrono::Utc>>) {
+    FIXED_CLOCK.with(|slot| slot.set(now));
+}
+
+pub fn check_slug(field: &str, value: &str) -> Result<(), FerrumError> {
+    let ok = !value.is_empty()
+        && value.len() <= 80
+        && !value.starts_with('-')
+        && !value.ends_with('-')
+        && !value.contains("--")
+        && value
+            .chars()
+            .all(|char| char.is_ascii_lowercase() || char.is_ascii_digit() || char == '-');
+    if ok {
+        Ok(())
+    } else {
+        Err(FerrumError::Validation(format!(
+            "{field} must be a lowercase slug"
+        )))
+    }
+}
+
+pub fn check_email(field: &str, value: &str) -> Result<(), FerrumError> {
+    let Some((local, domain)) = value.split_once('@') else {
+        return Err(FerrumError::Validation(format!(
+            "{field} must be an email address"
+        )));
+    };
+    let labels = domain.split('.').collect::<Vec<_>>();
+    let ok = !local.is_empty()
+        && local.len() <= 64
+        && !local
+            .chars()
+            .any(|char| char.is_whitespace() || char.is_control())
+        && labels.len() >= 2
+        && labels
+            .iter()
+            .all(|label| !label.is_empty() && label.len() <= 63)
+        && domain.len() <= 255
+        && !domain
+            .chars()
+            .any(|char| char.is_whitespace() || char.is_control() || char == '@');
+    if ok {
+        Ok(())
+    } else {
+        Err(FerrumError::Validation(format!(
+            "{field} must be an email address"
+        )))
+    }
+}

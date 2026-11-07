@@ -4,12 +4,32 @@ extern crate self as ferrum;
 pub use async_trait;
 pub use chrono;
 pub use ferrum_admin as admin;
-pub use ferrum_api::{pages, urls, views, web, App};
+pub use ferrum_api::{apps, pages, urls, views, web, App};
 pub use ferrum_auth as auth;
 pub use ferrum_core as core;
 pub use ferrum_db as db;
 pub use ferrum_forms as forms;
-pub use ferrum_macros::FerrumModel;
+pub use ferrum_macros::{model_fields, FerrumModel};
+
+#[macro_export]
+macro_rules! with_timestamps {
+    (
+        $(#[$meta:meta])*
+        $vis:vis struct $name:ident {
+            $($fields:tt)*
+        }
+    ) => {
+        $(#[$meta])*
+        $vis struct $name {
+            $($fields)*
+            #[field(managed = "created")]
+            pub created_at: ::ferrum::chrono::DateTime<::ferrum::chrono::Utc>,
+            #[field(managed = "updated")]
+            pub updated_at: ::ferrum::chrono::DateTime<::ferrum::chrono::Utc>,
+        }
+    };
+}
+pub use ferrum_jobs as jobs;
 pub use ferrum_mail as mail;
 pub use ferrum_middleware as middleware;
 pub use ferrum_migrations as migrations;

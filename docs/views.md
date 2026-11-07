@@ -6,6 +6,8 @@
 
 `ferrum::views` liefert die Antworten, die eine Anwendung häufig braucht: HTML, JSON, einen lokalen Redirect und stabile Fehler. Die Typen bleiben Axum-`Response` und `HeaderMap`. Tera bleibt die Vorlagen-Engine.
 
+`require_mutation(auth, headers, token)` prüft eine POST-Anfrage über `AuthService::authenticate_csrf`. Fehlt der Auth-Dienst, ist die Antwort `401` und `auth.not_configured`. Es gibt keinen zweiten CSRF-Mechanismus. `require_user` bleibt eine GET-Prüfung. Die App-Registrierung vergibt dadurch keine Berechtigung.
+
 ## Django und Ferrum
 
 | Django | Ferrum |

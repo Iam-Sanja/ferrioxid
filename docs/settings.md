@@ -12,7 +12,7 @@
 2. Der Wert aus `ferrum.toml`.
 3. Eine gesetzte Umgebungsvariable ersetzt nur den dafür vorgesehenen Wert.
 
-Ein unbekannter Abschnitt oder Schlüssel bleibt ein Fehler. Eine Ausnahme ist die Familie `[custom.<name>]`, beschrieben in [custom-settings.md](custom-settings.md). `[custom]` ohne Namen ist ebenfalls ein Fehler.
+Ein unbekannter Abschnitt oder Schlüssel bleibt ein Fehler. Ausnahmen sind `[custom.<name>]`, beschrieben in [custom-settings.md](custom-settings.md), und `[app.<name>]`, beschrieben in [app-registry.md](app-registry.md). `[custom]` und `[app]` ohne Namen sind Fehler. `[app.<name>]` deklariert ein Migrationsverzeichnis und lädt keinen Rust-Code. App-Einstellungen bleiben unter `[custom.<name>]` und überschreiben keine Framework-Schlüssel.
 
 ## Lesen
 
@@ -30,7 +30,7 @@ fn load() -> Result<ferrum::migrations::ProjectConfig, Box<dyn std::error::Error
 
 ## Bereiche
 
-Die vorhandenen Bereiche bleiben: `project`, `server`, `database`, `admin`, `auth`, `templates`, `branding`, `static`, `storage`, `mail`. Fehlende neue Schlüssel behalten die bisherigen Defaults: Sprache `de` mit Fallback `en`, Sitzung 12 Stunden, Leerlauf 30 Minuten, Vorlagen aus, Farbe `#0f172a`, Währung `EUR`, Staticfiles aus, lokaler Speicher unter `media` mit 10 MiB, Mail `disabled`.
+Die vorhandenen Bereiche bleiben: `project`, `server`, `database`, `admin`, `auth`, `templates`, `branding`, `static`, `storage`, `mail`, `jobs`. Fehlende neue Schlüssel behalten die bisherigen Defaults: Sprache `de` mit Fallback `en`, Sitzung 12 Stunden, Leerlauf 30 Minuten, Vorlagen aus, Farbe `#0f172a`, Währung `EUR`, Staticfiles aus, lokaler Speicher unter `media` mit 10 MiB, Mail `disabled`. `[jobs]` ist optional. Ohne Abschnitt bleibt der Worker erlaubt, startet aber nicht von selbst. Grenzen stehen in [workers.md](workers.md).
 
 `server.host` darf nicht `0.0.0.0` sein. `templates.engine` ist `tera`. Sprachen sind `de` und `en`. `branding.currency` besteht aus drei Großbuchstaben. `storage.backend` ist `local`. Static-Präfixe dürfen Admin, API, Auth, Health und Uploads nicht überdecken.
 

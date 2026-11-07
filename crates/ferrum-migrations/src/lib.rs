@@ -10,6 +10,7 @@ mod history;
 mod inspect;
 mod introspection;
 mod manifest;
+mod packages;
 mod project;
 mod rebuild;
 mod runner;
@@ -23,18 +24,23 @@ pub use diff::{plan_change, ApplyClass, MigrationOperation, MigrationPlan, Migra
 pub use error::MigrationError;
 pub use history::{history_exists, table_exists, AUTH_HISTORY_TABLE};
 pub use inspect::{
-    dev_notice, inspect_migrations, readonly_database_url, render_diagnosis, Diagnostic,
-    DualReport, Level, MigrationScope,
+    dev_notice, inspect_migrations, inspect_migrations_with_packages, readonly_database_url,
+    render_diagnosis, Diagnostic, DualReport, Level, MigrationScope, PackageStatus,
 };
 pub use manifest::{
     load_manifest, manifest_json, ProjectManifest, TrackedFile, MANIFEST_RELATIVE, TEMPLATE_VERSION,
 };
+pub use packages::{
+    apply_packages, package_order, package_reports, runtime_contract_note, same_migration_contract,
+    PackageMigration,
+};
 pub use project::{
-    discover_project, load_schema_from_command, redact_database_url, ProjectConfig, Settings,
+    discover_project, load_schema_from_command, redact_database_url, DeclaredApp, ProjectConfig,
+    Settings,
 };
 pub use runner::{
-    apply_directory, apply_directory_with_history, migration_status, reseal_unapplied, ApplyReport,
-    StatusReport,
+    apply_directory, apply_directory_with_history, apply_namespaced_directory, migration_status,
+    migration_status_in, namespaced_status, reseal_unapplied, ApplyReport, StatusReport,
 };
 pub use snapshot::{
     ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType, OnDelete, RegisteredModel,

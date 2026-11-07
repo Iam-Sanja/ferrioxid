@@ -14,6 +14,99 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
     }
 }
 
+#[proc_macro]
+pub fn model_fields(input: TokenStream) -> TokenStream {
+    let item = parse_macro_input!(input as syn::ItemStruct);
+    match expand_fields(&item) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+fn expand_fields(item: &syn::ItemStruct) -> syn::Result<proc_macro2::TokenStream> {
+    if !item.generics.params.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &item.ident,
+            "a field group cannot be generic",
+        ));
+    }
+    let syn::Fields::Named(fields) = &item.fields else {
+        return Err(syn::Error::new_spanned(
+            &item.ident,
+            "a field group needs named fields",
+        ));
+    };
+    if fields.named.is_empty() {
+        return Err(syn::Error::new_spanned(
+            &item.ident,
+            "a field group needs at least one field",
+        ));
+    }
+    let stored = fields
+        .named
+        .iter()
+        .map(|field| field_source(field, false))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let pasted = fields
+        .named
+        .iter()
+        .map(|field| field_source(field, true))
+        .collect::<Vec<_>>()
+        .join("\n");
+    let vis = &item.vis;
+    let source = format!(
+        r#"
+        {vis} struct {name} {{
+            {stored}
+        }}
+
+        #[macro_export]
+        macro_rules! ferrum_fields_{name} {{
+            (
+                $(#[$meta:meta])*
+                $struct_vis:vis struct $struct_name:ident {{
+                    $($fields:tt)*
+                }}
+            ) => {{
+                $(#[$meta])*
+                $struct_vis struct $struct_name {{
+                    $($fields)*
+                    {pasted}
+                }}
+            }};
+        }}
+        "#,
+        vis = quote!(#vis),
+        name = item.ident,
+    );
+    source.parse::<proc_macro2::TokenStream>().map_err(|error| {
+        syn::Error::new_spanned(
+            &item.ident,
+            format!("field group could not be built: {error}"),
+        )
+    })
+}
+
+fn field_source(field: &syn::Field, with_attrs: bool) -> String {
+    let attrs = if with_attrs {
+        field
+            .attrs
+            .iter()
+            .map(|attr| quote!(#attr).to_string())
+            .collect::<Vec<_>>()
+            .join(" ")
+    } else {
+        String::new()
+    };
+    let vis = &field.vis;
+    let ty = &field.ty;
+    let vis = quote!(#vis).to_string();
+    let ident = field.ident.as_ref().expect("named field");
+    let ty = quote!(#ty).to_string();
+    format!("{attrs} {vis} {ident}: {ty},")
+}
+
 fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let name = input.ident;
     let mut table: Option<String> = None;
@@ -181,6 +274,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let mut update_bindings = Vec::new();
     let mut seen_id = false;
     let mut field_names = Vec::new();
+    let mut touch_columns = Vec::new();
+    let mut created_ident = None;
+    let mut updated_ident = None;
     let mut relation_methods = Vec::new();
     let mut admin_fields = Vec::new();
     for field in fields {
@@ -215,6 +311,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let mut default_bool: Option<bool> = None;
         let mut unique = false;
         let mut indexed = false;
+        let mut managed: Option<String> = None;
+        let mut format: Option<String> = None;
         let mut foreign_key: Option<String> = None;
         let mut on_delete: Option<String> = None;
         let mut belongs_to: Option<String> = None;
@@ -249,6 +347,10 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     on_delete = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else if meta.path.is_ident("belongs_to") {
                     belongs_to = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("managed") {
+                    managed = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("format") {
+                    format = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else {
                     return Err(meta.error("unsupported field attribute"));
                 }
@@ -365,7 +467,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 searchable: admin_search,
                 sortable: admin_sort,
                 filterable: admin_filter,
-                readonly: admin_readonly || primary || readonly,
+                readonly: admin_readonly || primary || readonly || managed.is_some(),
                 hidden: admin_hidden,
                 sensitive: admin_sensitive || sensitive_admin_name(&field_name),
                 fieldset: admin_fieldset.unwrap_or_default(),
@@ -426,6 +528,46 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 &ident,
                 "default currently supports only bool",
             ));
+        }
+        if field_names.iter().any(|existing| existing == &field_name) {
+            return Err(syn::Error::new_spanned(&ident, "duplicate column name"));
+        }
+        let managed_kind = match managed.as_deref() {
+            None => None,
+            Some("created") | Some("updated") => managed.clone(),
+            Some(_) => {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "managed must be \"created\" or \"updated\"",
+                ))
+            }
+        };
+        if managed_kind.is_some() && (type_name != "DateTime" || nullable || primary) {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "managed timestamps must be a required DateTime<Utc> and cannot be the primary key",
+            ));
+        }
+        match format.as_deref() {
+            None => {}
+            Some("slug") | Some("email") if type_name == "String" => {}
+            Some("slug") | Some("email") => {
+                return Err(syn::Error::new_spanned(&ident, "format requires String"))
+            }
+            Some(_) => {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "format must be \"slug\" or \"email\"",
+                ))
+            }
+        }
+        if managed_kind.is_some() {
+            readonly = true;
+            match managed_kind.as_deref() {
+                Some("created") => created_ident = Some(ident.clone()),
+                Some("updated") => updated_ident = Some(ident.clone()),
+                _ => {}
+            }
         }
         field_names.push(field_name.clone());
         if unique && primary {
@@ -566,6 +708,13 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             values.push(quote! { ::ferrum::sea_orm::Value::from(::ferrum::uuid::Uuid::new_v4()) });
             continue;
         }
+        if managed_kind.is_some() {
+            values.push(quote! { ::ferrum::sea_orm::Value::from(::ferrum::core::utc_now()) });
+            if managed_kind.as_deref() == Some("updated") {
+                touch_columns.push(field_name.clone());
+            }
+            continue;
+        }
         let de = temporal_attr(&type_name, nullable);
         let patch_de = temporal_patch_attr(&type_name);
         if let Some(default) = default_bool {
@@ -605,6 +754,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 min_length,
                 max_length,
             );
+            if let Some(kind) = format.as_deref() {
+                push_format_check(&mut checks, &ident, &field_name, nullable, kind);
+            }
         }
         if let Some(minimum) = min {
             if nullable {
@@ -636,6 +788,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             min_length,
             max_length,
             min,
+            format: format.as_deref(),
         }));
     }
     validate_groups(&name, &field_names, &unique_groups, "unique_together")?;
@@ -869,6 +1022,19 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     } else {
         quote! {}
     };
+    let timestamp_impl = match (&created_ident, &updated_ident) {
+        (Some(created), Some(updated)) => quote! {
+            impl ::ferrum::core::HasTimestamps for #name {
+                fn created_at(&self) -> ::ferrum::chrono::DateTime<::ferrum::chrono::Utc> {
+                    self.#created
+                }
+                fn updated_at(&self) -> ::ferrum::chrono::DateTime<::ferrum::chrono::Utc> {
+                    self.#updated
+                }
+            }
+        },
+        _ => quote! {},
+    };
     Ok(quote! {
         #[derive(::ferrum::serde::Deserialize)]
         #[serde(crate = "::ferrum::serde", deny_unknown_fields)]
@@ -1054,6 +1220,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             {
                 let mut changes: Vec<(&str, ::ferrum::sea_orm::Value)> = Vec::new();
                 #(#update_bindings)*
+                #(changes.push((#touch_columns, ::ferrum::sea_orm::Value::from(::ferrum::core::utc_now())));)*
                 let record = ::ferrum::db::update_record(db, #table, #columns_ident, id, changes, scope).await?;
                 ::ferrum::serde_json::from_value::<Self>(record)
                     .map_err(::ferrum::core::FerrumError::database)
@@ -1077,6 +1244,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
 
             #(#relation_methods)*
         }
+
+        #timestamp_impl
     })
 }
 
@@ -1463,6 +1632,28 @@ fn null_value(type_name: &str) -> proc_macro2::TokenStream {
     }
 }
 
+fn push_format_check(
+    checks: &mut Vec<proc_macro2::TokenStream>,
+    ident: &syn::Ident,
+    field_name: &str,
+    nullable: bool,
+    kind: &str,
+) {
+    let checker = match kind {
+        "email" => quote! { ::ferrum::core::check_email },
+        _ => quote! { ::ferrum::core::check_slug },
+    };
+    if nullable {
+        checks.push(quote! {
+            if let ::core::option::Option::Some(value) = payload.#ident.as_deref() {
+                #checker(#field_name, value)?;
+            }
+        });
+    } else {
+        checks.push(quote! { #checker(#field_name, payload.#ident.as_str())?; });
+    }
+}
+
 fn push_string_checks(
     checks: &mut Vec<proc_macro2::TokenStream>,
     ident: &syn::Ident,
@@ -1515,6 +1706,7 @@ struct PatchRules<'a> {
     min_length: Option<usize>,
     max_length: Option<usize>,
     min: Option<i64>,
+    format: Option<&'a str>,
 }
 
 fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
@@ -1527,6 +1719,7 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
         min_length,
         max_length,
         min,
+        format,
     } = rules;
     let mut value_checks = Vec::new();
     if type_name == "String" {
@@ -1544,6 +1737,13 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
             value_checks.push(quote! { if value.trim().chars().count() > #hi {
                 return Err(::ferrum::core::FerrumError::Validation(format!("{} may have at most {} characters", #field_name, #hi)));
             } });
+        }
+        if let Some(kind) = format {
+            let checker = match kind {
+                "email" => quote! { ::ferrum::core::check_email },
+                _ => quote! { ::ferrum::core::check_slug },
+            };
+            value_checks.push(quote! { #checker(#field_name, value.as_str())?; });
         }
     }
     if let Some(minimum) = min {

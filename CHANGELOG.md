@@ -1,5 +1,42 @@
 # Changelog
 
+## Unreleased — Anwendungs-Worker (v0.27.1)
+
+- `WorkerHost` startet den vorhandenen Worker mit den Projekt-Einstellungen, den registrierten App-Handlern und auf Wunsch dem Mail-Handler. Der Prozess startet keinen Webserver und wendet keine Migration an.
+- `ferrum generate worker` schreibt `src/bin/worker.rs` einmal. Eine vorhandene Datei bleibt stehen. `ferrum dev` startet diesen Prozess nicht.
+- `FerrumApplication::register_jobs` hat eine leere Standardmethode. `App::install` ruft sie nicht auf. `examples/notes` registriert `notes_pulse` und `notes_retry` in `src/bin/worker.rs`.
+- `ferrum jobs inspect` zeigt Status, Handler, Version, Versuche, Zeiten und Fehlercode. Die Payload bleibt ohne `--show-payload` verborgen. Das Lease-Token erscheint nicht. Eine ausdrücklich angeforderte Payload kann weiterhin personenbezogene Daten enthalten.
+- Fehlercodes bleiben auf sichere Bezeichner beschränkt. Eine Meldung mit Geheimnis-Markern wird zurückgehalten. In der Job-Zeile steht nur der Code.
+- SQLite bleibt bei einer Verbindung und Parallelität 1. Die Zustellung bleibt at least once. Eine Exactly-once-Garantie gibt es nicht.
+- Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Hintergrundjobs (v0.27)
+
+- `ferrum-jobs` speichert Jobs in `_ferrum_jobs`. Die Historie heißt `_ferrum_job_migrations`. Auth-Migrationen bleiben unverändert. Der Worker migriert nicht selbst.
+- Handler werden typisiert in einer `JobRegistry` registriert. Es gibt keine globale Registry. `ferrum worker` startet keinen Webserver und führt nur den Mail-Handler aus. `ferrum dev` startet keinen Worker.
+- Claims nutzen Lease-Token. Ein abgelaufener Worker kann einen neu beanspruchten Job nicht abschließen. Wiederholungen sind auf höchstens 20 Versuche und exponentiellen Backoff begrenzt.
+- Intervalle planen nach Erfolg genau eine nächste Fälligkeit in UTC. Cron gibt es nicht. Die Zustellung ist at least once.
+- Passwort-Reset-Tokens bleiben außerhalb der Queue. Gewöhnliche Hinweise können als Job versendet werden. Eine SMTP-Annahme ist keine Zustellbestätigung.
+- Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Modellbausteine und App-Start (v0.26)
+
+- `try_into_router` versiegelt installierte Apps und deklarierte `[app.<name>]`-Einträge vor dem Start. `into_router` bleibt ohne `Result` und startet bei einer ungültigen Registry nicht. Ohne Apps bleibt der bisherige Startweg.
+- `registry.migrations` und `[app.<name>]` müssen beim Start dieselben Namen, Abhängigkeiten und Verzeichnisse nennen. Die CLI prüft nur die TOML-Seite und sagt das ausdrücklich. Diagnose bleibt lesend.
+- `model_fields!` und `with_timestamps!` kopieren Felder in konkrete Models. Die Feldgruppe hat keine Tabelle. JSON und SQL bleiben flach.
+- `#[field(managed = "created"|"updated")]` setzt `DateTime<Utc>` im Repository. Create- und Update-DTOs nehmen die Werte nicht an. `#[field(format = "slug"|"email")]` ergänzt die vorhandene Validierung.
+- Soft Delete ist nicht umgesetzt. `ferrum generate model Name --timestamps` ist optional. Die Cargo-Version und die Template-Version bleiben `0.1.0` und `0.24`.
+
+## Unreleased — Apps und App-Registry (v0.25)
+
+- `FerrumApplication` und `App::install` registrieren Apps typisiert auf derselben `App`. Es gibt kein globales Singleton und keinen Abschnitt, der unbekannte Crates lädt. `[app.<name>]` nennt nur ein Migrationsverzeichnis und `depends_on`.
+- Apps melden Modelle, `UrlSet`, Admin-Erweiterungen, Vorlagen und Staticfiles an die vorhandenen Register. Ein belegter Pfad oder eine belegte Tabelle wird abgelehnt. `merge` eines rohen Routers sieht Namen weiterhin nicht.
+- `seal` prüft den Migrationsgraphen und die Admin-Registry und wendet keine Migration an. `into_router` bleibt ohne `Result`.
+- App-Migrationen schreiben `shop:0001_initial` in `_ferrum_migrations`. Die Datei-ID und die Prüfsumme bleiben unqualifiziert. Alte Zeilen ohne `:` bleiben gültig und werden nicht neu zugeordnet.
+- Tera erhält `url(name=..., ...)`. Das Ergebnis wird von Tera kodiert. Eine fehlende Route nennt nur den angeforderten Namen. `views::require_mutation` prüft POST über `AuthService::authenticate_csrf`.
+- `ferrum generate app` legt `src/apps/<name>/` an und überschreibt nichts. Die Template-Version bleibt `0.24`. `examples/notes` ist eine externe App-Crate. myshop und seine Migrationen bleiben unverändert.
+- Die Cargo-Version bleibt `0.1.0`.
+
 ## Unreleased — Settings, URLs und Views (v0.24)
 
 - `Settings` liest `ferrum.toml`, prüft Defaults, Datei und Umgebung und bleibt ohne globales Singleton. `[custom.<name>]` wird über `custom_settings` in eine `Deserialize`-Struktur gelesen. Unbekannte andere Schlüssel bleiben Fehler.

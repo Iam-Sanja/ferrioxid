@@ -1,16 +1,19 @@
 //! Ferrum-CLI. Migrationen fragen die Modell-Registry über ferrum.toml ab.
 
+mod apps;
 mod develop;
 mod diagnose;
+mod jobs;
 mod models;
 mod scaffold;
 mod text;
 
 use clap::{Parser, Subcommand};
 use ferrum_migrations::{
-    apply_directory, baseline_database, discover_project, inspect_migrations,
-    load_schema_from_command, make_migration, readonly_database_url, render_diagnosis,
-    reseal_unapplied, write_explicit_migration, MakeOutcome, MigrationOperation, SchemaSnapshot,
+    apply_directory, apply_packages, baseline_database, discover_project,
+    inspect_migrations_with_packages, load_schema_from_command, make_migration,
+    readonly_database_url, render_diagnosis, reseal_unapplied, runtime_contract_note,
+    write_explicit_migration, MakeOutcome, MigrationOperation, PackageMigration, SchemaSnapshot,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -78,12 +81,69 @@ enum Command {
         #[command(subcommand)]
         action: AuthCommand,
     },
+    /// Startet den Job-Worker. Der Webserver bleibt aus.
+    Worker {
+        #[arg(long)]
+        database_url: Option<String>,
+        #[arg(long)]
+        concurrency: Option<u16>,
+        #[arg(long)]
+        poll_ms: Option<u64>,
+    },
+    /// Zeigt und steuert persistente Jobs.
+    Jobs {
+        #[command(subcommand)]
+        action: JobsCommand,
+    },
+}
+
+#[derive(Subcommand)]
+enum JobsCommand {
+    /// Listet Jobs. Der Befehl schreibt nicht.
+    List {
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Zeigt einen Job. Die Payload bleibt ohne `--show-payload` verborgen.
+    Inspect {
+        id: String,
+        /// Gibt die gespeicherte Payload aus. Sie kann personenbezogene Daten enthalten.
+        #[arg(long)]
+        show_payload: bool,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Setzt einen fehlgeschlagenen oder abgebrochenen Job zurück.
+    Retry {
+        id: String,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Bricht einen wartenden Job ab.
+    Cancel {
+        id: String,
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
 }
 
 #[derive(Subcommand)]
 enum GenerateCommand {
     /// Legt ein Modell an und trägt es in die Registry ein.
-    Model { name: String },
+    Model {
+        name: String,
+        /// Ergänzt die verwalteten Felder created_at und updated_at.
+        #[arg(long)]
+        timestamps: bool,
+    },
+    /// Legt eine Ferrum-App an, ohne vorhandene Dateien zu überschreiben.
+    App { name: String },
+    /// Schreibt `src/bin/worker.rs`, ohne vorhandene Dateien zu überschreiben.
+    Worker,
 }
 
 #[derive(Subcommand)]
@@ -258,9 +318,9 @@ fn main() -> ExitCode {
         Command::Dev => develop::dev(),
         Command::Build => develop::build(),
         Command::Generate { action } => match action {
-            GenerateCommand::Model { name } => match models::generate_model(&name) {
+            GenerateCommand::Worker => match apps::generate_worker() {
                 Ok(path) => {
-                    println!("{} {}", text::line("model_created"), path.display());
+                    println!("Worker angelegt: {}", path.display());
                     ExitCode::SUCCESS
                 }
                 Err(error) => {
@@ -268,6 +328,28 @@ fn main() -> ExitCode {
                     ExitCode::from(1)
                 }
             },
+            GenerateCommand::App { name } => match apps::generate_app(&name) {
+                Ok(path) => {
+                    println!("App angelegt: {}", path.display());
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("{error}");
+                    ExitCode::from(1)
+                }
+            },
+            GenerateCommand::Model { name, timestamps } => {
+                match models::generate_model(&name, timestamps) {
+                    Ok(path) => {
+                        println!("{} {}", text::line("model_created"), path.display());
+                        ExitCode::SUCCESS
+                    }
+                    Err(error) => {
+                        eprintln!("{error}");
+                        ExitCode::from(1)
+                    }
+                }
+            }
         },
         Command::Migrate { action } => match run_migrate(action) {
             Ok(()) => ExitCode::SUCCESS,
@@ -290,6 +372,68 @@ fn main() -> ExitCode {
                 ExitCode::from(1)
             }
         },
+        Command::Worker {
+            database_url,
+            concurrency,
+            poll_ms,
+        } => {
+            let project = match optional_project() {
+                Ok(project) => project,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return ExitCode::from(1);
+                }
+            };
+            let url = match jobs_database_url(database_url, project.as_ref()) {
+                Ok(url) => url,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return ExitCode::from(2);
+                }
+            };
+            jobs::worker(url, project.as_ref(), concurrency, poll_ms)
+        }
+        Command::Jobs { action } => {
+            let project = match optional_project() {
+                Ok(project) => project,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return ExitCode::from(1);
+                }
+            };
+            if project
+                .as_ref()
+                .is_some_and(|project| !project.jobs_enabled)
+                && matches!(
+                    action,
+                    JobsCommand::Retry { .. } | JobsCommand::Cancel { .. }
+                )
+            {
+                eprintln!("job.disabled jobs.enabled ist false.");
+                return ExitCode::from(2);
+            }
+            let database_url = match &action {
+                JobsCommand::List { database_url }
+                | JobsCommand::Inspect { database_url, .. }
+                | JobsCommand::Retry { database_url, .. }
+                | JobsCommand::Cancel { database_url, .. } => database_url.clone(),
+            };
+            let url = match jobs_database_url(database_url, project.as_ref()) {
+                Ok(url) => url,
+                Err(error) => {
+                    eprintln!("{error}");
+                    return ExitCode::from(2);
+                }
+            };
+            match action {
+                JobsCommand::List { .. } => jobs::list(url),
+                JobsCommand::Inspect {
+                    id, show_payload, ..
+                } => jobs::inspect(url, id, show_payload),
+                JobsCommand::Retry { id, yes, .. } => jobs::retry(url, id, yes),
+                JobsCommand::Cancel { id, yes, .. } => jobs::cancel(url, id, yes),
+            }
+        }
     }
 }
 
@@ -391,17 +535,24 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
         } => {
             let directory = resolve_directory(migrations_dir)?;
             let url = resolve_database_url(database_url)?;
-            let (auth_applied, report) = runtime.block_on(async {
+            let (auth_applied, jobs_applied, report, package_report) = runtime.block_on(async {
                 let db = ferrum_db::connect(&url)
                     .await
                     .map_err(|error| error.to_string())?;
                 let auth_applied = ferrum_auth::apply_migrations(&db)
                     .await
                     .map_err(|error| error.to_string())?;
+                let jobs_applied = ferrum_jobs::apply_migrations(&db)
+                    .await
+                    .map_err(|error| error.detail().to_owned())?;
                 let report = apply_directory(&db, &directory, allow_destructive)
                     .await
                     .map_err(|error| error.0)?;
-                Ok::<_, String>((auth_applied, report))
+                let packages = declared_packages()?;
+                let package_report = apply_packages(&db, &packages, allow_destructive)
+                    .await
+                    .map_err(|error| error.0)?;
+                Ok::<_, String>((auth_applied, jobs_applied, report, package_report))
             })?;
             if auth_applied.is_empty() {
                 println!("Keine ausstehenden Auth-Migrationen.");
@@ -410,11 +561,25 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                     println!("Auth-Migration angewendet: {id}");
                 }
             }
+            if jobs_applied.is_empty() {
+                println!("Keine ausstehenden Job-Migrationen.");
+            } else {
+                for id in jobs_applied {
+                    println!("Job-Migration angewendet: {id}");
+                }
+            }
             if report.applied.is_empty() {
                 println!("Keine ausstehenden Migrationen.");
             } else {
                 for id in report.applied {
                     println!("Angewendet: {id}");
+                }
+            }
+            if package_report.is_empty() {
+                println!("Keine ausstehenden App-Migrationen.");
+            } else {
+                for id in package_report {
+                    println!("App-Migration angewendet: {id}");
                 }
             }
         }
@@ -431,22 +596,63 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 let db = ferrum_db::connect(&readonly)
                     .await
                     .map_err(|error| format!("migration.database.unavailable: {error}"))?;
-                inspect_migrations(
+                inspect_migrations_with_packages(
                     &db,
                     &ferrum_auth::migrations_dir(),
                     &directory,
                     schema.as_ref(),
+                    &declared_packages()?,
                 )
                 .await
                 .map_err(|error| error.0)
             })?;
             print!("{}", render_diagnosis(&text::locale(), &report));
+            if !report.packages.is_empty() {
+                println!("{}", runtime_contract_note());
+            }
             if report.has_error() {
                 return Err("Es gibt Migrationskonflikte.".to_owned());
+            }
+            let jobs_current = runtime.block_on(async {
+                let db = ferrum_db::connect(&readonly)
+                    .await
+                    .map_err(|error| format!("migration.database.unavailable: {error}"))?;
+                jobs::print_status(&db).await
+            })?;
+            if !jobs_current {
+                println!("Job-Migrationen sind nicht vollständig angewendet. ferrum migrate up holt sie nach. Dieser Status schreibt nicht.");
             }
         }
     }
     Ok(())
+}
+
+fn optional_project() -> Result<Option<ferrum_migrations::ProjectConfig>, String> {
+    let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+    match ferrum_migrations::discover_project(&directory) {
+        Ok(project) => Ok(Some(project)),
+        Err(error) if error.0.contains("Keine ferrum.toml") => Ok(None),
+        Err(error) => Err(error.0),
+    }
+}
+
+fn jobs_database_url(
+    override_url: Option<String>,
+    project: Option<&ferrum_migrations::ProjectConfig>,
+) -> Result<String, String> {
+    if let Some(url) = override_url {
+        return Ok(url);
+    }
+    if let Some(project) = project {
+        return Ok(project.resolved_database_url());
+    }
+    match std::env::var("DATABASE_URL") {
+        Ok(url) if !url.is_empty() => Ok(url),
+        _ => Err(
+            "job.database Es gibt keine Datenbank-URL. Setze DATABASE_URL oder --database-url."
+                .to_owned(),
+        ),
+    }
 }
 
 fn print_written(outcome: MakeOutcome) {
@@ -475,6 +681,23 @@ fn print_risks(risks: &[ferrum_migrations::MigrationRisk]) {
         .any(|risk| risk.code == "drop_table" || risk.code == "drop_column");
     if destructive {
         println!("Löschungen führt ferrum migrate up erst mit --allow-destructive aus.");
+    }
+}
+
+fn declared_packages() -> Result<Vec<PackageMigration>, String> {
+    let directory = std::env::current_dir().map_err(|error| error.to_string())?;
+    match discover_project(&directory) {
+        Ok(project) => Ok(project
+            .apps
+            .into_iter()
+            .map(|app| PackageMigration {
+                name: app.name,
+                directory: app.migrations,
+                depends_on: app.depends_on,
+            })
+            .collect()),
+        Err(error) if error.0.contains("Keine ferrum.toml") => Ok(Vec::new()),
+        Err(error) => Err(error.0),
     }
 }
 

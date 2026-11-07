@@ -4,7 +4,7 @@
 
 ## Aufgabe
 
-`ferrum new` legt ein Projekt außerhalb des Ferrum-Repositories an. Die Cargo-Version der Abhängigkeit bleibt die des Workspaces. Die Template-Version im Manifest ist `0.24`.
+`ferrum new` legt ein Projekt außerhalb des Ferrum-Repositories an. Die Cargo-Version der Abhängigkeit bleibt die des Workspaces. Die Template-Version im Manifest ist `0.24`. `ferrum generate app` ergänzt danach `src/apps/<name>/`, beschrieben in [create-app.md](create-app.md). Der Generator neuer Projekte schreibt dieses Verzeichnis nicht mit.
 
 ## Fullstack
 

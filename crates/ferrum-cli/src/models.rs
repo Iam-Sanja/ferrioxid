@@ -4,7 +4,7 @@ use crate::scaffold::validate_project_name;
 use ferrum_migrations::discover_project;
 use std::path::{Path, PathBuf};
 
-pub fn generate_model(name: &str) -> Result<PathBuf, String> {
+pub fn generate_model(name: &str, timestamps: bool) -> Result<PathBuf, String> {
     validate_model_name(name)?;
     let project = discover_project(&std::env::current_dir().map_err(|error| error.to_string())?)
         .map_err(|error| error.to_string())?;
@@ -18,8 +18,11 @@ pub fn generate_model(name: &str) -> Result<PathBuf, String> {
     }
     let package = package_name(&project.root)?;
     let template = project.template.as_deref().unwrap_or("api");
-    std::fs::write(&model_path, model_source(name, &module, template))
-        .map_err(|error| error.to_string())?;
+    std::fs::write(
+        &model_path,
+        model_source(name, &module, template, timestamps),
+    )
+    .map_err(|error| error.to_string())?;
     insert_line(
         &project.root.join("src/models/mod.rs"),
         "// ferrum:models:end",
@@ -82,7 +85,7 @@ fn snake_case(name: &str) -> String {
     result
 }
 
-fn model_source(name: &str, module: &str, template: &str) -> String {
+fn model_source(name: &str, module: &str, template: &str, timestamps: bool) -> String {
     let table = format!("{module}s");
     let attributes = if template == "fullstack" {
         format!(
@@ -93,7 +96,7 @@ fn model_source(name: &str, module: &str, template: &str) -> String {
             "    table = \"{table}\",\n    api = \"/api/v1/{table}\",\n    allow_anonymous = true"
         )
     };
-    format!(
+    let body = format!(
         r#"use ferrum::prelude::*;
 use serde::{{Deserialize, Serialize}};
 
@@ -109,10 +112,15 @@ pub struct {name} {{
     pub name: String,
 }}
 "#
-    )
+    );
+    if timestamps {
+        format!("ferrum::with_timestamps! {{\n{body}}}\n")
+    } else {
+        body
+    }
 }
 
-fn insert_line(path: &Path, marker: &str, line: &str) -> Result<(), String> {
+pub(crate) fn insert_line(path: &Path, marker: &str, line: &str) -> Result<(), String> {
     let text = std::fs::read_to_string(path)
         .map_err(|error| format!("{} konnte nicht gelesen werden: {error}", path.display()))?;
     if text.contains(line) {
@@ -150,7 +158,16 @@ fn package_name(root: &Path) -> Result<String, String> {
 
 #[cfg(test)]
 mod tests {
-    use super::{snake_case, validate_model_name};
+    use super::{model_source, snake_case, validate_model_name};
+
+    #[test]
+    fn timestamps_stay_optional() {
+        let plain = model_source("Product", "product", "api", false);
+        assert!(!plain.contains("with_timestamps"));
+        let stamped = model_source("Product", "product", "api", true);
+        assert!(stamped.contains("ferrum::with_timestamps!"));
+        assert!(stamped.contains("pub name: String"));
+    }
 
     #[test]
     fn model_names_stay_on_one_identifier() {

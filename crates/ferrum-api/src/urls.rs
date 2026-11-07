@@ -124,6 +124,10 @@ impl UrlSet {
         (self.router, self.names)
     }
 
+    pub fn names(&self) -> &RouteMap {
+        &self.names
+    }
+
     fn insert(&mut self, name: &str, path: &str) -> Result<(), UrlError> {
         validate_name(name)?;
         validate_path(path)?;

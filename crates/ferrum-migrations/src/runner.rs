@@ -76,18 +76,66 @@ pub async fn apply_directory_with_history(
     allow_destructive: bool,
     history_table: &str,
 ) -> Result<ApplyReport, MigrationError> {
+    apply_scoped(db, directory, allow_destructive, history_table, None).await
+}
+
+/// Wendet die Dateien eines App-Verzeichnisses an. Die Historien-ID ist `app:datei`.
+///
+/// Die Checksum bleibt die der Datei. Ein bereits geschriebenes Legacy-`0001_initial` wird nicht neu zugeordnet.
+pub async fn apply_namespaced_directory(
+    db: &DatabaseConnection,
+    directory: &Path,
+    namespace: &str,
+    allow_destructive: bool,
+) -> Result<ApplyReport, MigrationError> {
+    validate_namespace(namespace)?;
+    if !directory.is_dir() {
+        return Err(MigrationError::new(format!(
+            "Das Migrationsverzeichnis der App `{namespace}` fehlt."
+        )));
+    }
+    apply_scoped(
+        db,
+        directory,
+        allow_destructive,
+        history::HISTORY_TABLE,
+        Some(namespace),
+    )
+    .await
+}
+
+pub async fn namespaced_status(
+    db: &DatabaseConnection,
+    directory: &Path,
+    namespace: &str,
+) -> Result<StatusReport, MigrationError> {
+    validate_namespace(namespace)?;
+    status_scoped(db, directory, history::HISTORY_TABLE, None, Some(namespace)).await
+}
+
+async fn apply_scoped(
+    db: &DatabaseConnection,
+    directory: &Path,
+    allow_destructive: bool,
+    history_table: &str,
+    namespace: Option<&str>,
+) -> Result<ApplyReport, MigrationError> {
     let state = inspect_directory(directory);
     if !state.conflicts.is_empty() {
         return Err(MigrationError::new(state.conflicts.join("\n")));
     }
     history::ensure_history_in(db, history_table).await?;
-    let applied = history::read_history_in(db, history_table).await?;
+    let applied = scoped_history(
+        &history::read_history_in(db, history_table).await?,
+        namespace,
+    )?;
     let pending = pending_files(&state.files, &applied)?;
     let mut done = Vec::new();
     for file in pending {
         reject_blocked(file, allow_destructive)?;
-        apply_one(db, file, history_table).await?;
-        done.push(file.id.clone());
+        let history_id = history_key(namespace, &file.id);
+        apply_one(db, file, history_table, &history_id).await?;
+        done.push(history_id);
     }
     Ok(ApplyReport { applied: done })
 }
@@ -110,7 +158,7 @@ pub async fn migration_status_in(
     let backend = kind_of(db.get_database_backend())
         .map_err(|error| MigrationError::new(error.to_string()))?;
     let applied = if history::history_exists_in(db, history_table).await? {
-        history::read_history_in(db, history_table).await?
+        scoped_history(&history::read_history_in(db, history_table).await?, None)?
     } else {
         Vec::new()
     };
@@ -257,10 +305,122 @@ fn reject_blocked(file: &MigrationFile, allow_destructive: bool) -> Result<(), M
     Ok(())
 }
 
+fn validate_namespace(namespace: &str) -> Result<(), MigrationError> {
+    if !crate::snapshot::is_identifier(namespace) || namespace.contains(':') || namespace.len() > 32
+    {
+        return Err(MigrationError::new(format!(
+            "Ungültiger App-Name `{namespace}`."
+        )));
+    }
+    Ok(())
+}
+
+fn history_key(namespace: Option<&str>, file_id: &str) -> String {
+    match namespace {
+        Some(namespace) => format!("{namespace}:{file_id}"),
+        None => file_id.to_owned(),
+    }
+}
+
+fn scoped_history(
+    entries: &[HistoryEntry],
+    namespace: Option<&str>,
+) -> Result<Vec<HistoryEntry>, MigrationError> {
+    let mut scoped = Vec::new();
+    for entry in entries {
+        match namespace {
+            None => {
+                if !entry.id.contains(':') {
+                    scoped.push(entry.clone());
+                }
+            }
+            Some(namespace) => {
+                let prefix = format!("{namespace}:");
+                if let Some(rest) = entry.id.strip_prefix(&prefix) {
+                    if rest.is_empty() || rest.contains(':') {
+                        return Err(MigrationError::new(format!(
+                            "Die Historien-ID `{}` ist nicht eindeutig qualifiziert.",
+                            entry.id
+                        )));
+                    }
+                    scoped.push(HistoryEntry {
+                        id: rest.to_owned(),
+                        name: entry.name.clone(),
+                        checksum: entry.checksum.clone(),
+                        applied_at_unix: entry.applied_at_unix,
+                    });
+                }
+            }
+        }
+    }
+    Ok(scoped)
+}
+
+async fn status_scoped(
+    db: &DatabaseConnection,
+    directory: &Path,
+    history_table: &str,
+    current: Option<&SchemaSnapshot>,
+    namespace: Option<&str>,
+) -> Result<StatusReport, MigrationError> {
+    let state = inspect_directory(directory);
+    let backend = kind_of(db.get_database_backend())
+        .map_err(|error| MigrationError::new(error.to_string()))?;
+    let applied = if history::history_exists_in(db, history_table).await? {
+        scoped_history(
+            &history::read_history_in(db, history_table).await?,
+            namespace,
+        )?
+    } else {
+        Vec::new()
+    };
+    let mut conflicts = state.conflicts;
+    let mut lines = Vec::new();
+    for file in &state.files {
+        let shown = history_key(namespace, &file.id);
+        if let Some(entry) = applied.iter().find(|entry| entry.id == file.id) {
+            if entry.checksum != file.checksum {
+                conflicts.push(format!(
+                    "Angewendete Migration {shown} wurde verändert. Gespeicherte Checksum und Datei stimmen nicht überein."
+                ));
+            }
+            lines.push(MigrationLine {
+                id: shown,
+                state: "angewendet".to_owned(),
+                checksum: file.checksum.clone(),
+            });
+        } else {
+            lines.push(MigrationLine {
+                id: shown,
+                state: "ausstehend".to_owned(),
+                checksum: file.checksum.clone(),
+            });
+        }
+    }
+    for entry in &applied {
+        if !state.files.iter().any(|file| file.id == entry.id) {
+            conflicts.push(format!(
+                "Angewendete Migration {} hat keine Datei mehr im Migrationsverzeichnis.",
+                history_key(namespace, &entry.id)
+            ));
+        }
+    }
+    if let Err(error) = pending_files(&state.files, &applied) {
+        conflicts.push(error.0);
+    }
+    Ok(StatusReport {
+        backend: history::backend_name(backend).to_owned(),
+        lines,
+        conflicts,
+        schema_note: schema_note(current, &state.files, &applied),
+    })
+}
+
 async fn apply_one(
     db: &DatabaseConnection,
     file: &MigrationFile,
     history_table: &str,
+    history_id: &str,
 ) -> Result<(), MigrationError> {
     let backend = db.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
@@ -305,7 +465,7 @@ async fn apply_one(
     history::insert_history_in(
         &transaction,
         history_table,
-        &file.id,
+        history_id,
         &file.name,
         &file.checksum,
         applied_at_unix,

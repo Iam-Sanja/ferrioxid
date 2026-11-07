@@ -17,6 +17,7 @@ ferrum-static = { path = "../ferrum-static" }
 ferrum-storage = { path = "../ferrum-storage" }
 ferrum-middleware = { path = "../ferrum-middleware" }
 ferrum-mail = { path = "../ferrum-mail" }
+ferrum-jobs = { path = "../ferrum-jobs" }
 sea-orm.workspace = true
 serde.workspace = true
 serde_json.workspace = true

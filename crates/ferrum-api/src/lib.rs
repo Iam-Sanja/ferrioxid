@@ -3,6 +3,8 @@
 //! `allow_anonymous` bleibt die einzige öffentliche Freigabe. Jede andere Route prüft die
 //! Sitzung und die am Modell hinterlegte Berechtigung. Gebundene Objektregeln filtern über `QueryScope`.
 
+use std::collections::BTreeSet;
+
 use axum::{
     extract::{Path, State},
     http::{HeaderMap, Method, StatusCode},
@@ -18,6 +20,7 @@ use ferrum_migrations::{history_exists, ProjectConfig};
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::json;
 
+pub mod apps;
 pub mod pages;
 pub mod urls;
 pub mod views;
@@ -32,6 +35,13 @@ pub struct App {
     names: urls::RouteMap,
     routes: Router<AppState>,
     schemas: Vec<(&'static str, &'static [ColumnSpec])>,
+    installed: Vec<String>,
+    sealed: bool,
+    paths: BTreeSet<String>,
+    tables: BTreeSet<String>,
+    migrations: Vec<ferrum_migrations::PackageMigration>,
+    catalog: apps::TemplateCatalog,
+    statics: Vec<apps::StaticMount>,
 }
 
 impl App {
@@ -45,6 +55,13 @@ impl App {
             names: urls::RouteMap::default(),
             routes: Router::new(),
             schemas: Vec::new(),
+            installed: Vec::new(),
+            sealed: false,
+            paths: BTreeSet::new(),
+            tables: BTreeSet::new(),
+            migrations: Vec::new(),
+            catalog: apps::TemplateCatalog::default(),
+            statics: Vec::new(),
         }
     }
 
@@ -65,9 +82,7 @@ impl App {
 
     /// Hängt benannte Anwendungsrouten an. Reservierte Framework-Pfade werden abgelehnt.
     pub fn urls(mut self, set: urls::UrlSet) -> Result<Self, urls::UrlError> {
-        let (router, names) = set.into_parts();
-        self.names.merge(names)?;
-        self.routes = self.routes.merge(router);
+        self.accept_urls(set)?;
         Ok(self)
     }
 
@@ -83,48 +98,55 @@ impl App {
     }
 
     pub fn register<M: ModelRepository>(mut self) -> Self {
+        self.register_in::<M>();
+        self
+    }
+
+    pub(crate) fn register_in<M: ModelRepository>(&mut self) {
         let descriptor = M::descriptor();
         let detail_path = format!("{}/{{id}}", descriptor.api_path.trim_end_matches('/'));
         if descriptor.allow_anonymous {
-            self.routes = self
-                .routes
-                .route(descriptor.api_path, get(list::<M>).post(create::<M>));
-            self.routes = self.routes.route(
+            let routes = std::mem::replace(&mut self.routes, Router::new());
+            self.routes = routes.route(descriptor.api_path, get(list::<M>).post(create::<M>));
+            let routes = std::mem::replace(&mut self.routes, Router::new());
+            self.routes = routes.route(
                 &detail_path,
                 get(get_one::<M>).patch(update::<M>).delete(delete_one::<M>),
             );
         } else if descriptor.requires_object_policy {
-            self.routes = self.routes.route(
+            let routes = std::mem::replace(&mut self.routes, Router::new());
+            self.routes = routes.route(
                 descriptor.api_path,
                 get(policy_unbound).post(policy_unbound),
             );
-            self.routes = self.routes.route(
+            let routes = std::mem::replace(&mut self.routes, Router::new());
+            self.routes = routes.route(
                 &detail_path,
                 get(policy_unbound)
                     .patch(policy_unbound)
                     .delete(policy_unbound),
             );
         } else if descriptor.permission.is_some() {
-            self.routes = self.routes.route(
+            let routes = std::mem::replace(&mut self.routes, Router::new());
+            self.routes = routes.route(
                 descriptor.api_path,
                 get(guarded_list::<M>).post(guarded_create::<M>),
             );
-            self.routes = self.routes.route(
+            let routes = std::mem::replace(&mut self.routes, Router::new());
+            self.routes = routes.route(
                 &detail_path,
                 get(guarded_get::<M>)
                     .patch(guarded_update::<M>)
                     .delete(guarded_delete::<M>),
             );
         } else {
-            self.routes = self
-                .routes
-                .route(descriptor.api_path, get(denied).post(denied));
-            self.routes = self
-                .routes
-                .route(&detail_path, get(denied).patch(denied).delete(denied));
+            let routes = std::mem::replace(&mut self.routes, Router::new());
+            self.routes = routes.route(descriptor.api_path, get(denied).post(denied));
+            let routes = std::mem::replace(&mut self.routes, Router::new());
+            self.routes = routes.route(&detail_path, get(denied).patch(denied).delete(denied));
         }
+        self.remember(descriptor.table, descriptor.api_path, &detail_path);
         self.schemas.push((descriptor.table, M::columns()));
-        self
     }
 
     /// Bindet eine Objektregel. Listen und Schreibzugriffe verwenden denselben Query-Scope.
@@ -135,20 +157,56 @@ impl App {
         M: ModelRepository,
         P: ObjectPolicy<M> + 'static,
     {
+        self.register_policy_in::<M, P>();
+        self
+    }
+
+    pub(crate) fn register_policy_in<M, P>(&mut self)
+    where
+        M: ModelRepository,
+        P: ObjectPolicy<M> + 'static,
+    {
         let descriptor = M::descriptor();
         let detail_path = format!("{}/{{id}}", descriptor.api_path.trim_end_matches('/'));
-        self.routes = self.routes.route(
+        let routes = std::mem::replace(&mut self.routes, Router::new());
+        self.routes = routes.route(
             descriptor.api_path,
             get(policy_list::<M, P>).post(policy_create::<M, P>),
         );
-        self.routes = self.routes.route(
+        let routes = std::mem::replace(&mut self.routes, Router::new());
+        self.routes = routes.route(
             &detail_path,
             get(policy_get::<M, P>)
                 .patch(policy_update::<M, P>)
                 .delete(policy_delete::<M, P>),
         );
+        self.remember(descriptor.table, descriptor.api_path, &detail_path);
         self.schemas.push((descriptor.table, M::columns()));
-        self
+    }
+
+    fn remember(&mut self, table: &str, path: &str, detail: &str) {
+        self.tables.insert(table.to_owned());
+        self.paths.insert(path.to_owned());
+        self.paths.insert(detail.to_owned());
+    }
+
+    fn accept_urls(&mut self, set: urls::UrlSet) -> Result<(), urls::UrlError> {
+        let (router, names) = set.into_parts();
+        for (_name, path) in names.iter() {
+            if self.paths.contains(path) {
+                return Err(urls::UrlError {
+                    code: "url.duplicate",
+                    detail: format!("Der Pfad `{path}` ist bereits vergeben."),
+                });
+            }
+        }
+        self.names.merge(names)?;
+        for (_name, path) in self.names.iter() {
+            self.paths.insert(path.to_owned());
+        }
+        let routes = std::mem::replace(&mut self.routes, Router::new());
+        self.routes = routes.merge(router);
+        Ok(())
     }
 
     /// Legacy-Helfer für leere Testdatenbanken. Keine Migrationshistorie und kein Schema-Diff.
@@ -175,7 +233,28 @@ impl App {
         Ok(())
     }
 
+    pub fn try_into_router(self) -> Result<Router, crate::apps::AppError> {
+        let needs_validation = !self.sealed
+            && (!self.installed.is_empty()
+                || self
+                    .settings
+                    .as_ref()
+                    .is_some_and(|settings| !settings.apps.is_empty()));
+        let app = if needs_validation { self.seal()? } else { self };
+        Ok(app.finish_router())
+    }
+
     pub fn into_router(self) -> Router {
+        match self.try_into_router() {
+            Ok(router) => router,
+            Err(error) => panic!(
+                "Ferrum-App-Registry ist ungültig ({}). {}",
+                error.code, error.detail
+            ),
+        }
+    }
+
+    fn finish_router(self) -> Router {
         let state = AppState {
             db: self.db,
             auth: self.auth,
@@ -190,6 +269,15 @@ impl App {
         }
         .route("/healthz", get(|| async { Json(json!({"status": "ok"})) }))
         .with_state(state);
+        let mut router = router;
+        for mount in self.statics {
+            let mut options = ferrum_static::StaticOptions::new(mount.directory);
+            options.url_prefix = mount.prefix;
+            router = ferrum_static::mount(router, options);
+        }
+        let mut catalog = self.catalog;
+        catalog.set_routes(self.names.clone());
+        let router = router.layer(axum::Extension(std::sync::Arc::new(catalog)));
         let router = router.layer(axum::Extension(std::sync::Arc::new(self.names)));
         if let Some(settings) = self.settings {
             router.layer(axum::Extension(std::sync::Arc::new(settings)))

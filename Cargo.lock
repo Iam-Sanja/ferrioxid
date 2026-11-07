@@ -688,6 +688,7 @@ dependencies = [
  "ferrum-core",
  "ferrum-db",
  "ferrum-forms",
+ "ferrum-jobs",
  "ferrum-macros",
  "ferrum-mail",
  "ferrum-middleware",
@@ -729,6 +730,7 @@ dependencies = [
  "ferrum-auth",
  "ferrum-core",
  "ferrum-db",
+ "ferrum-jobs",
  "ferrum-mail",
  "ferrum-middleware",
  "ferrum-migrations",
@@ -775,10 +777,14 @@ dependencies = [
  "ctrlc",
  "ferrum-auth",
  "ferrum-db",
+ "ferrum-jobs",
+ "ferrum-mail",
  "ferrum-migrations",
  "notify",
  "rpassword",
+ "sea-orm",
  "tokio",
+ "uuid",
 ]
 
 [[package]]
@@ -811,6 +817,25 @@ version = "0.1.0"
 dependencies = [
  "chrono",
  "ferrum-core",
+ "uuid",
+]
+
+[[package]]
+name = "ferrum-jobs"
+version = "0.1.0"
+dependencies = [
+ "async-trait",
+ "ferrum-auth",
+ "ferrum-core",
+ "ferrum-db",
+ "ferrum-mail",
+ "ferrum-migrations",
+ "sea-orm",
+ "serde",
+ "serde_json",
+ "thiserror",
+ "tokio",
+ "tracing",
  "uuid",
 ]
 
@@ -1669,6 +1694,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "df9761775871bdef83bee530e60050f7e54b1105350d6884eb0fb4f46c2f9405"
 dependencies = [
  "memchr",
+]
+
+[[package]]
+name = "notes"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "ferrum",
+ "http-body-util",
+ "serde",
+ "tokio",
+ "tower",
 ]
 
 [[package]]

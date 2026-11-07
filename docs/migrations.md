@@ -18,6 +18,8 @@ Rust-Modelle
 
 Die Engine liest keinen Rust-Quelltext. Sie hängt nicht an Axum und nicht am Admin-Frontend. CRUD und Migrationen nutzen dieselbe Typabbildung in `crates/ferrum-db/src/sql.rs`.
 
+App-Pakete nutzen dieselbe Tabelle. Die Historien-ID ist `shop:0001_initial`, die Datei bleibt `0001_initial`. Details: [app-migrations.md](app-migrations.md). Bestehende unqualifizierte Zeilen werden nicht umgeschrieben. Der Prozessstart vergleicht `registry.migrations` mit `[app.<name>]`. Die CLI sieht nur die TOML-Seite und kennzeichnet das. Eine Feldgruppe ohne konkretes Model erzeugt keine Tabelle. Spalten stehen in `columns()` der konkreten Models und damit im Schema-Diff.
+
 Auth-Dateien liegen in `crates/ferrum-auth/migrations/` und schreiben die Historie `_ferrum_auth_migrations`. `ferrum migrate up` wendet dieses Verzeichnis vor den Anwendungsdateien an. Die Anwendungshistorie bleibt `_ferrum_migrations`. Dadurch kollidiert `0001_auth_schema` nicht mit `0001_initial`. Der Serverstart migriert nicht. `0001_initial.json` bleibt unverändert.
 
 | Aufgabe | Datei |

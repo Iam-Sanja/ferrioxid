@@ -8,7 +8,7 @@
 
 Dieselbe lesende Prüfung gilt für `ferrum migrate status`, `ferrum check`, `ferrum doctor`, `ferrum dev` und `ferrum upgrade --check` beziehungsweise `--dry-run`. Sie wendet keine Migration an, legt keine Historientabelle an und erzeugt keine SQLite-Datei.
 
-Auth-Dateien liegen in `crates/ferrum-auth/migrations`. Die Historie heißt `_ferrum_auth_migrations`. App-Dateien liegen im `migrations_dir` des Projekts. Die Historie heißt `_ferrum_migrations`.
+Auth-Dateien liegen in `crates/ferrum-auth/migrations`. Die Historie heißt `_ferrum_auth_migrations`. App-Dateien liegen im `migrations_dir` des Projekts. Die Historie heißt `_ferrum_migrations`. Deklarierte App-Pakete aus `[app.<name>]` stehen in derselben Historie unter `shop:0001_initial`. Die CLI liest diese Deklaration und nicht `registry.migrations`. Die Zeile `app.migration.runtime` sagt das. Der Prozessstart vergleicht beide Seiten.
 
 ## Bericht
 

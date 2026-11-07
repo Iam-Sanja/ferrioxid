@@ -1,9 +1,8 @@
 //! Diagnose und Prüfung ohne Schreibzugriff auf die Datenbank.
 
 use ferrum_migrations::{
-    apply_upgrade, discover_project, inspect_directory, inspect_migrations,
-    load_schema_from_command, plan_upgrade, readonly_database_url, render_plan, ProjectConfig,
-    SchemaSnapshot, TEMPLATE_VERSION,
+    apply_upgrade, discover_project, inspect_directory, load_schema_from_command, plan_upgrade,
+    readonly_database_url, render_plan, ProjectConfig, SchemaSnapshot, TEMPLATE_VERSION,
 };
 use std::process::{Command, ExitCode};
 
@@ -38,6 +37,10 @@ pub fn doctor() -> ExitCode {
             report(
                 "OK",
                 &format!("ferrum.toml gefunden in {}", project.root.display()),
+            );
+            report(
+                "OK",
+                "ferrum dev startet keinen Job-Worker. Der Worker heißt ferrum worker.",
             );
             if project.migrations_dir.is_dir() {
                 report(
@@ -280,6 +283,9 @@ struct Counts {
 }
 
 fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
+    if !project.apps.is_empty() {
+        report("OK", ferrum_migrations::runtime_contract_note());
+    }
     let url = project.resolved_database_url();
     let readonly = match readonly_database_url(&url) {
         Ok(url) => url,
@@ -325,11 +331,21 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
         let db = ferrum_db::connect(&readonly)
             .await
             .map_err(|error| format!("migration.database.unavailable: {error}"))?;
-        inspect_migrations(
+        let packages: Vec<ferrum_migrations::PackageMigration> = project
+            .apps
+            .iter()
+            .map(|app| ferrum_migrations::PackageMigration {
+                name: app.name.clone(),
+                directory: app.migrations.clone(),
+                depends_on: app.depends_on.clone(),
+            })
+            .collect();
+        ferrum_migrations::inspect_migrations_with_packages(
             &db,
             &ferrum_auth::migrations_dir(),
             &project.migrations_dir,
             schema.as_ref(),
+            &packages,
         )
         .await
         .map_err(|error| error.0)
@@ -338,13 +354,23 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
         Ok(report_value) => {
             let mut errors = 0;
             let mut warnings = 0;
+            let jobs_pending = jobs_pending(&readonly);
             if report_value.pending_auth() == 0
                 && report_value.pending_app() == 0
+                && report_value.pending_packages() == 0
+                && !jobs_pending
                 && !report_value.has_error()
             {
                 report(
                     "OK",
-                    "migration.current Auth- und App-Migrationen sind angewendet.",
+                    "migration.current Auth-, Job- und App-Migrationen sind angewendet.",
+                );
+            }
+            if jobs_pending {
+                warnings += 1;
+                report(
+                    "WARN",
+                    "job.migration.pending 0001_jobs Die Job-Migration ist nicht angewendet. ferrum migrate up holt sie nach. Diese Prüfung schreibt nicht.",
                 );
             }
             for item in &report_value.diagnostics {
@@ -363,7 +389,11 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
                     ferrum_migrations::Level::Ok => {}
                 }
             }
-            if report_value.pending_auth() + report_value.pending_app() > 0 {
+            if report_value.pending_auth()
+                + report_value.pending_app()
+                + report_value.pending_packages()
+                > 0
+            {
                 println!("Empfehlung:\n  ferrum migrate up");
             }
             Counts { errors, warnings }
@@ -376,6 +406,19 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
             }
         }
     }
+}
+
+fn jobs_pending(url: &str) -> bool {
+    let Ok(runtime) = tokio::runtime::Runtime::new() else {
+        return false;
+    };
+    runtime
+        .block_on(async {
+            let db = ferrum_db::connect(url).await.ok()?;
+            let (_text, current) = ferrum_jobs::render_migration_status(&db).await.ok()?;
+            Some(!current)
+        })
+        .unwrap_or(false)
 }
 
 fn load_check_schema(project: &ProjectConfig) -> Result<Option<SchemaSnapshot>, String> {

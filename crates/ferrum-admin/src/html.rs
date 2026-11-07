@@ -473,18 +473,18 @@ async fn model_list(
     let (sort, descending) = match resolved_sort(model.meta(), &params) {
         Ok(value) => value,
         Err(()) => {
-            return error_page(
-                &state,
-                &headers,
-                &registry,
-                &locale,
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "forbidden",
-                true,
-                &user.email,
-            )
-            .await;
-        }
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
     };
     let filters = match filters_from(
         raw.as_deref().unwrap_or(""),
@@ -645,7 +645,7 @@ async fn model_list(
                 })
                 .collect();
             json!({
-                "id": row.get("id").and_then(Value::as_str).unwrap_or(""),
+        "id": row.get("id").and_then(Value::as_str).unwrap_or(""),
                 "cells": cells
             })
         })
@@ -2603,7 +2603,7 @@ async fn relation_options(
     let mut options: Vec<Value> = rows
         .into_iter()
         .filter_map(|row| {
-            let id = row.get("id")?.as_str()?;
+        let id = row.get("id")?.as_str()?;
             Some(json!({
                 "id": id,
                 "label": row.get(label)?.as_str().unwrap_or(""),
@@ -2816,8 +2816,8 @@ fn visible_fields(
                 &mut lead,
             );
             json!({
-                "label": field.label,
-                "readonly": field.readonly || field.name == "id",
+        "label": field.label,
+        "readonly": field.readonly || field.name == "id",
                 "value": cell["text"].as_str().unwrap_or(""),
                 "relation": cell["relation"].as_bool().unwrap_or(false),
                 "ref": cell["ref"].as_str().unwrap_or(""),
@@ -3002,8 +3002,8 @@ async fn filter_inputs(
             raw
         };
         filters.push(json!({
-            "name": field.name,
-            "label": field.label,
+                "name": field.name,
+                "label": field.label,
             "kind": kind,
             "value": value,
             "options": options,
@@ -4066,7 +4066,7 @@ async fn mutate_user(
             id,
             form_flag(&form, "active").unwrap_or(false),
         )
-        .await
+            .await
     } else {
         crate::directory::set_staff(
             auth,
@@ -4074,7 +4074,7 @@ async fn mutate_user(
             id,
             form_flag(&form, "staff").unwrap_or(false),
         )
-        .await
+            .await
     };
     if result.is_err() {
         return error_page(
