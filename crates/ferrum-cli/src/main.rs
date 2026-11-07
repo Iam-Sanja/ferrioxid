@@ -8,9 +8,9 @@ mod text;
 
 use clap::{Parser, Subcommand};
 use ferrum_migrations::{
-    apply_directory, baseline_database, discover_project, load_schema_from_command, make_migration,
-    migration_status, reseal_unapplied, write_explicit_migration, MakeOutcome, MigrationOperation,
-    SchemaSnapshot,
+    apply_directory, baseline_database, discover_project, inspect_migrations,
+    load_schema_from_command, make_migration, readonly_database_url, render_diagnosis,
+    reseal_unapplied, write_explicit_migration, MakeOutcome, MigrationOperation, SchemaSnapshot,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -37,7 +37,23 @@ enum Command {
     /// Prüft Werkzeuge, Konfiguration und Projektdateien.
     Doctor,
     /// Prüft Konfiguration, Migrationen und Kompilierung, ohne Daten zu ändern.
-    Check,
+    Check {
+        /// Warnungen, ausstehende Migrationen und Legacy-Projekte beenden mit Exitcode 2.
+        #[arg(long)]
+        strict: bool,
+    },
+    /// Analysiert ein bestehendes Projekt und schreibt höchstens ein fehlendes Legacy-Manifest.
+    Upgrade {
+        /// Nur Diagnose. Es wird keine Datei geschrieben.
+        #[arg(long)]
+        check: bool,
+        /// Zeigt den Dateiplan. Es wird keine Datei geschrieben.
+        #[arg(long)]
+        dry_run: bool,
+        /// Legt ein fehlendes Legacy-Manifest an. Überschreibt keine Projektdatei.
+        #[arg(long)]
+        yes: bool,
+    },
     /// Startet den Entwicklungsserver und startet ihn nach Rust-Änderungen neu.
     Dev,
     /// Kompiliert das Projekt. Fullstack bettet das Admin-Frontend ein.
@@ -233,7 +249,12 @@ fn main() -> ExitCode {
             }
         },
         Command::Doctor => diagnose::doctor(),
-        Command::Check => diagnose::check(),
+        Command::Check { strict } => diagnose::check(strict),
+        Command::Upgrade {
+            check,
+            dry_run,
+            yes,
+        } => diagnose::upgrade(check, dry_run, yes),
         Command::Dev => develop::dev(),
         Command::Build => develop::build(),
         Command::Generate { action } => match action {
@@ -405,16 +426,22 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
             let directory = resolve_directory(migrations_dir)?;
             let schema = load_optional_schema(schema_file)?;
             let url = resolve_database_url(database_url)?;
+            let readonly = readonly_database_url(&url).map_err(|error| error.0)?;
             let report = runtime.block_on(async {
-                let db = ferrum_db::connect(&url)
+                let db = ferrum_db::connect(&readonly)
                     .await
-                    .map_err(|error| error.to_string())?;
-                migration_status(&db, &directory, schema.as_ref())
-                    .await
-                    .map_err(|error| error.0)
+                    .map_err(|error| format!("migration.database.unavailable: {error}"))?;
+                inspect_migrations(
+                    &db,
+                    &ferrum_auth::migrations_dir(),
+                    &directory,
+                    schema.as_ref(),
+                )
+                .await
+                .map_err(|error| error.0)
             })?;
-            print!("{}", report.render());
-            if !report.conflicts.is_empty() {
+            print!("{}", render_diagnosis(&text::locale(), &report));
+            if report.has_error() {
                 return Err("Es gibt Migrationskonflikte.".to_owned());
             }
         }

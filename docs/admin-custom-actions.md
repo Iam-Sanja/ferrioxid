@@ -28,8 +28,33 @@ registry.action(AdminAction {
 - `Delete` verlangt das Recht `delete`.
 - `SetBool` verlangt `update` und eine sichtbare, nicht schreibgeschützte, nicht sensible Bool-Spalte, die nicht der Primärschlüssel ist.
 
-Eingebaute Aktionen: `delete` immer, `activate` und `deactivate` nur wenn eine solche Spalte `active` existiert. Ein HTTP-Name, der nicht in dieser Liste steht, ist 422. Es wird kein Closure und kein SQL aus der Anfrage ausgeführt.
+Eingebaute Aktionen: `delete` immer, `activate` und `deactivate` nur wenn eine solche Spalte `active` existiert. Ein HTTP-Name, der weder eingebaut noch über `try_action` registriert ist, ist 422. Es wird kein SQL aus der Anfrage ausgeführt.
 
 Beide Operationen laufen in der Transaktion aus [admin-bulk-actions.md](admin-bulk-actions.md) und schreiben `bulk_delete` oder `bulk_update`.
 
-Ein freier Rust-Handler je Aktion ist nicht umgesetzt. Wer eine andere Änderung braucht, erweitert `ActionOperation` im Crate und registriert sie weiter über `AdminAction`.
+## Eigener Handler
+
+```rust
+struct MarkProcessed;
+
+#[ferrum::async_trait::async_trait]
+impl ferrum::admin::ActionHandler for MarkProcessed {
+    async fn apply(
+        &self,
+        context: &mut ferrum::admin::ActionContext,
+    ) -> Result<(), ferrum::admin::ActionError> {
+        for id in context.ids() {
+            context.set_text(id, "status", "processed")?;
+        }
+        Ok(())
+    }
+}
+
+registry.try_action(
+    ferrum::admin::AdminAction::custom("orders", "mark_processed", std::sync::Arc::new(MarkProcessed))
+        .labels("Als bearbeitet markieren", "Mark processed")
+        .writes(&["status"]),
+)?;
+```
+
+Der HTTP-Parameter wählt nur den registrierten Namen. Ferrum prüft vorher `update`, die Auswahlgrenze, den Query-Scope und die Objektregel. `set_text`, `set_integer` und `set_bool` akzeptieren nur eine ID aus dieser Auswahl und eine Spalte aus `writes`. Die Methode öffnet keine Verbindung. Nach dem Plan schreibt `update_in` in derselben Transaktion wie das Audit. Ein Fehler rollt alles zurück. `Delete` und `SetBool` bleiben die bisherigen Literale.

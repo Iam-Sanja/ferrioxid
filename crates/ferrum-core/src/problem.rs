@@ -25,6 +25,10 @@ fn classify(detail: &str) -> (&'static str, Option<String>, String) {
         "Field is required" | "active is required" | "email and role are required" => {
             "validation.required"
         }
+        _ if message.contains("validation.datetime_offset") => "validation.datetime_offset",
+        _ if message.contains("validation.datetime") => "validation.datetime",
+        _ if message.contains("validation.date") => "validation.date",
+        _ if message.contains("validation.time") => "validation.time",
         "Password must contain 12 to 128 characters" => "validation.password",
         "Invalid email or password" => "auth.invalid_credentials",
         "Authentication required" => "auth.required",

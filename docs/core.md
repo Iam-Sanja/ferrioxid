@@ -22,7 +22,7 @@ pub struct ModelDescriptor {
     pub requires_object_policy: bool,
 }
 pub enum DatabaseKind { Sqlite, Postgres }
-pub enum ColumnKind { Uuid, Text, BigInt, Boolean }
+pub enum ColumnKind { Uuid, Text, BigInt, Boolean, Date, Time, DateTime }
 pub enum ReferentialAction { Restrict, Cascade, SetNull }
 pub struct ColumnSpec {
     pub name: &'static str,
@@ -65,7 +65,7 @@ Hinweis: Das obige `Error` ist zur Lesbarkeit abgekürzt; in der Quelldatei steh
 - `columns`: dialektunabhängige Spaltenmetadaten aus dem Makro.
 - `schema_sql(kind)`: Bootstrap-DDL für SQLite oder PostgreSQL. Der Text kommt aus SeaQuery, nicht aus einem gespeicherten SQL-String.
 
-`unique`, `indexed` und die Foreign-Key-Felder stehen in `ColumnSpec`. Zusammengesetzte Gruppen stehen in `TableConstraints`. `constraints()` liefert für alte Modelle leere Gruppen. `DateTime` ist kein `ColumnKind`. Policies sind nicht enthalten. Migrationen bauen den Snapshot aus diesen Metadaten. Die Namenshelfer `unique_index_name`, `secondary_index_name` und `foreign_key_name` liegen in derselben Crate. Details stehen in [constraints.md](constraints.md) und [relations.md](relations.md).
+`unique`, `indexed` und die Foreign-Key-Felder stehen in `ColumnSpec`. Zusammengesetzte Gruppen stehen in `TableConstraints`. `constraints()` liefert für alte Modelle leere Gruppen. `Date`, `Time` und `DateTime` sind `ColumnKind`. Policies sind nicht enthalten. Migrationen bauen den Snapshot aus diesen Metadaten. Die Namenshelfer `unique_index_name`, `secondary_index_name` und `foreign_key_name` liegen in derselben Crate. Details stehen in [constraints.md](constraints.md) und [relations.md](relations.md).
 
 ## Fehlersemantik (IST)
 

@@ -2,7 +2,11 @@
 //!
 //! Feldregeln kommen aus `ferrum_core`. HTML wird escaped. Unbekannte Felder werden abgelehnt.
 
-use ferrum_core::{parse_bool, parse_i64, parse_uuid, text_code};
+use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+use ferrum_core::{
+    parse_bool, parse_date, parse_datetime_local, parse_datetime_utc, parse_i64, parse_time,
+    parse_uuid, text_code,
+};
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -130,6 +134,83 @@ pub fn optional_text(values: &FormValues, spec: TextSpec) -> Result<Option<Strin
     let mut spec = spec;
     spec.required = true;
     required_text(values, spec).map(Some)
+}
+
+pub fn required_date(values: &FormValues, name: &'static str) -> Result<NaiveDate, FieldFailure> {
+    temporal(values, name, parse_date)
+}
+
+pub fn optional_date(
+    values: &FormValues,
+    name: &'static str,
+) -> Result<Option<NaiveDate>, FieldFailure> {
+    optional_temporal(values, name, parse_date)
+}
+
+pub fn required_time(values: &FormValues, name: &'static str) -> Result<NaiveTime, FieldFailure> {
+    temporal(values, name, parse_time)
+}
+
+pub fn optional_time(
+    values: &FormValues,
+    name: &'static str,
+) -> Result<Option<NaiveTime>, FieldFailure> {
+    optional_temporal(values, name, parse_time)
+}
+
+pub fn required_datetime_utc(
+    values: &FormValues,
+    name: &'static str,
+) -> Result<DateTime<Utc>, FieldFailure> {
+    temporal(values, name, parse_datetime_utc)
+}
+
+pub fn optional_datetime_utc(
+    values: &FormValues,
+    name: &'static str,
+) -> Result<Option<DateTime<Utc>>, FieldFailure> {
+    optional_temporal(values, name, parse_datetime_utc)
+}
+
+/// `datetime-local` ohne Offset. Die Zeichenkette gilt als UTC.
+pub fn required_datetime_local(
+    values: &FormValues,
+    name: &'static str,
+) -> Result<DateTime<Utc>, FieldFailure> {
+    temporal(values, name, parse_datetime_local)
+}
+
+fn temporal<T>(
+    values: &FormValues,
+    name: &'static str,
+    parse: fn(&str) -> Result<T, &'static str>,
+) -> Result<T, FieldFailure> {
+    let value = values.get(name).unwrap_or("");
+    if value.is_empty() {
+        return Err(FieldFailure {
+            field: name.to_owned(),
+            code: "validation.required",
+        });
+    }
+    parse(value).map_err(|code| FieldFailure {
+        field: name.to_owned(),
+        code,
+    })
+}
+
+fn optional_temporal<T>(
+    values: &FormValues,
+    name: &'static str,
+    parse: fn(&str) -> Result<T, &'static str>,
+) -> Result<Option<T>, FieldFailure> {
+    let value = values.get(name).unwrap_or("");
+    if value.is_empty() {
+        return Ok(None);
+    }
+    parse(value).map(Some).map_err(|code| FieldFailure {
+        field: name.to_owned(),
+        code,
+    })
 }
 
 pub fn required_i64(

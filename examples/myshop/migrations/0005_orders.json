@@ -1,0 +1,463 @@
+{
+  "format_version": 1,
+  "id": "0005_orders",
+  "name": "orders",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "categories",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_categories_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "events",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "event_date",
+            "type": "date",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "start_time",
+            "type": "time",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "date_time",
+            "primary_key": false,
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "name": "internal_notes",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "body",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ]
+      },
+      {
+        "name": "products",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "price_cents",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "category_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix_products_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_products_category_id_categories_id",
+            "columns": [
+              "category_id"
+            ],
+            "referenced_table": "categories",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    ]
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "categories",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_categories_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "events",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "event_date",
+            "type": "date",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "start_time",
+            "type": "time",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "date_time",
+            "primary_key": false,
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "name": "internal_notes",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "title",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "body",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ]
+      },
+      {
+        "name": "order_lines",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "order_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "product",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "quantity",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "unit_price",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_order_lines_order_id_orders_id",
+            "columns": [
+              "order_id"
+            ],
+            "referenced_table": "orders",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "orders",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "customer",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "ordered_on",
+            "type": "date",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "name": "products",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "price_cents",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "category_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix_products_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_products_category_id_categories_id",
+            "columns": [
+              "category_id"
+            ],
+            "referenced_table": "categories",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "create_table",
+      "table": {
+        "name": "orders",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "customer",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "ordered_on",
+            "type": "date",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "order_lines",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "order_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "product",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "quantity",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "unit_price",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_order_lines_order_id_orders_id",
+            "columns": [
+              "order_id"
+            ],
+            "referenced_table": "orders",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "5fe744833b12b362029b50cc29de4b92e49d15efcf891e722d814273300d171f"
+}

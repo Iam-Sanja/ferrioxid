@@ -1,6 +1,6 @@
 # Architektur – Modulgrenzen und Laufzeit
 
-[Zur Übersicht](index.md) · **Status:** Modulgrenzen bleiben gültig. v0.9 ergänzt Create-Policies und die Entwickler-CLI.
+[Zur Übersicht](index.md) · **Status:** Modulgrenzen bleiben gültig. v0.24 legt Settings in `ferrum-migrations` und benannte Routen sowie View-Helfer in `ferrum-api`. `AppState` bleibt unverändert. Es gibt keinen zweiten Router und kein Settings-Singleton. v0.23 legt den Versand in `ferrum-mail` und den Reset in `ferrum-auth`. Es gibt keinen zweiten Passwort- oder Sitzungsdienst. v0.22 hängt Seiten, Aktionen, Filter, Widgets und Vorlagen an dieselbe `AdminRegistry`. Es gibt keine zweite Admin-Engine. v0.21 hängt die lesende Migrationsdiagnose und das Upgrade-Manifest an dieselbe Migrations-Engine. Es gibt keine zweite Historie und keinen schreibenden Diagnoseweg. v0.19 ergänzt `Date`, `Time` und `DateTime<Utc>` in denselben Metadaten, derselben Migrations-Engine und demselben Repository. v0.20 legt Modell-, Auth- und Audit-Schreibvorgänge auf dieselbe `DatabaseTransaction`. Es gibt keine zweite Transaktions-Engine. Siehe [transactions.md](transactions.md).
 
 ## 1. Architekturprinzipien
 
@@ -90,7 +90,9 @@ GET /api/v1/products
   → höchstens 100 Modelle, truncated als Boolean
 ```
 
-Die Prüfung `allow_anonymous` geschieht **beim Registrieren der Route**. Ohne Freigabe werden ausschließlich 403-Handler registriert. Es existieren keine Identitäten oder RBAC-Policies.
+Die Prüfung `allow_anonymous` geschieht **beim Registrieren der Route**. Ohne Freigabe werden ausschließlich 403-Handler registriert.
+
+v0.24 hängt benannte Anwendungsrouten über `App::urls` an denselben Router. `UrlSet` lehnt `/admin`, `/auth` und die festen Auth-Pfade ab. Settings und `RouteMap` verlassen `into_router` als `Extension`, nicht als neue Felder von `AppState`. `merge` bleibt für unbenannte Router gültig.
 
 ## 5. Verträge zwischen Modulen (IST)
 
@@ -127,7 +129,7 @@ Rust-Modelle + Makros
 
 `ModelRepository` hat `get_tx`, `create_tx`, `update_tx` und `delete_tx` auf `&DatabaseTransaction`. Die SQL-Helfer nehmen `&impl ConnectionTrait`. `ManagedModel::update` und `remove` erhalten den `AuthUser`. Ein erfolgreiches Anlegen, Ändern oder Löschen im Admin öffnet eine Transaktion, schreibt die Zeile, schreibt `_ferrum_admin_audit` und committet. Ein Abbruch verwirft beides. `ModelRepository::create` ohne den Admin-Pfad schreibt keine Historie.
 
-Verzeichnisereignisse (`user_create`, `user_update`, `password_reset`, `role_assign`, `role_revoke`) entstehen nach dem `AuthService`-Aufruf. Sie teilen sich keine Transaktion mit der Auth-Änderung.
+Verzeichnisereignisse (`user_create`, `user_update`, `password_reset`, `role_assign`, `role_revoke`) entstehen nach dem `AuthService`-Aufruf. Sie teilen sich keine Transaktion mit der Auth-Änderung. Der Self-Service unter `/auth/password-reset` ist davon getrennt: Token-Verbrauch, Passwort, Sitzungswiderruf und Audit sind eine Transaktion. Die E-Mail folgt nach dem Commit. Siehe [password-reset.md](password-reset.md).
 
 Entwürfe liegen in `_ferrum_admin_drafts` und verweisen als Text-UUID auf `_ferrum_sessions.id`. Auth speichert Sitzungs-IDs als Text. Dieselbe Textbindung gilt für Audit-IDs. Die Migration ist `crates/ferrum-auth/migrations/0002_admin_journal.json`. `0001_auth_schema` bleibt unverändert.
 

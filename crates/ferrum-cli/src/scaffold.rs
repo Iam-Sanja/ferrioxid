@@ -1,7 +1,8 @@
 //! Erzeugt ein eigenständiges Ferrum-Projekt außerhalb des Framework-Workspaces.
 
 use ferrum_migrations::{
-    plan_change, save_migration, seal, ColumnSnapshot, LogicalType, SchemaSnapshot, TableSnapshot,
+    manifest_json, plan_change, save_migration, seal, sha256_hex, ColumnSnapshot, LogicalType,
+    ProjectManifest, SchemaSnapshot, TableSnapshot, TrackedFile,
 };
 use std::path::{Path, PathBuf};
 
@@ -65,9 +66,18 @@ pub fn new_project(
         &product_model(template),
     )?;
     write(&destination.join("src/main.rs"), &main_rs(name, template))?;
+    write(&destination.join("src/settings.rs"), settings_rs())?;
+    write(&destination.join("src/urls.rs"), &urls_rs(template))?;
+    if matches!(template, Template::Fullstack) {
+        std::fs::create_dir_all(destination.join("src/views"))
+            .map_err(|error| error.to_string())?;
+        write(&destination.join("src/views/mod.rs"), "pub mod home;\n")?;
+        write(&destination.join("src/views/home.rs"), home_view())?;
+    }
     write(&destination.join("tests/api.rs"), &api_test(name))?;
     write_templates(&destination, name, template)?;
     write_initial_migration(&destination.join("migrations"))?;
+    write_upgrade_manifest(&destination, template)?;
     Ok(destination)
 }
 
@@ -143,6 +153,56 @@ fn cargo_path(path: &Path) -> String {
     let text = path.to_string_lossy();
     let text = text.strip_prefix(r"\\?\").unwrap_or(&text);
     text.replace('\\', "/")
+}
+
+fn write_upgrade_manifest(destination: &Path, template: Template) -> Result<(), String> {
+    let template_name = match template {
+        Template::Api => "api",
+        Template::Fullstack => "fullstack",
+    };
+    let mut relative = vec![
+        "Cargo.toml",
+        "ferrum.toml",
+        ".gitignore",
+        ".env.example",
+        "README.md",
+        "src/lib.rs",
+        "src/main.rs",
+        "src/settings.rs",
+        "src/urls.rs",
+        "src/models/mod.rs",
+        "src/models/product.rs",
+        "tests/api.rs",
+        "templates/base.html",
+        "templates/index.html",
+        "templates/errors/404.html",
+        "templates/errors/500.html",
+        "static/css/app.css",
+        "static/js/app.js",
+        "media/.gitkeep",
+        "migrations/0001_initial.json",
+    ];
+    if matches!(template, Template::Fullstack) {
+        relative.extend([
+            "src/views/mod.rs",
+            "src/views/home.rs",
+            "templates/home.html",
+        ]);
+    }
+    let mut files = Vec::new();
+    for path in relative {
+        let bytes = std::fs::read(destination.join(path))
+            .map_err(|error| format!("{path} fehlt im neuen Projekt: {error}"))?;
+        files.push(TrackedFile {
+            path: path.to_owned(),
+            sha256: sha256_hex(&bytes),
+        });
+    }
+    let json = manifest_json(&ProjectManifest::generated(template_name, files))
+        .map_err(|error| error.0)?;
+    std::fs::create_dir_all(destination.join(".ferrum")).map_err(|error| error.to_string())?;
+    std::fs::write(destination.join(".ferrum/project.json"), json)
+        .map_err(|error| error.to_string())
 }
 
 fn write(path: &Path, contents: &str) -> Result<(), String> {
@@ -228,12 +288,17 @@ cache_seconds = 3600
 backend = "local"
 directory = "media"
 max_upload_size_mb = 10
+
+[mail]
+backend = "disabled"
+public_origin = "http://127.0.0.1:3000"
+reset_ttl_minutes = 30
 "##
     )
 }
 
 fn env_example() -> &'static str {
-    "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRUM_CSRF_SECRET muss in Produktion 64 Hex-Zeichen sein.\n# FERRUM_PASSWORD wird nur für die nicht interaktive Benutzeranlage gelesen.\n"
+    "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRUM_CSRF_SECRET muss in Produktion 64 Hex-Zeichen sein.\n# FERRUM_PASSWORD wird nur für die nicht interaktive Benutzeranlage gelesen.\n# FERRUM_SMTP_PASSWORD bleibt außerhalb von ferrum.toml.\n# FERRUM_PUBLIC_ORIGIN setzt die Reset-URL, zum Beispiel https://example.com.\n"
 }
 
 fn readme(name: &str, template: Template) -> String {
@@ -255,7 +320,7 @@ ferrum dev
 ```
 
 {frontend}
-Der Server bindet standardmäßig nur `127.0.0.1`. Die Startseite liegt unter `/`. Statische Dateien liegen in `static/` und werden unter `/static/` ausgeliefert. `media/` ist für Uploads vorgesehen und wird nicht versioniert. Ein Benutzer wird mit `ferrum admin create-user --email name@example.com --staff --superuser` angelegt. Das Passwort wird abgefragt. Vorlagen stehen in `templates/` und nutzen Tera. Das Kontaktformular eines Fullstack-Projekts liegt unter `/contact` und versendet keine E-Mail.
+Der Server bindet standardmäßig nur `127.0.0.1`. Die Startseite liegt unter `/`. Statische Dateien liegen in `static/` und werden unter `/static/` ausgeliefert. `media/` ist für Uploads vorgesehen und wird nicht versioniert. Ein Benutzer wird mit `ferrum admin create-user --email name@example.com --staff --superuser` angelegt. Das Passwort wird abgefragt. Vorlagen stehen in `templates/` und nutzen Tera. Das Kontaktformular eines Fullstack-Projekts liegt unter `/contact` und versendet keine E-Mail. `[mail] backend = "disabled"` versendet ebenfalls keine E-Mail. Ein Passwort-Reset liegt unter `/auth/password-reset`, sobald ein Mail-Backend aktiv ist.
 "#
     )
 }
@@ -317,12 +382,16 @@ fn main_rs(name: &str, template: Template) -> String {
 "#
         .to_owned(),
     };
+    let modules = match template {
+        Template::Api => "mod settings;\nmod urls;\n",
+        Template::Fullstack => "mod settings;\nmod urls;\nmod views;\n",
+    };
     let chain = match template {
-        Template::Api => ".register::<Product>()\n        // ferrum:registry\n        // ferrum:registry:end\n",
-        Template::Fullstack => ".with_auth(auth)\n        .with_admin(admin)\n        .merge(axum::Router::new().route(\"/contact\", axum::routing::get(show_contact).post(submit_contact)))\n        .register::<Product>()\n        // ferrum:registry\n        // ferrum:registry:end\n",
+        Template::Api => ".with_settings(settings.clone())\n        .with_mail(ferrum::mail_for(&settings))\n        .urls(urls::routes()?)?\n        .register::<Product>()\n        // ferrum:registry\n        // ferrum:registry:end\n",
+        Template::Fullstack => ".with_settings(settings.clone())\n        .with_mail(ferrum::mail_for(&settings))\n        .with_auth(auth)\n        .with_admin(admin)\n        .urls(urls::routes()?)?\n        .merge(axum::Router::new().route(\"/contact\", axum::routing::get(show_contact).post(submit_contact)))\n        .register::<Product>()\n        // ferrum:registry\n        // ferrum:registry:end\n",
     };
     format!(
-        r#"use {name}::models::product::Product;
+        r#"{modules}use {name}::models::product::Product;
 use ferrum::core::FerrumModel;
 use ferrum::migrations::{{RegisteredModel, SchemaSnapshot}};
 // ferrum:uses
@@ -346,12 +415,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
         println!("{{}}", registered_schema()?.to_canonical_json()?);
         return Ok(());
     }}
-    let settings = ferrum::migrations::discover_project(std::path::Path::new("."))?;
+    let settings = settings::load()?;
     tracing_subscriber::fmt().with_env_filter("info").init();
-    let url = std::env::var("DATABASE_URL").unwrap_or_else(|_| settings.database_url.clone());
+    let url = settings.resolved_database_url();
     let db = ferrum::db::connect(&url).await?;
-    let address = std::env::var("BIND_ADDRESS")
-        .unwrap_or_else(|_| format!("{{}}:{{}}", settings.host, settings.port));
+    let address = settings.bind_address()?;
     if address.starts_with("0.0.0.0") {{
         return Err("Ferrum bindet neue Projekte nicht an 0.0.0.0.".into());
     }}
@@ -459,7 +527,74 @@ fn write_templates(destination: &Path, name: &str, template: Template) -> Result
         &destination.join("templates/errors/500.html"),
         "{% extends \"base.html\" %}{% block content %}<h1>500</h1><p>{{ server_error }}</p>{% endblock %}\n",
     )?;
+    if matches!(template, Template::Fullstack) {
+        write(
+            &destination.join("templates/home.html"),
+            "{% extends \"base.html\" %}{% block content %}<h1>{{ welcome }}</h1><p>{{ running }}</p>{% endblock %}\n",
+        )?;
+    }
     Ok(())
+}
+
+fn settings_rs() -> &'static str {
+    r#"pub fn load() -> Result<ferrum::migrations::ProjectConfig, Box<dyn std::error::Error>> {
+    let settings = ferrum::migrations::Settings::discover(std::path::Path::new("."))?;
+    Ok(settings.project().clone())
+}
+"#
+}
+
+fn urls_rs(template: Template) -> String {
+    match template {
+        Template::Api => r#"use axum::routing::get;
+use ferrum::urls::{UrlError, UrlSet};
+
+pub fn routes() -> Result<UrlSet, UrlError> {
+    UrlSet::new().route("api.ping", "/api/v1/ping", get(ping))
+}
+
+async fn ping() -> axum::response::Response {
+    ferrum::views::json(&ferrum::serde_json::json!({"ok": true}))
+}
+"#
+        .to_owned(),
+        Template::Fullstack => r#"use axum::routing::get;
+use ferrum::urls::{UrlError, UrlSet};
+
+pub fn routes() -> Result<UrlSet, UrlError> {
+    UrlSet::new().route("site.home", "/home", get(crate::views::home::home))
+}
+"#
+        .to_owned(),
+    }
+}
+
+fn home_view() -> &'static str {
+    r#"use std::sync::Arc;
+
+use axum::extract::Extension;
+use ferrum::migrations::ProjectConfig;
+
+pub async fn home(
+    Extension(settings): Extension<Arc<ProjectConfig>>,
+) -> axum::response::Response {
+    let site = match ferrum::pages::Site::open(&settings.templates_directory()) {
+        Ok(site) => site,
+        Err(_) => {
+            return ferrum::views::fail(
+                &axum::http::HeaderMap::new(),
+                None,
+                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+                "view.template",
+                "Internal server error",
+                settings.debug,
+            )
+        }
+    };
+    let context = ferrum::pages::home_context(&settings);
+    ferrum::views::render(&site, "home.html", &context, settings.debug)
+}
+"#
 }
 
 fn api_test(name: &str) -> String {

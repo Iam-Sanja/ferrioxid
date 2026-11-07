@@ -5,7 +5,7 @@ members = [
   "crates/ferrum-db", "crates/ferrum-api", "crates/ferrum-cli",
   "crates/ferrum-migrations", "crates/ferrum-auth", "crates/ferrum-admin",
   "crates/ferrum-forms", "crates/ferrum-static", "crates/ferrum-storage",
-  "crates/ferrum-middleware", "examples/myshop"
+  "crates/ferrum-middleware", "crates/ferrum-mail", "examples/myshop"
 ]
 
 [workspace.package]
@@ -16,7 +16,8 @@ version = "0.1.0"
 [workspace.dependencies]
 axum = "0.8"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
-sea-orm = { version = "1.1", default-features = false, features = ["sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "with-uuid", "with-json"] }
+sea-orm = { version = "1.1", default-features = false, features = ["sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "with-uuid", "with-json", "with-chrono"] }
+chrono = { version = "0.4", default-features = false, features = ["std", "serde"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 uuid = { version = "1", features = ["v4", "serde"] }

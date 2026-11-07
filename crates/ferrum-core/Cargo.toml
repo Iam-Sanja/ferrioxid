@@ -6,5 +6,7 @@ license.workspace = true
 
 [dependencies]
 serde_json.workspace = true
+serde.workspace = true
 thiserror.workspace = true
 uuid.workspace = true
+chrono.workspace = true

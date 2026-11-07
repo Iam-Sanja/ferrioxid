@@ -1,6 +1,6 @@
 # Migrations-Engine
 
-[Zur Übersicht](index.md) · **IST:** `crates/ferrum-migrations/`. **Nicht** der Legacy-Befehl `myshop --bootstrap`.
+[Zur Übersicht](index.md) · **IST:** `crates/ferrum-migrations/`. **Nicht** der Legacy-Befehl `myshop --bootstrap`. Datumstypen: [date-time-migrations.md](date-time-migrations.md). Auth `0003_audit_operation` ergänzt `operation_id`. myshop `0005_orders` ergänzt `orders` und `order_lines`. `0001` bis `0004` und Auth `0001`/`0002` bleiben unverändert.
 
 ## 1. Architektur
 
@@ -181,7 +181,7 @@ Die installierte Binary heißt `ferrum`. `make` legt ohne Schemaänderung keine 
 cargo run -p ferrum-cli -- migrate up --allow-destructive
 ```
 
-`status` zeigt Backend, Dateien, angewendet oder ausstehend, Checksum-Konflikte und, wenn das Modellschema geladen werden konnte, ob es zum letzten Migrationsziel passt. Die Datenbank-URL wird nicht ausgegeben. `--database-url` und `--migrations-dir` überschreiben Projekt und Umgebung. Ohne URL gilt `DATABASE_URL`, sonst `sqlite://db.sqlite3?mode=rwc` im Arbeitsverzeichnis.
+`status` zeigt Backend, Auth-Migrationen und App-Migrationen getrennt, angewendet oder ausstehend, Checksums und Konflikte. Wenn das Modellschema geladen werden konnte, steht darunter, ob es zum letzten App-Migrationsziel passt. Ausstehende Migrationen lassen den Befehl erfolgreich. Checksum, unbekannte IDs und Reihenfolgefehler beenden ihn mit Exitcode 1. Die Diagnose öffnet SQLite mit `mode=ro` und legt eine fehlende Datei nicht an. Die Datenbank-URL wird nicht ausgegeben. `--database-url` und `--migrations-dir` überschreiben Projekt und Umgebung. Ohne URL gilt `DATABASE_URL`, sonst `sqlite://db.sqlite3?mode=rwc` im Arbeitsverzeichnis. Der gemeinsame Bericht steht in [migration-diagnostics.md](migration-diagnostics.md).
 
 Löschrisiken (`drop_table`, `drop_column`) weist die CLI vor `up` auf `--allow-destructive` hin. Ein `rebuild_column`-Risiko ist keine Löschfreigabe. Eine fehlgeschlagene Prüfung endet mit Exit-Code 1 und wird nicht als Erfolg ausgegeben. `baseline` ohne `--confirm` ist so ein Fall, auch wenn das Schema passt.
 

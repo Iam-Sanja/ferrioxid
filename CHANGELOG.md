@@ -1,5 +1,69 @@
 # Changelog
 
+## Unreleased — Settings, URLs und Views (v0.24)
+
+- `Settings` liest `ferrum.toml`, prüft Defaults, Datei und Umgebung und bleibt ohne globales Singleton. `[custom.<name>]` wird über `custom_settings` in eine `Deserialize`-Struktur gelesen. Unbekannte andere Schlüssel bleiben Fehler.
+- `FERRUM_ENV=production` zusammen mit aktivem Debug ist ein Fehler. `FERRUM_DEBUG` akzeptiert nur `true` und `false`. `BIND_ADDRESS` darf nicht mit `0.0.0.0` beginnen. `Debug` von `ProjectConfig` schwärzt Zugangsdaten in der Datenbank-URL.
+- `UrlSet` registriert Axum-Routen unter `bereich.name`. `App::urls` hängt sie an denselben `AppState`. `/admin`, `/auth` und die bekannten Auth-Pfade bleiben reserviert. `RouteMap::path` löst Namen auf und lehnt unsichere Parameter ab.
+- `ferrum::views` rendert Tera, JSON und lokale Redirects und bildet 400, 401, 403, 404, 409, 422 und 500 auf HTML oder das bestehende `problem_json` ab. `require_user`, `require_staff`, `require_permission` und `require_object_read` nutzen den vorhandenen Auth-Dienst.
+- Neue Projekte erhalten `src/settings.rs` und `src/urls.rs`. Fullstack zusätzlich `src/views/home.rs` auf `/home`. Die Template-Version ist `0.24`. `ferrum upgrade` ersetzt keine Projektdatei. Eine ältere Version wird `project.template.outdated`.
+- Bestehende `main.rs` mit `App::new`, `register` und `merge` bleiben gültig. `AppState` hat keine neuen Felder. Die Cargo-Version bleibt `0.1.0`. API-Vorlagen behalten die HTML-Startseiten, weil `templates.enabled` wahr bleibt.
+
+## Unreleased — E-Mail und Passwort-Reset (v0.23)
+
+- `ferrum-mail` stellt `disabled`, `console`, `memory` und `smtp` bereit. SMTP nutzt STARTTLS oder implizites TLS, prüft Zertifikate und liest das Passwort nur aus `FERRUM_SMTP_PASSWORD`. Ein Request versucht den Versand einmal.
+- `0004_password_reset.json` speichert Reset-Hashes, Austausch-Hashes und eine Outbox ohne Roh-Token. `0001` bis `0003` bleiben unverändert.
+- `/auth/password-reset` antwortet für bekannte, unbekannte und deaktivierte Adressen gleich. Der Abschluss hasht vor der Transaktion, verbraucht den Token bedingt, ändert das Passwort, widerruft die Sitzungen und schreibt das Audit gemeinsam.
+- Hinweise sind `Notice` mit deutschen und englischen Text- und HTML-Vorlagen. `AccountDeactivated` ist aufrufbar und nicht an die Benutzerpflege gehängt.
+- Neue Projekte setzen `[mail] backend = "disabled"`. `ferrum check` verbindet sich nicht mit SMTP. `ferrum upgrade` überschreibt keine `ferrum.toml`. Die Template-Version dieses Stands war `0.21` und ist seit v0.24 `0.24`.
+- Die Cargo-Version bleibt `0.1.0`. Eine angenommene SMTP-Antwort ist keine Zustellgarantie. Der Workspace-Lauf mit Formatprüfung, Clippy, Tests und Build ist grün. Die ignorierten PostgreSQL-Laufzeittests wurden nicht ausgeführt. Der rustc-Absturz aus v0.21.1 bleibt ungeklärt.
+
+## Unreleased — Erweiterbarer Admin (v0.22)
+
+- `AdminRegistry` registriert eigene Seiten unter `/admin/pages/{key}`, eigene Sammelaktionen, Listenfilter, Formular-Widgets und Tera-Vorlagen. `seal` prüft die Kombination vor dem Start.
+- Eine Seite verlangt Staff und einen Code `resource.action`. POST ohne CSRF bleibt 403. Reservierte Namen und Vorlagen mit Pfad oder `|safe` werden abgelehnt.
+- Eine eigene Aktion schreibt nur deklarierte Spalten. Der Handler plant die Änderung. Ferrum führt sie in der bestehenden Sammeltransaktion über `update_in` aus und schreibt das Audit.
+- Filter und Widgets ändern keine Rechte. Versteckte Felder bleiben versteckt. Fremdschlüssel behalten das eingebaute Auswahlfeld.
+- myshop zeigt die Bestellübersicht, die Aktion `mark_processed`, den Statusfilter, ein Textfeld für den Kunden und `templates/admin/orders_report.html`.
+- Die Cargo-Version bleibt `0.1.0`. Bestehende `AdminAction`-Literale für `Delete` und `SetBool` bleiben gültig. Ein externes `match` auf `ActionOperation` braucht den Zweig `Custom`.
+
+## Unreleased — Windows-Teststabilität (v0.21.1)
+
+- Der Generator-Test begrenzt verschachtelte Cargo-Builds auf höchstens zwei Jobs. Das gilt nur für die Kindprozesse dieses Tests und ändert die globale Umgebung nicht.
+- rustc 1.98.1 ist bei unbegrenzten Release-Builds dieses Tests mit `0xc0000005` und `0xc0000409` abgestürzt. Die Ursache ist nicht aufgeklärt. Danach waren ein Workspace-Lauf mit `CARGO_BUILD_JOBS=2` und `--test-threads=2` sowie ein uneingeschränkter `cargo test --workspace --offline` erfolgreich. Der uneingeschränkte Lauf nutzt dieselbe Kindprozess-Grenze von höchstens zwei Jobs. Das erklärt den Compilerabsturz nicht.
+- Diagnoseprüfungen für eine unlesbare SQLite-Datei, eine unbekannte Migration und ein nicht geladenes Schema behaupten keinen Erfolg. Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Projekt-Upgrade und Migrationsdiagnose (v0.21)
+
+- Ein gemeinsamer Inspector liest Auth-Historie `_ferrum_auth_migrations` und App-Historie `_ferrum_migrations`. `check`, `doctor`, `migrate status`, `dev` und `upgrade --check` sowie `--dry-run` legen keine Tabelle und keine SQLite-Datei an.
+- `ferrum migrate status` trennt Auth und App, nennt ausstehende Migrationen und bleibt dabei erfolgreich. Checksum-, Reihenfolge- und unbekannte IDs beenden ihn mit Exitcode 1.
+- `ferrum check --strict` beendet Warnungen mit Exitcode 2. Ohne `--strict` bleiben Warnungen bei Exitcode 0. Fehler bleiben Exitcode 1.
+- `ferrum dev` warnt vor dem Start und migriert nicht.
+- `ferrum upgrade --yes` legt nur ein fehlendes Legacy-Manifest `.ferrum/project.json` an. Unbekannte, geänderte und fehlende Dateien werden nicht ersetzt. Neue Projekte erhalten ein Manifest mit SHA-256 und Template-Version `0.21`.
+- `admin-ui` bleibt gültig. Die Cargo-Version bleibt `0.1.0`.
+- Die ignorierten PostgreSQL-Laufzeittests wurden nicht ausgeführt.
+
+## Unreleased — Transaktionen (v0.20)
+
+- `ferrum_db::conclude` committet nur bei Erfolg. Auth-Methoden `*_on` und `ManagedModel::*_in` schreiben auf einer übergebenen Transaktion und öffnen keine zweite.
+- Verzeichnisänderungen in HTML und JSON schreiben Auth-Zustand, Sitzungswiderruf und Audit in einer Transaktion. Der Argon2id-Hash entsteht vor der Schreibsperre. Passwörter, Hashes und Tokens stehen nicht im Audit. CLI-Auth bleibt ohne dieses Audit.
+- `0003_audit_operation.json` ergänzt `operation_id`. `0001` und `0002` bleiben unverändert. Ältere Audit-Zeilen bleiben lesbar.
+- `admin_inline` akzeptiert `|form` und weitere Optionen. Ein solches Formular speichert Elternobjekt und eine Has-Many-Ebene gemeinsam. `save=rows` ändert nur den Entwurf. Ein veralteter Fingerabdruck antwortet mit `409`.
+- myshop erhält `orders` und `order_lines` in `0005_orders.json`. `0001` bis `0004` bleiben unverändert.
+- Die Cargo-Version bleibt `0.1.0`. Der Workspace-Lauf mit Formatprüfung, Clippy, Tests und Build ist grün. Die ignorierten PostgreSQL-Laufzeittests wurden nicht ausgeführt.
+
+## Unreleased — Datum und Uhrzeit (v0.19)
+
+- `ColumnKind` kennt `Date`, `Time` und `DateTime`. Die Rust-Typen sind `chrono::NaiveDate`, `chrono::NaiveTime` und `chrono::DateTime<Utc>`.
+- SQLite speichert kanonischen Text: `YYYY-MM-DD`, `HH:MM:SS` und RFC 3339 mit `Z`. PostgreSQL nutzt `DATE`, `TIME` und `TIMESTAMPTZ`. Die PostgreSQL-Laufzeittests bleiben ungetestet, wenn kein Server erreichbar ist.
+- Eine Textspalte wird nicht stillschweigend zu einem Datum. `plan_change` blockiert diese Änderung.
+- `0004_events.json` hängt die Tabelle `events` an. `0001` bis `0003` und `0002_admin_journal` bleiben unverändert.
+- JSON verwendet dieselben kanonischen Zeichenketten. Andere Offsets als UTC sind `validation.datetime_offset`.
+- HTML nutzt `date`, `time` und `datetime-local`. Das lokale Feld ist als UTC beschriftet und wird nicht in die Rechnerzeitzone umgerechnet.
+- `admin_date_hierarchy` filtert Listen nach UTC-Jahr, Monat und Tag. Die Zählung respektiert Suche, Filter und Query-Scope und bleibt bei 100 Gruppen.
+- Die Cargo-Version bleibt `0.1.0`.
+- v0.19 ist abgeschlossen. Der Workspace-Lauf mit Formatprüfung, Clippy, Tests und Build ist grün. Die ignorierten PostgreSQL-Laufzeittests wurden nicht ausgeführt.
+
 ## Unreleased — Django-Admin-Parität II (v0.18)
 
 - Formularwerte überleben die Fremdschlüssel-Auswahl in einem sitzungsgebundenen Entwurf. Die URL trägt nur die zufällige Draft-ID und den gewählten Schlüssel. Passwörter, Hashes, CSRF und unbekannte Felder werden nicht gespeichert. Lebensdauer 30 Minuten, höchstens 8 KiB, höchstens 20 Entwürfe je Sitzung.
@@ -7,7 +71,7 @@
 - Listen können registrierte Sammelaktionen ausführen: Löschen, und bei einem sichtbaren Bool-Feld `active` Aktivieren und Deaktivieren. Die erste POST-Anfrage schreibt nur einen Entwurf. Die Bestätigung verlangt `confirm=1` und CSRF. Eine verweigerte Zeile oder ein Fremdschlüsselfehler rollt die ganze Auswahl zurück.
 - Eigene Aktionen registriert `AdminRegistry::action` als `AdminAction` mit `ActionOperation::Delete` oder `SetBool`. Der HTTP-Name führt keinen Code und kein SQL aus.
 - `_ferrum_admin_audit` zeichnet erfolgreiche Modelländerungen in derselben Transaktion auf. Verzeichnisereignisse folgen dem Auth-Schreibvorgang und sind nicht dieselbe Transaktion. Superuser sehen die Historie. Anderes Staff sieht nur eigene Ereignisse. Passwörter, Hashes, Tokens und als sensibel markierte Felder fehlen in der Zusammenfassung.
-- Die Cargo-Version bleibt `0.1.0`. Datum und Uhrzeit bleiben offen.
+- Die Cargo-Version bleibt `0.1.0`. Datum und Uhrzeit folgen in v0.19.
 
 ## Unreleased — Django-Admin-Parität I (v0.17)
 

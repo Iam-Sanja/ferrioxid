@@ -152,7 +152,9 @@ async fn checked_in_migrations_add_the_category_foreign_key() {
         vec![
             "0001_initial".to_owned(),
             "0002_categories_and_product_relations".to_owned(),
-            "0003_internal_notes".to_owned()
+            "0003_internal_notes".to_owned(),
+            "0004_events".to_owned(),
+            "0005_orders".to_owned()
         ]
     );
     let category = Category::create(

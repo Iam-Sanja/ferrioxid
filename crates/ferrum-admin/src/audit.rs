@@ -18,6 +18,8 @@ pub struct Event {
     pub action: String,
     pub outcome: String,
     pub summary: String,
+    /// Gemeinsamer Vorgang mehrerer Zeilen. `None` bei älteren Einzeleinträgen.
+    pub operation_id: Option<Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -31,9 +33,15 @@ pub struct StoredEvent {
     pub action: String,
     pub outcome: String,
     pub summary: String,
+    pub operation_id: Option<Uuid>,
 }
 
 pub async fn insert(db: &impl ConnectionTrait, event: &Event) -> Result<(), FerrumError> {
+    if FAIL_NEXT.with(|flag| flag.replace(false)) {
+        return Err(FerrumError::database(std::io::Error::other(
+            "audit write failed",
+        )));
+    }
     let backend = db.get_database_backend();
     let mut query = Query::insert();
     let values = [
@@ -45,6 +53,10 @@ pub async fn insert(db: &impl ConnectionTrait, event: &Event) -> Result<(), Ferr
         DbValue::from(clip(&event.action, 40)).into(),
         DbValue::from(clip(&event.outcome, 16)).into(),
         DbValue::from(clip(&event.summary, 1500)).into(),
+        match event.operation_id {
+            Some(id) => DbValue::from(id.to_string()).into(),
+            None => DbValue::String(None).into(),
+        },
     ];
     query
         .into_table(Alias::new(ADMIN_AUDIT))
@@ -57,6 +69,7 @@ pub async fn insert(db: &impl ConnectionTrait, event: &Event) -> Result<(), Ferr
             Alias::new("action"),
             Alias::new("outcome"),
             Alias::new("summary"),
+            Alias::new("operation_id"),
         ])
         .values_panic(values);
     execute(db, backend, &query).await
@@ -79,6 +92,7 @@ pub async fn page(
             Alias::new("action"),
             Alias::new("outcome"),
             Alias::new("summary"),
+            Alias::new("operation_id"),
         ])
         .from(Alias::new(ADMIN_AUDIT))
         .order_by(Alias::new("created_at"), sea_orm::sea_query::Order::Desc)
@@ -117,6 +131,7 @@ pub async fn page(
             summary: row
                 .try_get::<String>("", "summary")
                 .map_err(FerrumError::database)?,
+            operation_id: optional_uuid(&row, "operation_id")?,
         });
     }
     let has_more = events.len() > PAGE_SIZE as usize;
@@ -191,6 +206,29 @@ fn unix_now() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|duration| duration.as_secs() as i64)
         .unwrap_or(0)
+}
+
+fn optional_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Option<Uuid>, FerrumError> {
+    if let Ok(value) = row.try_get::<Option<String>>("", column) {
+        return match value {
+            Some(text) if !text.is_empty() => Uuid::parse_str(&text).map(Some).map_err(|_| {
+                FerrumError::database(std::io::Error::other("operation id is invalid"))
+            }),
+            _ => Ok(None),
+        };
+    }
+    if let Ok(value) = row.try_get::<Option<Uuid>>("", column) {
+        return Ok(value);
+    }
+    Ok(None)
+}
+
+thread_local! {
+    static FAIL_NEXT: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+pub fn fail_next_insert() {
+    FAIL_NEXT.with(|flag| flag.set(true));
 }
 
 fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FerrumError> {
@@ -268,6 +306,7 @@ mod tests {
             per_page: 25,
             fieldsets: &[],
             inlines: &[],
+            date_hierarchy: None,
         };
         let before =
             serde_json::json!({"name": "Apfel", "password": "secret", "password_hash": "hash"});
@@ -279,5 +318,27 @@ mod tests {
         assert!(!text.contains("secret"));
         assert!(!text.contains("hash"));
         assert!(!text.contains("next"));
+    }
+
+    #[test]
+    fn summary_quotes_date_and_utc_instants() {
+        let fields: &'static [AdminFieldMeta] = Box::leak(Box::new([field("created_at", false)]));
+        let meta = AdminModelMeta {
+            key: "events",
+            label: "Ereignisse",
+            permission: None,
+            fields,
+            ordering: None,
+            per_page: 25,
+            fieldsets: &[],
+            inlines: &[],
+            date_hierarchy: Some("created_at"),
+        };
+        let before = serde_json::json!({"created_at": "2026-11-06T23:59:59Z"});
+        let after = serde_json::json!({"created_at": "2026-11-07T00:00:00Z"});
+        let text = change_summary(&meta, Some(&before), Some(&after));
+        assert!(text.contains("2026-11-06T23:59:59Z"));
+        assert!(text.contains("2026-11-07T00:00:00Z"));
+        assert!(text.contains("→"));
     }
 }

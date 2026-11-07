@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Backend: [admin-backend.md](admin-backend.md) · Oberfläche: [admin-frontend.md](admin-frontend.md) · Sicherheit: [admin-security.md](admin-security.md)
 
-**Stand:** v0.18. Die Cargo-Version bleibt `0.1.0`. Admin-Metadaten ändern das Datenbankschema nicht. Die Auth-Migration `0002_admin_journal` legt Entwürfe und Audit an. Anlegen verwendet dieselbe `can_create`-Regel wie REST. Listen filtern in SQL. Das Verzeichnis bleibt Staff-Superusern vorbehalten. Branding kommt aus `ferrum.toml`. Details stehen in [admin-native.md](admin-native.md). Listen: [admin-list-configuration.md](admin-list-configuration.md). Abschnitte: [admin-fieldsets.md](admin-fieldsets.md). Auswahl: [admin-relational-widgets.md](admin-relational-widgets.md). Entwürfe: [admin-form-drafts.md](admin-form-drafts.md). Inlines: [admin-inlines.md](admin-inlines.md). Sammelaktionen: [admin-bulk-actions.md](admin-bulk-actions.md). Historie: [admin-audit-log.md](admin-audit-log.md). Eigene Aktionen: [admin-custom-actions.md](admin-custom-actions.md).
+**Stand:** v0.22. Die Cargo-Version bleibt `0.1.0`. Erweiterung: [admin-extension-api.md](admin-extension-api.md). Transaktionen: [transactions.md](transactions.md). Datumshierarchie: [admin-date-hierarchy.md](admin-date-hierarchy.md). Typen: [date-time-types.md](date-time-types.md). Admin-Metadaten ändern das Datenbankschema nicht. Die Auth-Migration `0002_admin_journal` legt Entwürfe und Audit an. Anlegen verwendet dieselbe `can_create`-Regel wie REST. Listen filtern in SQL. Das Verzeichnis bleibt Staff-Superusern vorbehalten. Branding kommt aus `ferrum.toml`. Details stehen in [admin-native.md](admin-native.md). Listen: [admin-list-configuration.md](admin-list-configuration.md). Abschnitte: [admin-fieldsets.md](admin-fieldsets.md). Auswahl: [admin-relational-widgets.md](admin-relational-widgets.md). Entwürfe: [admin-form-drafts.md](admin-form-drafts.md). Inlines: [admin-inlines.md](admin-inlines.md). Sammelaktionen: [admin-bulk-actions.md](admin-bulk-actions.md). Historie: [admin-audit-log.md](admin-audit-log.md). Eigene Aktionen: [admin-custom-actions.md](admin-custom-actions.md).
 
 Eine angemeldete 403-Seite enthält ein Abmeldeformular. Listen ohne weiteres `list_display` wählen ein sichtbares Feld und die ID. Die Fläche und die Rollenauswahl sind in v0.15 umgesetzt. Die Phasen v0.16 bis v0.18 stehen in [roadmap.md](roadmap.md).
 
@@ -19,7 +19,7 @@ Ein Modell mit `admin = true` liefert Navigation, Tabelle, Formular, Detail und 
 | Listenabfrage | `crates/ferrum-db/src/sql.rs` (`query_admin_page`) |
 | Oberfläche | `crates/ferrum-admin/templates/`, `crates/ferrum-admin/static/` |
 | Beispiel | `examples/myshop/src/models/`, `examples/myshop/src/main.rs` |
-| Test | `examples/myshop/tests/admin_http.rs`, `examples/myshop/tests/admin_html.rs` |
+| Test | `examples/myshop/tests/admin_http.rs`, `examples/myshop/tests/admin_html.rs`, `examples/myshop/tests/admin_extensions.rs` |
 
 ## Datenfluss
 

@@ -18,7 +18,7 @@ ferrum doctor
 ferrum check
 ```
 
-Statuszeilen sind `[ok]`, `[warnung]` und `[fehler]`. Ein Fehler ergibt Exit-Code 1.
+Statuszeilen sind `[OK]`, `[WARN]` und `[ERROR]`. Ein Fehler ergibt Exitcode 1. `check --strict` ergibt Exitcode 2, wenn nur Warnungen bleiben. Ohne `--strict` bleiben Warnungen bei Exitcode 0.
 
 ## Konfiguration
 
@@ -26,9 +26,9 @@ Gelesen wird `ferrum.toml`. `DATABASE_URL` darf den Datenbankeintrag ersetzen. `
 
 ## Datenfluss
 
-`doctor` ruft `rustc` und `cargo` mit `--version` auf. Danach sucht es `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` und das Migrationsverzeichnis. SQLite wird als konfiguriert gemeldet. Eine noch nicht vorhandene Datei ist eine Warnung und wird nicht angelegt. PostgreSQL ist eine Warnung ohne Verbindung. Bei einem Fullstack-Projekt meldet `doctor`, dass der Admin im Rust-Binary liegt. Node.js wird nicht verlangt.
+`doctor` ruft `rustc` und `cargo` mit `--version` auf. Danach sucht es `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` und das Migrationsverzeichnis. Eine vorhandene Datenbank wird nur gelesen. Eine noch nicht vorhandene SQLite-Datei ist eine Warnung und wird nicht angelegt. PostgreSQL wird lesend verbunden, wenn die URL darauf zeigt. Ein Fehlschlag ist ein Fehler. Bei einem Fullstack-Projekt meldet `doctor`, dass der Admin im Rust-Binary liegt. Node.js wird nicht verlangt. Storage-Routen werden nicht aus `main.rs` geschlossen.
 
-`check` prüft die Umgebung, liest die Migrationsdateien und ihre Prüfsummen und führt `cargo check` aus. Es ruft `migrate up` nicht auf und löscht nichts.
+`check` prüft die Umgebung, beide Migrationshistorien und führt `cargo check` aus. Liegt die Datenbankdatei vor und ist `schema_command` gesetzt, vergleicht es das Modell. `FERRUM_CHECK_SKIP_SCHEMA=1` und `FERRUM_CHECK_SKIP_CARGO=1` überspringen diese Schritte in Tests. Es ruft `migrate up` nicht auf und löscht nichts.
 
 ## Fehlerfälle
 
@@ -45,7 +45,7 @@ Gelesen wird `ferrum.toml`. `DATABASE_URL` darf den Datenbankeintrag ersetzen. `
 
 ## Sicherheitsregeln
 
-Verbindungszeichenketten werden nicht ausgegeben. `doctor` öffnet keine PostgreSQL-Verbindung und legt keine SQLite-Datei an. `check` schreibt keine Migration.
+Verbindungszeichenketten werden nicht ausgegeben. `doctor` und `check` legen keine SQLite-Datei und keine Historientabelle an. `check` schreibt keine Migration.
 
 ## Beispiele
 
@@ -53,6 +53,7 @@ Verbindungszeichenketten werden nicht ausgegeben. `doctor` öffnet keine Postgre
 cd demo
 ferrum doctor
 ferrum check
+ferrum check --strict
 ```
 
 Dieselbe Aufrufform gilt unter Linux in der jeweiligen Shell.
@@ -63,4 +64,4 @@ Dieselbe Aufrufform gilt unter Linux in der jeweiligen Shell.
 
 ## Einschränkungen
 
-Eine echte SQLite-Verbindung wird nicht geöffnet, damit `doctor` keine Datei anlegt. Schemavergleich gegen eine laufende Datenbank gehört zu `migrate status`, nicht zu `check`.
+Eine fehlende SQLite-Datei wird nicht angelegt. Existiert sie, wird sie mit `mode=ro` gelesen. `doctor` startet `schema_command` nicht. `check` und `migrate status` vergleichen das Modell, wenn die Datei vorhanden ist und ein Schema geladen werden kann. Der gemeinsame Bericht steht in [migration-diagnostics.md](migration-diagnostics.md).

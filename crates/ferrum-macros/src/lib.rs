@@ -31,6 +31,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let mut admin_per_page: Option<u16> = None;
     let mut admin_fieldsets: Vec<(String, String, bool)> = Vec::new();
     let mut admin_inlines: Vec<String> = Vec::new();
+    let mut admin_date_hierarchy: Option<String> = None;
     for attr in &input.attrs {
         if !attr.path().is_ident("ferrum") {
             continue;
@@ -77,6 +78,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 );
             } else if meta.path.is_ident("admin_inline") {
                 admin_inlines.push(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("admin_date_hierarchy") {
+                admin_date_hierarchy = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("has_many") {
                 has_many.push(
                     parse_has_many(&meta.value()?.parse::<LitStr>()?.value())
@@ -116,6 +119,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             || admin_permission.is_some()
             || admin_ordering.is_some()
             || admin_per_page.is_some()
+            || admin_date_hierarchy.is_some()
             || !admin_fieldsets.is_empty())
     {
         return Err(syn::Error::new_spanned(
@@ -191,10 +195,13 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             "String" => quote! { ::ferrum::core::ColumnKind::Text },
             "i64" => quote! { ::ferrum::core::ColumnKind::BigInt },
             "bool" => quote! { ::ferrum::core::ColumnKind::Boolean },
+            "NaiveDate" => quote! { ::ferrum::core::ColumnKind::Date },
+            "NaiveTime" => quote! { ::ferrum::core::ColumnKind::Time },
+            "DateTime" => quote! { ::ferrum::core::ColumnKind::DateTime },
             _ => {
                 return Err(syn::Error::new_spanned(
                     &field.ty,
-                    "supported types are Uuid, String, i64, bool and Option of those except a nullable id",
+                    "supported types are Uuid, String, i64, bool, NaiveDate, NaiveTime, DateTime<Utc> and Option of those except a nullable id",
                 ))
             }
         };
@@ -362,6 +369,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 hidden: admin_hidden,
                 sensitive: admin_sensitive || sensitive_admin_name(&field_name),
                 fieldset: admin_fieldset.unwrap_or_default(),
+                kind: type_name.clone(),
             });
         }
         if primary || auto {
@@ -396,7 +404,12 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 "required cannot be combined with a nullable field",
             ));
         }
-        if required && type_name != "String" {
+        if required
+            && !matches!(
+                type_name.as_str(),
+                "String" | "NaiveDate" | "NaiveTime" | "DateTime"
+            )
+        {
             return Err(syn::Error::new_spanned(
                 &ident,
                 "required is supported only for String",
@@ -553,6 +566,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             values.push(quote! { ::ferrum::sea_orm::Value::from(::ferrum::uuid::Uuid::new_v4()) });
             continue;
         }
+        let de = temporal_attr(&type_name, nullable);
+        let patch_de = temporal_patch_attr(&type_name);
         if let Some(default) = default_bool {
             dto_fields.push(quote! {
                 #[serde(default)]
@@ -563,6 +578,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             );
         } else if nullable {
             dto_fields.push(quote! {
+                #de
                 #[serde(default)]
                 pub #ident: ::core::option::Option<#value_ty>
             });
@@ -573,7 +589,10 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 }
             });
         } else {
-            dto_fields.push(quote! { pub #ident: #value_ty });
+            dto_fields.push(quote! {
+                #de
+                pub #ident: #value_ty
+            });
             values.push(quote! { ::ferrum::sea_orm::Value::from(payload.#ident) });
         }
         if type_name == "String" {
@@ -604,6 +623,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             continue;
         }
         update_fields.push(quote! {
+            #patch_de
             #[serde(default)]
             pub #ident: ::ferrum::db::PatchField<#value_ty>
         });
@@ -696,6 +716,19 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 ));
             }
         }
+        if let Some(column) = &admin_date_hierarchy {
+            let allowed = admin_fields.iter().any(|field| {
+                field.name == *column
+                    && !field.hidden
+                    && matches!(field.kind.as_str(), "NaiveDate" | "DateTime")
+            });
+            if !valid_ident(column) || !allowed {
+                return Err(syn::Error::new_spanned(
+                    &name,
+                    "admin_date_hierarchy must be a visible NaiveDate or DateTime<Utc> field",
+                ));
+            }
+        }
     }
     if !seen_id {
         return Err(syn::Error::new_spanned(
@@ -757,17 +790,49 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 }
             }
         });
+        let hierarchy_meta = match &admin_date_hierarchy {
+            Some(value) => quote! { ::core::option::Option::Some(#value) },
+            None => quote! { ::core::option::Option::None },
+        };
         let ordering_meta = match &admin_ordering {
             Some(value) => quote! { ::core::option::Option::Some(#value) },
             None => quote! { ::core::option::Option::None },
         };
         let per_page = admin_per_page.unwrap_or(25);
-        let inline_tokens = resolved_inlines.iter().map(|(method, child, column)| {
+        let inline_tokens = resolved_inlines.iter().map(|inline| {
+            let method = &inline.method;
+            let child = &inline.child;
+            let column = &inline.column;
+            let label = &inline.label;
+            let fields = &inline.fields;
+            let readonly_fields = &inline.readonly_fields;
+            let min_count = inline.min_count;
+            let max_count = inline.max_count;
+            let extra = inline.extra;
+            let can_add = inline.can_add;
+            let can_change = inline.can_change;
+            let can_delete = inline.can_delete;
+            let form = inline.form;
+            let ordering = match &inline.ordering {
+                Some(value) => quote! { ::core::option::Option::Some(#value) },
+                None => quote! { ::core::option::Option::None },
+            };
             quote! {
                 ::ferrum::core::AdminInline {
                     name: #method,
                     child_table: #child,
                     column: #column,
+                    label: #label,
+                    fields: &[#(#fields),*],
+                    readonly_fields: &[#(#readonly_fields),*],
+                    min_count: #min_count,
+                    max_count: #max_count,
+                    extra: #extra,
+                    can_add: #can_add,
+                    can_change: #can_change,
+                    can_delete: #can_delete,
+                    ordering: #ordering,
+                    form: #form,
                 }
             }
         });
@@ -796,6 +861,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     per_page: #per_page,
                     fieldsets: FIELDSETS,
                     inlines: INLINES,
+                    date_hierarchy: #hierarchy_meta,
                 };
                 ::core::option::Option::Some(&META)
             }
@@ -1040,37 +1106,64 @@ fn split_names(value: &str, label: &str) -> Result<Vec<String>, String> {
     Ok(names)
 }
 
+struct InlineDecl {
+    method: String,
+    child: String,
+    column: String,
+    label: String,
+    fields: Vec<String>,
+    readonly_fields: Vec<String>,
+    min_count: u16,
+    max_count: u16,
+    extra: u16,
+    can_add: bool,
+    can_change: bool,
+    can_delete: bool,
+    ordering: Option<String>,
+    form: bool,
+}
+
 fn resolve_inlines(
     name: &syn::Ident,
     declared: &[String],
     has_many: &[(String, String, String)],
-) -> syn::Result<Vec<(String, String, String)>> {
+) -> syn::Result<Vec<InlineDecl>> {
     let mut resolved = Vec::new();
     for value in declared {
-        let (method, child, column) =
+        let inline =
             parse_admin_inline(value).map_err(|error| syn::Error::new_spanned(name, error))?;
-        let matched = has_many
-            .iter()
-            .any(|(existing, _, has_column)| existing == &method && has_column == &column);
+        let matched = has_many.iter().any(|(existing, _, has_column)| {
+            existing == &inline.method && has_column == &inline.column
+        });
         if !matched {
             return Err(syn::Error::new_spanned(
                 name,
-                format!("admin_inline {method} must match has_many {method}=Type.{column}"),
+                format!(
+                    "admin_inline {} must match has_many {}=Type.{}",
+                    inline.method, inline.method, inline.column
+                ),
             ));
         }
-        if resolved.iter().any(|(existing, _, _)| existing == &method) {
+        if resolved
+            .iter()
+            .any(|existing: &InlineDecl| existing.method == inline.method)
+        {
             return Err(syn::Error::new_spanned(
                 name,
-                format!("admin_inline {method} is declared twice"),
+                format!("admin_inline {} is declared twice", inline.method),
             ));
         }
-        resolved.push((method, child, column));
+        resolved.push(inline);
     }
     Ok(resolved)
 }
 
-fn parse_admin_inline(value: &str) -> Result<(String, String, String), String> {
-    let (method, rest) = value
+fn parse_admin_inline(value: &str) -> Result<InlineDecl, String> {
+    let (head, options) = match value.split_once('|') {
+        Some((head, options)) => (head, options),
+        None => (value, ""),
+    };
+    let (method, rest) = head
         .split_once('=')
         .ok_or("admin_inline must look like products=products.category_id")?;
     let (table, column) = rest
@@ -1079,7 +1172,123 @@ fn parse_admin_inline(value: &str) -> Result<(String, String, String), String> {
     if !valid_ident(method) || !valid_ident(table) || !valid_ident(column) {
         return Err("admin_inline contains an invalid name".to_owned());
     }
-    Ok((method.to_owned(), table.to_owned(), column.to_owned()))
+    let mut inline = InlineDecl {
+        method: method.to_owned(),
+        child: table.to_owned(),
+        column: column.to_owned(),
+        label: String::new(),
+        fields: Vec::new(),
+        readonly_fields: Vec::new(),
+        min_count: 0,
+        max_count: 0,
+        extra: 0,
+        can_add: true,
+        can_change: false,
+        can_delete: false,
+        ordering: None,
+        form: false,
+    };
+    let mut explicit_access = false;
+    if !options.is_empty() {
+        for part in options.split('|') {
+            if part == "form" {
+                inline.form = true;
+            } else if part == "add" || part == "change" || part == "delete" {
+                if !explicit_access {
+                    explicit_access = true;
+                    inline.can_add = false;
+                    inline.can_change = false;
+                    inline.can_delete = false;
+                }
+                match part {
+                    "add" => inline.can_add = true,
+                    "change" => inline.can_change = true,
+                    "delete" => inline.can_delete = true,
+                    _ => {}
+                }
+            } else if let Some(label) = part.strip_prefix("label=") {
+                if label.is_empty()
+                    || label.chars().count() > 40
+                    || label.chars().any(|char| char.is_control() || char == '|')
+                {
+                    return Err("admin_inline label is invalid".to_owned());
+                }
+                inline.label = label.to_owned();
+            } else if let Some(names) = part.strip_prefix("fields=") {
+                inline.fields = split_field_names(names)?;
+            } else if let Some(names) = part.strip_prefix("readonly=") {
+                inline.readonly_fields = split_field_names(names)?;
+            } else if let Some(number) = part.strip_prefix("min=") {
+                inline.min_count = parse_count(number)?;
+            } else if let Some(number) = part.strip_prefix("max=") {
+                inline.max_count = parse_count(number)?;
+            } else if let Some(number) = part.strip_prefix("extra=") {
+                inline.extra = parse_count(number)?;
+            } else if let Some(name) = part.strip_prefix("order=") {
+                if !valid_ident(name) {
+                    return Err("admin_inline order is invalid".to_owned());
+                }
+                inline.ordering = Some(name.to_owned());
+            } else {
+                return Err(format!("admin_inline option {part} is unknown"));
+            }
+        }
+    }
+    if inline.form {
+        if !explicit_access {
+            inline.can_add = true;
+            inline.can_change = true;
+            inline.can_delete = true;
+        } else if !inline.can_add && !inline.can_change && !inline.can_delete {
+            return Err("admin_inline form needs add, change, or delete".to_owned());
+        }
+        if inline.max_count == 0 {
+            inline.max_count = 20;
+        }
+        if inline.max_count > 50 {
+            return Err("admin_inline max is 50".to_owned());
+        }
+        if inline.extra == 0 && inline.can_add {
+            inline.extra = 1;
+        }
+        if inline.min_count > inline.max_count || inline.extra > inline.max_count {
+            return Err("admin_inline counts exceed max".to_owned());
+        }
+    }
+    if inline.fields.iter().any(|name| name == &inline.column) {
+        return Err("admin_inline fields must not include the parent foreign key".to_owned());
+    }
+    if inline
+        .readonly_fields
+        .iter()
+        .any(|name| !inline.fields.is_empty() && !inline.fields.iter().any(|field| field == name))
+    {
+        return Err("admin_inline readonly field is not listed in fields".to_owned());
+    }
+    Ok(inline)
+}
+
+fn split_field_names(value: &str) -> Result<Vec<String>, String> {
+    let mut names = Vec::new();
+    for name in value.split(',') {
+        if !valid_ident(name) {
+            return Err("admin_inline field name is invalid".to_owned());
+        }
+        if names.iter().any(|existing| existing == name) {
+            return Err(format!("admin_inline field {name} is declared twice"));
+        }
+        names.push(name.to_owned());
+    }
+    if names.is_empty() {
+        return Err("admin_inline field list is empty".to_owned());
+    }
+    Ok(names)
+}
+
+fn parse_count(value: &str) -> Result<u16, String> {
+    value
+        .parse::<u16>()
+        .map_err(|_| format!("admin_inline count {value} is invalid"))
 }
 
 fn parse_has_many(value: &str) -> Result<(String, String, String), String> {
@@ -1173,6 +1382,7 @@ fn field_type(ty: &Type) -> syn::Result<(String, bool, Type)> {
                 "Option needs a single type argument",
             ));
         }
+        assert_utc(inner_ty)?;
         let Type::Path(inner_path) = inner_ty else {
             return Err(syn::Error::new_spanned(
                 inner_ty,
@@ -1182,8 +1392,62 @@ fn field_type(ty: &Type) -> syn::Result<(String, bool, Type)> {
         let name = inner_path.path.segments.last().unwrap().ident.to_string();
         Ok((name, true, inner_ty.clone()))
     } else {
+        assert_utc(ty)?;
         Ok((segment.ident.to_string(), false, ty.clone()))
     }
+}
+
+fn assert_utc(ty: &Type) -> syn::Result<()> {
+    let Type::Path(path) = ty else {
+        return Ok(());
+    };
+    let segment = path.path.segments.last().unwrap();
+    if segment.ident != "DateTime" {
+        return Ok(());
+    }
+    let PathArguments::AngleBracketed(args) = &segment.arguments else {
+        return Err(syn::Error::new_spanned(
+            ty,
+            "DateTime must be DateTime<Utc>",
+        ));
+    };
+    let mut inner = args.args.iter();
+    let Some(GenericArgument::Type(Type::Path(argument))) = inner.next() else {
+        return Err(syn::Error::new_spanned(
+            ty,
+            "DateTime must be DateTime<Utc>",
+        ));
+    };
+    if inner.next().is_some() || argument.path.segments.last().unwrap().ident != "Utc" {
+        return Err(syn::Error::new_spanned(
+            ty,
+            "DateTime must be DateTime<Utc>",
+        ));
+    }
+    Ok(())
+}
+
+fn temporal_attr(type_name: &str, nullable: bool) -> proc_macro2::TokenStream {
+    let path = match (type_name, nullable) {
+        ("NaiveDate", false) => "::ferrum::core::temporal::deserialize_date",
+        ("NaiveDate", true) => "::ferrum::core::temporal::deserialize_optional_date",
+        ("NaiveTime", false) => "::ferrum::core::temporal::deserialize_time",
+        ("NaiveTime", true) => "::ferrum::core::temporal::deserialize_optional_time",
+        ("DateTime", false) => "::ferrum::core::temporal::deserialize_datetime",
+        ("DateTime", true) => "::ferrum::core::temporal::deserialize_optional_datetime",
+        _ => return quote! {},
+    };
+    quote! { #[serde(deserialize_with = #path)] }
+}
+
+fn temporal_patch_attr(type_name: &str) -> proc_macro2::TokenStream {
+    let path = match type_name {
+        "NaiveDate" => "::ferrum::db::deserialize_patch_date",
+        "NaiveTime" => "::ferrum::db::deserialize_patch_time",
+        "DateTime" => "::ferrum::db::deserialize_patch_datetime",
+        _ => return quote! {},
+    };
+    quote! { #[serde(deserialize_with = #path)] }
 }
 
 fn null_value(type_name: &str) -> proc_macro2::TokenStream {
@@ -1192,6 +1456,9 @@ fn null_value(type_name: &str) -> proc_macro2::TokenStream {
         "i64" => quote! { ::ferrum::sea_orm::Value::BigInt(None) },
         "bool" => quote! { ::ferrum::sea_orm::Value::Bool(None) },
         "Uuid" => quote! { ::ferrum::sea_orm::Value::Uuid(None) },
+        "NaiveDate" => quote! { ::ferrum::sea_orm::Value::ChronoDate(None) },
+        "NaiveTime" => quote! { ::ferrum::sea_orm::Value::ChronoTime(None) },
+        "DateTime" => quote! { ::ferrum::sea_orm::Value::ChronoDateTimeUtc(None) },
         _ => quote! { ::ferrum::sea_orm::Value::String(None) },
     }
 }
@@ -1318,6 +1585,7 @@ struct AdminFieldBits {
     hidden: bool,
     sensitive: bool,
     fieldset: String,
+    kind: String,
 }
 
 fn parse_fieldset(value: &str) -> Result<(String, String, bool), String> {

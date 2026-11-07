@@ -1,0 +1,11 @@
+{% extends "base.html" %}
+{% block content %}
+{% if body %}<p>{{ body }}</p>{% endif %}
+{% if rows %}
+<ul class="cards">
+{% for row in rows %}
+<li class="card"><h2>{{ row.label }}</h2><p>{{ row.value }}</p></li>
+{% endfor %}
+</ul>
+{% endif %}
+{% endblock %}

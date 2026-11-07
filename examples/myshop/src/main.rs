@@ -1,3 +1,4 @@
+mod admin;
 mod contact;
 
 use ferrum::core::FerrumModel;
@@ -7,7 +8,10 @@ use ferrum::static_files::{mount, StaticOptions};
 use ferrum::storage::LocalStorage;
 use ferrum::App;
 use myshop::models::category::Category;
+use myshop::models::event::Event;
 use myshop::models::internal_note::InternalNote;
+use myshop::models::order::Order;
+use myshop::models::order_line::OrderLine;
 use myshop::models::product::Product;
 use std::net::SocketAddr;
 use std::sync::Arc;
@@ -27,6 +31,21 @@ fn registered_schema() -> Result<SchemaSnapshot, Box<dyn std::error::Error>> {
             table: Product::descriptor().table,
             columns: Product::columns(),
             constraints: Product::constraints(),
+        },
+        RegisteredModel {
+            table: Event::descriptor().table,
+            columns: Event::columns(),
+            constraints: Event::constraints(),
+        },
+        RegisteredModel {
+            table: Order::descriptor().table,
+            columns: Order::columns(),
+            constraints: Order::constraints(),
+        },
+        RegisteredModel {
+            table: OrderLine::descriptor().table,
+            columns: OrderLine::columns(),
+            constraints: OrderLine::constraints(),
         },
         RegisteredModel {
             table: InternalNote::descriptor().table,
@@ -56,22 +75,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         "Login-Origins aus der Bind-Adresse vorbereitet."
     );
     let auth = ferrum::auth::AuthService::new(db.clone(), auth_config);
-    let branding = ferrum::migrations::discover_project(std::path::Path::new("."))
+    let project = ferrum::migrations::discover_project(std::path::Path::new(".")).ok();
+    let branding = project
+        .as_ref()
         .map(|project| ferrum::admin::AdminBranding {
-            site_title: project.site_title,
-            site_header: project.site_header,
-            app_name: project.app_name,
-            primary_color: project.primary_color,
-            default_locale: project.default_locale,
-            fallback_locale: project.fallback_locale,
-            currency: project.currency,
+            site_title: project.site_title.clone(),
+            site_header: project.site_header.clone(),
+            app_name: project.app_name.clone(),
+            primary_color: project.primary_color.clone(),
+            default_locale: project.default_locale.clone(),
+            fallback_locale: project.fallback_locale.clone(),
+            currency: project.currency.clone(),
         })
         .unwrap_or_default();
-    let admin = ferrum::admin::AdminRegistry::new()
-        .with_branding(branding)
-        .add::<Category>()
-        .add::<Product>()
-        .add::<InternalNote>();
+    let mail = project
+        .as_ref()
+        .map(ferrum::mail_for)
+        .unwrap_or_else(ferrum::mail::MailService::disabled);
+    let admin = admin::extend(
+        ferrum::admin::AdminRegistry::new()
+            .with_branding(branding)
+            .add::<Category>()
+            .add::<Event>()
+            .add::<Order>()
+            .add::<OrderLine>()
+            .add::<Product>()
+            .add::<InternalNote>(),
+    )?;
     let media = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("media");
     let storage = LocalStorage::open(
         &media,
@@ -80,6 +110,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     )?;
     let app = App::new(db.clone())
         .with_auth(auth)
+        .with_mail(mail)
         .with_admin(admin)
         .merge(
             axum::Router::new()
@@ -91,6 +122,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         )
         .merge(ferrum::storage::routes(Arc::new(storage)))
         .register::<Category>()
+        .register::<Event>()
+        .register::<Order>()
+        .register::<OrderLine>()
         .register::<Product>()
         .register::<InternalNote>();
 

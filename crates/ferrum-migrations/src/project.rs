@@ -2,10 +2,11 @@
 
 use crate::error::MigrationError;
 use crate::snapshot::SchemaSnapshot;
+use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct ProjectConfig {
     pub root: PathBuf,
     pub migrations_dir: PathBuf,
@@ -38,6 +39,32 @@ pub struct ProjectConfig {
     pub storage_backend: String,
     pub storage_directory: String,
     pub storage_max_upload_mb: u64,
+    pub mail_backend: String,
+    pub mail_host: String,
+    pub mail_port: u16,
+    pub mail_security: String,
+    pub mail_from: String,
+    pub mail_reply_to: String,
+    pub mail_timeout_secs: u64,
+    pub mail_public_origin: String,
+    pub mail_reset_ttl_minutes: u32,
+    pub custom: BTreeMap<String, BTreeMap<String, String>>,
+}
+
+impl std::fmt::Debug for ProjectConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ProjectConfig")
+            .field("root", &self.root)
+            .field("name", &self.name)
+            .field("template", &self.template)
+            .field("database_url", &redact_database_url(&self.database_url))
+            .field("host", &self.host)
+            .field("port", &self.port)
+            .field("debug", &self.debug)
+            .field("custom", &self.custom)
+            .finish_non_exhaustive()
+    }
 }
 
 impl ProjectConfig {
@@ -65,6 +92,108 @@ impl ProjectConfig {
             _ => self.database_url.clone(),
         }
     }
+
+    pub fn is_production(&self) -> bool {
+        std::env::var("FERRUM_ENV")
+            .ok()
+            .is_some_and(|value| value.eq_ignore_ascii_case("production"))
+    }
+
+    /// `FERRUM_DEBUG` ersetzt `server.debug`. Ein ungültiger Wert bleibt ein Fehler.
+    pub fn resolved_debug(&self) -> Result<bool, MigrationError> {
+        match std::env::var("FERRUM_DEBUG") {
+            Ok(value) if !value.is_empty() => parse_bool(&value).map_err(|_| {
+                MigrationError::new(
+                    "FERRUM_DEBUG erlaubt true oder false. Der ungültige Wert wird nicht ersetzt."
+                        .to_owned(),
+                )
+            }),
+            _ => Ok(self.debug),
+        }
+    }
+
+    /// `BIND_ADDRESS` ersetzt Host und Port. `0.0.0.0` bleibt abgelehnt.
+    pub fn bind_address(&self) -> Result<String, MigrationError> {
+        if let Ok(value) = std::env::var("BIND_ADDRESS") {
+            if !value.is_empty() {
+                if value.starts_with("0.0.0.0") {
+                    return Err(MigrationError::new(
+                        "BIND_ADDRESS darf nicht 0.0.0.0 sein.".to_owned(),
+                    ));
+                }
+                return Ok(value);
+            }
+        }
+        Ok(format!("{}:{}", self.host, self.port))
+    }
+
+    /// Produktion mit aktivem Debug ist ein Fehler. Es gibt keinen stillen Wechsel.
+    pub fn enforce_runtime(&self) -> Result<(), MigrationError> {
+        if self.is_production() && self.resolved_debug()? {
+            return Err(MigrationError::new(
+                "server.debug ist in Produktion nicht erlaubt.".to_owned(),
+            ));
+        }
+        self.bind_address().map(|_| ())
+    }
+
+    pub fn custom_settings<T: serde::de::DeserializeOwned>(
+        &self,
+        name: &str,
+    ) -> Result<T, MigrationError> {
+        let section = self
+            .custom
+            .get(name)
+            .ok_or_else(|| MigrationError::new(format!("custom.{name} ist nicht konfiguriert.")))?;
+        let mut object = serde_json::Map::new();
+        for (key, value) in section {
+            object.insert(key.clone(), coerce_custom(value));
+        }
+        serde_json::from_value(serde_json::Value::Object(object)).map_err(|_| {
+            MigrationError::new(format!(
+                "custom.{name} passt nicht zur erwarteten Struktur."
+            ))
+        })
+    }
+}
+
+/// Gelesene Projekteinstellungen. Kein globales Singleton.
+#[derive(Clone, Debug)]
+pub struct Settings {
+    project: ProjectConfig,
+}
+
+impl Settings {
+    pub fn discover(start: &Path) -> Result<Self, MigrationError> {
+        Self::from_project(discover_project(start)?)
+    }
+
+    pub fn from_project(project: ProjectConfig) -> Result<Self, MigrationError> {
+        project.enforce_runtime()?;
+        Ok(Self { project })
+    }
+
+    pub fn project(&self) -> &ProjectConfig {
+        &self.project
+    }
+}
+
+pub fn redact_database_url(value: &str) -> String {
+    if let Some(rest) = value.split_once("://").map(|(_, rest)| rest) {
+        if let Some((userinfo, host)) = rest.split_once('@') {
+            if userinfo.contains(':') {
+                let scheme = value
+                    .split_once("://")
+                    .map(|(scheme, _)| scheme)
+                    .unwrap_or("");
+                return format!("{scheme}://[redacted]@{host}");
+            }
+        }
+    }
+    if value.to_ascii_lowercase().contains("password=") {
+        return "[redacted]".to_owned();
+    }
+    value.to_owned()
 }
 
 pub fn discover_project(start: &Path) -> Result<ProjectConfig, MigrationError> {
@@ -149,6 +278,16 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let mut storage_backend = "local".to_owned();
     let mut storage_directory = "media".to_owned();
     let mut storage_max_upload_mb = 10_u64;
+    let mut mail_backend = "disabled".to_owned();
+    let mut mail_host = String::new();
+    let mut mail_port = 587_u16;
+    let mut mail_security = "starttls".to_owned();
+    let mut mail_from = String::new();
+    let mut mail_reply_to = String::new();
+    let mut mail_timeout_secs = 15_u64;
+    let mut mail_public_origin = String::new();
+    let mut mail_reset_ttl_minutes = 30_u32;
+    let mut custom: BTreeMap<String, BTreeMap<String, String>> = BTreeMap::new();
     for (line_number, raw) in text.lines().enumerate() {
         let line = raw.trim();
         if line.is_empty() || line.starts_with('#') {
@@ -156,7 +295,20 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         }
         if line.starts_with('[') && line.ends_with(']') {
             section = line[1..line.len() - 1].trim().to_owned();
-            if !matches!(
+            if section == "custom" {
+                return Err(MigrationError::new(format!(
+                    "{}:{line_number}: [custom] braucht einen Namen, zum Beispiel [custom.shop].",
+                    path.display()
+                )));
+            }
+            if let Some(name) = section.strip_prefix("custom.") {
+                if !valid_custom_name(name) {
+                    return Err(MigrationError::new(format!(
+                        "{}:{line_number}: custom.{name} ist kein gültiger Abschnitt.",
+                        path.display()
+                    )));
+                }
+            } else if !matches!(
                 section.as_str(),
                 "project"
                     | "database"
@@ -167,6 +319,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
                     | "branding"
                     | "static"
                     | "storage"
+                    | "mail"
             ) {
                 return Err(MigrationError::new(format!(
                     "{}:{line_number}: unbekannter Abschnitt `[{section}]`.",
@@ -188,6 +341,25 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
                 path.display()
             ))
         })?;
+        if let Some(name) = section.strip_prefix("custom.") {
+            if secret_config_key(key) {
+                return Err(MigrationError::new(
+                    "Secrets gehören nicht in ferrum.toml. Verwende eine Umgebungsvariable."
+                        .to_owned(),
+                ));
+            }
+            if !valid_custom_name(key) {
+                return Err(MigrationError::new(format!(
+                    "{}:{line_number}: custom.{name}.{key} ist kein gültiger Schlüssel.",
+                    path.display()
+                )));
+            }
+            custom
+                .entry(name.to_owned())
+                .or_default()
+                .insert(key.to_owned(), value);
+            continue;
+        }
         let qualified = if section.is_empty() {
             key.to_owned()
         } else {
@@ -253,6 +425,42 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             }
             "storage.backend" => storage_backend = value,
             "storage.directory" => storage_directory = value,
+            "mail.password" | "mail.secret" | "mail.smtp_password" => {
+                return Err(MigrationError::new(
+                    "SMTP-Passwörter stehen nicht in ferrum.toml. Setze FERRUM_SMTP_PASSWORD."
+                        .to_owned(),
+                ));
+            }
+            "mail.backend" => mail_backend = value,
+            "mail.host" => mail_host = value,
+            "mail.port" => {
+                mail_port = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: mail.port muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
+            "mail.security" => mail_security = value,
+            "mail.from" => mail_from = value,
+            "mail.reply_to" => mail_reply_to = value,
+            "mail.timeout_secs" => {
+                mail_timeout_secs = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: mail.timeout_secs muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
+            "mail.public_origin" => mail_public_origin = value,
+            "mail.reset_ttl_minutes" => {
+                mail_reset_ttl_minutes = value.parse().map_err(|_| {
+                    MigrationError::new(format!(
+                        "{}:{line_number}: mail.reset_ttl_minutes muss eine Zahl sein.",
+                        path.display()
+                    ))
+                })?;
+            }
             "storage.max_upload_size_mb" => {
                 storage_max_upload_mb = value.parse().map_err(|_| {
                     MigrationError::new(format!(
@@ -347,6 +555,17 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "storage.max_upload_size_mb muss zwischen 1 und 100 liegen.".to_owned(),
         ));
     }
+    validate_mail(MailFields {
+        backend: &mail_backend,
+        host: &mail_host,
+        port: mail_port,
+        security: &mail_security,
+        from: &mail_from,
+        reply_to: &mail_reply_to,
+        timeout_secs: mail_timeout_secs,
+        origin: &mail_public_origin,
+        ttl_minutes: mail_reset_ttl_minutes,
+    })?;
     if host == "0.0.0.0" {
         return Err(MigrationError::new(
             "server.host darf nicht 0.0.0.0 sein.".to_owned(),
@@ -384,7 +603,137 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         storage_backend,
         storage_directory,
         storage_max_upload_mb,
+        mail_backend,
+        mail_host,
+        mail_port,
+        mail_security,
+        mail_from,
+        mail_reply_to,
+        mail_timeout_secs,
+        mail_public_origin,
+        mail_reset_ttl_minutes,
+        custom,
     })
+}
+
+struct MailFields<'a> {
+    backend: &'a str,
+    host: &'a str,
+    port: u16,
+    security: &'a str,
+    from: &'a str,
+    reply_to: &'a str,
+    timeout_secs: u64,
+    origin: &'a str,
+    ttl_minutes: u32,
+}
+
+fn validate_mail(mail: MailFields<'_>) -> Result<(), MigrationError> {
+    let MailFields {
+        backend,
+        host,
+        port,
+        security,
+        from,
+        reply_to,
+        timeout_secs,
+        origin,
+        ttl_minutes,
+    } = mail;
+    if !matches!(backend, "disabled" | "console" | "memory" | "smtp") {
+        return Err(MigrationError::new(
+            "mail.backend erlaubt disabled, console, memory oder smtp.".to_owned(),
+        ));
+    }
+    if !(1..=30).contains(&timeout_secs) {
+        return Err(MigrationError::new(
+            "mail.timeout_secs muss zwischen 1 und 30 liegen.".to_owned(),
+        ));
+    }
+    if !(5..=1440).contains(&ttl_minutes) {
+        return Err(MigrationError::new(
+            "mail.reset_ttl_minutes muss zwischen 5 und 1440 liegen.".to_owned(),
+        ));
+    }
+    if port == 0 {
+        return Err(MigrationError::new(
+            "mail.port muss zwischen 1 und 65535 liegen.".to_owned(),
+        ));
+    }
+    if !reply_to.is_empty() && !plausible_email(reply_to) {
+        return Err(MigrationError::new(
+            "mail.reply_to muss eine E-Mail-Adresse ohne Steuerzeichen sein.".to_owned(),
+        ));
+    }
+    if backend == "disabled" {
+        return Ok(());
+    }
+    if !plausible_email(from) {
+        return Err(MigrationError::new(
+            "mail.from ist für ein aktives Backend erforderlich.".to_owned(),
+        ));
+    }
+    if !trusted_origin(origin) {
+        return Err(MigrationError::new(
+            "mail.public_origin muss http://127.0.0.1, http://localhost oder https sein."
+                .to_owned(),
+        ));
+    }
+    if backend == "smtp" {
+        if host.is_empty()
+            || host
+                .chars()
+                .any(|char| char.is_whitespace() || char.is_control())
+        {
+            return Err(MigrationError::new(
+                "mail.host ist für smtp erforderlich.".to_owned(),
+            ));
+        }
+        if !matches!(security, "starttls" | "tls") {
+            return Err(MigrationError::new(
+                "mail.security erlaubt starttls oder tls. Klartext ist nicht vorgesehen."
+                    .to_owned(),
+            ));
+        }
+    }
+    Ok(())
+}
+
+fn plausible_email(value: &str) -> bool {
+    let Some((local, domain)) = value.split_once('@') else {
+        return false;
+    };
+    !local.is_empty()
+        && domain.contains('.')
+        && !value
+            .chars()
+            .any(|char| char.is_control() || char.is_whitespace())
+        && value.len() <= 254
+}
+
+fn trusted_origin(origin: &str) -> bool {
+    let Some((scheme, rest)) = origin.split_once("://") else {
+        return false;
+    };
+    if rest.is_empty()
+        || rest.contains('@')
+        || rest.contains('/')
+        || rest.contains('?')
+        || rest.contains('#')
+    {
+        return false;
+    }
+    let host = rest.split(':').next().unwrap_or("");
+    match scheme {
+        "http" => host == "127.0.0.1" || host == "localhost",
+        "https" => {
+            !host.is_empty()
+                && !host
+                    .chars()
+                    .any(|char| char.is_control() || char.is_whitespace())
+        }
+        _ => false,
+    }
 }
 
 fn relative_dir(value: &str) -> bool {
@@ -435,6 +784,33 @@ fn is_hex_color(value: &str) -> bool {
     matches!(hex.len(), 3 | 6) && hex.chars().all(|char| char.is_ascii_hexdigit())
 }
 
+fn valid_custom_name(value: &str) -> bool {
+    let mut chars = value.chars();
+    matches!(chars.next(), Some(char) if char.is_ascii_lowercase())
+        && chars.all(|char| char.is_ascii_lowercase() || char.is_ascii_digit() || char == '_')
+        && value.len() <= 32
+}
+
+fn secret_config_key(key: &str) -> bool {
+    let key = key.to_ascii_lowercase();
+    key.contains("password")
+        || key.contains("secret")
+        || key.contains("token")
+        || key.contains("credential")
+}
+
+fn coerce_custom(value: &str) -> serde_json::Value {
+    match value {
+        "true" => serde_json::Value::Bool(true),
+        "false" => serde_json::Value::Bool(false),
+        _ if !value.is_empty() && value.chars().all(|char| char.is_ascii_digit()) => value
+            .parse::<u64>()
+            .map(|number| serde_json::Value::Number(number.into()))
+            .unwrap_or_else(|_| serde_json::Value::String(value.to_owned())),
+        _ => serde_json::Value::String(value.to_owned()),
+    }
+}
+
 fn parse_value(value: &str) -> Option<String> {
     if let Some(quoted) = unquote(value) {
         return Some(quoted.to_owned());
@@ -478,6 +854,8 @@ fn command_args(command: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::parse_manifest;
+
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
     use std::fs;
     use std::time::{SystemTime, UNIX_EPOCH};
 
@@ -557,5 +935,68 @@ primary_color = "#0f172a"
         let unknown = write_manifest("migrations_dir = \"migrations\"\nsecret = \"no\"\n");
         assert!(parse_manifest(&unknown).is_err());
         let _ = fs::remove_dir_all(unknown.parent().unwrap());
+    }
+
+    #[test]
+    fn custom_settings_env_and_production_stay_explicit() {
+        let path = write_manifest(
+            "migrations_dir = \"migrations\"\n[custom.shop]\ncurrency = \"EUR\"\nitems_per_page = 25\nopen = true\n",
+        );
+        let config = parse_manifest(&path).expect("custom");
+        #[derive(serde::Deserialize)]
+        struct ShopSettings {
+            currency: String,
+            items_per_page: usize,
+            open: bool,
+        }
+        let shop = config.custom_settings::<ShopSettings>("shop").unwrap();
+        assert_eq!(shop.currency, "EUR");
+        assert_eq!(shop.items_per_page, 25);
+        assert!(shop.open);
+        assert!(config.custom_settings::<ShopSettings>("missing").is_err());
+        let rendered = format!("{config:?}");
+        assert!(!rendered.contains("super-secret-value"));
+        let secret = write_manifest(
+            "migrations_dir = \"migrations\"\n[database]\nurl = \"postgres://ferrum:super-secret-value@localhost/ferrum\"\n",
+        );
+        let hidden = parse_manifest(&secret).unwrap();
+        let debug = format!("{hidden:?}");
+        assert!(debug.contains("[redacted]"));
+        assert!(!debug.contains("super-secret-value"));
+        let denied = write_manifest(
+            "migrations_dir = \"migrations\"\n[custom.shop]\npassword = \"super-secret-value\"\n",
+        );
+        let error = parse_manifest(&denied).unwrap_err();
+        assert!(!error.0.contains("super-secret-value"));
+        let guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous_env = std::env::var("FERRUM_ENV").ok();
+        let previous_debug = std::env::var("FERRUM_DEBUG").ok();
+        unsafe {
+            std::env::set_var("FERRUM_ENV", "production");
+            std::env::set_var("FERRUM_DEBUG", "true");
+        }
+        let error = config.enforce_runtime().unwrap_err();
+        assert!(error.0.contains("Produktion"));
+        assert!(!error.0.contains("super-secret-value"));
+        unsafe {
+            std::env::set_var("FERRUM_DEBUG", "maybe");
+        }
+        assert!(config.resolved_debug().is_err());
+        unsafe {
+            std::env::remove_var("FERRUM_DEBUG");
+            std::env::remove_var("FERRUM_ENV");
+        }
+        if let Some(value) = previous_env {
+            unsafe { std::env::set_var("FERRUM_ENV", value) };
+        }
+        if let Some(value) = previous_debug {
+            unsafe { std::env::set_var("FERRUM_DEBUG", value) };
+        }
+        drop(guard);
+        let _ = fs::remove_dir_all(path.parent().unwrap());
+        let _ = fs::remove_dir_all(secret.parent().unwrap());
+        let _ = fs::remove_dir_all(denied.parent().unwrap());
     }
 }

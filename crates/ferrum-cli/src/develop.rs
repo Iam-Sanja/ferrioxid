@@ -14,6 +14,10 @@ pub fn dev() -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    let notice = migration_notice(&project);
+    if !notice.is_empty() {
+        println!("{notice}");
+    }
     let package = match package_name(&project.root) {
         Ok(name) => name,
         Err(error) => {
@@ -137,6 +141,41 @@ pub fn build() -> ExitCode {
 enum Signal {
     Changed,
     Stop,
+}
+
+fn migration_notice(project: &ferrum_migrations::ProjectConfig) -> String {
+    let locale = crate::text::locale();
+    let url = project.resolved_database_url();
+    let readonly = match ferrum_migrations::readonly_database_url(&url) {
+        Ok(url) => url,
+        Err(error) => return ferrum_migrations::dev_notice(&locale, &Err(error)),
+    };
+    let runtime = match tokio::runtime::Runtime::new() {
+        Ok(runtime) => runtime,
+        Err(error) => {
+            return ferrum_migrations::dev_notice(
+                &locale,
+                &Err(ferrum_migrations::MigrationError::new(format!(
+                    "migration.database.unavailable: {error}"
+                ))),
+            );
+        }
+    };
+    let result = runtime.block_on(async {
+        let db = ferrum_db::connect(&readonly).await.map_err(|error| {
+            ferrum_migrations::MigrationError::new(format!(
+                "migration.database.unavailable: {error}"
+            ))
+        })?;
+        ferrum_migrations::inspect_migrations(
+            &db,
+            &ferrum_auth::migrations_dir(),
+            &project.migrations_dir,
+            None,
+        )
+        .await
+    });
+    ferrum_migrations::dev_notice(&locale, &result)
 }
 
 fn current_project() -> Result<ferrum_migrations::ProjectConfig, String> {

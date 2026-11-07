@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Routen: [admin-routing.md](admin-routing.md) · Vorlagen: [admin-templates.md](admin-templates.md) · Gestaltung: [admin-design-system.md](admin-design-system.md)
 
-**Stand:** v0.18. Die Cargo-Version bleibt `0.1.0`. Die Oberfläche ist serverseitiges HTML. React, Vite und Node.js werden dafür nicht gebraucht. Die Login-Origins folgen der Bind-Adresse aus `ferrum.toml` oder `BIND_ADDRESS`. Formularentwürfe, Has-Many-Inlines, Sammelaktionen und die Historie laufen ohne JavaScript.
+**Stand:** v0.22. Die Cargo-Version bleibt `0.1.0`. Eigene Seiten liegen unter `/admin/pages/{key}` und nutzen dasselbe Layout. Die Oberfläche ist serverseitiges HTML. React, Vite und Node.js werden dafür nicht gebraucht. Die Login-Origins folgen der Bind-Adresse aus `ferrum.toml` oder `BIND_ADDRESS`. Formularentwürfe, Has-Many-Inlines, das gemeinsame Eltern-Kind-Formular, Sammelaktionen, die Historie und die Datumshierarchie laufen ohne JavaScript. `admin.js` ist `defer` und für das Absenden nicht erforderlich. Datumsfelder nutzen `type="date"`, `type="time"` und `type="datetime-local"` mit UTC-Hinweis.
 
 ## Aufgabe
 

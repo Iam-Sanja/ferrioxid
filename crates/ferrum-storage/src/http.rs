@@ -308,6 +308,7 @@ mod tests {
         let app = routes(storage).with_state(AppState {
             db,
             auth: Some(auth),
+            mail: None,
         });
         let missing = Uuid::nil();
         let (status, _) = call(

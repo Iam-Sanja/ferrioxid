@@ -53,6 +53,39 @@ pub async fn table_exists(db: &DatabaseConnection, table: &str) -> Result<bool, 
     Ok(row.is_some())
 }
 
+pub async fn column_exists(
+    db: &DatabaseConnection,
+    table: &str,
+    column: &str,
+) -> Result<bool, MigrationError> {
+    if !crate::snapshot::is_identifier(table) || !crate::snapshot::is_identifier(column) {
+        return Err(MigrationError::new(format!(
+            "Ungültiger Spaltenname `{table}.{column}`."
+        )));
+    }
+    let backend = db.get_database_backend();
+    let (sql, values) = match backend {
+        DatabaseBackend::Sqlite => (
+            format!(
+                "SELECT 1 AS present FROM pragma_table_info('{table}') WHERE name = ?"
+            ),
+            vec![Value::from(column)],
+        ),
+        DatabaseBackend::Postgres => (
+            "SELECT 1 AS present FROM information_schema.columns WHERE table_schema = 'public' AND table_name = $1 AND column_name = $2".to_owned(),
+            vec![Value::from(table), Value::from(column)],
+        ),
+        DatabaseBackend::MySql => {
+            return Err(MigrationError::new("MySQL wird nicht unterstützt."));
+        }
+    };
+    let statement = Statement::from_sql_and_values(backend, sql, values);
+    let row = db.query_one(statement).await.map_err(|error| {
+        MigrationError::new(format!("Spaltenprüfung ist fehlgeschlagen: {error}"))
+    })?;
+    Ok(row.is_some())
+}
+
 pub async fn ensure_history(db: &impl ConnectionTrait) -> Result<(), MigrationError> {
     ensure_history_in(db, HISTORY_TABLE).await
 }

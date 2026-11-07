@@ -1,9 +1,13 @@
 //! Shared contracts, independent of HTTP and database implementations.
 
 mod problem;
+pub mod temporal;
 mod validation;
 
 pub use problem::problem_json;
+pub use temporal::{
+    hierarchy_bound, parse_date, parse_datetime_local, parse_datetime_utc, parse_time, DateBound,
+};
 pub use validation::{is_email, is_http_url, parse_bool, parse_i64, parse_uuid, text_code};
 
 #[derive(Debug, Clone, Copy)]
@@ -67,12 +71,26 @@ pub struct AdminFieldMeta {
     pub fieldset: &'static str,
 }
 
-/// Has-Many-Abschnitt auf der Detailseite. `child_table` ist der Admin-Schlüssel des Kindes.
+/// Has-Many-Abschnitt. `form` speichert Eltern und Kinder in einer Transaktion.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdminInline {
     pub name: &'static str,
     pub child_table: &'static str,
     pub column: &'static str,
+    /// Leer: die Oberfläche verwendet das Label des Kindmodells.
+    pub label: &'static str,
+    /// Leer: alle schreibbaren Felder außer dem Eltern-Fremdschlüssel.
+    pub fields: &'static [&'static str],
+    pub readonly_fields: &'static [&'static str],
+    pub min_count: u16,
+    /// `0` ohne `form` bedeutet: das gemeinsame Formular ist aus.
+    pub max_count: u16,
+    pub extra: u16,
+    pub can_add: bool,
+    pub can_change: bool,
+    pub can_delete: bool,
+    pub ordering: Option<&'static str>,
+    pub form: bool,
 }
 
 /// Admin-Freigabe eines Modells. `None` bei `admin_meta` bedeutet: nicht im Admin.
@@ -89,6 +107,8 @@ pub struct AdminModelMeta {
     pub per_page: u16,
     pub fieldsets: &'static [AdminFieldset],
     pub inlines: &'static [AdminInline],
+    /// `Some(field)` schaltet die UTC-Datumsnavigation der Liste ein. Nur `Date` oder `DateTime`.
+    pub date_hierarchy: Option<&'static str>,
 }
 
 /// Backend, für den Ferrum DDL und Abfragen erzeugt.
@@ -105,6 +125,12 @@ pub enum ColumnKind {
     Text,
     BigInt,
     Boolean,
+    /// Kalendertag ohne Uhrzeit und ohne Zeitzone. Kanonisch `YYYY-MM-DD`.
+    Date,
+    /// Tageszeit ohne Datum. Kanonisch `HH:MM:SS`.
+    Time,
+    /// Absoluter Zeitpunkt in UTC. Kanonisch RFC 3339 mit `Z`.
+    DateTime,
 }
 
 /// Aktion für `ON DELETE`. `ON UPDATE` bleibt `NO ACTION`.

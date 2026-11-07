@@ -17,6 +17,9 @@ pub const USER_ROLES: &str = "_ferrum_user_roles";
 pub const ROLE_PERMISSIONS: &str = "_ferrum_role_permissions";
 pub const ADMIN_DRAFTS: &str = "_ferrum_admin_drafts";
 pub const ADMIN_AUDIT: &str = "_ferrum_admin_audit";
+pub const PASSWORD_RESETS: &str = "_ferrum_password_resets";
+pub const PASSWORD_RESET_EXCHANGES: &str = "_ferrum_password_reset_exchanges";
+pub const MAIL_OUTBOX: &str = "_ferrum_mail_outbox";
 
 pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
@@ -77,6 +80,147 @@ pub fn admin_migration_file() -> Result<MigrationFile, AuthError> {
         &plan,
     )
     .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
+/// Hängt `operation_id` an die bestehende Audit-Tabelle. `0002` bleibt versiegelt.
+#[allow(dead_code)]
+pub fn operation_migration_file() -> Result<MigrationFile, AuthError> {
+    let previous =
+        ferrum_migrations::load_migration(&migrations_dir().join("0002_admin_journal.json"))
+            .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let mut to = previous.to_snapshot.clone();
+    let table = to
+        .tables
+        .iter_mut()
+        .find(|table| table.name == ADMIN_AUDIT)
+        .ok_or_else(|| AuthError::Validation("audit table is missing from 0002".into()))?;
+    if table
+        .columns
+        .iter()
+        .any(|column| column.name == "operation_id")
+    {
+        return Err(AuthError::Validation(
+            "operation_id is already in the sealed journal".into(),
+        ));
+    }
+    table.columns.push(ColumnSnapshot {
+        name: "operation_id".to_owned(),
+        logical_type: LogicalType::String,
+        primary_key: false,
+        nullable: true,
+        default: None,
+    });
+    to.validate()
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let plan = plan_change(&previous.to_snapshot, &to)
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    if let Some(reason) = &plan.refusal {
+        return Err(AuthError::Validation(reason.clone()));
+    }
+    seal(
+        "0003_audit_operation".to_owned(),
+        "audit_operation".to_owned(),
+        previous.to_snapshot,
+        to,
+        &plan,
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
+/// Reset-Token, Austausch-Cookie und Versandprotokoll. `0001` bis `0003` bleiben versiegelt.
+#[cfg(test)]
+fn password_reset_migration_file() -> Result<MigrationFile, AuthError> {
+    let previous =
+        ferrum_migrations::load_migration(&migrations_dir().join("0003_audit_operation.json"))
+            .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let mut to = previous.to_snapshot.clone();
+    to.tables.push(password_resets());
+    to.tables.push(password_reset_exchanges());
+    to.tables.push(mail_outbox());
+    to.validate()
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let plan = plan_change(&previous.to_snapshot, &to)
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    if let Some(reason) = &plan.refusal {
+        return Err(AuthError::Validation(reason.clone()));
+    }
+    seal(
+        "0004_password_reset".to_owned(),
+        "password_reset".to_owned(),
+        previous.to_snapshot,
+        to,
+        &plan,
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
+#[cfg(test)]
+fn password_resets() -> TableSnapshot {
+    table(
+        PASSWORD_RESETS,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("user_id", LogicalType::Uuid, false, false, None),
+            column("token_hash", LogicalType::String, false, false, None),
+            column("created_at", LogicalType::I64, false, false, None),
+            column("expires_at", LogicalType::I64, false, false, None),
+            column("used_at", LogicalType::I64, false, true, None),
+        ],
+        vec![unique(PASSWORD_RESETS, &["token_hash"])],
+        vec![IndexSnapshot {
+            name: format!("ix_{PASSWORD_RESETS}_user_id"),
+            columns: vec!["user_id".to_owned()],
+        }],
+        vec![foreign_key(PASSWORD_RESETS, "user_id", USERS)],
+    )
+}
+
+#[cfg(test)]
+fn password_reset_exchanges() -> TableSnapshot {
+    table(
+        PASSWORD_RESET_EXCHANGES,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("reset_id", LogicalType::Uuid, false, false, None),
+            column("secret_hash", LogicalType::String, false, false, None),
+            column("created_at", LogicalType::I64, false, false, None),
+            column("expires_at", LogicalType::I64, false, false, None),
+        ],
+        vec![unique(PASSWORD_RESET_EXCHANGES, &["secret_hash"])],
+        vec![IndexSnapshot {
+            name: format!("ix_{PASSWORD_RESET_EXCHANGES}_reset_id"),
+            columns: vec!["reset_id".to_owned()],
+        }],
+        vec![foreign_key(
+            PASSWORD_RESET_EXCHANGES,
+            "reset_id",
+            PASSWORD_RESETS,
+        )],
+    )
+}
+
+#[cfg(test)]
+fn mail_outbox() -> TableSnapshot {
+    table(
+        MAIL_OUTBOX,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("kind", LogicalType::String, false, false, None),
+            column("recipient", LogicalType::String, false, false, None),
+            column("reset_id", LogicalType::Uuid, false, true, None),
+            column("created_at", LogicalType::I64, false, false, None),
+            column("sent_at", LogicalType::I64, false, true, None),
+            column("failed_at", LogicalType::I64, false, true, None),
+            column("attempts", LogicalType::I64, false, false, None),
+            column("error_code", LogicalType::String, false, true, None),
+        ],
+        Vec::new(),
+        vec![IndexSnapshot {
+            name: format!("ix_{MAIL_OUTBOX}_created_at"),
+            columns: vec!["created_at".to_owned()],
+        }],
+        Vec::new(),
+    )
 }
 
 pub async fn apply_migrations(db: &DatabaseConnection) -> Result<Vec<String>, AuthError> {
@@ -329,5 +473,37 @@ mod tests {
         assert_eq!(loaded.id, "0002_admin_journal");
         assert_eq!(loaded.checksum, file.checksum);
         assert!(loaded.operations.len() >= 2);
+    }
+
+    #[test]
+    fn audit_operation_migration_is_sealed() {
+        let file = super::operation_migration_file().expect("operation migration");
+        let path = migrations_dir().join("0003_audit_operation.json");
+        if !path.exists() {
+            ferrum_migrations::save_migration(&migrations_dir(), &file).expect("write migration");
+        }
+        let loaded = ferrum_migrations::load_migration(&path).expect("load migration");
+        assert_eq!(loaded.id, "0003_audit_operation");
+        assert_eq!(loaded.checksum, file.checksum);
+        assert!(loaded
+            .operations
+            .iter()
+            .any(|operation| format!("{operation:?}").contains("operation_id")));
+    }
+
+    #[test]
+    fn password_reset_migration_is_sealed() {
+        let file = super::password_reset_migration_file().expect("password reset migration");
+        let path = migrations_dir().join("0004_password_reset.json");
+        if !path.exists() {
+            ferrum_migrations::save_migration(&migrations_dir(), &file).expect("write migration");
+        }
+        let loaded = ferrum_migrations::load_migration(&path).expect("load migration");
+        assert_eq!(loaded.id, "0004_password_reset");
+        assert_eq!(loaded.checksum, file.checksum);
+        assert!(loaded
+            .operations
+            .iter()
+            .any(|operation| format!("{operation:?}").contains("_ferrum_password_resets")));
     }
 }

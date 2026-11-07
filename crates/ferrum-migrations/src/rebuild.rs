@@ -181,6 +181,9 @@ async fn alter_postgres(
             LogicalType::String | LogicalType::Uuid => "text",
             LogicalType::I64 => "bigint",
             LogicalType::Bool => "boolean",
+            LogicalType::Date => "date",
+            LogicalType::Time => "time",
+            LogicalType::DateTime => "timestamptz",
         };
         execute(
             db,
@@ -355,7 +358,9 @@ fn copy_expression(
         return Ok(format!("\"{}\"", column.name));
     }
     let sql_type = match to.logical_type {
-        LogicalType::String => "TEXT",
+        LogicalType::String | LogicalType::Date | LogicalType::Time | LogicalType::DateTime => {
+            "TEXT"
+        }
         LogicalType::I64 => "INTEGER",
         LogicalType::Uuid | LogicalType::Bool => {
             return Err(MigrationError::new(format!(
@@ -373,7 +378,11 @@ fn read_cell(
     logical: LogicalType,
 ) -> Result<Cell, MigrationError> {
     match logical {
-        LogicalType::String | LogicalType::Uuid => match row.try_get::<Option<String>>("", name) {
+        LogicalType::String
+        | LogicalType::Uuid
+        | LogicalType::Date
+        | LogicalType::Time
+        | LogicalType::DateTime => match row.try_get::<Option<String>>("", name) {
             Ok(Some(text)) => Ok(Cell::Text(text)),
             Ok(None) => Ok(Cell::Null),
             Err(error) => Err(MigrationError::new(format!(
@@ -408,7 +417,14 @@ fn convert_cell(value: Cell, from: LogicalType, to: LogicalType) -> Result<Cell,
                 Err(format!("{number} ist kein boolescher 0/1-Wert"))
             }
             (LogicalType::I64, Cell::Integer(number)) => Ok(Cell::Integer(number)),
-            (LogicalType::String | LogicalType::Uuid, Cell::Text(text)) => Ok(Cell::Text(text)),
+            (
+                LogicalType::String
+                | LogicalType::Uuid
+                | LogicalType::Date
+                | LogicalType::Time
+                | LogicalType::DateTime,
+                Cell::Text(text),
+            ) => Ok(Cell::Text(text)),
             _ => Err("gespeicherter Wert passt nicht zum Ausgangstyp".to_owned()),
         };
     }

@@ -10,7 +10,7 @@ use crate::schema::{PERMISSIONS, ROLES, ROLE_PERMISSIONS, USER_ROLES};
 use crate::store::{self, SessionRow, UserRow};
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use axum::http::{HeaderMap, Method};
-use sea_orm::{DatabaseConnection, TransactionTrait};
+use sea_orm::{ConnectionTrait, DatabaseConnection, DatabaseTransaction, TransactionTrait};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -113,7 +113,7 @@ impl AuthService {
             .map(public_user))
     }
 
-    /// Admin-Anlage. Superuser bleibt der CLI vorbehalten.
+    /// Admin-Anlage. Superuser bleibt der CLI vorbehalten. Der Hash entsteht vor dem Schreibvorgang.
     pub async fn create_directory_user(
         &self,
         email: &str,
@@ -121,14 +121,10 @@ impl AuthService {
         is_active: bool,
         is_staff: bool,
     ) -> Result<PublicUser, AuthError> {
-        let created = self.create_user(email, password, is_staff, false).await?;
-        if !is_active {
-            self.set_user_active(&created.email, false).await?;
-        }
-        Ok(PublicUser {
-            is_active,
-            ..created
-        })
+        validate_new_password(password)?;
+        let hash = hash_password(password)?;
+        self.insert_directory_user_on(&self.db, email, &hash, is_active, is_staff)
+            .await
     }
 
     pub async fn update_profile(
@@ -167,18 +163,10 @@ impl AuthService {
     /// Setzt das Passwort ohne das bisherige zu kennen und widerruft alle Sitzungen dieses Benutzers.
     pub async fn reset_password(&self, id: Uuid, password: &str) -> Result<(), AuthError> {
         validate_new_password(password)?;
-        let user = store::find_user_by_id(&self.db, id)
-            .await?
-            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
-        if user.is_superuser {
-            return Err(AuthError::Forbidden);
-        }
-        let now = unix_now()?;
+        let hash = hash_password(password)?;
         let transaction = self.db.begin().await.map_err(AuthError::database)?;
-        store::update_password(&transaction, user.id, &hash_password(password)?, now).await?;
-        store::revoke_user_sessions(&transaction, user.id, now).await?;
-        transaction.commit().await.map_err(AuthError::database)?;
-        Ok(())
+        let result = self.reset_password_hash_on(&transaction, id, &hash).await;
+        ferrum_db::conclude(transaction, result, AuthError::database).await
     }
 
     pub async fn list_user_permissions(&self, id: Uuid) -> Result<Vec<String>, AuthError> {
@@ -356,6 +344,17 @@ impl AuthService {
         }
     }
 
+    /// Prüft einen vollständigen Code wie `orders.read`. Superuser bestehen, inaktive Benutzer nicht.
+    pub async fn holds(&self, user: &AuthUser, code: &str) -> Result<bool, AuthError> {
+        if !user.is_active || code.is_empty() || code.len() > 80 {
+            return Ok(false);
+        }
+        if user.is_superuser {
+            return Ok(true);
+        }
+        store::user_has_code(&self.db, user.id, code).await
+    }
+
     pub async fn ensure_role(&self, name: &str) -> Result<Uuid, AuthError> {
         let name = require_ident(name, "role")?;
         store::ensure_named_row(&self.db, ROLES, "name", &name).await
@@ -458,6 +457,258 @@ impl AuthService {
     pub async fn set_staff(&self, id: Uuid, staff: bool) -> Result<(), AuthError> {
         let now = unix_now()?;
         store::set_staff(&self.db, id, staff, now).await
+    }
+
+    pub async fn begin(&self) -> Result<DatabaseTransaction, AuthError> {
+        self.db.begin().await.map_err(AuthError::database)
+    }
+
+    /// Prüft Staff-Superuser erneut auf derselben Verbindung wie die folgende Schreiboperation.
+    pub async fn require_directory_actor(
+        &self,
+        db: &impl ConnectionTrait,
+        id: Uuid,
+    ) -> Result<(), AuthError> {
+        let user = store::find_user_by_id(db, id)
+            .await?
+            .ok_or(AuthError::Forbidden)?;
+        if user.is_active && user.is_staff && user.is_superuser {
+            Ok(())
+        } else {
+            Err(AuthError::Forbidden)
+        }
+    }
+
+    pub async fn authorize_on(
+        &self,
+        db: &impl ConnectionTrait,
+        user: &AuthUser,
+        permission: Option<&str>,
+        action: &str,
+    ) -> Result<(), AuthError> {
+        if !user.is_active {
+            return Err(AuthError::Forbidden);
+        }
+        let Some(permission) = permission else {
+            return Err(AuthError::Forbidden);
+        };
+        if permission == "authenticated" {
+            return Ok(());
+        }
+        if user.is_superuser {
+            let stored = store::find_user_by_id(db, user.id)
+                .await?
+                .ok_or(AuthError::Forbidden)?;
+            if stored.is_active && stored.is_superuser {
+                return Ok(());
+            }
+            return Err(AuthError::Forbidden);
+        }
+        let code = format!("{permission}.{action}");
+        if store::user_has_code(db, user.id, &code).await? {
+            Ok(())
+        } else {
+            Err(AuthError::Forbidden)
+        }
+    }
+
+    pub async fn insert_directory_user_on(
+        &self,
+        db: &impl ConnectionTrait,
+        email: &str,
+        password_hash: &str,
+        is_active: bool,
+        is_staff: bool,
+    ) -> Result<PublicUser, AuthError> {
+        let email = normalize_email(email)?;
+        if store::find_user_by_email(db, &email).await?.is_some() {
+            return Err(AuthError::Validation("email is already registered".into()));
+        }
+        let now = unix_now()?;
+        let user = UserRow {
+            id: Uuid::new_v4(),
+            email,
+            password_hash: password_hash.to_owned(),
+            is_active,
+            is_staff,
+            is_superuser: false,
+            created_at: now,
+            updated_at: now,
+            last_login: None,
+        };
+        store::insert_user(db, &user).await?;
+        Ok(public_user(&user))
+    }
+
+    pub async fn update_profile_on(
+        &self,
+        db: &impl ConnectionTrait,
+        actor: Uuid,
+        id: Uuid,
+        email: &str,
+        is_active: bool,
+        is_staff: bool,
+    ) -> Result<PublicUser, AuthError> {
+        let user = store::find_user_by_id(db, id)
+            .await?
+            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
+        if user.is_superuser || (actor == id && (!is_active || !is_staff)) {
+            return Err(AuthError::Forbidden);
+        }
+        let email = normalize_email(email)?;
+        if let Some(existing) = store::find_user_by_email(db, &email).await? {
+            if existing.id != user.id {
+                return Err(AuthError::Validation("email is already registered".into()));
+            }
+        }
+        let now = unix_now()?;
+        store::update_profile(db, user.id, &email, is_active, is_staff, now).await?;
+        if !is_active {
+            store::revoke_user_sessions(db, user.id, now).await?;
+        }
+        Ok(PublicUser {
+            id: user.id,
+            email,
+            is_active,
+            is_staff,
+            is_superuser: false,
+        })
+    }
+
+    pub async fn reset_password_hash_on(
+        &self,
+        db: &impl ConnectionTrait,
+        id: Uuid,
+        password_hash: &str,
+    ) -> Result<(), AuthError> {
+        let user = store::find_user_by_id(db, id)
+            .await?
+            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
+        if user.is_superuser {
+            return Err(AuthError::Forbidden);
+        }
+        let now = unix_now()?;
+        store::update_password(db, user.id, password_hash, now).await?;
+        store::revoke_user_sessions(db, user.id, now).await?;
+        Ok(())
+    }
+
+    pub async fn set_active_on(
+        &self,
+        db: &impl ConnectionTrait,
+        id: Uuid,
+        active: bool,
+    ) -> Result<(), AuthError> {
+        let user = store::find_user_by_id(db, id)
+            .await?
+            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
+        if user.is_superuser {
+            return Err(AuthError::Forbidden);
+        }
+        let now = unix_now()?;
+        store::set_active(db, user.id, active, now).await?;
+        if !active {
+            store::revoke_user_sessions(db, user.id, now).await?;
+        }
+        Ok(())
+    }
+
+    pub async fn set_staff_on(
+        &self,
+        db: &impl ConnectionTrait,
+        actor: Uuid,
+        id: Uuid,
+        staff: bool,
+    ) -> Result<(), AuthError> {
+        let user = store::find_user_by_id(db, id)
+            .await?
+            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
+        if user.is_superuser || (actor == id && !staff) {
+            return Err(AuthError::Forbidden);
+        }
+        let now = unix_now()?;
+        store::set_staff(db, id, staff, now).await
+    }
+
+    pub async fn assign_role_on(
+        &self,
+        db: &impl ConnectionTrait,
+        email: &str,
+        role: &str,
+    ) -> Result<Uuid, AuthError> {
+        let email = normalize_email(email)?;
+        let user = store::find_user_by_email(db, &email)
+            .await?
+            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
+        let role_name = require_ident(role, "role")?;
+        let role_id = store::ensure_named_row(db, ROLES, "name", &role_name).await?;
+        store::link_rows(db, USER_ROLES, "user_id", user.id, "role_id", role_id).await?;
+        Ok(user.id)
+    }
+
+    pub async fn revoke_role_on(
+        &self,
+        db: &impl ConnectionTrait,
+        email: &str,
+        role: &str,
+    ) -> Result<Uuid, AuthError> {
+        let email = normalize_email(email)?;
+        let user = store::find_user_by_email(db, &email)
+            .await?
+            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
+        let role_name = require_ident(role, "role")?;
+        let Some(role_id) = store::find_named_row(db, ROLES, "name", &role_name).await? else {
+            return Ok(user.id);
+        };
+        store::unlink_rows(db, USER_ROLES, "user_id", user.id, "role_id", role_id).await?;
+        Ok(user.id)
+    }
+
+    pub async fn grant_permission_on(
+        &self,
+        db: &impl ConnectionTrait,
+        role: &str,
+        code: &str,
+    ) -> Result<(), AuthError> {
+        let role_name = require_ident(role, "role")?;
+        validate_permission_code(code)?;
+        let role_id = store::ensure_named_row(db, ROLES, "name", &role_name).await?;
+        let permission_id = store::ensure_named_row(db, PERMISSIONS, "code", code).await?;
+        store::link_rows(
+            db,
+            ROLE_PERMISSIONS,
+            "role_id",
+            role_id,
+            "permission_id",
+            permission_id,
+        )
+        .await
+    }
+
+    pub async fn revoke_permission_on(
+        &self,
+        db: &impl ConnectionTrait,
+        role: &str,
+        code: &str,
+    ) -> Result<(), AuthError> {
+        let role_name = require_ident(role, "role")?;
+        validate_permission_code(code)?;
+        let Some(role_id) = store::find_named_row(db, ROLES, "name", &role_name).await? else {
+            return Ok(());
+        };
+        let Some(permission_id) = store::find_named_row(db, PERMISSIONS, "code", code).await?
+        else {
+            return Ok(());
+        };
+        store::unlink_rows(
+            db,
+            ROLE_PERMISSIONS,
+            "role_id",
+            role_id,
+            "permission_id",
+            permission_id,
+        )
+        .await
     }
 
     pub async fn list_roles(&self) -> Result<Vec<(Uuid, String)>, AuthError> {
@@ -569,6 +820,21 @@ impl AuthService {
             return Err(AuthError::Unauthenticated);
         }
         Ok(session)
+    }
+
+    pub(crate) fn note_attempt(&self, key: &str, max: u32) -> Result<bool, AuthError> {
+        let mut guard = self
+            .limiter
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let now = unix_now()?;
+        let hits = guard.entry(key.to_owned()).or_default();
+        hits.retain(|at| now.saturating_sub(*at) < self.config.login_window_secs);
+        if hits.len() as u32 >= max {
+            return Ok(true);
+        }
+        hits.push(now);
+        Ok(false)
     }
 
     fn limited(&self, key: &str) -> Result<bool, AuthError> {

@@ -23,8 +23,18 @@ fn seal(command: &mut Command) -> &mut Command {
     );
     command
         .env("DATABASE_URL", url)
+        .env("CARGO_BUILD_JOBS", nested_build_jobs())
         .env_remove("FERRUM_E2E_DATABASE")
         .env_remove("FERRUM_PASSWORD")
+}
+
+/// Deckt verschachtelte Cargo-Builds ab. rustc 1.98.1 ist hier bei einem unbegrenzten Release-Build mit 0xc0000005 und 0xc0000409 abgestürzt. Die Ursache ist nicht aufgeklärt. Mit höchstens zwei Jobs bestanden der begrenzte und der anschließende uneingeschränkte Workspace-Lauf. Ein bereits kleineres Limit bleibt erhalten.
+fn nested_build_jobs() -> String {
+    let configured = std::env::var("CARGO_BUILD_JOBS")
+        .ok()
+        .and_then(|value| value.parse::<usize>().ok())
+        .unwrap_or(2);
+    configured.clamp(1, 2).to_string()
 }
 
 fn cleanup_isolated_databases() {
@@ -104,6 +114,7 @@ fn generated_api_and_fullstack_projects_compile() {
     let root = std::env::temp_dir().join(format!("ferrum-gen-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
+    // Ein Target nur für diesen Prozess. Die Builds laufen nacheinander, nicht parallel.
     let target = root.join("shared-target");
     let repo = repository();
     assert!(create(&root, "demo_api", "api", &repo).status.success());

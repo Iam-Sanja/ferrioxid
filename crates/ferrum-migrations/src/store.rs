@@ -47,6 +47,11 @@ pub enum MakeOutcome {
     },
 }
 
+pub fn sha256_hex(bytes: &[u8]) -> String {
+    let digest = Sha256::digest(bytes);
+    digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
 pub fn checksum_of(file: &MigrationFile) -> Result<String, MigrationError> {
     let body = ChecksumBody {
         format_version: file.format_version,

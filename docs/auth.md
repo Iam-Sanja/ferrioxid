@@ -6,6 +6,8 @@
 
 Ferrum prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferrum-auth` hängt nicht an der HTML-Oberfläche. Der Admin ruft dieselben Methoden auf. Generierte CRUD-Routen nutzen dieselbe Prüfung. Auth-Fehler laufen über `problem_json`. `Invalid email or password` bleibt für unbekannte Benutzer und falsche Passwörter gleich und trägt `auth.invalid_credentials`. Das Verzeichnis hängt Rollennamen an, ohne `PublicUser` von `/auth/me` zu verändern.
 
+Admin-Änderungen an Benutzern, Rollen und Rechten laufen über `*_on` in einer Transaktion mit dem Audit. Sitzungswiderruf bei Passwort und Deaktivierung gehört dazu. Die CLI-Methoden bleiben ohne dieses Audit. Siehe [admin-directory-audit.md](admin-directory-audit.md). Ein vergessenes Passwort setzt der Benutzer selbst zurück: [password-reset.md](password-reset.md). Der Versand liegt in [mail.md](mail.md).
+
 ## Architektur
 
 `ferrum-auth` hängt von `ferrum-core`, `ferrum-db` und `ferrum-migrations` ab, nicht von `ferrum-api`. `ferrum-api` hängt von `ferrum-auth` und registriert die Auth-Routen zusammen mit den Modellrouten. Die CLI ruft dieselben Service-Methoden auf.
@@ -21,6 +23,8 @@ Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Di
 | `crates/ferrum-auth/src/store.rs` | SeaQuery gegen die Auth-Tabellen |
 | `crates/ferrum-auth/src/schema.rs` | Snapshot und Migration |
 | `crates/ferrum-auth/src/routes.rs` | `/auth/*` |
+| `crates/ferrum-auth/src/recovery.rs` | Reset-Anforderung, Austausch und Abschluss |
+| `crates/ferrum-auth/migrations/0004_password_reset.json` | Token-Hash, Austausch-Hash, Outbox |
 | `crates/ferrum-auth/migrations/0001_auth_schema.json` | Versiegeltes Schema |
 | `crates/ferrum-api/src/lib.rs` | Guard vor generierten Routen |
 
@@ -30,6 +34,7 @@ Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Di
 - `AuthService::create_user`, `list_users`, `set_user_active`
 - `login`, `logout`, `authenticate_token`, `change_password`, `rotate_session`
 - `authorize`, `ensure_role`, `grant_permission`, `revoke_permission`, `assign_role`, `revoke_role`
+- `request_reset`, `exchange_token`, `complete_reset`
 - `apply_migrations`
 - `App::with_auth`, `App::register`, `App::register_policy`
 
@@ -88,8 +93,8 @@ Die Antwort setzt `Set-Cookie: ferrum_session=...` und liefert `user` plus `csrf
 
 ## Einschränkungen
 
-- Das Rate-Limit liegt im Prozess. Mehrere Prozesse teilen es nicht. Die Map kann später ersetzt werden.
-- Es gibt kein E-Mail-Reset, kein MFA, kein OAuth und kein JWT für externe APIs.
+- Das Rate-Limit liegt im Prozess. Mehrere Prozesse teilen es nicht. Die Map kann später ersetzt werden. Der Reset nutzt eigene Schlüssel und dasselbe Fenster.
+- Es gibt kein MFA, kein OAuth und kein JWT für externe APIs. Der E-Mail-Reset ist in v0.23 vorhanden und garantiert die Zustellung nicht.
 - `is_active` ist nötig für eine Sitzung. Ein inaktives Konto wird bei der Anmeldung abgelehnt.
 - `is_staff` öffnet die Verwaltung und umgeht keine Modellrechte.
 - `is_superuser` umgeht Rollen und Objektregeln, ersetzt `is_staff` aber nicht. Ein Superuser ohne Staff erhält im Admin 403 und kann sich dort abmelden.
@@ -97,7 +102,7 @@ Die Antwort setzt `Set-Cookie: ferrum_session=...` und liefert `user` plus `csrf
 
 ## Geplante Erweiterungen
 
-Mehrprozess-Rate-Limit, Passwort-Reset, MFA und OAuth bleiben späteren Versionen vorbehalten.
+Mehrprozess-Rate-Limit, MFA und OAuth bleiben späteren Versionen vorbehalten. Der Passwort-Reset ist umgesetzt.
 
 ## Admin und CSRF-Bootstrap
 

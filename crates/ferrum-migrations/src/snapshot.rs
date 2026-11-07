@@ -16,6 +16,9 @@ pub enum LogicalType {
     String,
     I64,
     Bool,
+    Date,
+    Time,
+    DateTime,
 }
 
 impl From<ColumnKind> for LogicalType {
@@ -25,6 +28,9 @@ impl From<ColumnKind> for LogicalType {
             ColumnKind::Text => Self::String,
             ColumnKind::BigInt => Self::I64,
             ColumnKind::Boolean => Self::Bool,
+            ColumnKind::Date => Self::Date,
+            ColumnKind::Time => Self::Time,
+            ColumnKind::DateTime => Self::DateTime,
         }
     }
 }
@@ -36,6 +42,9 @@ impl From<LogicalType> for ColumnKind {
             LogicalType::String => Self::Text,
             LogicalType::I64 => Self::BigInt,
             LogicalType::Bool => Self::Boolean,
+            LogicalType::Date => Self::Date,
+            LogicalType::Time => Self::Time,
+            LogicalType::DateTime => Self::DateTime,
         }
     }
 }

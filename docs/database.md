@@ -6,6 +6,8 @@
 
 `_ferrum_users`, `_ferrum_sessions`, `_ferrum_roles`, `_ferrum_permissions`, `_ferrum_user_roles` und `_ferrum_role_permissions` liegen in `ferrum-auth` und nutzen SeaQuery auf derselben Verbindung. Sie sind keine `FerrumModel`-CRUD-Modelle, damit `password_hash` nicht als REST-Ressource erscheint. Zeitstempel sind `i64`. UUID ist in SQLite Text und in PostgreSQL der UUID-Typ. Die Introspektion übergeht Tabellennamen mit Präfix `_ferrum_`.
 
+SQLite nutzt `max_connections(1)`. Während einer Schreibtransaktion darf kein Aufruf eine zweite Verbindung aus demselben Pool verlangen. `conclude` und die `*_in`-Methoden stehen in [transactions.md](transactions.md).
+
 ## Verantwortung (IST)
 
 - `connect(url)` öffnet SeaORM. URLs mit `sqlite:` setzen den Pool auf eine Verbindung und aktivieren `PRAGMA foreign_keys=ON`.
@@ -30,7 +32,7 @@ pub trait ModelRepository: FerrumModel + Serialize + DeserializeOwned {
 
 ## Dialekt und Typen (IST)
 
-`DatabaseKind` ist `Sqlite` oder `Postgres`. `ColumnSpec` beschreibt Name, `ColumnKind`, Nullbarkeit, Primärschlüssel und ein optionales Bool-Default. Das Makro legt diese Metadaten fest. `render_schema` baut daraus `CREATE TABLE IF NOT EXISTS`.
+`DatabaseKind` ist `Sqlite` oder `Postgres`. `ColumnSpec` beschreibt Name, `ColumnKind`, Nullbarkeit, Primärschlüssel und ein optionales Bool-Default. `ColumnKind` umfasst `Uuid`, `Text`, `BigInt`, `Boolean`, `Date`, `Time` und `DateTime`. SQLite legt die drei Zeittypen als Text ab. PostgreSQL nutzt `DATE`, `TIME` und `TIMESTAMPTZ`. Das Makro legt diese Metadaten fest. `render_schema` baut daraus `CREATE TABLE IF NOT EXISTS`. Details stehen in [date-time-types.md](date-time-types.md).
 
 | Modelltyp | PostgreSQL | SQLite | JSON-API |
 |---|---|---|---|

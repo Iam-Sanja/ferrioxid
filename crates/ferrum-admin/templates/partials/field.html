@@ -11,6 +11,10 @@
 <span>{{ field.label }} {% if field.required %}<span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %}<span class="hint">{{ i18n.optional }}</span>{% endif %}</span>
 </label>
 {% if field.hint %}<p class="hint" id="{{ field.name }}-hint">{{ field.hint }}</p>{% endif %}
+{% elif field.kind == "textarea" %}
+<label for="{{ field.name }}">{{ field.label }} {% if field.required %}<span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %}<span class="hint">{{ i18n.optional }}</span>{% endif %}</label>
+{% if field.hint %}<p class="hint" id="{{ field.name }}-hint">{{ field.hint }}</p>{% endif %}
+<textarea id="{{ field.name }}" name="{{ field.name }}" {% if field.required %}required{% endif %} {% if field.invalid %}aria-invalid="true"{% endif %} {% if field.hint and field.error %}aria-describedby="{{ field.name }}-hint {{ field.name }}-error"{% elif field.error %}aria-describedby="{{ field.name }}-error"{% elif field.hint %}aria-describedby="{{ field.name }}-hint"{% endif %}>{{ field.value }}</textarea>
 {% elif field.kind == "select" %}
 <label for="{{ field.name }}">{{ field.label }} {% if field.required %}<span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %}<span class="hint">{{ i18n.optional }}</span>{% endif %}</label>
 {% if field.hint %}<p class="hint" id="{{ field.name }}-hint">{{ field.hint }}</p>{% endif %}

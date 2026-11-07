@@ -17,7 +17,7 @@ use axum::routing::{get, post};
 use axum::Router;
 use ferrum_auth::{AppState, AuthConfig, AuthError, AuthUser, CookieSameSite};
 use ferrum_core::{ColumnKind, ColumnSpec, FerrumError};
-use ferrum_db::{delete_record, get_record, query_labels, update_record};
+use ferrum_db::{date_buckets, delete_record, get_record, query_labels, update_record};
 use ferrum_forms::{
     reject_unknown, require_confirmation, required_bool, required_text, FormValues, TextSpec,
 };
@@ -86,6 +86,10 @@ pub fn routes(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSt
                 post(permission_change),
             )
             .route("/admin/directory/assignments", post(assignment))
+            .route(
+                "/admin/pages/{key}",
+                get(crate::pages::show).post(crate::pages::submit),
+            )
             .layer(Extension(registry)),
     )
 }
@@ -378,6 +382,7 @@ async fn dashboard(
         }
     }
     let csrf = session_csrf(auth, &headers).await;
+    let nav = crate::pages::visible_nav(&state, &user, &registry, &locale, "/admin").await;
     page(
         &registry,
         "dashboard.html",
@@ -396,7 +401,7 @@ async fn dashboard(
             query.get("notice").map(String::as_str).unwrap_or(""),
         ),
         "",
-        json!({ "models": models, "user_email": user.email }),
+        json!({ "models": models, "user_email": user.email, "nav_custom": nav }),
     )
 }
 
@@ -481,7 +486,12 @@ async fn model_list(
             .await;
         }
     };
-    let filters = match filters_from(raw.as_deref().unwrap_or(""), model.columns(), model.meta()) {
+    let filters = match filters_from(
+        raw.as_deref().unwrap_or(""),
+        model.columns(),
+        model.meta(),
+        registry.filters(),
+    ) {
         Ok(filters) => filters,
         Err(_) => {
             return error_page(
@@ -523,6 +533,34 @@ async fn model_list(
         .await;
     }
     let scope = access_scope(model.as_ref(), &user, false);
+    let navigation = match date_navigation(
+        &state,
+        model.as_ref(),
+        &locale,
+        &params,
+        &search_columns,
+        (!query.is_empty()).then_some(query.as_str()),
+        &filter_refs,
+        &scope,
+        &format!("/admin/models/{model_key}"),
+    )
+    .await
+    {
+        Ok(value) => value,
+        Err(()) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await;
+        }
+    };
     let page_size = u64::from(model.meta().per_page.clamp(1, 100));
     let listed = model
         .page(
@@ -532,6 +570,7 @@ async fn model_list(
             &sort,
             descending,
             &filter_refs,
+            &navigation.bounds,
             u64::from(page_number - 1) * page_size,
             page_size,
             &scope,
@@ -667,6 +706,7 @@ async fn model_list(
             params.get("notice").map(String::as_str).unwrap_or(""),
         )
     };
+    let nav = crate::pages::visible_nav(&state, &user, &registry, &locale, &list_path).await;
     page(
         &registry,
         "list.html",
@@ -689,6 +729,7 @@ async fn model_list(
             "dir": if params.contains_key("dir") { if descending { "desc" } else { "asc" }.to_owned() } else { String::new() },
             "filters": filters,
             "filtering": filtering,
+            "hierarchy": navigation.view,
             "can_create": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "create").await.is_ok(),
             "can_update": can_update,
             "can_delete": can_delete,
@@ -698,7 +739,8 @@ async fn model_list(
             "shown": rows.len(),
             "page": page_number,
             "previous": (page_number > 1).then(|| format!("{list_path}?{preserved}&page={}", page_number - 1)),
-            "next_page": has_more.then(|| format!("{list_path}?{preserved}&page={}", page_number + 1))
+            "next_page": has_more.then(|| format!("{list_path}?{preserved}&page={}", page_number + 1)),
+            "nav_custom": nav
         }),
     )
 }
@@ -1443,13 +1485,8 @@ async fn permission_change(
         .await;
     }
     let auth = state.auth.as_ref().unwrap();
-    let result = if form.get("action").map(String::as_str) == Some("grant") {
-        auth.ensure_permission(&code)
-            .await
-            .and(auth.grant_permission(&role, &code).await)
-    } else {
-        auth.revoke_permission(&role, &code).await
-    };
+    let grant = form.get("action").map(String::as_str) == Some("grant");
+    let result = crate::directory::grant_permission(auth, user.id, &role, &code, grant).await;
     if result.is_err() {
         return error_page(
             &state,
@@ -1525,11 +1562,14 @@ async fn assignment(
         )
         .await;
     }
-    let result = if form.get("action").map(String::as_str) == Some("revoke") {
-        auth.revoke_role(&email, &role).await
-    } else {
-        auth.assign_role(&email, &role).await
-    };
+    let result = crate::directory::assign_role(
+        auth,
+        user.id,
+        &email,
+        &role,
+        form.get("action").map(String::as_str) != Some("revoke"),
+    )
+    .await;
     if result.is_err() {
         return error_page(
             &state,
@@ -1543,23 +1583,6 @@ async fn assignment(
         )
         .await;
     }
-    let _ = audit::insert(
-        &state.db,
-        &Event {
-            actor_id: user.id,
-            model_key: "_ferrum_users".to_owned(),
-            record_id: email,
-            action: if form.get("action").map(String::as_str) == Some("revoke") {
-                "role_revoke"
-            } else {
-                "role_assign"
-            }
-            .to_owned(),
-            outcome: "ok".to_owned(),
-            summary: role,
-        },
-    )
-    .await;
     redirect("/admin/directory/users?notice=updated")
 }
 
@@ -1787,6 +1810,7 @@ async fn pick_page(
             label,
             false,
             &[],
+            &[],
             u64::from(page_number - 1) * page_size,
             page_size,
             &scope,
@@ -1950,11 +1974,26 @@ async fn form_page(
     let csrf = session_csrf(state.auth.as_ref().unwrap(), headers).await;
     let fields = input_fields(&locale, registry, state, &user, model.as_ref(), &values).await;
     let sections = form_sections(model.meta(), &fields);
+    let (inline_groups, basis) = if model.meta().inlines.iter().any(|item| item.form) {
+        crate::compose::groups(
+            &state.db,
+            state.auth.as_ref().unwrap(),
+            &user,
+            model.as_ref(),
+            |key| registry.find(key).cloned(),
+            id,
+            &values,
+        )
+        .await
+    } else {
+        (Vec::new(), String::new())
+    };
     let action = custom_action.unwrap_or_else(|| match id {
         Some(id) => format!("/admin/models/{model_key}/{id}/edit"),
         None => format!("/admin/models/{model_key}/new"),
     });
     let list_path = back.clone();
+    let nav = crate::pages::visible_nav(state, &user, registry, &locale, &back).await;
     let cancel = values
         .get("_cancel")
         .and_then(Value::as_str)
@@ -1982,7 +2021,10 @@ async fn form_page(
             "action": action,
             "cancel": cancel,
             "draft": draft_id,
-            "sections": sections
+            "sections": sections,
+            "inline_groups": inline_groups,
+            "basis": basis,
+            "nav_custom": nav
         }),
     )
 }
@@ -2047,8 +2089,27 @@ async fn save_form(
         .await;
     }
     let form = parse_form(body);
-    let (object, mut raw) = payload(model.meta(), model.columns(), &form);
-    if let Err(message) = reject_locked(model.meta(), &object, id.is_none()) {
+    let (mut object, mut raw) = payload(model.meta(), model.columns(), &form);
+    if let Err((field, code)) = normalize_temporal(model.columns(), &mut object) {
+        let text = validation_text(&locale, code);
+        raw.insert("__error".into(), json!({ "field": field, "text": text }));
+        return form_page(
+            state,
+            headers,
+            registry,
+            model_key,
+            id,
+            raw,
+            FormFeedback {
+                notice: "",
+                alert: &text,
+            },
+        )
+        .await;
+    }
+    if let Err(message) = reject_locked(model.meta(), &object, id.is_none())
+        .and_then(|()| crate::widgets::enforce(registry.widgets(), model.meta().key, &object))
+    {
         let text = validation_text(&locale, &message);
         return form_page(
             state,
@@ -2065,6 +2126,32 @@ async fn save_form(
         .await;
     }
     let save = form.get("save").map(String::as_str).unwrap_or("detail");
+    let formed = model.meta().inlines.iter().any(|item| item.form);
+    if formed && save == "rows" {
+        return match crate::compose::store_extra(&state.db, &user, model.as_ref(), id, &form).await
+        {
+            Ok(draft) => {
+                let target = match id {
+                    Some(id) => format!("/admin/models/{model_key}/{id}/edit?draft={draft}"),
+                    None => format!("/admin/models/{model_key}/new?draft={draft}"),
+                };
+                redirect(&target)
+            }
+            Err(_) => {
+                error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "inline_limit",
+                    true,
+                    &user.email,
+                )
+                .await
+            }
+        };
+    }
     if !matches!(save, "detail" | "edit" | "new") {
         return error_page(
             state,
@@ -2098,6 +2185,105 @@ async fn save_form(
             },
         )
         .await;
+    }
+    if formed {
+        return match crate::compose::save(
+            &state.db,
+            state.auth.as_ref().unwrap(),
+            &user,
+            model.as_ref(),
+            |key| registry.find(key).cloned(),
+            id,
+            object,
+            &form,
+        )
+        .await
+        {
+            crate::compose::SaveResult::Saved(saved) => {
+                if let Some(token) = form
+                    .get("_draft")
+                    .and_then(|value| Uuid::parse_str(value).ok())
+                {
+                    let _ = drafts::delete(&state.db, token, user.session_id, user.id).await;
+                }
+                let notice = if id.is_some() { "saved" } else { "created" };
+                let target = match save {
+                    "edit" => format!("/admin/models/{model_key}/{saved}/edit?notice={notice}"),
+                    "new" => format!("/admin/models/{model_key}/new?notice={notice}"),
+                    _ => format!("/admin/models/{model_key}/{saved}?notice={notice}"),
+                };
+                redirect(&target)
+            }
+            crate::compose::SaveResult::Invalid(values) => {
+                let text = validation_text(
+                    &locale,
+                    values
+                        .get("__error")
+                        .and_then(|value| value.get("text"))
+                        .and_then(|value| value.as_str())
+                        .unwrap_or("validation.inline_failed"),
+                );
+                let mut response = form_page(
+                    state,
+                    headers,
+                    registry,
+                    model_key,
+                    id,
+                    values,
+                    FormFeedback {
+                        notice: "",
+                        alert: &text,
+                    },
+                )
+                .await;
+                *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
+                response
+            }
+            crate::compose::SaveResult::Conflict(values) => {
+                let text = validation_text(&locale, "conflict.stale");
+                let mut response = form_page(
+                    state,
+                    headers,
+                    registry,
+                    model_key,
+                    id,
+                    values,
+                    FormFeedback {
+                        notice: "",
+                        alert: &text,
+                    },
+                )
+                .await;
+                *response.status_mut() = StatusCode::CONFLICT;
+                response
+            }
+            crate::compose::SaveResult::Missing => {
+                error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::NOT_FOUND,
+                    "not_found",
+                    true,
+                    &user.email,
+                )
+                .await
+            }
+            crate::compose::SaveResult::Denied => {
+                error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::FORBIDDEN,
+                    "forbidden",
+                    true,
+                    &user.email,
+                )
+                .await
+            }
+        };
     }
     let result = if let Some(id) = id {
         if read_visible(state, &user, model.as_ref(), id, "update")
@@ -2317,7 +2503,33 @@ async fn input_fields(
                 _ => false,
             }
         });
-        if column.foreign_table.is_some() {
+        if let Some(widget) = registry
+            .widgets()
+            .iter()
+            .find(|widget| widget.model_key == model.meta().key && widget.field == field.name)
+        {
+            if matches!(widget.kind, crate::widgets::WidgetKind::Readonly) {
+                fields.push(json!({
+                    "name": field.name,
+                    "label": field.label,
+                    "fieldset": field.fieldset,
+                    "kind": "readonly",
+                    "required": false,
+                    "invalid": false,
+                    "error": "",
+                    "hint": "",
+                    "pick": "",
+                    "value": display_cell(locale, registry.branding().currency.as_str(), field.name, &current),
+                    "raw": "",
+                    "locked": false,
+                    "checked": false
+                }));
+                continue;
+            }
+            let (kind, input_type) = crate::widgets::presentation(widget.kind);
+            input["kind"] = json!(kind);
+            input["input"] = json!(input_type);
+        } else if column.foreign_table.is_some() {
             input["kind"] = json!("select");
             input["options"] = relation_options(
                 registry,
@@ -2334,9 +2546,20 @@ async fn input_fields(
             input["kind"] = json!("text");
             input["input"] = json!(match column.kind {
                 ColumnKind::BigInt => "number",
-                ColumnKind::Uuid => "text",
-                _ => "text",
+                ColumnKind::Date => "date",
+                ColumnKind::Time => "time",
+                ColumnKind::DateTime => "datetime-local",
+                ColumnKind::Uuid | ColumnKind::Text | ColumnKind::Boolean => "text",
             });
+            if column.kind == ColumnKind::DateTime {
+                if let Some(text) = input["value"].as_str() {
+                    input["value"] = json!(ferrum_core::temporal::datetime_local_value(text));
+                }
+                input["hint"] = json!(catalog(locale)
+                    .get("utc_hint")
+                    .and_then(Value::as_str)
+                    .unwrap_or("UTC"));
+            }
         }
         fields.push(input);
     }
@@ -2372,7 +2595,7 @@ async fn relation_options(
     };
     let scope = access_scope(target.as_ref(), user, false);
     let Ok((rows, _, _)) = target
-        .page(&state.db, &[], None, label, false, &[], 0, 100, &scope)
+        .page(&state.db, &[], None, label, false, &[], &[], 0, 100, &scope)
         .await
     else {
         return json!([]);
@@ -2534,6 +2757,10 @@ fn payload(
             continue;
         }
         if key == "_draft" {
+            raw.insert(key.clone(), json!(value));
+            continue;
+        }
+        if key.starts_with("inline_") || key.starts_with("extra_") || key == "basis" {
             raw.insert(key.clone(), json!(value));
             continue;
         }
@@ -2760,6 +2987,9 @@ async fn filter_inputs(
             ),
             Some(column) if column.kind == ColumnKind::Boolean => ("boolean", json!([])),
             Some(column) if column.kind == ColumnKind::BigInt => ("number", json!([])),
+            Some(column) if column.kind == ColumnKind::Date => ("date", json!([])),
+            Some(column) if column.kind == ColumnKind::Time => ("time", json!([])),
+            Some(column) if column.kind == ColumnKind::DateTime => ("datetime", json!([])),
             _ => ("text", json!([])),
         };
         let value = if kind == "boolean" {
@@ -2776,6 +3006,40 @@ async fn filter_inputs(
             "label": field.label,
             "kind": kind,
             "value": value,
+            "options": options,
+            "yes": catalog(locale)["yes"].as_str().unwrap_or("Yes"),
+            "no": catalog(locale)["no"].as_str().unwrap_or("No")
+        }));
+    }
+    for filter in registry
+        .filters()
+        .iter()
+        .filter(|filter| filter.model_key == meta.key)
+    {
+        let raw = params
+            .get(&format!("filter.{}", filter.name))
+            .cloned()
+            .unwrap_or_default();
+        let (kind, options) = match &filter.kind {
+            crate::filters::FilterKind::Choice { options, .. } => (
+                "choice",
+                options
+                    .iter()
+                    .map(|option| {
+                        json!({
+                            "id": option.value,
+                            "label": if locale == "de" { option.label_de } else { option.label_en }
+                        })
+                    })
+                    .collect::<Vec<_>>(),
+            ),
+            crate::filters::FilterKind::Equals { .. } => ("text", Vec::new()),
+        };
+        filters.push(json!({
+            "name": filter.name,
+            "label": filter.label(locale),
+            "kind": kind,
+            "value": raw,
             "options": options,
             "yes": catalog(locale)["yes"].as_str().unwrap_or("Yes"),
             "no": catalog(locale)["no"].as_str().unwrap_or("No")
@@ -3100,17 +3364,19 @@ async fn user_create(
         )
         .await;
     }
-    let created = auth
-        .create_directory_user(
-            email.as_ref().unwrap(),
-            password,
-            active.unwrap(),
-            staff.unwrap(),
-        )
-        .await;
+    let created = crate::directory::create_user(
+        auth,
+        actor.id,
+        email.as_ref().unwrap(),
+        password,
+        active.unwrap(),
+        staff.unwrap(),
+        &roles,
+    )
+    .await;
     let created = match created {
         Ok(user) => user,
-        Err(AuthError::Validation(message)) if message.contains("password") => {
+        Err(ferrum_core::FerrumError::Validation(message)) if message.contains("password") => {
             let text = catalog(&locale)["password_invalid"]
                 .as_str()
                 .unwrap_or("The password must contain 12 to 128 characters.")
@@ -3119,7 +3385,7 @@ async fn user_create(
             draft.password_error = text.clone();
             return user_form(&state, &headers, &registry, None, Some(draft), &text).await;
         }
-        Err(AuthError::Validation(_)) => {
+        Err(ferrum_core::FerrumError::Validation(_)) => {
             let text = catalog(&locale)["email_taken"]
                 .as_str()
                 .unwrap_or("That email is already registered.")
@@ -3142,33 +3408,6 @@ async fn user_create(
             .await
         }
     };
-    for role in roles {
-        if auth.assign_role(&created.email, &role).await.is_err() {
-            return error_page(
-                &state,
-                &headers,
-                &registry,
-                &locale,
-                StatusCode::UNPROCESSABLE_ENTITY,
-                "unknown_role",
-                true,
-                &actor.email,
-            )
-            .await;
-        }
-    }
-    let _ = audit::insert(
-        &state.db,
-        &Event {
-            actor_id: actor.id,
-            model_key: "_ferrum_users".to_owned(),
-            record_id: created.id.to_string(),
-            action: "user_create".to_owned(),
-            outcome: "ok".to_owned(),
-            summary: created.email.clone(),
-        },
-    )
-    .await;
     redirect(&format!(
         "/admin/directory/users/{}?notice=created",
         created.id
@@ -3383,23 +3622,9 @@ async fn user_update(
         )
         .await;
     }
-    match auth.update_profile(id, &email, active, staff).await {
-        Ok(_) => {
-            let _ = audit::insert(
-                &state.db,
-                &Event {
-                    actor_id: actor.id,
-                    model_key: "_ferrum_users".to_owned(),
-                    record_id: id.to_string(),
-                    action: "user_update".to_owned(),
-                    outcome: "ok".to_owned(),
-                    summary: email,
-                },
-            )
-            .await;
-            redirect(&format!("/admin/directory/users/{id}?notice=updated"))
-        }
-        Err(AuthError::Forbidden) => {
+    match crate::directory::update_user(auth, actor.id, id, &email, active, staff).await {
+        Ok(_) => redirect(&format!("/admin/directory/users/{id}?notice=updated")),
+        Err(ferrum_core::FerrumError::Forbidden) => {
             error_page(
                 &state,
                 &headers,
@@ -3412,7 +3637,7 @@ async fn user_update(
             )
             .await
         }
-        Err(AuthError::Validation(message)) if message.contains("email") => {
+        Err(ferrum_core::FerrumError::Validation(message)) if message.contains("email") => {
             let text = catalog(&locale)["email_taken"]
                 .as_str()
                 .unwrap_or("That email is already registered.")
@@ -3531,27 +3756,15 @@ async fn user_password(
         )
         .await;
     }
-    match auth.reset_password(id, password).await {
+    match crate::directory::reset_password(auth, actor.id, id, password).await {
         Ok(()) => {
-            let _ = audit::insert(
-                &state.db,
-                &Event {
-                    actor_id: actor.id,
-                    model_key: "_ferrum_users".to_owned(),
-                    record_id: id.to_string(),
-                    action: "password_reset".to_owned(),
-                    outcome: "ok".to_owned(),
-                    summary: String::new(),
-                },
-            )
-            .await;
             if actor.id == id {
                 redirect("/admin/login")
             } else {
                 redirect(&format!("/admin/directory/users/{id}?notice=updated"))
             }
         }
-        Err(AuthError::Forbidden) => {
+        Err(ferrum_core::FerrumError::Forbidden) => {
             error_page(
                 &state,
                 &headers,
@@ -3564,7 +3777,7 @@ async fn user_password(
             )
             .await
         }
-        Err(AuthError::Validation(_)) => {
+        Err(ferrum_core::FerrumError::Validation(_)) => {
             let text = catalog(&locale)["password_invalid"]
                 .as_str()
                 .unwrap_or("The password must contain 12 to 128 characters.")
@@ -3847,11 +4060,21 @@ async fn mutate_user(
         .await;
     }
     let result = if active_flag {
-        auth.set_user_active(&target.email, form_flag(&form, "active").unwrap_or(false))
-            .await
+        crate::directory::set_active(
+            auth,
+            user.id,
+            id,
+            form_flag(&form, "active").unwrap_or(false),
+        )
+        .await
     } else {
-        auth.set_staff(id, form_flag(&form, "staff").unwrap_or(false))
-            .await
+        crate::directory::set_staff(
+            auth,
+            user.id,
+            id,
+            form_flag(&form, "staff").unwrap_or(false),
+        )
+        .await
     };
     if result.is_err() {
         return error_page(
@@ -3866,23 +4089,11 @@ async fn mutate_user(
         )
         .await;
     }
-    let _ = audit::insert(
-        &state.db,
-        &Event {
-            actor_id: user.id,
-            model_key: "_ferrum_users".to_owned(),
-            record_id: id.to_string(),
-            action: "user_update".to_owned(),
-            outcome: "ok".to_owned(),
-            summary: String::new(),
-        },
-    )
-    .await;
     redirect("/admin/directory/users?notice=updated")
 }
 
 #[allow(clippy::result_large_err)]
-async fn require_get(
+pub(crate) async fn require_get(
     state: &AppState,
     headers: &HeaderMap,
     registry: &AdminRegistry,
@@ -3922,7 +4133,11 @@ async fn require_get(
     }
 }
 
-async fn require_post(state: &AppState, headers: &HeaderMap, body: &Bytes) -> Result<AuthUser, ()> {
+pub(crate) async fn require_post(
+    state: &AppState,
+    headers: &HeaderMap,
+    body: &Bytes,
+) -> Result<AuthUser, ()> {
     let Some(auth) = state.auth.as_ref() else {
         return Err(());
     };
@@ -4372,6 +4587,7 @@ async fn inline_create(
                 action: "create".to_owned(),
                 outcome: "denied".to_owned(),
                 summary: String::new(),
+                operation_id: None,
             },
         )
         .await;
@@ -4606,6 +4822,10 @@ async fn audit_page(
                 "record": event.record_id,
                 "record_short": event.record_id.chars().take(8).collect::<String>(),
                 "ok": event.outcome == "ok",
+                "operation": event
+                    .operation_id
+                    .map(|id| id.to_string().chars().take(8).collect::<String>())
+                    .unwrap_or_default(),
                 "summary": event.summary
             })
         })
@@ -4675,6 +4895,14 @@ fn draft_values(
         }
         if columns.iter().any(|column| column.name == field.name) {
             values.insert(field.name.to_owned(), json!(value));
+        }
+    }
+    for (key, value) in form {
+        if (key.starts_with("inline_") || key.starts_with("extra_") || key == "basis")
+            && value.chars().count() <= 2_000
+            && !key.contains("password")
+        {
+            values.insert(key.clone(), json!(value));
         }
     }
     values
@@ -4782,6 +5010,7 @@ async fn inline_sections(
                 "id",
                 false,
                 &filters,
+                &[],
                 u64::from(page_number - 1) * limit,
                 limit,
                 &scope,
@@ -4828,7 +5057,7 @@ async fn inline_sections(
         sections.push(json!({
             "label": child.meta().label,
             "rows": rendered,
-            "add": can_create.then(|| format!("/admin/models/{}/{parent_id}/inline/{}/new", parent.meta().key, spec.name)),
+            "add": (can_create && !spec.form).then(|| format!("/admin/models/{}/{parent_id}/inline/{}/new", parent.meta().key, spec.name)),
             "next": has_more.then(|| format!("/admin/models/{}/{parent_id}?inline.{}={}", parent.meta().key, spec.name, page_number + 1))
         }));
     }
@@ -4949,6 +5178,7 @@ async fn stage_bulk(
             &String::from_utf8_lossy(body),
             model.columns(),
             model.meta(),
+            registry.filters(),
         ) {
             Ok(filters) => filters,
             Err(_) => {
@@ -4987,6 +5217,7 @@ async fn stage_bulk(
                 &sort,
                 descending,
                 &filters,
+                &[],
                 u64::from(page_number - 1) * page_size,
                 page_size,
                 &access_scope(model.as_ref(), &user, true),
@@ -5352,6 +5583,7 @@ async fn apply_bulk(
                 .to_owned(),
                 outcome: "denied".to_owned(),
                 summary: String::new(),
+                operation_id: None,
             },
         )
         .await;
@@ -5450,8 +5682,65 @@ async fn apply_bulk(
             } else {
                 "bulk_update"
             };
+            if let ActionOperation::Custom(custom) = &action.operation {
+                let records: Vec<Value> = rows.iter().map(|(_, row)| row.clone()).collect();
+                let mut context = crate::actions::ActionContext::prepare(
+                    custom.columns,
+                    model.columns(),
+                    model.meta(),
+                    &records,
+                );
+                if custom.handler.apply(&mut context).await.is_err() {
+                    return Err((StatusCode::UNPROCESSABLE_ENTITY, "bulk_failed"));
+                }
+                for write in context.planned() {
+                    let body = match &write.value {
+                        crate::actions::ActionValue::Text(text) => json!({ write.column: text }),
+                        crate::actions::ActionValue::Integer(number) => {
+                            json!({ write.column: number })
+                        }
+                        crate::actions::ActionValue::Boolean(flag) => json!({ write.column: flag }),
+                    };
+                    let before = rows
+                        .iter()
+                        .find(|(id, _)| *id == write.id)
+                        .map(|(_, row)| row);
+                    let after = match model.update_in(&txn, write.id, body, &scope, user).await {
+                        Ok(row) => row,
+                        Err(FerrumError::Validation(_))
+                        | Err(FerrumError::Denied(_))
+                        | Err(FerrumError::NotFound) => {
+                            return Err((StatusCode::UNPROCESSABLE_ENTITY, "bulk_failed"));
+                        }
+                        Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed")),
+                    };
+                    let summary = audit::change_summary(model.meta(), before, Some(&after));
+                    if audit::insert(
+                        &txn,
+                        &Event {
+                            actor_id: user.id,
+                            model_key: model.meta().key.to_owned(),
+                            record_id: write.id.to_string(),
+                            action: audit_action.to_owned(),
+                            outcome: "ok".to_owned(),
+                            summary,
+                            operation_id: None,
+                        },
+                    )
+                    .await
+                    .is_err()
+                    {
+                        return Err((StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed"));
+                    }
+                }
+                let count = rows.len();
+                txn.commit()
+                    .await
+                    .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed"))?;
+                return Ok(count);
+            }
             for (id, before) in &rows {
-                let after = match action.operation {
+                let after = match &action.operation {
                     ActionOperation::Delete => {
                         match delete_record(
                             &txn,
@@ -5475,7 +5764,7 @@ async fn apply_bulk(
                             model.descriptor().table,
                             model.columns(),
                             *id,
-                            vec![(column, DbValue::from(value))],
+                            vec![(*column, DbValue::from(*value))],
                             &scope,
                         )
                         .await
@@ -5485,6 +5774,9 @@ async fn apply_bulk(
                                 return Err((StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed"))
                             }
                         }
+                    }
+                    ActionOperation::Custom(_) => {
+                        return Err((StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed"))
                     }
                 };
                 let summary = audit::change_summary(model.meta(), Some(before), after.as_ref());
@@ -5497,6 +5789,7 @@ async fn apply_bulk(
                         action: audit_action.to_owned(),
                         outcome: "ok".to_owned(),
                         summary,
+                        operation_id: None,
                     },
                 )
                 .await
@@ -5536,7 +5829,7 @@ async fn apply_bulk(
 }
 
 #[allow(clippy::too_many_arguments)]
-fn page(
+pub(crate) fn page(
     registry: &AdminRegistry,
     template: &str,
     locale: &str,
@@ -5582,7 +5875,12 @@ fn page(
             target.insert(key.clone(), item.clone());
         }
     }
-    match render(template, value) {
+    if value.get("nav_custom").is_none() {
+        if let Some(target) = value.as_object_mut() {
+            target.insert("nav_custom".to_owned(), Value::Array(Vec::new()));
+        }
+    }
+    match render(template, value, registry.templates()) {
         Ok(body) => Html(body).into_response(),
         Err(error) => {
             tracing::error!(%error, "admin template failed");
@@ -5592,7 +5890,7 @@ fn page(
 }
 
 #[allow(clippy::too_many_arguments)]
-async fn error_page(
+pub(crate) async fn error_page(
     state: &AppState,
     headers: &HeaderMap,
     registry: &AdminRegistry,
@@ -5680,14 +5978,18 @@ impl IntoResponse for Html {
     }
 }
 
-fn locale_of(headers: &HeaderMap, default_locale: &str, fallback_locale: &str) -> String {
+pub(crate) fn locale_of(
+    headers: &HeaderMap,
+    default_locale: &str,
+    fallback_locale: &str,
+) -> String {
     let requested = cookie(headers, "ferrum_locale")
         .or_else(|| accept_language(headers))
         .unwrap_or_default();
     normalize(&requested, default_locale, fallback_locale)
 }
 
-fn theme_of(headers: &HeaderMap) -> String {
+pub(crate) fn theme_of(headers: &HeaderMap) -> String {
     match cookie(headers, "ferrum_theme").as_deref() {
         Some("light") => "light".to_owned(),
         Some("dark") => "dark".to_owned(),
@@ -5706,7 +6008,7 @@ fn accept_language(headers: &HeaderMap) -> Option<String> {
     }
 }
 
-async fn session_csrf(auth: &ferrum_auth::AuthService, headers: &HeaderMap) -> String {
+pub(crate) async fn session_csrf(auth: &ferrum_auth::AuthService, headers: &HeaderMap) -> String {
     auth.csrf_from_request(headers).await.unwrap_or_default()
 }
 
@@ -5862,7 +6164,7 @@ fn append_cookie(response: &mut Response, value: &str) {
     }
 }
 
-fn parse_form(body: &Bytes) -> HashMap<String, String> {
+pub(crate) fn parse_form(body: &Bytes) -> HashMap<String, String> {
     let mut values = HashMap::new();
     for pair in String::from_utf8_lossy(body).split('&') {
         if pair.is_empty() {
@@ -6029,6 +6331,232 @@ fn url_encode(value: &str) -> String {
         }
     }
     output
+}
+
+struct DateNavigation {
+    bounds: Vec<(&'static str, bool, DbValue)>,
+    view: Value,
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn date_navigation(
+    state: &AppState,
+    model: &dyn ManagedModel,
+    locale: &str,
+    params: &HashMap<String, String>,
+    search_columns: &[&str],
+    search: Option<&str>,
+    filters: &[(&str, DbValue)],
+    scope: &ferrum_core::QueryScope,
+    list_path: &str,
+) -> Result<DateNavigation, ()> {
+    let Some(column) = model.meta().date_hierarchy else {
+        return Ok(DateNavigation {
+            bounds: Vec::new(),
+            view: Value::Null,
+        });
+    };
+    let kind = model
+        .columns()
+        .iter()
+        .find(|item| item.name == column)
+        .map(|item| item.kind)
+        .ok_or(())?;
+    let year = optional_number(params, "year")?;
+    let month = optional_number(params, "month")?;
+    let day = optional_number(params, "day")?;
+    if month.is_some() && year.is_none() || day.is_some() && month.is_none() {
+        return Err(());
+    }
+    let mut bounds = Vec::new();
+    if let Some(year) = year {
+        if !(1..=9999).contains(&year) {
+            return Err(());
+        }
+        let bound = ferrum_core::hierarchy_bound(year as i32, month, day).map_err(|_| ())?;
+        let (start, end) = match kind {
+            ColumnKind::Date => (DbValue::from(bound.start), DbValue::from(bound.end)),
+            ColumnKind::DateTime => (
+                DbValue::from(bound.start.and_hms_opt(0, 0, 0).ok_or(())?.and_utc()),
+                DbValue::from(bound.end.and_hms_opt(0, 0, 0).ok_or(())?.and_utc()),
+            ),
+            _ => return Err(()),
+        };
+        bounds.push((column, true, start));
+        bounds.push((column, false, end));
+    }
+    let width = if year.is_none() {
+        4
+    } else if month.is_none() {
+        7
+    } else if day.is_none() {
+        10
+    } else {
+        0
+    };
+    let buckets = if width == 0 {
+        Vec::new()
+    } else {
+        date_buckets(
+            &state.db,
+            model.descriptor().table,
+            model.columns(),
+            column,
+            width,
+            search_columns,
+            search,
+            filters,
+            &bounds,
+            scope,
+        )
+        .await
+        .map_err(|_| ())?
+    };
+    let root = hierarchy_href(list_path, params, None, None, None);
+    let mut crumbs = Vec::new();
+    if let Some(year) = year {
+        crumbs.push(json!({
+            "label": year.to_string(),
+            "href": hierarchy_href(list_path, params, Some(year), None, None)
+        }));
+    }
+    if let (Some(year), Some(month)) = (year, month) {
+        crumbs.push(json!({
+            "label": month_name(locale, month),
+            "href": hierarchy_href(list_path, params, Some(year), Some(month), None)
+        }));
+    }
+    let items: Vec<Value> = buckets
+        .into_iter()
+        .filter_map(|(label, count)| {
+            let (text, href) = match width {
+                4 => {
+                    let value = label.parse::<u32>().ok()?;
+                    (
+                        label,
+                        hierarchy_href(list_path, params, Some(value), None, None),
+                    )
+                }
+                7 => {
+                    let month = label.get(5..7)?.parse::<u32>().ok()?;
+                    (
+                        month_name(locale, month),
+                        hierarchy_href(list_path, params, year, Some(month), None),
+                    )
+                }
+                _ => {
+                    let day = label.get(8..10)?.parse::<u32>().ok()?;
+                    (
+                        day.to_string(),
+                        hierarchy_href(list_path, params, year, month, Some(day)),
+                    )
+                }
+            };
+            Some(json!({ "label": text, "href": href, "count": count }))
+        })
+        .collect();
+    let field = model
+        .meta()
+        .fields
+        .iter()
+        .find(|field| field.name == column)
+        .map(|field| field.label)
+        .unwrap_or(column);
+    Ok(DateNavigation {
+        bounds,
+        view: json!({
+            "field": field,
+            "root": root,
+            "crumbs": crumbs,
+            "items": items
+        }),
+    })
+}
+
+fn optional_number(params: &HashMap<String, String>, key: &str) -> Result<Option<u32>, ()> {
+    match params.get(key).map(String::as_str) {
+        None | Some("") => Ok(None),
+        Some(value) => value.parse::<u32>().map(Some).map_err(|_| ()),
+    }
+}
+
+fn month_name(locale: &str, month: u32) -> String {
+    catalog(locale)
+        .get(format!("month_{month}"))
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned()
+}
+
+fn hierarchy_href(
+    list_path: &str,
+    params: &HashMap<String, String>,
+    year: Option<u32>,
+    month: Option<u32>,
+    day: Option<u32>,
+) -> String {
+    let mut pairs = Vec::new();
+    for (key, value) in params {
+        if matches!(
+            key.as_str(),
+            "page" | "notice" | "changed" | "year" | "month" | "day"
+        ) {
+            continue;
+        }
+        pairs.push(format!("{}={}", url_encode(key), url_encode(value)));
+    }
+    if let Some(year) = year {
+        pairs.push(format!("year={year}"));
+    }
+    if let Some(month) = month {
+        pairs.push(format!("month={month}"));
+    }
+    if let Some(day) = day {
+        pairs.push(format!("day={day}"));
+    }
+    if pairs.is_empty() {
+        list_path.to_owned()
+    } else {
+        format!("{list_path}?{}", pairs.join("&"))
+    }
+}
+
+fn normalize_temporal(
+    columns: &[ColumnSpec],
+    object: &mut Map<String, Value>,
+) -> Result<(), (String, &'static str)> {
+    for column in columns {
+        let Some(value) = object.get(column.name).cloned() else {
+            continue;
+        };
+        if value.is_null() {
+            continue;
+        }
+        let Some(text) = value.as_str() else {
+            continue;
+        };
+        if text.is_empty() {
+            if column.nullable {
+                object.insert(column.name.to_owned(), Value::Null);
+            }
+            continue;
+        }
+        let canonical = match column.kind {
+            ColumnKind::Date => ferrum_core::parse_date(text)
+                .map(ferrum_core::temporal::format_date)
+                .map_err(|code| (column.name.to_owned(), code))?,
+            ColumnKind::Time => ferrum_core::parse_time(text)
+                .map(ferrum_core::temporal::format_time)
+                .map_err(|code| (column.name.to_owned(), code))?,
+            ColumnKind::DateTime => ferrum_core::parse_datetime_local(text)
+                .or_else(|_| ferrum_core::parse_datetime_utc(text))
+                .map(ferrum_core::temporal::format_datetime)
+                .map_err(|code| (column.name.to_owned(), code))?,
+            _ => continue,
+        };
+        object.insert(column.name.to_owned(), json!(canonical));
+    }
+    Ok(())
 }
 
 fn flash(locale: &str, code: &str) -> String {

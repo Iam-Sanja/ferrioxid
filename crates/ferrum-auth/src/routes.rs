@@ -16,6 +16,7 @@ use axum::extract::ConnectInfo;
 pub struct AppState {
     pub db: sea_orm::DatabaseConnection,
     pub auth: Option<AuthService>,
+    pub mail: Option<ferrum_mail::MailService>,
 }
 
 #[derive(Deserialize)]
@@ -37,6 +38,18 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         .route("/auth/me", get(me))
         .route("/auth/csrf", get(csrf))
         .route("/auth/change-password", post(change_password))
+        .route(
+            "/auth/password-reset",
+            get(crate::recovery::show_request).post(crate::recovery::submit_request),
+        )
+        .route(
+            "/auth/password-reset/confirm",
+            get(crate::recovery::confirm_token),
+        )
+        .route(
+            "/auth/password-reset/choose",
+            get(crate::recovery::show_choose).post(crate::recovery::submit_choose),
+        )
 }
 
 pub struct ClientIp(pub String);

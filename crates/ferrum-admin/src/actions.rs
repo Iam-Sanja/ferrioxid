@@ -1,11 +1,216 @@
 //! Registrierte Sammelaktionen. Der HTTP-Name wählt nur einen bekannten Eintrag.
 
 use ferrum_core::{AdminModelMeta, ColumnKind, ColumnSpec};
+use serde_json::Value;
+use std::sync::Arc;
+use uuid::Uuid;
 
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+use crate::views::{valid_key, valid_label, ExtensionError};
+
+#[derive(Clone)]
 pub enum ActionOperation {
     Delete,
     SetBool { column: &'static str, value: bool },
+    Custom(CustomAction),
+}
+
+impl std::fmt::Debug for ActionOperation {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::Delete => write!(formatter, "Delete"),
+            Self::SetBool { column, value } => formatter
+                .debug_struct("SetBool")
+                .field("column", column)
+                .field("value", value)
+                .finish(),
+            Self::Custom(_) => write!(formatter, "Custom"),
+        }
+    }
+}
+
+impl PartialEq for ActionOperation {
+    fn eq(&self, other: &Self) -> bool {
+        match (self, other) {
+            (Self::Delete, Self::Delete) => true,
+            (
+                Self::SetBool {
+                    column: left,
+                    value: left_value,
+                },
+                Self::SetBool {
+                    column: right,
+                    value: right_value,
+                },
+            ) => left == right && left_value == right_value,
+            _ => false,
+        }
+    }
+}
+
+impl Eq for ActionOperation {}
+
+#[derive(Clone)]
+pub struct CustomAction {
+    pub(crate) columns: &'static [&'static str],
+    pub(crate) handler: Arc<dyn ActionHandler>,
+}
+
+#[derive(Clone, Debug)]
+pub enum ActionValue {
+    Text(String),
+    Integer(i64),
+    Boolean(bool),
+}
+
+#[derive(Clone, Debug)]
+pub(crate) struct PlannedWrite {
+    pub id: Uuid,
+    pub column: &'static str,
+    pub value: ActionValue,
+}
+
+/// Geprüfte Auswahl einer atomaren Aktion. Der Handler erhält keine Datenbankverbindung.
+pub struct ActionContext<'a> {
+    allowed: &'static [&'static str],
+    specs: &'a [ColumnSpec],
+    meta: &'a AdminModelMeta,
+    records: &'a [Value],
+    planned: Vec<PlannedWrite>,
+}
+
+impl<'a> ActionContext<'a> {
+    pub(crate) fn prepare(
+        allowed: &'static [&'static str],
+        specs: &'a [ColumnSpec],
+        meta: &'a AdminModelMeta,
+        records: &'a [Value],
+    ) -> Self {
+        Self {
+            allowed,
+            specs,
+            meta,
+            records,
+            planned: Vec::new(),
+        }
+    }
+
+    pub fn records(&self) -> &'a [Value] {
+        self.records
+    }
+
+    pub fn ids(&self) -> Vec<Uuid> {
+        self.records
+            .iter()
+            .filter_map(|record| {
+                record
+                    .get("id")
+                    .and_then(Value::as_str)
+                    .and_then(|text| Uuid::parse_str(text).ok())
+            })
+            .collect()
+    }
+
+    pub fn set_text(
+        &mut self,
+        id: Uuid,
+        column: &'static str,
+        value: impl Into<String>,
+    ) -> Result<(), ActionError> {
+        self.push(
+            id,
+            column,
+            ActionValue::Text(value.into()),
+            ColumnKind::Text,
+        )
+    }
+
+    pub fn set_integer(
+        &mut self,
+        id: Uuid,
+        column: &'static str,
+        value: i64,
+    ) -> Result<(), ActionError> {
+        self.push(id, column, ActionValue::Integer(value), ColumnKind::BigInt)
+    }
+
+    pub fn set_bool(
+        &mut self,
+        id: Uuid,
+        column: &'static str,
+        value: bool,
+    ) -> Result<(), ActionError> {
+        self.push(id, column, ActionValue::Boolean(value), ColumnKind::Boolean)
+    }
+
+    pub(crate) fn planned(&self) -> &[PlannedWrite] {
+        &self.planned
+    }
+
+    fn push(
+        &mut self,
+        id: Uuid,
+        column: &'static str,
+        value: ActionValue,
+        kind: ColumnKind,
+    ) -> Result<(), ActionError> {
+        if !self.ids().contains(&id) {
+            return Err(ActionError::new(
+                "extension.action",
+                "record is outside the selection",
+            ));
+        }
+        if !self.allowed.contains(&column) {
+            return Err(ActionError::new(
+                "extension.action",
+                "column is not declared",
+            ));
+        }
+        let allowed = self
+            .specs
+            .iter()
+            .any(|spec| spec.name == column && spec.kind == kind)
+            && self.meta.fields.iter().any(|field| {
+                field.name == column && !field.hidden && !field.sensitive && !field.readonly
+            });
+        if !allowed {
+            return Err(ActionError::new(
+                "extension.action",
+                "column is not writable",
+            ));
+        }
+        if let ActionValue::Text(text) = &value {
+            if text.chars().count() > 4000 {
+                return Err(ActionError::new("extension.action", "value is too long"));
+            }
+        }
+        self.planned.push(PlannedWrite { id, column, value });
+        Ok(())
+    }
+}
+
+#[derive(Debug)]
+pub struct ActionError {
+    pub code: &'static str,
+    pub detail: &'static str,
+}
+
+impl ActionError {
+    pub const fn new(code: &'static str, detail: &'static str) -> Self {
+        Self { code, detail }
+    }
+}
+
+impl std::fmt::Display for ActionError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(formatter, "{}: {}", self.code, self.detail)
+    }
+}
+
+impl std::error::Error for ActionError {}
+
+#[async_trait::async_trait]
+pub trait ActionHandler: Send + Sync {
+    async fn apply(&self, context: &mut ActionContext) -> Result<(), ActionError>;
 }
 
 #[derive(Debug, Clone)]
@@ -102,16 +307,115 @@ fn accepts(action: &AdminAction, meta: &AdminModelMeta, columns: &[ColumnSpec]) 
     if action.max_ids == 0 || action.max_ids > 100 || !action.confirm {
         return false;
     }
-    match action.operation {
+    match &action.operation {
         ActionOperation::Delete => action.permission == "delete",
         ActionOperation::SetBool { column, .. } => {
             action.permission == "update"
                 && columns.iter().any(|spec| {
-                    spec.name == column && spec.kind == ColumnKind::Boolean && !spec.primary_key
+                    spec.name == *column && spec.kind == ColumnKind::Boolean && !spec.primary_key
                 })
                 && meta.fields.iter().any(|field| {
-                    field.name == column && !field.hidden && !field.sensitive && !field.readonly
+                    field.name == *column && !field.hidden && !field.sensitive && !field.readonly
                 })
         }
+        ActionOperation::Custom(custom) => {
+            action.permission == "update"
+                && !custom.columns.is_empty()
+                && custom
+                    .columns
+                    .iter()
+                    .all(|column| writable(meta, columns, column))
+        }
     }
+}
+
+pub(crate) fn writable(meta: &AdminModelMeta, columns: &[ColumnSpec], column: &str) -> bool {
+    columns
+        .iter()
+        .any(|spec| spec.name == column && !spec.primary_key)
+        && meta.fields.iter().any(|field| {
+            field.name == column && !field.hidden && !field.sensitive && !field.readonly
+        })
+}
+
+impl AdminAction {
+    pub fn custom(
+        model_key: &'static str,
+        name: &'static str,
+        handler: Arc<dyn ActionHandler>,
+    ) -> Self {
+        Self {
+            model_key,
+            name,
+            label_de: name,
+            label_en: name,
+            permission: "update",
+            confirm: true,
+            max_ids: 100,
+            operation: ActionOperation::Custom(CustomAction {
+                columns: &[],
+                handler,
+            }),
+        }
+    }
+
+    pub fn labels(mut self, german: &'static str, english: &'static str) -> Self {
+        self.label_de = german;
+        self.label_en = english;
+        self
+    }
+
+    /// Spalten, die der Handler über den Aktionskontext setzen darf.
+    pub fn writes(mut self, columns: &'static [&'static str]) -> Self {
+        if let ActionOperation::Custom(custom) = &mut self.operation {
+            custom.columns = columns;
+        }
+        self
+    }
+}
+
+pub(crate) fn check_custom(action: &AdminAction) -> Result<(), ExtensionError> {
+    if !valid_key(action.model_key) || !valid_name(action.name) {
+        return Err(ExtensionError::new(
+            "extension.action",
+            "Aktionsname oder Modellname ist ungültig.",
+        ));
+    }
+    if matches!(action.name, "delete" | "activate" | "deactivate") {
+        return Err(ExtensionError::new(
+            "extension.action",
+            "Der Aktionsname ist reserviert.",
+        ));
+    }
+    if !action.confirm || action.max_ids == 0 || action.max_ids > 100 {
+        return Err(ExtensionError::new(
+            "extension.action",
+            "Eine eigene Aktion bestätigt höchstens 100 Datensätze.",
+        ));
+    }
+    if !valid_label(action.label_de) || !valid_label(action.label_en) {
+        return Err(ExtensionError::new(
+            "extension.action",
+            "Die Aktionsbeschriftung ist leer oder enthält Steuerzeichen.",
+        ));
+    }
+    let ActionOperation::Custom(custom) = &action.operation else {
+        return Err(ExtensionError::new(
+            "extension.action",
+            "try_action erwartet eine eigene Aktion.",
+        ));
+    };
+    if action.permission != "update" || custom.columns.is_empty() {
+        return Err(ExtensionError::new(
+            "extension.action",
+            "Eine eigene Aktion schreibt mit dem Recht update in deklarierte Spalten.",
+        ));
+    }
+    if custom.columns.iter().any(|column| !valid_key(column)) {
+        return Err(ExtensionError::new(
+            "extension.action",
+            "Eine Schreibspalte ist kein Feldname.",
+        ));
+    }
+    Ok(())
 }

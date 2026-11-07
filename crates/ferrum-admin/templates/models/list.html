@@ -22,8 +22,17 @@
 <option value="{{ option.id }}" {% if option.id == filter.value %}selected{% endif %}>{{ option.label }}</option>
 {% endfor %}
 </select>
+{% elif filter.kind == "choice" %}
+<select name="filter.{{ filter.name }}">
+<option value="">{{ i18n.all }}</option>
+{% for option in filter.options %}
+<option value="{{ option.id }}" {% if option.id == filter.value %}selected{% endif %}>{{ option.label }}</option>
+{% endfor %}
+</select>
 {% elif filter.kind == "number" %}
 <input name="filter.{{ filter.name }}" type="number" inputmode="numeric" value="{{ filter.value }}">
+{% elif filter.kind == "date" or filter.kind == "time" or filter.kind == "datetime" %}
+<input name="filter.{{ filter.name }}" type="{% if filter.kind == "date" %}date{% elif filter.kind == "time" %}time{% else %}datetime-local{% endif %}" value="{{ filter.value }}">
 {% else %}
 <input name="filter.{{ filter.name }}" value="{{ filter.value }}">
 {% endif %}
@@ -37,6 +46,21 @@
 </form>
 {% if can_create %}<a class="button" href="{{ list_path }}/new">{{ i18n.new_record }}</a>{% endif %}
 </div>
+{% if hierarchy %}
+<nav class="hierarchy" aria-label="{{ i18n.date_hierarchy }}">
+<p>
+{% if hierarchy.crumbs | length > 0 %}<a href="{{ hierarchy.root }}">{{ hierarchy.field }}</a>{% else %}<span>{{ hierarchy.field }}</span>{% endif %}
+{% for crumb in hierarchy.crumbs %} / <a href="{{ crumb.href }}">{{ crumb.label }}</a>{% endfor %}
+</p>
+{% if hierarchy.items | length > 0 %}
+<ul>
+{% for item in hierarchy.items %}
+<li><a href="{{ item.href }}">{{ item.label }}</a> <span class="meta">{{ item.count }}</span></li>
+{% endfor %}
+</ul>
+{% endif %}
+</nav>
+{% endif %}
 <p class="meta">{{ i18n.total }}: {{ total }} · {{ i18n.results }}: {{ shown }} · {{ i18n.page }} {{ page }}</p>
 {% if rows | length == 0 %}
 <div class="empty-state">

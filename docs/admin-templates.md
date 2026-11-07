@@ -50,4 +50,4 @@ Die Rollenzuweisung sendet `email` und `role` aus Auswahllisten. Der Handler wei
 
 ## Bekannte Lücken
 
-`errors/error.html` zeigt bei einer Sitzung ein POST-Abmeldeformular. Ohne Sitzung verlinkt sie auf die Anmeldung. `directory/users.html` weist Rollen über ein `<select>` zu. Die Werkzeugleiste trennt Suche und Filter von „Neu“. Feldgruppen liegen in `partials/field.html`. Die Vorlagennamen bleiben fest. Eine Anfrage darf auch später keinen Vorlagenpfad wählen.
+`errors/error.html` zeigt bei einer Sitzung ein POST-Abmeldeformular. Ohne Sitzung verlinkt sie auf die Anmeldung. `directory/users.html` weist Rollen über ein `<select>` zu. Die Werkzeugleiste trennt Suche und Filter von „Neu“. Feldgruppen liegen in `partials/field.html`. Eingebaute Namen bleiben fest. Eine Anfrage darf keinen Vorlagenpfad wählen. Ein Projekt kann zusätzliche Namen registrieren, beschrieben in [admin-extension-api.md](admin-extension-api.md). Diese Vorlagen erweitern `base.html`, überschreiben sie nicht und dürfen `|safe` nicht verwenden.

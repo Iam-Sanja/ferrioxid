@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Roadmap: [roadmap.md](roadmap.md) · Vergleich: [admin-django-parity.md](admin-django-parity.md)
 
-**Stand der Umsetzung:** v0.18. Abmelden ohne Staff, die Flag-Hinweise, die Standardspalten, die Design-Tokens, die Rollenauswahl, die Benutzerpflege, die serverseitige Bestätigung, lesbare Fremdschlüssel, die Filterauswahl, die Listenkonfiguration, Fieldsets, die Speicherziele, die Auswahlseite, Formularentwürfe, Has-Many-Inlines, Sammelaktionen und die Historie sind umgesetzt. Datum fehlt. Gemeinsames Speichern von Eltern und Kindern fehlt.
+**Stand der Umsetzung:** v0.22. Eigene Seiten, Aktionen, Filter und Widgets sind registrierbar. Die bekannten Abstände und Farben des bestehenden Admins bleiben unverändert. Abmelden ohne Staff, die Flag-Hinweise, die Standardspalten, die Design-Tokens, die Rollenauswahl, die Benutzerpflege, die serverseitige Bestätigung, lesbare Fremdschlüssel, die Filterauswahl, die Listenkonfiguration, Fieldsets, die Speicherziele, die Auswahlseite, Formularentwürfe, Has-Many-Inlines, das opt-in Eltern-Kind-Formular, Sammelaktionen, die Historie, die UTC-Datumshierarchie und das atomare Verzeichnis-Audit sind umgesetzt. Abbrechen löscht einen Entwurf nicht sofort. Many-to-Many und verschachtelte Inlines fehlen.
 
 Impeccable 4.8.0 liegt unter `.cursor/skills/impeccable/`. Für v0.15 wurden Kontext, Critique, Audit, Layout und Feinschliff ausgeführt. Der Bericht steht im Arbeitsgang. Die visuelle Welt bleibt „Die Nachtschicht“ aus `DESIGN.md`.
 

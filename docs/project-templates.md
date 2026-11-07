@@ -31,13 +31,23 @@ meinprojekt/
 ├── .gitignore
 ├── .env.example
 ├── README.md
+├── .ferrum/project.json
 ├── src/main.rs
 ├── src/lib.rs
+├── src/settings.rs
+├── src/urls.rs
+├── src/views/mod.rs
+├── src/views/home.rs
 ├── src/models/mod.rs
 ├── src/models/product.rs
+├── templates/
+├── static/css/
+├── static/js/
 ├── migrations/0001_initial.json
 └── tests/api.rs
 ```
+
+`src/views/` und `templates/home.html` schreibt nur `--template fullstack`. Die API-Vorlage registriert `api.ping` und behält die HTML-Startseite. Die genaue Liste steht in [project-structure.md](project-structure.md). Die Template-Version ist `0.24`.
 
 `Cargo.lock` entsteht beim ersten Cargo-Lauf.
 

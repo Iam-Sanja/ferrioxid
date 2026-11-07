@@ -16,10 +16,24 @@ fn engine() -> &'static Tera {
     })
 }
 
-pub fn render(template: &str, value: Value) -> Result<String, String> {
+pub fn embedded(name: &str) -> bool {
+    TEMPLATES.iter().any(|(template, _)| *template == name)
+}
+
+pub fn render(template: &str, value: Value, extra: &[(&str, &str)]) -> Result<String, String> {
+    if !embedded(template) && !extra.iter().any(|(name, _)| *name == template) {
+        return Err(format!("unknown admin template: {template}"));
+    }
+    let mut tera = engine().clone();
+    for (name, source) in extra {
+        if embedded(name) || !crate::registry::valid_template_name(name) {
+            return Err(format!("rejected admin template: {name}"));
+        }
+        tera.add_raw_template(name, source)
+            .map_err(|error| error.to_string())?;
+    }
     let context = Context::from_serialize(value).map_err(|error| error.to_string())?;
-    engine()
-        .render(template, &context)
+    tera.render(template, &context)
         .map_err(|error| error.to_string())
 }
 
@@ -68,4 +82,5 @@ const TEMPLATES: &[(&str, &str)] = &[
         include_str!("../templates/directory/permissions.html"),
     ),
     ("error.html", include_str!("../templates/errors/error.html")),
+    ("custom.html", include_str!("../templates/custom.html")),
 ];

@@ -7,3 +7,4 @@ license.workspace = true
 [dependencies]
 ferrum-core = { path = "../ferrum-core" }
 uuid.workspace = true
+chrono.workspace = true

@@ -1,6 +1,6 @@
 # ferrum-api – HTTP-Routing und Antwortverträge
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-api/src/lib.rs`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-api/src/lib.rs`. Datumsformate: [date-time-types.md](date-time-types.md). Ungültige Werte bleiben 422 mit `validation.date`, `validation.time`, `validation.datetime` oder `validation.datetime_offset`.
 
 ## Verantwortung (IST)
 

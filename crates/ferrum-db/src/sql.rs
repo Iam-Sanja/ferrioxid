@@ -226,6 +226,24 @@ fn column_definition(kind: DatabaseKind, column: &PhysicalColumn<'_>) -> ColumnD
         (DatabaseKind::Sqlite, ColumnKind::Boolean) => {
             definition.integer();
         }
+        (DatabaseKind::Postgres, ColumnKind::Date) => {
+            definition.date();
+        }
+        (DatabaseKind::Sqlite, ColumnKind::Date) => {
+            definition.text();
+        }
+        (DatabaseKind::Postgres, ColumnKind::Time) => {
+            definition.time();
+        }
+        (DatabaseKind::Sqlite, ColumnKind::Time) => {
+            definition.text();
+        }
+        (DatabaseKind::Postgres, ColumnKind::DateTime) => {
+            definition.timestamp_with_time_zone();
+        }
+        (DatabaseKind::Sqlite, ColumnKind::DateTime) => {
+            definition.text();
+        }
     }
     if !column.nullable {
         definition.not_null();
@@ -300,6 +318,8 @@ pub struct AdminPageRequest<'a> {
     pub sort_column: &'a str,
     pub descending: bool,
     pub equal_filters: &'a [(&'a str, Value)],
+    /// `(column, inclusive_lower, value)`. `inclusive_lower` false means `< value`.
+    pub bounds: &'a [(&'a str, bool, Value)],
     pub offset: u64,
     pub limit: u64,
     pub scope: &'a QueryScope,
@@ -313,7 +333,7 @@ pub struct AdminPage {
 }
 
 pub async fn query_admin_page(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     table: &str,
     columns: &[ColumnSpec],
     request: AdminPageRequest<'_>,
@@ -323,6 +343,9 @@ pub async fn query_admin_page(
         ensure_column(columns, name)?;
     }
     for (name, _) in request.equal_filters {
+        ensure_column(columns, name)?;
+    }
+    for (name, _, _) in request.bounds {
         ensure_column(columns, name)?;
     }
     if request.limit == 0 || request.limit > LIST_LIMIT as u64 {
@@ -343,6 +366,7 @@ pub async fn query_admin_page(
         request.search_columns,
         request.search,
         request.equal_filters,
+        request.bounds,
         request.scope,
     )?;
     let count_row = db
@@ -369,6 +393,7 @@ pub async fn query_admin_page(
         request.search_columns,
         request.search,
         request.equal_filters,
+        request.bounds,
         request.scope,
     )?;
     query.order_by(
@@ -467,12 +492,94 @@ pub async fn query_labels(
     Ok(found)
 }
 
+#[allow(clippy::too_many_arguments)]
+pub async fn date_buckets(
+    db: &DatabaseConnection,
+    table: &str,
+    columns: &[ColumnSpec],
+    column: &str,
+    width: u8,
+    search_columns: &[&str],
+    search: Option<&str>,
+    equal_filters: &[(&str, Value)],
+    bounds: &[(&str, bool, Value)],
+    scope: &QueryScope,
+) -> Result<Vec<(String, i64)>, FerrumError> {
+    if !matches!(width, 4 | 7 | 10) || !is_safe_ident(table) {
+        return Err(FerrumError::Validation("date bucket is invalid".into()));
+    }
+    ensure_column(columns, column)?;
+    let kind = columns
+        .iter()
+        .find(|item| item.name == column)
+        .map(|item| item.kind)
+        .unwrap_or(ColumnKind::Text);
+    let expression = bucket_expression(db.get_database_backend(), kind, column, width);
+    let mut query = Query::select();
+    query
+        .expr_as(Expr::cust(&expression), Alias::new("bucket"))
+        .expr_as(
+            Expr::col(Alias::new("id")).count(),
+            Alias::new("bucket_count"),
+        )
+        .from(Alias::new(table));
+    constrain(
+        &mut query,
+        columns,
+        search_columns,
+        search,
+        equal_filters,
+        bounds,
+        scope,
+    )?;
+    query.add_group_by([Expr::cust(&expression)]);
+    query.order_by_expr(Expr::cust("bucket"), Order::Asc);
+    query.limit(101);
+    let rows = db
+        .query_all(statement(db, &query)?)
+        .await
+        .map_err(FerrumError::database)?;
+    let mut buckets = Vec::new();
+    for row in rows.into_iter().take(100) {
+        let label = row
+            .try_get::<String>("", "bucket")
+            .map_err(FerrumError::database)?;
+        let count = row
+            .try_get::<i64>("", "bucket_count")
+            .or_else(|_| row.try_get::<i32>("", "bucket_count").map(i64::from))
+            .map_err(FerrumError::database)?;
+        buckets.push((label, count));
+    }
+    Ok(buckets)
+}
+
+fn bucket_expression(
+    backend: DatabaseBackend,
+    kind: ColumnKind,
+    column: &str,
+    width: u8,
+) -> String {
+    let format = match width {
+        4 => "YYYY",
+        7 => "YYYY-MM",
+        _ => "YYYY-MM-DD",
+    };
+    match (backend, kind) {
+        (DatabaseBackend::Postgres, ColumnKind::DateTime) => {
+            format!("to_char(\"{column}\" AT TIME ZONE 'UTC', '{format}')")
+        }
+        (DatabaseBackend::Postgres, _) => format!("to_char(\"{column}\", '{format}')"),
+        _ => format!("substr(\"{column}\", 1, {width})"),
+    }
+}
+
 fn constrain(
     query: &mut sea_orm::sea_query::SelectStatement,
     columns: &[ColumnSpec],
     search_columns: &[&str],
     search: Option<&str>,
     equal_filters: &[(&str, Value)],
+    bounds: &[(&str, bool, Value)],
     scope: &QueryScope,
 ) -> Result<(), FerrumError> {
     if let Some(term) = search.filter(|term| !term.is_empty()) {
@@ -491,6 +598,14 @@ fn constrain(
     }
     for (column, value) in equal_filters {
         query.and_where(Expr::col(Alias::new(*column)).eq(value.clone()));
+    }
+    for (column, lower, value) in bounds {
+        let column = Expr::col(Alias::new(*column));
+        if *lower {
+            query.and_where(column.gte(value.clone()));
+        } else {
+            query.and_where(column.lt(value.clone()));
+        }
     }
     if let Some(condition) = scope_condition(columns, scope)? {
         query.and_where(condition);
@@ -741,6 +856,9 @@ fn row_to_json(row: &QueryResult, columns: &[ColumnSpec]) -> Result<Json, Ferrum
             ColumnKind::BigInt => json_int(row, column)?,
             ColumnKind::Boolean => json_bool(row, column)?,
             ColumnKind::Uuid => json_uuid(row, column)?,
+            ColumnKind::Date | ColumnKind::Time | ColumnKind::DateTime => {
+                json_temporal(row, column)?
+            }
         };
         object.insert(column.name.to_owned(), value);
     }
@@ -793,6 +911,49 @@ fn json_bool(row: &QueryResult, column: &ColumnSpec) -> Result<Json, FerrumError
         Some(flag) => Json::Bool(flag != 0),
         None => Json::Null,
     })
+}
+
+fn json_temporal(row: &QueryResult, column: &ColumnSpec) -> Result<Json, FerrumError> {
+    if let Ok(value) = row.try_get::<Option<String>>("", column.name) {
+        return Ok(match value {
+            Some(text) => Json::String(canonical_temporal(&text)),
+            None => Json::Null,
+        });
+    }
+    if let Ok(value) = row.try_get::<Option<chrono::NaiveDate>>("", column.name) {
+        return Ok(match value {
+            Some(date) => Json::String(ferrum_core::temporal::format_date(date)),
+            None => Json::Null,
+        });
+    }
+    if let Ok(value) = row.try_get::<Option<chrono::NaiveTime>>("", column.name) {
+        return Ok(match value {
+            Some(time) => Json::String(ferrum_core::temporal::format_time(time)),
+            None => Json::Null,
+        });
+    }
+    let value = row
+        .try_get::<Option<chrono::DateTime<chrono::Utc>>>("", column.name)
+        .map_err(FerrumError::database)?;
+    Ok(match value {
+        Some(instant) => Json::String(ferrum_core::temporal::format_datetime(instant)),
+        None => Json::Null,
+    })
+}
+
+fn canonical_temporal(text: &str) -> String {
+    if let Ok(date) = ferrum_core::parse_date(text) {
+        return ferrum_core::temporal::format_date(date);
+    }
+    if let Ok(time) = ferrum_core::parse_time(text) {
+        if text.len() <= 8 {
+            return ferrum_core::temporal::format_time(time);
+        }
+    }
+    if let Ok(instant) = ferrum_core::parse_datetime_utc(text) {
+        return ferrum_core::temporal::format_datetime(instant);
+    }
+    text.to_owned()
 }
 
 fn json_uuid(row: &QueryResult, column: &ColumnSpec) -> Result<Json, FerrumError> {

@@ -367,6 +367,11 @@ fn type_compatible(logical: LogicalType, sql_type: &str) -> bool {
         LogicalType::Uuid | LogicalType::String => text,
         LogicalType::I64 => integer,
         LogicalType::Bool => integer || normalized == "boolean" || normalized == "bool",
+        LogicalType::Date => text || normalized == "date",
+        LogicalType::Time => text || normalized == "time" || normalized.starts_with("time "),
+        LogicalType::DateTime => {
+            text || normalized.contains("timestamp") || normalized == "datetime"
+        }
     }
 }
 

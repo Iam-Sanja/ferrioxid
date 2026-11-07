@@ -297,6 +297,31 @@ struct Reply {
     body: String,
 }
 
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_appointments",
+    api = "/api/v1/html_appointments",
+    admin = true,
+    admin_label = "Termine",
+    admin_permission = "appointments",
+    admin_date_hierarchy = "event_date"
+)]
+struct HtmlAppointment {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(required, min_length = 1, max_length = 80)]
+    #[admin(list_display, searchable, label = "Titel")]
+    title: String,
+    #[field(required)]
+    #[admin(list_display, sortable, filterable, label = "Datum")]
+    event_date: NaiveDate,
+    #[admin(label = "Beginn")]
+    start_time: Option<NaiveTime>,
+    #[field(required)]
+    #[admin(label = "Angelegt")]
+    created_at: DateTime<Utc>,
+}
+
 #[tokio::test]
 async fn html_admin_works_without_javascript() {
     let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
@@ -3201,6 +3226,127 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
         "{}",
         staff_history.body
     );
+}
+
+#[tokio::test]
+async fn admin_dates_use_native_inputs_and_utc_hierarchy() {
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
+    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let mut config = AuthConfig::development();
+    config.with_loopback_address(&format!("127.0.0.1:{port}"));
+    let auth = AuthService::new(db.clone(), config);
+    auth.create_user("staff@example.com", "correct-horse-battery", true, true)
+        .await
+        .unwrap();
+    let registry = AdminRegistry::new().add::<HtmlAppointment>();
+    let app = ferrum::App::new(db)
+        .with_auth(auth)
+        .with_admin(registry)
+        .register::<HtmlAppointment>();
+    app.bootstrap_schema().await.unwrap();
+    let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
+    let call = |method: &'static str, path: String, body: Option<String>, extra: String| {
+        tokio::task::spawn_blocking(move || http(port, method, &path, body.as_deref(), &extra))
+    };
+    let login_page = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    let token = cookie_value(&login_page.headers, "ferrum_login_csrf");
+    let signed = call(
+        "POST",
+        "/admin/login".into(),
+        Some(form(&[
+            ("csrf_token", &token),
+            ("email", "staff@example.com"),
+            ("password", "correct-horse-battery"),
+            ("next", "/admin"),
+        ])),
+        format!("Origin: http://127.0.0.1:{port}\r\nCookie: ferrum_login_csrf={token}\r\n"),
+    )
+    .await
+    .unwrap();
+    let session = cookie_value(&signed.headers, "ferrum_session");
+    let cookie = format!("Cookie: ferrum_session={session}\r\n");
+    let form_page = call(
+        "GET",
+        "/admin/models/html_appointments/new".into(),
+        None,
+        cookie.clone(),
+    )
+    .await
+    .unwrap();
+    assert_eq!(form_page.status, 200);
+    assert!(form_page.body.contains("type=\"date\""));
+    assert!(form_page.body.contains("type=\"time\""));
+    assert!(form_page.body.contains("type=\"datetime-local\""));
+    assert!(form_page.body.contains("UTC"));
+    assert!(form_page.body.contains("for=\"event_date\""));
+    let csrf = field_value(&form_page.body, "csrf_token");
+    let invalid = call(
+        "POST",
+        "/admin/models/html_appointments/new".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("title", "Falsch"),
+            ("event_date", "2023-02-29"),
+            ("start_time", ""),
+            ("created_at", "2026-11-07T13:30"),
+            ("save", "detail"),
+        ])),
+        format!("Origin: http://127.0.0.1:{port}\r\n{cookie}"),
+    )
+    .await
+    .unwrap();
+    assert_ne!(invalid.status, 303);
+    assert!(invalid.body.contains("2023-02-29"));
+    let created = call(
+        "POST",
+        "/admin/models/html_appointments/new".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("title", "Fruehstueck"),
+            ("event_date", "2026-11-07"),
+            ("start_time", "08:15"),
+            ("created_at", "2026-11-07T07:15"),
+            ("save", "detail"),
+        ])),
+        format!("Origin: http://127.0.0.1:{port}\r\n{cookie}"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(created.status, 303, "{}", created.body);
+    let list = call(
+        "GET",
+        "/admin/models/html_appointments".into(),
+        None,
+        cookie.clone(),
+    )
+    .await
+    .unwrap();
+    assert!(list.body.contains("Fruehstueck"));
+    assert!(list.body.contains("2026"));
+    assert!(list.body.contains("year=2026"));
+    let year = call(
+        "GET",
+        "/admin/models/html_appointments?year=2026".into(),
+        None,
+        cookie.clone(),
+    )
+    .await
+    .unwrap();
+    assert!(year.body.contains("Fruehstueck"));
+    let empty = call(
+        "GET",
+        "/admin/models/html_appointments?year=1999".into(),
+        None,
+        cookie,
+    )
+    .await
+    .unwrap();
+    assert!(!empty.body.contains("Fruehstueck"));
+    server.abort();
 }
 
 fn http(port: u16, method: &str, path: &str, body: Option<&str>, extra: &str) -> Reply {

@@ -1,37 +1,69 @@
 # Settings
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-migrations/src/project.rs`.
+[Zur Übersicht](index.md) · Eigene Werte: [custom-settings.md](custom-settings.md) · **IST-Datei:** `crates/ferrum-migrations/src/project.rs`.
 
 ## Aufgabe
 
-`ferrum.toml` ist die einzige Projektdatei für Einstellungen. CLI, Generator und die generierte Anwendung lesen dieselben Felder. Secrets stehen nicht in der Datei.
+`ferrum.toml` bleibt die einzige Projektdatei. `Settings` liest sie, prüft die Laufzeit und gibt `ProjectConfig` zurück. Es gibt kein globales Singleton. Secrets stehen in Umgebungsvariablen, nicht in der Datei und nicht in `Debug`.
 
-## Zuständige Dateien
+## Priorität
 
-- `crates/ferrum-migrations/src/project.rs`
-- `crates/ferrum-auth/src/config.rs`
-- `crates/ferrum-cli/src/scaffold.rs`
-- `crates/ferrum-cli/src/diagnose.rs`
+1. Eingebaute Defaults, wenn ein Schlüssel fehlt.
+2. Der Wert aus `ferrum.toml`.
+3. Eine gesetzte Umgebungsvariable ersetzt nur den dafür vorgesehenen Wert.
 
-## Öffentliche Schnittstelle
+Ein unbekannter Abschnitt oder Schlüssel bleibt ein Fehler. Eine Ausnahme ist die Familie `[custom.<name>]`, beschrieben in [custom-settings.md](custom-settings.md). `[custom]` ohne Namen ist ebenfalls ein Fehler.
 
-`ProjectConfig` enthält Projekt, Server, Datenbank, Admin, Auth, Vorlagen und Branding. `resolved_database_url` bevorzugt eine gesetzte `DATABASE_URL`. `AuthConfig::apply_project_session` übernimmt Sitzungsdauer und Leerlauf aus der Datei, sofern `FERRUM_SESSION_HOURS` oder `FERRUM_IDLE_MINUTES` nicht gesetzt sind.
+## Lesen
 
-## Konfiguration
+```rust
+fn load() -> Result<ferrum::migrations::ProjectConfig, Box<dyn std::error::Error>> {
+    let settings = ferrum::migrations::Settings::discover(std::path::Path::new("."))?;
+    let project = settings.project();
+    let _url = project.resolved_database_url();
+    let _address = project.bind_address()?;
+    Ok(project.clone())
+}
+```
 
-Fehlende neue Schlüssel behalten Defaults: Sprache `de` mit Fallback `en`, Sitzung 12 Stunden, Leerlauf 30 Minuten, Vorlagen aus, Farbe `#0f172a`, Währung `EUR`. `branding.currency` muss drei Großbuchstaben sein. Der Admin übernimmt die öffentlichen Werte in `AdminBranding`. `GET /admin/api/config` liefert dieselbe geprüfte Teilmenge. Die HTML-Seiten lesen die Registry, nicht die Datei bei jedem Request. Secrets, Datenbank-URL und Sitzungsschlüssel gehören nicht in diese Antwort. Seit v0.12 gibt es `[static]` und `[storage]`. Ohne Abschnitt bleiben Staticfiles aus und der Speicher lokal unter `media` mit 10 MiB. `storage.backend` ist nur `local`. Präfixe dürfen Admin, API, Auth, Health und Uploads nicht überdecken. Die bisherige Workspace-Datei mit `migrations_dir` und `schema_command` bleibt gültig. Unbekannte Abschnitte und Schlüssel sind Fehler. `server.host` darf nicht `0.0.0.0` sein. `templates.engine` ist `tera`. Sprachen sind derzeit `de` und `en`.
+`discover` sucht `ferrum.toml` vom Startverzeichnis aufwärts und ruft `enforce_runtime` auf. `from_project` prüft eine bereits gelesene `ProjectConfig` erneut. `project()` leiht die Konfiguration aus. Der Generator schreibt dieselbe Folge in `src/settings.rs`.
 
-## Datenfluss
+## Bereiche
 
-Der Generator schreibt die Datei. `discover_project` sucht sie vom Arbeitsverzeichnis aufwärts. Die Anwendung verbindet mit `resolved_database_url` und bindet `BIND_ADDRESS` oder `host:port`.
+Die vorhandenen Bereiche bleiben: `project`, `server`, `database`, `admin`, `auth`, `templates`, `branding`, `static`, `storage`, `mail`. Fehlende neue Schlüssel behalten die bisherigen Defaults: Sprache `de` mit Fallback `en`, Sitzung 12 Stunden, Leerlauf 30 Minuten, Vorlagen aus, Farbe `#0f172a`, Währung `EUR`, Staticfiles aus, lokaler Speicher unter `media` mit 10 MiB, Mail `disabled`.
 
-## Fehlerfälle
+`server.host` darf nicht `0.0.0.0` sein. `templates.engine` ist `tera`. Sprachen sind `de` und `en`. `branding.currency` besteht aus drei Großbuchstaben. `storage.backend` ist `local`. Static-Präfixe dürfen Admin, API, Auth, Health und Uploads nicht überdecken.
 
-Ungültige Farbe, unbekannte Sprache, zu lange Leerlaufzeit, ein absoluter Vorlagenpfad oder `..` im Vorlagenordner brechen das Lesen ab. Die Meldungen nennen den Schlüssel.
+## Umgebung
 
-## Sicherheitsregeln
+| Variable | Wirkung |
+|---|---|
+| `DATABASE_URL` | Ersetzt die Datei-URL, wenn sie nicht leer ist. Der Wert erscheint nicht in `Debug` |
+| `FERRUM_ENV=production` | Schaltet den Produktionsmodus ein. Jeder andere oder fehlende Wert bleibt Entwicklung |
+| `FERRUM_DEBUG` | Nur `true` oder `false`. Ein anderer Wert ist ein Fehler und wird nicht durch die Datei ersetzt |
+| `BIND_ADDRESS` | Ersetzt `host:port`. Ein Wert, der mit `0.0.0.0` beginnt, wird abgelehnt |
+| `FERRUM_PUBLIC_ORIGIN` | Ersetzt `mail.public_origin` erst beim Öffnen des Mail-Dienstes |
+| `FERRUM_SMTP_USERNAME` | SMTP-Benutzer. Fehlt er, bleibt das Feld leer |
+| `FERRUM_SMTP_PASSWORD` | SMTP-Passwort. Es steht nicht in `ferrum.toml` |
+| `FERRUM_SESSION_HOURS` | Ersetzt die Datei, wenn gesetzt. Sonst gilt `auth.session_hours` über `apply_project_session` |
+| `FERRUM_IDLE_MINUTES` | Ersetzt die Datei, wenn gesetzt. Sonst gilt `auth.idle_minutes` |
+| `FERRUM_COOKIE_SECURE` | `1` oder `true` setzt das Secure-Cookie. In Produktion ist der Standard an |
+| `FERRUM_CSRF_SECRET` | 64 Hex-Zeichen in Produktion. Der Wert wird nicht protokolliert |
+| `FERRUM_ALLOWED_ORIGINS` | Kommagetrennte Origins. In Produktion ohne diese Variable ist die Liste leer, bis `apply_bound_address` Loopback setzt |
 
-Keine Passwörter und kein CSRF-Geheimnis in `ferrum.toml`. `doctor` nennt eine gesetzte `DATABASE_URL`, zeigt den Wert aber nicht. Die Datei-URL bleibt SQLite, bis die Umgebung sie ersetzt.
+Eine fehlende optionale Variable behält den Datei- oder Standardwert. Eine fehlende verpflichtende Produktionsangabe bleibt ein Fehler: `FERRUM_DEBUG` mit ungültigem Text, `BIND_ADDRESS` auf `0.0.0.0`, und `server.debug = true` zusammen mit `FERRUM_ENV=production`. Ferrum schaltet Debug in diesem Fall nicht still auf `false`.
+
+## Entwicklung und Produktion
+
+Entwicklung ist der Normalfall. Generierte Projekte setzen `debug = true` und binden `127.0.0.1`. Produktion ist ausschließlich `FERRUM_ENV=production`. Dann lehnt `enforce_runtime` aktives Debug ab. `ferrum check` und `ferrum doctor` rufen dieselbe Prüfung auf und öffnen dafür keine Datenbank- und keine SMTP-Verbindung. Erfolg ist `OK settings.runtime`. Ein Fehler ist `ERROR settings.runtime` und Exitcode 1.
+
+## Debug und Logs
+
+`ProjectConfig` implementiert `Debug` von Hand. Die Datenbank-URL mit Benutzer und Passwort wird `schema://[redacted]@host`. Eine URL mit `password=` wird `[redacted]`. Mail-Passwörter, CSRF-Geheimnisse und Custom-Werte mit `password`, `secret`, `token` oder `credential` im Schlüsselnamen werden beim Lesen abgelehnt, ohne den Wert in die Meldung zu schreiben.
+
+## CLI
+
+`ferrum check` und `ferrum doctor` lesen die Datei, prüfen die Laufzeitregeln und melden eine gesetzte `DATABASE_URL`, ohne sie auszugeben. Eine statische Prüfung verbindet sich nicht.
 
 ## Beispiel
 
@@ -46,12 +78,17 @@ fallback_locale = "en"
 host = "127.0.0.1"
 port = 3000
 debug = true
+
+[database]
+url = "sqlite://db.sqlite3?mode=rwc"
 ```
+
+Die Workspace-Datei mit nur `migrations_dir` und `schema_command` bleibt gültig.
 
 ## Tests
 
-`legacy_manifest_keeps_defaults` und `full_settings_parse_and_unknown_keys_fail` in `project.rs`.
+`legacy_manifest_keeps_defaults`, `full_settings_parse_and_unknown_keys_fail` und `custom_settings_env_and_production_stay_explicit` in `project.rs`.
 
 ## Einschränkungen
 
-Das eingebaute Admin-Frontend liest `site_title` noch nicht aus der Datei. Die Startseite verwendet Branding und Sprache. Weitere Sprachen sind geplant.
+`resolved_database_url` gibt den Umgebungswert an den Aufrufer zurück. Wer ihn loggt, umgeht die Schwärzung. Die HTML-Fehlerseiten der Views sind nicht die Projektvorlagen unter `templates/errors/`.

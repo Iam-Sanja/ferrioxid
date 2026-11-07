@@ -22,7 +22,7 @@ Beide Befehle lesen `ferrum.toml` im Arbeitsverzeichnis oder einem Elternverzeic
 
 ## Konfiguration
 
-`BIND_ADDRESS` und `DATABASE_URL` gelten für den gestarteten Prozess. `ferrum build` und `ferrum dev` starten kein Node.js. Der Admin ist im Rust-Binary enthalten.
+`BIND_ADDRESS` und `DATABASE_URL` gelten für den gestarteten Prozess. Vor dem Build prüft `ferrum dev` die Migrationslage nur lesend. Ausstehende Migrationen oder eine nicht prüfbare Datenbank ergeben eine Warnung und keinen Abbruch. Es wird nichts migriert. `ferrum build` und `ferrum dev` starten kein Node.js. Der Admin ist im Rust-Binary enthalten. Die Warnung beschreibt [migration-diagnostics.md](migration-diagnostics.md).
 
 ## Datenfluss
 

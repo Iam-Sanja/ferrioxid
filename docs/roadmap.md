@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Admin-Vergleich: [admin-django-parity.md](admin-django-parity.md) · UX-Backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
 
-**Stand:** Funktionsstand v0.18. Die Cargo-Version bleibt `0.1.0`. Dieser Text trennt umgesetzte Meilensteine von geplanten Phasen. Eine geplante Phase ist keine Freigabe und kein fertiges Feature.
+**Stand:** Funktionsstand v0.24 ergänzt Settings, benannte Routen und Views. Funktionsstand v0.23 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Dieser Text trennt umgesetzte Meilensteine von geplanten Phasen. Eine geplante Phase ist keine Freigabe und kein fertiges Feature.
 
 ## Produktentscheidung
 
@@ -16,7 +16,7 @@ Langfristig soll der Admin die relevanten Funktionen des Django-Admins funktions
 |---|---|---|---|
 | v0.1 | Implementiert, SQLite im Workspace getestet | Typed Model, Liste, GET, POST, PATCH, DELETE, sichere Migrationen | PostgreSQL-HTTP-Test bleibt ignoriert, solange kein Server läuft |
 | v0.6 | Implementiert | Unique, Indizes, Foreign Keys, Belongs-To, Has-Many, Snapshot und Diff | Many-to-Many, Eager Loading, `down` und PostgreSQL-Baseline fehlen |
-| v0.7 | Implementiert | Argon2id, Sitzungen, Cookies, CSRF, RBAC, Modellrechte | OAuth, MFA, JWT und Passwort-Reset fehlen |
+| v0.7 | Implementiert | Argon2id, Sitzungen, Cookies, CSRF, RBAC, Modellrechte | OAuth, MFA und JWT fehlen. Passwort-Reset folgt in v0.23 |
 | v0.8 bis v0.12 | Implementiert | Admin-Metadaten, JSON-API, Query-Scopes, Generator, Settings, Formulare, Staticfiles, Uploads, Middleware | Historische React-Oberfläche ist seit v0.13 entfernt |
 | v0.13 | Implementiert | Nativer Admin unter `/admin`, Tera, CSS im Binary, JSON-API bleibt | Cargo-Version bleibt `0.1.0` |
 | v0.13.1 | Implementiert | Login-Origins aus der Bind-Adresse, `Origin: null` nur mit `Sec-Fetch-Site: same-origin` | Host-Header wird nicht als Allowlist gelesen |
@@ -24,14 +24,33 @@ Langfristig soll der Admin die relevanten Funktionen des Django-Admins funktions
 | v0.15 | Implementiert | Design-Tokens, Feldgruppen, Tabellenrhythmus, Rollenauswahl, Kontrasttor | Cargo-Version bleibt `0.1.0` |
 | v0.16 | Implementiert | Benutzerpflege, serverseitige Bestätigung, lesbare Fremdschlüssel, Filterauswahl, isolierte Generator-Datenbanken | Superuser bleibt CLI. Kein Benutzer-Hard-Delete. JSON-API ohne `confirm` |
 | v0.17 | Implementiert | Listenkonfiguration, Fieldsets, drei Speicherziele, Formularzustand, Fremdschlüssel-Auswahlseite | Kein Datumstyp. Cargo-Version bleibt `0.1.0` |
-| v0.18 | Implementiert | Formularentwürfe, Has-Many-Inlines, Sammelaktionen, Audit, registrierte Aktionen | Kein gemeinsames Parent-Kind-Speichern. Verzeichnis-Audit ist nicht dieselbe Transaktion. Kein Datumstyp |
+| v0.18 | Implementiert | Formularentwürfe, Has-Many-Inlines, Sammelaktionen, Audit, registrierte Aktionen | Kein gemeinsames Parent-Kind-Speichern. Verzeichnis-Audit ist nicht dieselbe Transaktion |
+| v0.19 | Abgeschlossen | `Date`, `Time`, `DateTime<Utc>`, Migration `0004_events`, Admin-Felder, UTC-Datumshierarchie | PostgreSQL-Laufzeit ungetestet. Keine stillschweigende Text-zu-Datum-Umwandlung |
+| v0.20 | Abgeschlossen | Gemeinsame Transaktion für Modell, Auth und Audit. Verzeichnis-Audit. Opt-in Eltern-Kind-Formular | Kein Many-to-Many. Kein frameworkweites Optimistic Locking. PostgreSQL-Laufzeit ungetestet |
+| v0.21 | Abgeschlossen | Lesende Auth- und App-Diagnose. `check --strict`. Upgrade legt nur ein fehlendes Legacy-Manifest an | Keine automatische Vorlagenersetzung. Keine stillen Migrationen. PostgreSQL-Laufzeit ungetestet |
+| v0.21.1 | Abgeschlossen | Generator-Test begrenzt verschachtelte Release-Builds auf zwei Jobs. Uneingeschränkter Workspace-Test danach grün | rustc-Absturz `0xc0000005` und `0xc0000409` ist nicht ursächlich geklärt |
+| v0.22 | Abgeschlossen | Öffentliche Admin-Erweiterung: Seiten, Aktionen, Filter, Widgets, Vorlagen | Keine zweite Admin-Engine. PostgreSQL-Laufzeit ungetestet. Der rustc-Absturz bleibt ungeklärt |
+| v0.23 | Abgeschlossen | E-Mail-Dienst, Self-Service-Passwort-Reset, typisierte Hinweise | Keine Zustellgarantie. Kein Admin-Benachrichtigungscenter. PostgreSQL-Laufzeit ungetestet |
+| v0.24 | Abgeschlossen | Typisierte Settings, `[custom.*]`, `UrlSet`, View-Helfer, Generatorstruktur | Keine Tera-`reverse`-Funktion. `require_user` prüft kein CSRF. API-Vorlagen behalten HTML-Startseiten. PostgreSQL-Laufzeit ungetestet |
 
-## Offen nach v0.18
+## Offen nach v0.24
 
+- Benannte Routen sind nicht automatisch im Tera-Kontext.
+- `views::fail` nutzt eine eigene HTML-Seite und nicht `templates/errors/`.
+- `require_user` authentifiziert mit GET und prüft dabei kein CSRF.
+- Die API-Vorlage schreibt weiterhin `templates/index.html`, weil die Startseite aktiv bleibt.
+
+## Offen nach v0.23
+
+- Eine angenommene SMTP-Antwort beweist den Posteingang nicht. Ein Prozessabbruch kann einen bereits angenommenen Token beim Aufräumen entwerten.
+- `AccountDeactivated` und `SecurityNotice` hängen nicht an der Benutzerpflege.
+- Das Reset-Rate-Limit bleibt prozesslokal.
 - Die JSON-Verzeichnis-API verlangt `confirm` nicht.
 - Ein Nicht-Superuser kann eine fehlende Fremdschlüsselzeile nicht von einer unsichtbaren unterscheiden.
 - Filterauswahlen und das Formular-Select zeigen höchstens 100 berechtigte Ziele. Die Auswahlseite blättert darüber hinaus.
-- Datum, Uhrzeit und `date_hierarchy` fehlen. `ColumnKind` hat keinen Datumstyp, und die bestehenden Migrationen bleiben unverändert.
+- Abbrechen löscht einen Formularentwurf nicht sofort. Er läuft nach 30 Minuten ab.
+- Der Formular-Fingerabdruck ist kein versionsstabiler Datenbankwert.
+- Weitere Kind-Fremdschlüssel werden in der Inline-Transaktion nicht aufgelöst.
 
 ## Geplante Phasen
 
@@ -43,6 +62,12 @@ Die Reihenfolge ist verbindlich für die nächste Arbeit. Eine spätere Phase be
 | v0.16 | umgesetzt | Benutzer anlegen, E-Mail und Passwort ändern, Sitzungen widerrufen, Bestätigung und lesbare Relationen | v0.15 |
 | v0.17 | umgesetzt | Listenlinks, Standardsortierung, Seitengröße, Fieldsets, Speicherziele, Formularzustand, Auswahlseite | [admin-django-parity.md](admin-django-parity.md) |
 | v0.18 | umgesetzt | Entwürfe, Has-Many-Inlines, atomare Sammelaktionen, Audit, `AdminAction` | [admin-bulk-actions.md](admin-bulk-actions.md) |
+| v0.19 | abgeschlossen | Datum, Uhrzeit, UTC-Zeitpunkt, Datumshierarchie | [date-time-types.md](date-time-types.md) |
+| v0.20 | abgeschlossen | Transaktionen, Verzeichnis-Audit, Eltern-Kind-Formulare | [transactions.md](transactions.md) |
+| v0.21 | abgeschlossen | Migrationsdiagnose und sicheres Projektmanifest | [migration-diagnostics.md](migration-diagnostics.md) |
+| v0.22 | abgeschlossen | Registrierte Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen | [admin-extension-api.md](admin-extension-api.md) |
+| v0.23 | abgeschlossen | E-Mail, Passwort-Reset und typisierte Hinweise | [password-reset.md](password-reset.md) |
+| v0.24 | abgeschlossen | Settings, benannte URLs, Views und Projektstruktur | [settings.md](settings.md) |
 
 Nicht in diesen Phasen: React-Rückkehr, OAuth, MFA, JWT, S3, Virenscanner, Many-to-Many, `migrate down`, PostgreSQL-Baseline, OpenAPI, automatische Superuser-Semantik.
 

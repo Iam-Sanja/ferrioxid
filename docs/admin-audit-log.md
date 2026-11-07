@@ -16,8 +16,9 @@
 | `action` | siehe unten |
 | `outcome` | `ok` oder `denied` |
 | `summary` | Gekürzte Textzusammenfassung |
+| `operation_id` | Nullable UUID aus `0003_audit_operation`. Ältere Zeilen bleiben leer. Die Historie zeigt acht Zeichen |
 
-Aktionen: `create`, `update`, `delete`, `bulk_update`, `bulk_delete`, `user_create`, `user_update`, `password_reset`, `role_assign`, `role_revoke`.
+Aktionen: `create`, `update`, `delete`, `bulk_update`, `bulk_delete`, `user_create`, `user_update`, `password_reset`, `role_assign`, `role_revoke`, `permission_grant`, `permission_revoke`.
 
 ## Was nicht in der Zusammenfassung steht
 
@@ -29,7 +30,7 @@ Eine normale Änderung nutzt das Feldlabel: `Name: "Apfel" → "Grüner Apfel"`.
 
 `audited_create`, `audited_update` und `audited_delete` schreiben Modellzeile und Audit in einer Transaktion. Die öffentliche `ModelRepository::create` tut das nicht. Die JSON-Admin-API geht über `ManagedModel` und schreibt mit.
 
-Verzeichnisereignisse werden nach dem Auth-Schreibvorgang eingefügt. Schlägt das Audit fehl, bleibt die Auth-Änderung bestehen. Das ist ausdrücklich nicht atomar.
+Verzeichnisereignisse und ein `|form`-Inline schreiben Audit in derselben Transaktion wie die Daten. Schlägt das Audit fehl, bleibt der vorherige Zustand. Details: [admin-directory-audit.md](admin-directory-audit.md) und [admin-transactional-inlines.md](admin-transactional-inlines.md). CLI-Auth schreibt dieses Audit nicht.
 
 ## Seite
 

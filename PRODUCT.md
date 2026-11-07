@@ -32,9 +32,9 @@ Bestätigt für spätere Arbeit:
 - `is_staff` öffnet den Admin. `is_superuser` ersetzt `is_staff` nicht. `is_active` bleibt erforderlich.
 - Dokumentation und der Admin-Katalog bleiben Deutsch und Englisch. Öffentliche APIs, Feldnamen, CLI-Befehle und technische Fehlercodes bleiben Englisch.
 
-Funktionsstand im Baum ist v0.18. Die Cargo-Version bleibt vorerst `0.1.0`. Formularentwürfe, Has-Many-Inlines, Sammelaktionen und die Änderungshistorie gehören dazu. Ein Datumstyp fehlt weiter.
+Funktionsstand v0.24 ist die Settings-, URL- und View-Schicht auf dem bestehenden Axum-Router und auf `ferrum.toml`. Es gibt kein zweites Routing und kein Settings-Singleton. Funktionsstand v0.23 bleibt gültig. Anwendungen versenden E-Mail über `ferrum::mail` und bieten einen Self-Service-Passwort-Reset unter `/auth/password-reset`. Der Standard bleibt `disabled` und öffnet keine SMTP-Verbindung. v0.22 bleibt gültig. Entwickler hängen eigene Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen über `ferrum::admin` an die vorhandene Registry. v0.21 bleibt gültig. Bestehende Projekte können auf ausstehende Auth- und App-Migrationen geprüft werden. `ferrum upgrade` schreibt nur ein fehlendes `.ferrum/project.json` und lässt Modelle, Vorlagen, Migrationen und Datenbanken unverändert. v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Formularentwürfe, Has-Many-Inlines, Sammelaktionen, die Änderungshistorie und echte Datums- und Zeittypen gehören dazu. Verzeichnis-Audit und opt-in Eltern-Kind-Formulare laufen in einer Transaktion.
 
-Nicht vorhanden und nicht zu erfinden: OAuth, MFA, JWT, S3, Many-to-Many, `migrate down`, OpenAPI als ausgeliefertes Feature. Benutzer anlegen, E-Mail, Aktiv, Staff, Rollen und Passwort sind im nativen Admin umgesetzt. Superuser-Vergabe bleibt die CLI. Physisches Löschen von Benutzern gibt es nicht.
+Nicht vorhanden und nicht zu erfinden: OAuth, MFA, JWT, S3, Many-to-Many, `migrate down`, OpenAPI als ausgeliefertes Feature, ein Admin-Benachrichtigungscenter und eine garantierte E-Mail-Zustellung. Benutzer anlegen, E-Mail, Aktiv, Staff, Rollen und Passwort sind im nativen Admin umgesetzt. Superuser-Vergabe bleibt die CLI. Physisches Löschen von Benutzern gibt es nicht.
 
 ## Brand Commitments
 

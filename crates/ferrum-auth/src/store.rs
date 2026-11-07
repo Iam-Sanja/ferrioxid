@@ -1,7 +1,10 @@
 //! SQL für Auth-Tabellen über SeaQuery. Keine zweite ORM-Schicht.
 
 use crate::error::AuthError;
-use crate::schema::{PERMISSIONS, ROLES, ROLE_PERMISSIONS, SESSIONS, USERS, USER_ROLES};
+use crate::schema::{
+    ADMIN_AUDIT, MAIL_OUTBOX, PASSWORD_RESETS, PASSWORD_RESET_EXCHANGES, PERMISSIONS, ROLES,
+    ROLE_PERMISSIONS, SESSIONS, USERS, USER_ROLES,
+};
 use sea_orm::sea_query::{Alias, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder};
 use sea_orm::{ConnectionTrait, DatabaseBackend, QueryResult, Statement, Value};
 use std::collections::HashMap;
@@ -366,6 +369,338 @@ pub async fn revoke_user_sessions(
     execute(db, &query).await
 }
 
+#[derive(Debug, Clone)]
+pub struct PasswordResetRow {
+    pub id: Uuid,
+    pub user_id: Uuid,
+    pub expires_at: i64,
+    pub used_at: Option<i64>,
+}
+
+pub async fn insert_password_reset(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    user_id: Uuid,
+    token_hash: &str,
+    created_at: i64,
+    expires_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::insert();
+    query
+        .into_table(Alias::new(PASSWORD_RESETS))
+        .columns([
+            Alias::new("id"),
+            Alias::new("user_id"),
+            Alias::new("token_hash"),
+            Alias::new("created_at"),
+            Alias::new("expires_at"),
+            Alias::new("used_at"),
+        ])
+        .values_panic([
+            text(&id.to_string()),
+            text(&user_id.to_string()),
+            text(token_hash),
+            number(created_at),
+            number(expires_at),
+            opt_number(None),
+        ]);
+    execute(db, &query).await
+}
+
+pub async fn active_password_resets(
+    db: &impl ConnectionTrait,
+    user_id: Uuid,
+    now: i64,
+) -> Result<Vec<(Uuid, i64)>, AuthError> {
+    let mut query = Query::select();
+    query
+        .columns([Alias::new("id"), Alias::new("created_at")])
+        .from(Alias::new(PASSWORD_RESETS))
+        .and_where(Expr::col(Alias::new("user_id")).eq(user_id.to_string()))
+        .and_where(Expr::col(Alias::new("used_at")).is_null())
+        .and_where(Expr::col(Alias::new("expires_at")).gt(now))
+        .order_by(Alias::new("created_at"), Order::Asc);
+    let mut rows = Vec::new();
+    for row in all(db, &query).await? {
+        rows.push((
+            required_uuid(&row, "id")?,
+            required_i64(&row, "created_at")?,
+        ));
+    }
+    Ok(rows)
+}
+
+pub async fn consume_password_reset(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    now: i64,
+) -> Result<bool, AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(PASSWORD_RESETS))
+        .values([(Alias::new("used_at"), number(now))])
+        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("used_at")).is_null())
+        .and_where(Expr::col(Alias::new("expires_at")).gt(now));
+    Ok(execute_rows(db, &query).await? == 1)
+}
+
+pub async fn invalidate_other_resets(
+    db: &impl ConnectionTrait,
+    user_id: Uuid,
+    keep: Uuid,
+    now: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(PASSWORD_RESETS))
+        .values([(Alias::new("used_at"), number(now))])
+        .and_where(Expr::col(Alias::new("user_id")).eq(user_id.to_string()))
+        .and_where(Expr::col(Alias::new("id")).ne(keep.to_string()))
+        .and_where(Expr::col(Alias::new("used_at")).is_null());
+    execute(db, &query).await
+}
+
+pub async fn find_password_reset_by_hash(
+    db: &impl ConnectionTrait,
+    token_hash: &str,
+) -> Result<Option<PasswordResetRow>, AuthError> {
+    let mut query = Query::select();
+    query
+        .columns([
+            Alias::new("id"),
+            Alias::new("user_id"),
+            Alias::new("expires_at"),
+            Alias::new("used_at"),
+        ])
+        .from(Alias::new(PASSWORD_RESETS))
+        .and_where(Expr::col(Alias::new("token_hash")).eq(token_hash));
+    let Some(row) = one(db, &query).await? else {
+        return Ok(None);
+    };
+    Ok(Some(PasswordResetRow {
+        id: required_uuid(&row, "id")?,
+        user_id: required_uuid(&row, "user_id")?,
+        expires_at: required_i64(&row, "expires_at")?,
+        used_at: optional_i64(&row, "used_at")?,
+    }))
+}
+
+pub async fn insert_reset_exchange(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    reset_id: Uuid,
+    secret_hash: &str,
+    created_at: i64,
+    expires_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::insert();
+    query
+        .into_table(Alias::new(PASSWORD_RESET_EXCHANGES))
+        .columns([
+            Alias::new("id"),
+            Alias::new("reset_id"),
+            Alias::new("secret_hash"),
+            Alias::new("created_at"),
+            Alias::new("expires_at"),
+        ])
+        .values_panic([
+            text(&id.to_string()),
+            text(&reset_id.to_string()),
+            text(secret_hash),
+            number(created_at),
+            number(expires_at),
+        ]);
+    execute(db, &query).await
+}
+
+pub async fn find_exchange(
+    db: &impl ConnectionTrait,
+    secret_hash: &str,
+) -> Result<Option<(Uuid, i64, PasswordResetRow)>, AuthError> {
+    let mut query = Query::select();
+    query
+        .columns([
+            Alias::new("id"),
+            Alias::new("reset_id"),
+            Alias::new("expires_at"),
+        ])
+        .from(Alias::new(PASSWORD_RESET_EXCHANGES))
+        .and_where(Expr::col(Alias::new("secret_hash")).eq(secret_hash));
+    let Some(row) = one(db, &query).await? else {
+        return Ok(None);
+    };
+    let exchange_id = required_uuid(&row, "id")?;
+    let exchange_expires = required_i64(&row, "expires_at")?;
+    let reset_id = required_uuid(&row, "reset_id")?;
+    let mut reset = Query::select();
+    reset
+        .columns([
+            Alias::new("id"),
+            Alias::new("user_id"),
+            Alias::new("expires_at"),
+            Alias::new("used_at"),
+        ])
+        .from(Alias::new(PASSWORD_RESETS))
+        .and_where(Expr::col(Alias::new("id")).eq(reset_id.to_string()));
+    let Some(row) = one(db, &reset).await? else {
+        return Ok(None);
+    };
+    Ok(Some((
+        exchange_id,
+        exchange_expires,
+        PasswordResetRow {
+            id: required_uuid(&row, "id")?,
+            user_id: required_uuid(&row, "user_id")?,
+            expires_at: required_i64(&row, "expires_at")?,
+            used_at: optional_i64(&row, "used_at")?,
+        },
+    )))
+}
+
+pub async fn delete_user_exchanges(
+    db: &impl ConnectionTrait,
+    user_id: Uuid,
+) -> Result<(), AuthError> {
+    let mut ids = Query::select();
+    ids.column(Alias::new("id"))
+        .from(Alias::new(PASSWORD_RESETS))
+        .and_where(Expr::col(Alias::new("user_id")).eq(user_id.to_string()));
+    let mut reset_ids = Vec::new();
+    for row in all(db, &ids).await? {
+        reset_ids.push(required_uuid(&row, "id")?);
+    }
+    for reset_id in reset_ids {
+        let mut query = Query::delete();
+        query
+            .from_table(Alias::new(PASSWORD_RESET_EXCHANGES))
+            .and_where(Expr::col(Alias::new("reset_id")).eq(reset_id.to_string()));
+        execute(db, &query).await?;
+    }
+    Ok(())
+}
+
+pub async fn insert_outbox(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    kind: &str,
+    recipient: &str,
+    reset_id: Option<Uuid>,
+    created_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::insert();
+    query
+        .into_table(Alias::new(MAIL_OUTBOX))
+        .columns([
+            Alias::new("id"),
+            Alias::new("kind"),
+            Alias::new("recipient"),
+            Alias::new("reset_id"),
+            Alias::new("created_at"),
+            Alias::new("sent_at"),
+            Alias::new("failed_at"),
+            Alias::new("attempts"),
+            Alias::new("error_code"),
+        ])
+        .values_panic([
+            text(&id.to_string()),
+            text(kind),
+            text(recipient),
+            match reset_id {
+                Some(id) => text(&id.to_string()),
+                None => Expr::value(Value::String(None)),
+            },
+            number(created_at),
+            opt_number(None),
+            opt_number(None),
+            number(0),
+            Expr::value(Value::String(None)),
+        ]);
+    execute(db, &query).await
+}
+
+pub async fn finish_outbox(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    sent_at: Option<i64>,
+    failed_at: Option<i64>,
+    error_code: Option<&str>,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(MAIL_OUTBOX))
+        .values([
+            (Alias::new("sent_at"), opt_number(sent_at)),
+            (Alias::new("failed_at"), opt_number(failed_at)),
+            (Alias::new("attempts"), number(1)),
+            (
+                Alias::new("error_code"),
+                match error_code {
+                    Some(code) => text(code),
+                    None => Expr::value(Value::String(None)),
+                },
+            ),
+        ])
+        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+    execute(db, &query).await
+}
+
+pub async fn stale_outbox(
+    db: &impl ConnectionTrait,
+    older_than: i64,
+) -> Result<Vec<(Uuid, Option<Uuid>)>, AuthError> {
+    let mut query = Query::select();
+    query
+        .columns([Alias::new("id"), Alias::new("reset_id")])
+        .from(Alias::new(MAIL_OUTBOX))
+        .and_where(Expr::col(Alias::new("sent_at")).is_null())
+        .and_where(Expr::col(Alias::new("failed_at")).is_null())
+        .and_where(Expr::col(Alias::new("created_at")).lt(older_than));
+    let mut rows = Vec::new();
+    for row in all(db, &query).await? {
+        rows.push((
+            required_uuid(&row, "id")?,
+            optional_text_uuid(&row, "reset_id")?,
+        ));
+    }
+    Ok(rows)
+}
+
+pub async fn insert_password_audit(
+    db: &impl ConnectionTrait,
+    actor_id: Uuid,
+    summary: &str,
+    operation_id: Uuid,
+    created_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::insert();
+    query
+        .into_table(Alias::new(ADMIN_AUDIT))
+        .columns([
+            Alias::new("id"),
+            Alias::new("created_at"),
+            Alias::new("actor_id"),
+            Alias::new("model_key"),
+            Alias::new("record_id"),
+            Alias::new("action"),
+            Alias::new("outcome"),
+            Alias::new("summary"),
+            Alias::new("operation_id"),
+        ])
+        .values_panic([
+            text(&Uuid::new_v4().to_string()),
+            number(created_at),
+            text(&actor_id.to_string()),
+            text("_ferrum_users"),
+            text(&actor_id.to_string()),
+            text("password_reset"),
+            text("ok"),
+            text(summary),
+            text(&operation_id.to_string()),
+        ]);
+    execute(db, &query).await
+}
+
 pub async fn find_named_row(
     db: &impl ConnectionTrait,
     table: &str,
@@ -506,6 +841,17 @@ fn parse_id(row: &QueryResult) -> Result<Uuid, AuthError> {
     required_uuid(row, "id")
 }
 
+fn optional_text_uuid(row: &QueryResult, column: &str) -> Result<Option<Uuid>, AuthError> {
+    match row.try_get::<Option<String>>("", column) {
+        Ok(Some(value)) if !value.is_empty() => value
+            .parse()
+            .map(Some)
+            .map_err(|_| AuthError::database(format!("column {column} is not a uuid"))),
+        Ok(_) => Ok(None),
+        Err(error) => Err(AuthError::database(error)),
+    }
+}
+
 fn required_uuid(row: &QueryResult, column: &str) -> Result<Uuid, AuthError> {
     if let Ok(value) = row.try_get::<Uuid>("", column) {
         return Ok(value);
@@ -570,8 +916,16 @@ async fn execute(
     db: &impl ConnectionTrait,
     query: &impl sea_orm::sea_query::QueryStatementWriter,
 ) -> Result<(), AuthError> {
-    db.execute(statement(db, query)?).await.map_err(map_write)?;
+    execute_rows(db, query).await?;
     Ok(())
+}
+
+async fn execute_rows(
+    db: &impl ConnectionTrait,
+    query: &impl sea_orm::sea_query::QueryStatementWriter,
+) -> Result<u64, AuthError> {
+    let result = db.execute(statement(db, query)?).await.map_err(map_write)?;
+    Ok(result.rows_affected())
 }
 
 async fn one(

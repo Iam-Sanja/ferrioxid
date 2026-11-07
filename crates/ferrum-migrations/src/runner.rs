@@ -20,14 +20,14 @@ pub struct ApplyReport {
     pub applied: Vec<String>,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MigrationLine {
     pub id: String,
     pub state: String,
     pub checksum: String,
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct StatusReport {
     pub backend: String,
     pub lines: Vec<MigrationLine>,
@@ -97,11 +97,20 @@ pub async fn migration_status(
     directory: &Path,
     current: Option<&SchemaSnapshot>,
 ) -> Result<StatusReport, MigrationError> {
+    migration_status_in(db, directory, history::HISTORY_TABLE, current).await
+}
+
+pub async fn migration_status_in(
+    db: &DatabaseConnection,
+    directory: &Path,
+    history_table: &str,
+    current: Option<&SchemaSnapshot>,
+) -> Result<StatusReport, MigrationError> {
     let state = inspect_directory(directory);
     let backend = kind_of(db.get_database_backend())
         .map_err(|error| MigrationError::new(error.to_string()))?;
-    let applied = if history::history_exists(db).await? {
-        history::read_history(db).await?
+    let applied = if history::history_exists_in(db, history_table).await? {
+        history::read_history_in(db, history_table).await?
     } else {
         Vec::new()
     };

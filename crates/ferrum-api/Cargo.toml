@@ -7,6 +7,7 @@ license.workspace = true
 [dependencies]
 ferrum-core = { path = "../ferrum-core" }
 ferrum-auth = { path = "../ferrum-auth" }
+ferrum-mail = { path = "../ferrum-mail" }
 ferrum-admin = { path = "../ferrum-admin" }
 ferrum-db = { path = "../ferrum-db" }
 ferrum-migrations = { path = "../ferrum-migrations" }
@@ -18,3 +19,8 @@ sea-orm.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+http-body-util = "0.1"
+tokio = { workspace = true }
+tower = { version = "0.5", features = ["util"] }

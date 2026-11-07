@@ -4,7 +4,7 @@
 
 ## Tatsächlicher Funktionsumfang (IST)
 
-`ferrum doctor` und `ferrum check` prüfen Werkzeuge, Dateien und Migrationen. Details stehen in [cli-doctor.md](cli-doctor.md). Generator, Vorlagen und der Entwicklungsserver stehen in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) und [development-server.md](development-server.md).
+`ferrum doctor` und `ferrum check` prüfen Werkzeuge, Dateien, beide Migrationsbereiche, `settings.runtime` und die Mail-Form. Die Laufzeitprüfung öffnet keine Verbindung. `settings.runtime` wird `ERROR`, wenn Produktion und Debug zusammenfallen, `FERRUM_DEBUG` weder `true` noch `false` ist oder `BIND_ADDRESS` mit `0.0.0.0` beginnt. `disabled` erwartet keinen SMTP-Server. `console` und `memory` bleiben lokal. `smtp` wird nicht verbunden. Fehlt `FERRUM_SMTP_PASSWORD`, entsteht die Warnung `mail.credentials`, ohne den Wert zu zeigen. Details stehen in [cli-doctor.md](cli-doctor.md) und [migration-diagnostics.md](migration-diagnostics.md). `ferrum upgrade` beschreibt [project-upgrade.md](project-upgrade.md). Generator, Vorlagen und der Entwicklungsserver stehen in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) und [development-server.md](development-server.md).
 
 ```powershell
 cargo run -p ferrum-cli -- new myproject --template fullstack --ferrum-path .
@@ -16,6 +16,10 @@ cargo run -p ferrum-cli -- generate model Customer
 cargo run -p ferrum-cli -- migrate make <name>
 cargo run -p ferrum-cli -- migrate up
 cargo run -p ferrum-cli -- migrate status
+cargo run -p ferrum-cli -- check --strict
+cargo run -p ferrum-cli -- upgrade --check
+cargo run -p ferrum-cli -- upgrade --dry-run
+cargo run -p ferrum-cli -- upgrade --yes
 ```
 
 `migrate` liest `ferrum.toml` oder die Flags `--schema-file`, `--migrations-dir` und `--database-url`. Die Ausführung beschreibt [migrations.md](migrations.md). `--bootstrap` gehört zur `myshop`-Binary, ist Legacy und führt keine Migration aus.
@@ -30,7 +34,9 @@ cargo run -p ferrum-cli -- auth assign-role --email admin@example.com --role edi
 
 `create-user` liest das Passwort verdeckt und verlangt die Wiederholung. Es akzeptiert kein Passwortargument. Ist `FERRUM_PASSWORD` gesetzt, muss der Wert mindestens 12 Zeichen haben. Es gibt kein Standardpasswort. `migrate up` wendet zuerst die Auth-Migrationen an. Schreibende Auth-Befehle legen die Auth-Tabellen ebenfalls an, wenn sie fehlen. `list-users` zeigt keine Hashes.
 
-Nicht existent: `ferrum migrate down`. Vite startet `ferrum dev` nicht mit.
+Nicht existent: `ferrum migrate down`. Vite startet `ferrum dev` nicht mit. Der Generator-Integrationstest begrenzt eigene Cargo-Builds auf zwei Jobs, weil ein unbegrenzter Release-Build auf Windows rustc 1.98.1 abstürzen ließ. Das Produktkommando `ferrum build` bleibt ein Release-Build. `ferrum dev` warnt vor ausstehenden Migrationen und wendet sie nicht an.
+
+Exitcodes der Prüfung: `0` ohne Fehler, Warnungen eingeschlossen. `1` bei Konflikten, einer nicht lesbaren vorhandenen Datenbank oder einem fehlgeschlagenen `cargo check`. `migrate status` nutzt `1` auch, wenn die SQLite-Datei fehlt, und legt sie nicht an. `check --strict` nutzt `2`, wenn nur Warnungen bleiben. `upgrade` nutzt `1` bei Dateikonflikten und schreibt dann nichts.
 
 ## SOLL: CLI-Kommandostruktur
 
@@ -40,6 +46,8 @@ ferrum
 ├─ doctor                      Reale Umgebungsprüfung
 ├─ dev                         Entwicklungsprozess starten
 ├─ generate model <name>       Kompilierbare Modelldatei erstellen
+├─ check [--strict]            IST, Projekt und Migrationen, ohne Schreiben
+├─ upgrade --check|--dry-run|--yes   IST, nur ein fehlendes Legacy-Manifest
 ├─ migrate make|up|status      IST, siehe migrations.md
 ├─ migrate rename-column       IST, explizite Spaltenumbenennung
 ├─ migrate rename-table        IST, explizite Tabellenumbenennung

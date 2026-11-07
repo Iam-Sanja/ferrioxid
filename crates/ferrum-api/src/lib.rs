@@ -14,17 +14,22 @@ use ferrum_admin::AdminRegistry;
 use ferrum_auth::{mount, AppState, AuthError, AuthService, AuthUser, ClientIp, ObjectPolicy};
 use ferrum_core::{problem_json, ColumnSpec, FerrumError, QueryScope};
 use ferrum_db::{kind_of, render_schema, DeleteOutcome, ModelRepository};
-use ferrum_migrations::history_exists;
+use ferrum_migrations::{history_exists, ProjectConfig};
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::json;
 
 pub mod pages;
+pub mod urls;
+pub mod views;
 pub mod web;
 
 pub struct App {
     db: DatabaseConnection,
     auth: Option<AuthService>,
+    mail: Option<ferrum_mail::MailService>,
     admin: Option<AdminRegistry>,
+    settings: Option<ProjectConfig>,
+    names: urls::RouteMap,
     routes: Router<AppState>,
     schemas: Vec<(&'static str, &'static [ColumnSpec])>,
 }
@@ -34,7 +39,10 @@ impl App {
         Self {
             db,
             auth: None,
+            mail: None,
             admin: None,
+            settings: None,
+            names: urls::RouteMap::default(),
             routes: Router::new(),
             schemas: Vec::new(),
         }
@@ -43,6 +51,24 @@ impl App {
     pub fn with_auth(mut self, auth: AuthService) -> Self {
         self.auth = Some(auth);
         self
+    }
+
+    pub fn with_mail(mut self, mail: ferrum_mail::MailService) -> Self {
+        self.mail = Some(mail);
+        self
+    }
+
+    pub fn with_settings(mut self, settings: ProjectConfig) -> Self {
+        self.settings = Some(settings);
+        self
+    }
+
+    /// Hängt benannte Anwendungsrouten an. Reservierte Framework-Pfade werden abgelehnt.
+    pub fn urls(mut self, set: urls::UrlSet) -> Result<Self, urls::UrlError> {
+        let (router, names) = set.into_parts();
+        self.names.merge(names)?;
+        self.routes = self.routes.merge(router);
+        Ok(self)
     }
 
     pub fn with_admin(mut self, registry: AdminRegistry) -> Self {
@@ -153,8 +179,9 @@ impl App {
         let state = AppState {
             db: self.db,
             auth: self.auth,
+            mail: self.mail,
         };
-        {
+        let router = {
             let mut routes = mount(self.routes);
             if let Some(registry) = self.admin {
                 routes = ferrum_admin::mount(routes, registry);
@@ -162,7 +189,13 @@ impl App {
             routes
         }
         .route("/healthz", get(|| async { Json(json!({"status": "ok"})) }))
-        .with_state(state)
+        .with_state(state);
+        let router = router.layer(axum::Extension(std::sync::Arc::new(self.names)));
+        if let Some(settings) = self.settings {
+            router.layer(axum::Extension(std::sync::Arc::new(settings)))
+        } else {
+            router
+        }
     }
 }
 

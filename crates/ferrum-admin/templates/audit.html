@@ -25,7 +25,7 @@
 <td>{{ row.action }}</td>
 <td><span class="uuid" title="{{ row.record }}">{{ row.record_short }}</span></td>
 <td>{% if row.ok %}{{ i18n.succeeded }}{% else %}{{ i18n.denied }}{% endif %}</td>
-<td class="audit-detail">{{ row.summary }}</td>
+<td class="audit-detail">{% if row.operation %}<span class="uuid" title="{{ row.operation }}">{{ row.operation }}</span> {% endif %}{{ row.summary }}</td>
 </tr>
 {% endfor %}
 </tbody>

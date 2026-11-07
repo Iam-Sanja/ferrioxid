@@ -8,6 +8,7 @@ license.workspace = true
 ferrum-core = { path = "../ferrum-core" }
 ferrum-db = { path = "../ferrum-db" }
 ferrum-migrations = { path = "../ferrum-migrations" }
+ferrum-mail = { path = "../ferrum-mail" }
 argon2.workspace = true
 axum.workspace = true
 sea-orm.workspace = true
@@ -20,3 +21,7 @@ thiserror.workspace = true
 tokio.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

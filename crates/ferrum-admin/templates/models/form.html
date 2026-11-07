@@ -29,6 +29,30 @@
 {% endfor %}
 {% endif %}
 {% endfor %}
+{% for group in inline_groups %}
+<fieldset class="form-section">
+<legend>{{ group.label }}</legend>
+{% if group.error %}<p class="field-error" role="alert">{{ group.error }}</p>{% endif %}
+{% for row in group.rows %}
+<div class="inline-row">
+<p class="label" id="{{ row.id_name }}-label">{{ row.heading }}</p>
+{% if row.id %}<input type="hidden" name="{{ row.id_name }}" value="{{ row.id }}">{% endif %}
+{% for field in row.fields %}
+{% include "field.html" %}
+{% endfor %}
+{% if row.remove_name %}
+<label class="check"><input type="checkbox" name="{{ row.remove_name }}" value="1" {% if row.remove %}checked{% endif %}> {{ i18n.inline_remove }}</label>
+{% if row.remove %}<p class="hint">{{ i18n.inline_marked }}</p>{% endif %}
+{% endif %}
+</div>
+{% endfor %}
+{% if group.add_name %}
+<input type="hidden" name="{{ group.extra_name }}" value="{{ group.extra }}">
+<button class="button ghost" type="submit" name="save" value="rows">{{ i18n.inline_another }}</button>
+{% endif %}
+</fieldset>
+{% endfor %}
+{% if basis %}<input type="hidden" name="basis" value="{{ basis }}">{% endif %}
 <div class="actions">
 <button type="submit" name="save" value="detail">{{ i18n.save }}</button>
 <button type="submit" name="save" value="edit">{{ i18n.save_continue }}</button>

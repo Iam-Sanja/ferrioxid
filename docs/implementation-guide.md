@@ -1,6 +1,6 @@
 # Implementierungsleitfaden für ausführende Coding-KIs
 
-[Zur Übersicht](index.md) · **Status:** Arbeitskonventionen und prüfbare Zielkriterien.
+[Zur Übersicht](index.md) · **Status:** Arbeitskonventionen und prüfbare Zielkriterien. Funktionsstand v0.24 ergänzt [settings.md](settings.md), [urls.md](urls.md) und [views.md](views.md). Eine bestehende `main.rs` wird dafür nicht umgeschrieben. Funktionsstand v0.23 bleibt gültig. E-Mail und Reset: [mail.md](mail.md), [password-reset.md](password-reset.md), [notifications.md](notifications.md). Funktionsstand v0.22 bleibt gültig. Admin-Erweiterungen: [admin-extension-api.md](admin-extension-api.md). Diagnose und Upgrade: [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md). v0.20 bleibt gültig. Datum und Uhrzeit sind in [date-time-types.md](date-time-types.md) beschrieben. Transaktionen: [transactions.md](transactions.md). Bestehende angewendete Migrationen werden nicht umgeschrieben.
 
 ## 1. Erst den vorhandenen Code verstehen
 

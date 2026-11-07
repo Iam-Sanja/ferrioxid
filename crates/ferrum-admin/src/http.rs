@@ -189,7 +189,12 @@ async fn records(
     if params.q.as_ref().is_some_and(|term| !term.is_empty()) && search_columns.is_empty() {
         return failure(StatusCode::UNPROCESSABLE_ENTITY, "search is not available");
     }
-    let filters = match filters_from(raw.as_deref().unwrap_or(""), model.columns(), model.meta()) {
+    let filters = match filters_from(
+        raw.as_deref().unwrap_or(""),
+        model.columns(),
+        model.meta(),
+        registry.filters(),
+    ) {
         Ok(filters) => filters,
         Err(message) => return failure(StatusCode::UNPROCESSABLE_ENTITY, &message),
     };
@@ -205,6 +210,7 @@ async fn records(
             sort,
             descending,
             &filter_refs,
+            &[],
             u64::from(page - 1) * u64::from(page_size),
             u64::from(page_size),
             &scope,
@@ -440,6 +446,7 @@ async fn relation_options(
             label,
             false,
             &[],
+            &[],
             0,
             25,
             &scope,
@@ -544,9 +551,9 @@ async fn set_active(
     if target.is_superuser {
         return failure(StatusCode::FORBIDDEN, "superuser changes are blocked");
     }
-    match auth.set_user_active(&target.email, active).await {
+    match crate::directory::set_active(auth, user.id, id, active).await {
         Ok(()) => Json(json!({ "status": "updated" })).into_response(),
-        Err(error) => auth_failure(error),
+        Err(error) => ferrum_failure(error),
     }
 }
 
@@ -586,9 +593,9 @@ async fn set_staff_flag(
     if target.is_superuser {
         return failure(StatusCode::FORBIDDEN, "superuser changes are blocked");
     }
-    match auth.set_staff(id, staff_flag).await {
+    match crate::directory::set_staff(auth, user.id, id, staff_flag).await {
         Ok(()) => Json(json!({ "status": "updated" })).into_response(),
-        Err(error) => auth_failure(error),
+        Err(error) => ferrum_failure(error),
     }
 }
 
@@ -704,14 +711,11 @@ async fn mutate_permission(
     let Some(auth) = state.auth.as_ref() else {
         return failure(StatusCode::FORBIDDEN, "authentication is not configured");
     };
-    let result = if grant_permission {
-        auth.grant_permission(role, code).await
-    } else {
-        auth.revoke_permission(role, code).await
-    };
+    let result =
+        crate::directory::grant_permission(auth, user.id, role, code, grant_permission).await;
     match result {
         Ok(()) => Json(json!({ "status": "updated" })).into_response(),
-        Err(error) => auth_failure(error),
+        Err(error) => ferrum_failure(error),
     }
 }
 
@@ -763,14 +767,10 @@ async fn change_assignment(
     let Some(auth) = state.auth.as_ref() else {
         return failure(StatusCode::FORBIDDEN, "authentication is not configured");
     };
-    let result = if assign {
-        auth.assign_role(&email, &role).await
-    } else {
-        auth.revoke_role(&email, &role).await
-    };
+    let result = crate::directory::assign_role(auth, user.id, &email, &role, assign).await;
     match result {
         Ok(()) => Json(json!({ "status": "updated" })).into_response(),
-        Err(error) => auth_failure(error),
+        Err(error) => ferrum_failure(error),
     }
 }
 
@@ -912,6 +912,7 @@ pub(crate) fn filters_from(
     raw: &str,
     columns: &[ColumnSpec],
     meta: &AdminModelMeta,
+    custom: &[crate::filters::AdminFilter],
 ) -> Result<Vec<(&'static str, DbValue)>, String> {
     let mut filters = Vec::new();
     for pair in raw.split('&').filter(|pair| !pair.is_empty()) {
@@ -921,6 +922,17 @@ pub(crate) fn filters_from(
             continue;
         };
         let field_name = urlencoding_decode(field);
+        if let Some(filter) = custom
+            .iter()
+            .find(|filter| filter.model_key == meta.key && filter.name == field_name)
+        {
+            let value = urlencoding_decode(value);
+            if value.is_empty() {
+                continue;
+            }
+            filters.push(filter.bind(columns, &value)?);
+            continue;
+        }
         let Some(meta_field) = meta
             .fields
             .iter()
@@ -958,6 +970,15 @@ fn filter_value(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
         ColumnKind::Uuid => Uuid::parse_str(value)
             .map(DbValue::from)
             .map_err(|_| format!("filter {} must be a uuid", column.name)),
+        ColumnKind::Date => ferrum_core::parse_date(value)
+            .map(DbValue::from)
+            .map_err(|_| format!("filter {} must be a date", column.name)),
+        ColumnKind::Time => ferrum_core::parse_time(value)
+            .map(DbValue::from)
+            .map_err(|_| format!("filter {} must be a time", column.name)),
+        ColumnKind::DateTime => ferrum_core::parse_datetime_utc(value)
+            .map(DbValue::from)
+            .map_err(|_| format!("filter {} must be a utc datetime", column.name)),
     }
 }
 
@@ -1025,6 +1046,9 @@ fn column_type(column: &ColumnSpec) -> &'static str {
         ColumnKind::BigInt => "integer",
         ColumnKind::Boolean => "boolean",
         ColumnKind::Uuid => "uuid",
+        ColumnKind::Date => "date",
+        ColumnKind::Time => "time",
+        ColumnKind::DateTime => "datetime",
     }
 }
 

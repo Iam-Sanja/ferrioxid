@@ -1,12 +1,15 @@
 //! Typed SeaORM-backed repository contract implemented by the model derive.
 
 mod sql;
+mod unit;
+
+pub use unit::conclude;
 
 use ferrum_core::{FerrumError, FerrumModel};
 use sea_orm::{DatabaseConnection, DatabaseTransaction};
-use serde::{de::DeserializeOwned, Serialize};
+use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub use sql::{
-    delete_record, find_by_column, get_record, insert_record, kind_of, list_records,
+    date_buckets, delete_record, find_by_column, get_record, insert_record, kind_of, list_records,
     query_admin_page, query_labels, render_add_column, render_add_column_referencing,
     render_create_index, render_create_table, render_drop_column, render_drop_index,
     render_drop_table, render_rename_column, render_rename_table, render_schema,
@@ -31,6 +34,49 @@ pub enum PatchField<T> {
     Missing,
     Null,
     Value(T),
+}
+
+pub fn deserialize_patch_date<'de, D>(
+    deserializer: D,
+) -> Result<PatchField<chrono::NaiveDate>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_patch(deserializer, ferrum_core::parse_date)
+}
+
+pub fn deserialize_patch_time<'de, D>(
+    deserializer: D,
+) -> Result<PatchField<chrono::NaiveTime>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_patch(deserializer, ferrum_core::parse_time)
+}
+
+pub fn deserialize_patch_datetime<'de, D>(
+    deserializer: D,
+) -> Result<PatchField<chrono::DateTime<chrono::Utc>>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    deserialize_patch(deserializer, ferrum_core::parse_datetime_utc)
+}
+
+fn deserialize_patch<'de, D, T>(
+    deserializer: D,
+    parse: fn(&str) -> Result<T, &'static str>,
+) -> Result<PatchField<T>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    match Option::<String>::deserialize(deserializer)? {
+        None => Ok(PatchField::Null),
+        Some(text) if text.is_empty() => Ok(PatchField::Null),
+        Some(text) => parse(&text)
+            .map(PatchField::Value)
+            .map_err(serde::de::Error::custom),
+    }
 }
 
 impl<'de, T> serde::Deserialize<'de> for PatchField<T>

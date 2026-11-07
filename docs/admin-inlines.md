@@ -27,6 +27,6 @@ Ein Link öffnet den Kinddatensatz. Bearbeiten nutzt die normale Kindseite. Dort
 
 Der Elternsatz muss lesbar sein. Das Kind prüft das Create-Recht und `can_create`. Vor `child.create` setzt der Server den Fremdschlüssel auf die ID aus der URL. Ein mitgesendeter anderer Wert wird ersetzt. Weitere Fremdschlüssel laufen durch `ensure_relations`.
 
-Eltern und Kinder werden nicht in einem Formular gespeichert. Eine solche Transaktion ist nicht umgesetzt.
+Ohne `|form` werden Eltern und Kinder nicht in einem Formular gespeichert. Mit `|form` ist das Speichern eine Transaktion. Syntax, Rollback und Grenzen: [admin-transactional-inlines.md](admin-transactional-inlines.md).
 
-Beispiel: `examples/myshop/src/models/category.rs`. Test: `admin_v018_drafts_inlines_bulk_and_audit`.
+Beispiel ohne gemeinsames Formular: `examples/myshop/src/models/category.rs`. Beispiel mit Formular: `examples/myshop/src/models/order.rs`. Tests: `admin_v018_drafts_inlines_bulk_and_audit` und `examples/myshop/tests/orders.rs`.

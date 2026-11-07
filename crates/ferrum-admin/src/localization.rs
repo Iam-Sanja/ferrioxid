@@ -296,6 +296,33 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "No related records.",
     ),
     ("inline_open", "Öffnen", "Open"),
+    ("inline_another", "Weitere Zeile", "Add another row"),
+    ("inline_remove", "Entfernen", "Remove"),
+    (
+        "inline_marked",
+        "Wird beim Speichern entfernt.",
+        "Removed when you save.",
+    ),
+    (
+        "inline_conflict",
+        "Ein anderer Vorgang hat den Datensatz geändert. Es wurde nichts gespeichert.",
+        "Another change updated this record. Nothing was saved.",
+    ),
+    (
+        "inline_failed",
+        "Die Änderung wurde zurückgerollt. Es wurde nichts gespeichert.",
+        "The change was rolled back. Nothing was saved.",
+    ),
+    (
+        "inline_limit",
+        "Die Anzahl der Zeilen ist ungültig.",
+        "The number of rows is invalid.",
+    ),
+    (
+        "inline_foreign",
+        "Die Zeile gehört nicht zu diesem Datensatz.",
+        "The row does not belong to this record.",
+    ),
     ("audit_empty", "Keine Einträge.", "No entries."),
     ("when", "Zeitpunkt", "When"),
     ("actor", "Akteur", "Actor"),
@@ -304,6 +331,39 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("record", "Datensatz", "Record"),
     ("succeeded", "Erfolgreich", "Succeeded"),
     ("denied", "Verweigert", "Denied"),
+    ("date_hierarchy", "Datum", "Date"),
+    (
+        "utc_hint",
+        "UTC. Der Wert wird nicht in eine lokale Zeitzone umgerechnet.",
+        "UTC. The value is not converted to a local time zone.",
+    ),
+    (
+        "validation_date",
+        "Das Datum ist ungültig.",
+        "The date is invalid.",
+    ),
+    (
+        "validation_time",
+        "Die Uhrzeit ist ungültig.",
+        "The time is invalid.",
+    ),
+    (
+        "validation_datetime",
+        "Der Zeitpunkt ist ungültig. Erwartet wird UTC.",
+        "The timestamp is invalid. UTC is required.",
+    ),
+    ("month_1", "Januar", "January"),
+    ("month_2", "Februar", "February"),
+    ("month_3", "März", "March"),
+    ("month_4", "April", "April"),
+    ("month_5", "Mai", "May"),
+    ("month_6", "Juni", "June"),
+    ("month_7", "Juli", "July"),
+    ("month_8", "August", "August"),
+    ("month_9", "September", "September"),
+    ("month_10", "Oktober", "October"),
+    ("month_11", "November", "November"),
+    ("month_12", "Dezember", "December"),
 ];
 
 pub fn notice(locale: &str, code: &str) -> Option<String> {
@@ -359,6 +419,69 @@ pub fn validation_text(locale: &str, detail: &str) -> String {
         } else {
             "This field cannot be set.".into()
         };
+    }
+    if detail.contains("validation.date") {
+        return catalog(locale)["validation_date"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
+    }
+    if detail.contains("validation.time") {
+        return catalog(locale)["validation_time"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
+    }
+    if detail.contains("validation.datetime") {
+        return catalog(locale)["validation_datetime"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
+    }
+    if detail.contains("validation.required") {
+        return if german {
+            "Pflichtfeld.".into()
+        } else {
+            "Required.".into()
+        };
+    }
+    if detail.contains("validation.inline_max") {
+        return catalog(locale)["inline_limit"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
+    }
+    if detail.contains("validation.inline_duplicate") {
+        return if german {
+            "Eine Zeile ist doppelt.".into()
+        } else {
+            "A row is listed twice.".into()
+        };
+    }
+    if detail.contains("validation.inline_foreign") || detail.contains("validation.readonly") {
+        return catalog(locale)["inline_foreign"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
+    }
+    if detail.contains("validation.inline_field") {
+        return if german {
+            "Eine Zeile enthält ein ungültiges Feld.".into()
+        } else {
+            "A row contains an invalid field.".into()
+        };
+    }
+    if detail.contains("conflict.stale") {
+        return catalog(locale)["inline_conflict"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
+    }
+    if detail.contains("validation.inline_failed") {
+        return catalog(locale)["inline_failed"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
     }
     if detail == "Invalid email or password" {
         return catalog(locale)["invalid_credentials"]

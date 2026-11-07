@@ -2,7 +2,7 @@
 
 [Zur Übersicht](admin.md) · Vorlagen: [admin-templates.md](admin-templates.md) · Gestaltung: [admin-design-system.md](admin-design-system.md)
 
-Die Bausteine sind Tera-Blöcke, keine React-Komponenten.
+Die Bausteine sind Tera-Blöcke, keine React-Komponenten. Datumsfelder sind native Eingaben. Die Datumshierarchie ist eine Linkliste mit der Klasse `hierarchy`. Ein transaktionales Inline ist ein `fieldset.form-section` in der bestehenden Formularkarte, keine zweite Karte je Kind. Die Zeile ist `.inline-row`.
 
 | Baustein | Ort |
 |---|---|

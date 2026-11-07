@@ -1,6 +1,6 @@
 # Formulare
 
-**Stand:** v0.12, IST. Die Cargo-Version bleibt `0.1.0`.
+**Stand:** v0.19, IST. Die Cargo-Version bleibt `0.1.0`. `required_date`, `optional_date`, `required_time`, `optional_time`, `required_datetime_utc` und `required_datetime_local` prüfen die kanonischen Zeichenketten. Das lokale DateTime-Feld gilt als UTC.
 
 ## Verantwortlichkeit
 

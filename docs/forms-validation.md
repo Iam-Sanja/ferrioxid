@@ -1,6 +1,6 @@
 # Formularvalidierung
 
-**Stand:** v0.12, IST. Die Cargo-Version bleibt `0.1.0`.
+**Stand:** v0.19, IST. Die Cargo-Version bleibt `0.1.0`. Zusätzliche Codes: `validation.date`, `validation.time`, `validation.datetime`, `validation.datetime_offset`.
 
 ## Verantwortlichkeit
 

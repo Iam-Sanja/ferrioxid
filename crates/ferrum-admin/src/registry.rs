@@ -2,10 +2,13 @@
 
 use crate::actions::{self, AdminAction};
 use crate::audit::{self, Event};
+use crate::filters::{self, AdminFilter};
+use crate::views::{self, AdminView, ExtensionError};
+use crate::widgets::{self, AdminWidget};
 use ferrum_auth::{AuthUser, ObjectPolicy};
 use ferrum_core::{AdminModelMeta, ColumnSpec, FerrumError, ModelDescriptor, QueryScope};
 use ferrum_db::{query_admin_page, AdminPageRequest, DeleteOutcome, ModelRepository};
-use sea_orm::{DatabaseConnection, TransactionTrait};
+use sea_orm::{DatabaseConnection, DatabaseTransaction, TransactionTrait};
 use serde_json::{Map, Value};
 use std::sync::Arc;
 
@@ -26,6 +29,7 @@ pub trait ManagedModel: Send + Sync {
         sort_column: &str,
         descending: bool,
         filters: &[(&str, sea_orm::Value)],
+        bounds: &[(&str, bool, sea_orm::Value)],
         offset: u64,
         limit: u64,
         scope: &QueryScope,
@@ -58,6 +62,33 @@ pub trait ManagedModel: Send + Sync {
         user: &AuthUser,
     ) -> Result<DeleteOutcome, FerrumError>;
     fn object_allows(&self, user: &AuthUser, action: &str, record: &Value) -> bool;
+    async fn read_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        scope: &QueryScope,
+    ) -> Result<Option<Value>, FerrumError>;
+    async fn create_in(
+        &self,
+        tx: &DatabaseTransaction,
+        body: Value,
+        user: &AuthUser,
+    ) -> Result<Value, FerrumError>;
+    async fn update_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        body: Value,
+        scope: &QueryScope,
+        user: &AuthUser,
+    ) -> Result<Value, FerrumError>;
+    async fn delete_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        scope: &QueryScope,
+        user: &AuthUser,
+    ) -> Result<DeleteOutcome, FerrumError>;
 }
 
 #[derive(Clone, Debug)]
@@ -115,6 +146,16 @@ impl AdminBranding {
     }
 }
 
+pub(crate) fn valid_template_name(name: &str) -> bool {
+    let Some(stem) = name.strip_suffix(".html") else {
+        return false;
+    };
+    crate::views::valid_key(stem)
+        && !name.contains('/')
+        && !name.contains('\\')
+        && !name.contains("..")
+}
+
 fn is_public_label(value: &str) -> bool {
     let trimmed = value.trim();
     !trimmed.is_empty()
@@ -136,6 +177,11 @@ pub struct AdminRegistry {
     models: Arc<Vec<Arc<dyn ManagedModel>>>,
     branding: AdminBranding,
     actions: Vec<AdminAction>,
+    views: Vec<AdminView>,
+    filters: Vec<AdminFilter>,
+    widgets: Vec<AdminWidget>,
+    templates: Vec<(&'static str, &'static str)>,
+    sealed: bool,
 }
 
 impl AdminRegistry {
@@ -182,8 +228,231 @@ impl AdminRegistry {
         {
             return self;
         }
+        self.sealed = false;
         self.actions.push(action);
         self
+    }
+
+    pub fn try_action(mut self, action: AdminAction) -> Result<Self, ExtensionError> {
+        actions::check_custom(&action)?;
+        if self
+            .actions
+            .iter()
+            .any(|existing| existing.model_key == action.model_key && existing.name == action.name)
+        {
+            return Err(ExtensionError::new(
+                "extension.duplicate",
+                "Die Aktion ist für dieses Modell schon registriert.",
+            ));
+        }
+        self.sealed = false;
+        self.actions.push(action);
+        Ok(self)
+    }
+
+    pub fn view(mut self, view: AdminView) -> Result<Self, ExtensionError> {
+        if !views::valid_key(view.key()) || views::RESERVED_KEYS.contains(&view.key()) {
+            return Err(ExtensionError::new(
+                "extension.route",
+                "Der Seitenname ist leer, reserviert oder enthält unerlaubte Zeichen.",
+            ));
+        }
+        if self
+            .views
+            .iter()
+            .any(|existing| existing.key() == view.key())
+        {
+            return Err(ExtensionError::new(
+                "extension.duplicate",
+                "Die Seite ist schon registriert.",
+            ));
+        }
+        self.sealed = false;
+        self.views.push(view);
+        Ok(self)
+    }
+
+    pub fn filter(mut self, filter: AdminFilter) -> Result<Self, ExtensionError> {
+        filters::check_filter(&filter, None, None)?;
+        if self
+            .filters
+            .iter()
+            .any(|existing| existing.model_key == filter.model_key && existing.name == filter.name)
+        {
+            return Err(ExtensionError::new(
+                "extension.duplicate",
+                "Der Filter ist für dieses Modell schon registriert.",
+            ));
+        }
+        self.sealed = false;
+        self.filters.push(filter);
+        Ok(self)
+    }
+
+    pub fn widget(mut self, widget: AdminWidget) -> Result<Self, ExtensionError> {
+        widgets::check_widget(&widget, None, None)?;
+        if self.widgets.iter().any(|existing| {
+            existing.model_key == widget.model_key && existing.field == widget.field
+        }) {
+            return Err(ExtensionError::new(
+                "extension.duplicate",
+                "Das Feld hat schon ein Widget.",
+            ));
+        }
+        self.sealed = false;
+        self.widgets.push(widget);
+        Ok(self)
+    }
+
+    pub fn template(
+        mut self,
+        name: &'static str,
+        source: &'static str,
+    ) -> Result<Self, ExtensionError> {
+        if !valid_template_name(name) || crate::rendering::embedded(name) {
+            return Err(ExtensionError::new(
+                "extension.template",
+                "Der Vorlagenname ist reserviert oder kein einfacher HTML-Name.",
+            ));
+        }
+        if source.len() > 65_536
+            || source.contains("|safe")
+            || source.contains("| safe")
+            || source.contains("{% include")
+            || source.contains("{% import")
+            || !source.contains("{% extends \"base.html\" %}")
+        {
+            return Err(ExtensionError::new(
+                "extension.template",
+                "Die Vorlage muss base.html erweitern und bleibt escaped.",
+            ));
+        }
+        if self.templates.iter().any(|(existing, _)| *existing == name) {
+            return Err(ExtensionError::new(
+                "extension.duplicate",
+                "Die Vorlage ist schon registriert.",
+            ));
+        }
+        self.sealed = false;
+        self.templates.push((name, source));
+        Ok(self)
+    }
+
+    /// Prüft Erweiterungen gegen die registrierten Modelle. Danach ist die Registry startbereit.
+    pub fn seal(mut self) -> Result<Self, ExtensionError> {
+        let names: Vec<&str> = self.templates.iter().map(|(name, _)| *name).collect();
+        for view in &self.views {
+            views::check_view(view, &names)?;
+        }
+        for filter in &self.filters {
+            let model = self
+                .models
+                .iter()
+                .find(|model| model.meta().key == filter.model_key);
+            let Some(model) = model else {
+                return Err(ExtensionError::new(
+                    "extension.filter",
+                    "Der Filter gehört zu keinem registrierten Modell.",
+                ));
+            };
+            filters::check_filter(filter, Some(model.meta()), Some(model.columns()))?;
+        }
+        for widget in &self.widgets {
+            let model = self
+                .models
+                .iter()
+                .find(|model| model.meta().key == widget.model_key);
+            let Some(model) = model else {
+                return Err(ExtensionError::new(
+                    "extension.widget",
+                    "Das Widget gehört zu keinem registrierten Modell.",
+                ));
+            };
+            widgets::check_widget(widget, Some(model.meta()), Some(model.columns()))?;
+        }
+        for action in &self.actions {
+            if !matches!(action.operation, crate::actions::ActionOperation::Custom(_)) {
+                continue;
+            }
+            actions::check_custom(action)?;
+            let model = self
+                .models
+                .iter()
+                .find(|model| model.meta().key == action.model_key);
+            let Some(model) = model else {
+                return Err(ExtensionError::new(
+                    "extension.action",
+                    "Die Aktion gehört zu keinem registrierten Modell.",
+                ));
+            };
+            let crate::actions::ActionOperation::Custom(custom) = &action.operation else {
+                continue;
+            };
+            if custom
+                .columns
+                .iter()
+                .any(|column| !actions::writable(model.meta(), model.columns(), column))
+            {
+                return Err(ExtensionError::new(
+                    "extension.action",
+                    "Eine Schreibspalte ist verborgen, sensibel oder keine Modellspalte.",
+                ));
+            }
+        }
+        self.sealed = true;
+        Ok(self)
+    }
+
+    pub(crate) fn views(&self) -> &[AdminView] {
+        &self.views
+    }
+
+    pub(crate) fn filters(&self) -> &[AdminFilter] {
+        &self.filters
+    }
+
+    pub(crate) fn widgets(&self) -> &[AdminWidget] {
+        &self.widgets
+    }
+
+    pub(crate) fn templates(&self) -> &[(&'static str, &'static str)] {
+        &self.templates
+    }
+
+    pub(crate) fn sealed(&self) -> bool {
+        self.sealed
+            || (self.views.is_empty()
+                && self.filters.is_empty()
+                && self.widgets.is_empty()
+                && self.templates.is_empty()
+                && self.actions.iter().all(|action| {
+                    !matches!(action.operation, crate::actions::ActionOperation::Custom(_))
+                }))
+    }
+
+    pub(crate) fn nav(
+        &self,
+        locale: &str,
+        path: &str,
+        allowed: &[(&str, bool)],
+    ) -> Vec<serde_json::Value> {
+        self.views
+            .iter()
+            .filter(|view| view.in_navigation())
+            .filter(|view| {
+                allowed
+                    .iter()
+                    .any(|(code, allowed)| *code == view.permission_code() && *allowed)
+            })
+            .map(|view| {
+                let href = format!("/admin/pages/{}", view.key());
+                serde_json::json!({
+                    "href": href,
+                    "label": view.title(locale),
+                    "current": path == format!("/admin/pages/{}", view.key())
+                })
+            })
+            .collect()
     }
 
     pub fn actions_for(&self, meta: &AdminModelMeta, columns: &[ColumnSpec]) -> Vec<AdminAction> {
@@ -261,6 +530,7 @@ where
         sort_column: &str,
         descending: bool,
         filters: &[(&str, sea_orm::Value)],
+        bounds: &[(&str, bool, sea_orm::Value)],
         offset: u64,
         limit: u64,
         scope: &QueryScope,
@@ -272,6 +542,7 @@ where
             sort_column,
             descending,
             filters,
+            bounds,
             offset,
             limit,
             scope,
@@ -322,6 +593,56 @@ where
     fn object_allows(&self, _user: &AuthUser, _action: &str, _record: &Value) -> bool {
         true
     }
+    async fn read_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        scope: &QueryScope,
+    ) -> Result<Option<Value>, FerrumError> {
+        Ok(M::get_tx(tx, id, scope).await?.map(json_of))
+    }
+    async fn create_in(
+        &self,
+        tx: &DatabaseTransaction,
+        body: Value,
+        user: &AuthUser,
+    ) -> Result<Value, FerrumError> {
+        let _ = user;
+        let input = serde_json::from_value(body).map_err(|error| {
+            FerrumError::Validation(format!("request body is invalid: {error}"))
+        })?;
+        Ok(json_of(M::create_tx(tx, input).await?))
+    }
+    async fn update_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        body: Value,
+        scope: &QueryScope,
+        user: &AuthUser,
+    ) -> Result<Value, FerrumError> {
+        let _ = user;
+        let input = serde_json::from_value(body).map_err(|error| {
+            FerrumError::Validation(format!("request body is invalid: {error}"))
+        })?;
+        if M::get_tx(tx, id, scope).await?.is_none() {
+            return Err(FerrumError::NotFound);
+        }
+        Ok(json_of(M::update_tx(tx, id, input, scope).await?))
+    }
+    async fn delete_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        scope: &QueryScope,
+        user: &AuthUser,
+    ) -> Result<DeleteOutcome, FerrumError> {
+        let _ = user;
+        if M::get_tx(tx, id, scope).await?.is_none() {
+            return Err(FerrumError::NotFound);
+        }
+        M::delete_tx(tx, id, scope).await
+    }
 }
 
 #[async_trait::async_trait]
@@ -356,6 +677,7 @@ where
         sort_column: &str,
         descending: bool,
         filters: &[(&str, sea_orm::Value)],
+        bounds: &[(&str, bool, sea_orm::Value)],
         offset: u64,
         limit: u64,
         scope: &QueryScope,
@@ -367,6 +689,7 @@ where
             sort_column,
             descending,
             filters,
+            bounds,
             offset,
             limit,
             scope,
@@ -430,6 +753,68 @@ where
             _ => false,
         }
     }
+    async fn read_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        scope: &QueryScope,
+    ) -> Result<Option<Value>, FerrumError> {
+        Ok(M::get_tx(tx, id, scope).await?.map(json_of))
+    }
+    async fn create_in(
+        &self,
+        tx: &DatabaseTransaction,
+        body: Value,
+        user: &AuthUser,
+    ) -> Result<Value, FerrumError> {
+        let input = serde_json::from_value::<M::Create>(body).map_err(|error| {
+            FerrumError::Validation(format!("request body is invalid: {error}"))
+        })?;
+        if !user.is_superuser && !P::can_create(user, &input) {
+            return Err(FerrumError::Denied(
+                "create policy rejected the record".into(),
+            ));
+        }
+        Ok(json_of(M::create_tx(tx, input).await?))
+    }
+    async fn update_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        body: Value,
+        scope: &QueryScope,
+        user: &AuthUser,
+    ) -> Result<Value, FerrumError> {
+        let existing = M::get_tx(tx, id, scope)
+            .await?
+            .ok_or(FerrumError::NotFound)?;
+        if !user.is_superuser && !P::can_update(user, &existing) {
+            return Err(FerrumError::Denied(
+                "update policy rejected the record".into(),
+            ));
+        }
+        let input = serde_json::from_value(body).map_err(|error| {
+            FerrumError::Validation(format!("request body is invalid: {error}"))
+        })?;
+        Ok(json_of(M::update_tx(tx, id, input, scope).await?))
+    }
+    async fn delete_in(
+        &self,
+        tx: &DatabaseTransaction,
+        id: uuid::Uuid,
+        scope: &QueryScope,
+        user: &AuthUser,
+    ) -> Result<DeleteOutcome, FerrumError> {
+        let existing = M::get_tx(tx, id, scope)
+            .await?
+            .ok_or(FerrumError::NotFound)?;
+        if !user.is_superuser && !P::can_delete(user, &existing) {
+            return Err(FerrumError::Denied(
+                "delete policy rejected the record".into(),
+            ));
+        }
+        M::delete_tx(tx, id, scope).await
+    }
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -440,6 +825,7 @@ async fn load_page<M: ModelRepository>(
     sort_column: &str,
     descending: bool,
     filters: &[(&str, sea_orm::Value)],
+    bounds: &[(&str, bool, sea_orm::Value)],
     offset: u64,
     limit: u64,
     scope: &QueryScope,
@@ -454,6 +840,7 @@ async fn load_page<M: ModelRepository>(
             sort_column,
             descending,
             equal_filters: filters,
+            bounds,
             offset,
             limit,
             scope,
@@ -557,6 +944,7 @@ async fn write_audit<M: ModelRepository>(
             action: action.to_owned(),
             outcome: outcome.to_owned(),
             summary,
+            operation_id: None,
         },
     )
     .await

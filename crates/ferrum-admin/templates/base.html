@@ -18,6 +18,9 @@
 <a href="/admin" {% if nav_dashboard %}aria-current="page"{% endif %}>{{ i18n.dashboard }}</a>
 <a href="/admin/models" {% if nav_models %}aria-current="page"{% endif %}>{{ i18n.models }}</a>
 <a href="/admin/audit" {% if nav_audit %}aria-current="page"{% endif %}>{{ i18n.history }}</a>
+{% for item in nav_custom %}
+<a href="{{ item.href }}" {% if item.current %}aria-current="page"{% endif %}>{{ item.label }}</a>
+{% endfor %}
 {% if superuser %}
 <p class="nav-group">{{ i18n.directory }}</p>
 <a href="/admin/directory/users" {% if nav_users %}aria-current="page"{% endif %}>{{ i18n.users }}</a>

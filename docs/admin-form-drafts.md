@@ -6,6 +6,8 @@
 
 Die Fremdschlüssel-Auswahl ist eine eigene GET-Seite. Der Entwurf hält die übrigen, noch nicht gespeicherten Felder auf dem Server, gebunden an die Sitzung. Die URL enthält die Draft-ID und den gewählten Schlüssel, nicht den Formularinhalt.
 
+`save=rows` schreibt denselben Entwurf und keine Modellzeile. Schlüssel `inline_*`, `extra_*` und `basis` bleiben erhalten. Passwörter, CSRF und Schlüssel mit `password` werden nicht gespeichert. Grenze bleibt 8 KiB, 30 Minuten und 20 Entwürfe je Sitzung.
+
 ## Speicher
 
 Tabelle `_ferrum_admin_drafts` aus `crates/ferrum-auth/migrations/0002_admin_journal.json`.
