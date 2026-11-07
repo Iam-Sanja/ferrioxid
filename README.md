@@ -1,6 +1,21 @@
 # Ferrum — Model-first Rust backend (experimental)
 
-Funktionsstand v0.24 ergänzt typisierte Settings, benannte Axum-Routen und View-Helfer. Die Beschreibung steht in `docs/settings.md`, `docs/urls.md` und `docs/views.md`. Bestehende `main.rs`-Dateien müssen dafür nicht umgeschrieben werden. Funktionsstand v0.23 bleibt gültig. E-Mail und Passwort-Reset beschreibt `docs/mail.md` und `docs/password-reset.md`. Der öffentliche Reset liegt unter `/auth/password-reset` und verlangt kein Staff. Ohne aktives Mail-Backend wird keine E-Mail versendet. Funktionsstand v0.22 bleibt gültig. Eigene Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen registriert `AdminRegistry` in `ferrum::admin`. Die Beschreibung steht in `docs/admin-extension-api.md`. `ferrum migrate status`, `check`, `doctor` und `dev` zeigen ausstehende Auth- und App-Migrationen, ohne sie anzuwenden. `ferrum upgrade` legt höchstens ein fehlendes Legacy-Manifest an und überschreibt keine Projektdatei. Details: `docs/migration-diagnostics.md` und `docs/project-upgrade.md`. v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Verzeichnisänderungen und ihr Audit sind eine Transaktion. Ein `admin_inline` mit `|form` speichert Elternobjekt und Kinder gemeinsam. Details: `docs/transactions.md`. Der Admin ist serverseitiges HTML mit Axum und Tera. React, Vite und Node.js sind dafür nicht nötig. Die Beschreibung steht in `docs/admin-native.md`. Die Fläche folgt `DESIGN.md` und `docs/admin-design-system.md`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware bleiben aus v0.12. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
+Ferrum is a pre-release Rust full-stack web framework with a Django-inspired shape: explicit models, migrations, authentication, a server-rendered admin, and application modules on Axum and SeaORM. The framework name is Ferrum. Crate names stay `ferrum`, `ferrum-api`, `ferrum-cli`, and the other workspace members. The Cargo version is `0.1.0`. This is not a stable public release, and `neravol` is not an installable crate.
+
+SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js are not required for the admin.
+
+- Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
+- Security: [SECURITY.md](SECURITY.md)
+- Governance: [GOVERNANCE.md](GOVERNANCE.md)
+- Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
+- GitHub settings that are not stored in Git: [docs/github-maintenance.md](docs/github-maintenance.md)
+- Product documentation, currently German: [docs/index.md](docs/index.md)
+
+`LICENSE-MIT` and the workspace `Cargo.toml` currently identify the code as MIT. A dual `MIT OR Apache-2.0` license has not been adopted.
+
+The following paragraph is the German milestone record.
+
+Funktionsstand v0.27.1 startet Anwendungsjobs über `WorkerHost` und `src/bin/worker.rs`. `ferrum jobs inspect` verbirgt die Payload, bis `--show-payload` gesetzt ist. Beschreibung: `docs/workers.md` und `docs/job-security.md`. Funktionsstand v0.27 ergänzt persistente Hintergrundjobs ohne Redis. Beschreibung: `docs/jobs.md` und `docs/workers.md`. Funktionsstand v0.26 ergänzt wiederverwendbare Modellfelder und prüft installierte Apps vor dem Start. Beschreibung: `docs/models.md`, `docs/model-components.md`, `docs/model-timestamps.md` und `docs/app-lifecycle.md`. Soft Delete ist nicht enthalten. Funktionsstand v0.25 ergänzt typisierte Apps über `App::install`. Beschreibung: `docs/apps.md`, `docs/app-registry.md`, `docs/app-migrations.md`, `docs/reusable-apps.md` und `docs/create-app.md`. Eine bestehende `main.rs` muss dafür nicht umgeschrieben werden. `ferrum.toml` lädt keine App-Crate. Funktionsstand v0.24 ergänzt typisierte Settings, benannte Axum-Routen und View-Helfer. Die Beschreibung steht in `docs/settings.md`, `docs/urls.md` und `docs/views.md`. Bestehende `main.rs`-Dateien müssen dafür nicht umgeschrieben werden. Funktionsstand v0.23 bleibt gültig. E-Mail und Passwort-Reset beschreibt `docs/mail.md` und `docs/password-reset.md`. Der öffentliche Reset liegt unter `/auth/password-reset` und verlangt kein Staff. Ohne aktives Mail-Backend wird keine E-Mail versendet. Funktionsstand v0.22 bleibt gültig. Eigene Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen registriert `AdminRegistry` in `ferrum::admin`. Die Beschreibung steht in `docs/admin-extension-api.md`. `ferrum migrate status`, `check`, `doctor` und `dev` zeigen ausstehende Auth- und App-Migrationen, ohne sie anzuwenden. `ferrum upgrade` legt höchstens ein fehlendes Legacy-Manifest an und überschreibt keine Projektdatei. Details: `docs/migration-diagnostics.md` und `docs/project-upgrade.md`. v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Verzeichnisänderungen und ihr Audit sind eine Transaktion. Ein `admin_inline` mit `|form` speichert Elternobjekt und Kinder gemeinsam. Details: `docs/transactions.md`. Der Admin ist serverseitiges HTML mit Axum und Tera. React, Vite und Node.js sind dafür nicht nötig. Die Beschreibung steht in `docs/admin-native.md`. Die Fläche folgt `DESIGN.md` und `docs/admin-design-system.md`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware bleiben aus v0.12. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
 
 Ein neues Projekt außerhalb dieses Workspaces:
 
@@ -114,7 +129,7 @@ store the original text.
 
 ## Important security notice
 
-`allow_anonymous = true` is only for a disposable **local demo**. Models default to denied access. There is no production-ready login, authentication, authorization, rate limiting, CSRF system, or administrative UI in v0.1. **Do not expose the demo API to the public internet.** The example binds to `127.0.0.1` by default. Any other `BIND_ADDRESS` may expose the service to additional networks; `allow_anonymous = true` is only appropriate for localhost demos. The sample PostgreSQL password is for local development only.
+Ferrum `0.1.0` is pre-release. Do not expose a demo to the public internet. Models deny access unless `allow_anonymous = true`, and that flag is only appropriate for a local demo. Authentication, sessions, CSRF for cookie-authenticated writes, and the server-rendered admin exist and are described in `docs/auth.md` and `docs/admin.md`. The example binds to `127.0.0.1` by default. The sample PostgreSQL password is for local development only. Report vulnerabilities through [SECURITY.md](SECURITY.md), not through a public issue.
 
 ## Scope and limitations
 
@@ -125,11 +140,13 @@ store the original text.
 ## Development checks
 
 ```bash
-cargo fmt --all --check
+cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 cargo build --workspace
 ```
+
+Contributor workflow, branch names, and migration rules are in [CONTRIBUTING.md](CONTRIBUTING.md). A warm local cache may add `--offline`. GitHub Actions must be allowed to download dependencies.
 
 ## Ausführliche Entwicklerdokumentation (Deutsch)
 

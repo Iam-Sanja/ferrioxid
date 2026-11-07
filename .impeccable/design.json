@@ -1,0 +1,268 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-11-07T13:30:00+01:00",
+  "title": "Design System: Ferrum",
+  "extensions": {
+    "colorMeta": {
+      "slate-door": {
+        "role": "primary",
+        "displayName": "Schiefertür",
+        "canonical": "#0f172a",
+        "tonalRamp": ["#070b14", "#0f172a", "#1b2740", "#2c3d5c", "#4d5e7a", "#7d8da3", "#b7c2d0", "#e8edf3"]
+      },
+      "cool-paper": {
+        "role": "neutral",
+        "displayName": "Kühles Papier",
+        "canonical": "#f4f7fb",
+        "tonalRamp": ["#1a2330", "#2c3a4d", "#45566c", "#6d8096", "#9aabbc", "#c5d0dc", "#e4ebf3", "#f4f7fb"]
+      },
+      "ink": {
+        "role": "neutral",
+        "displayName": "Tinte",
+        "canonical": "#142033",
+        "tonalRamp": ["#070c14", "#142033", "#243348", "#3d516b", "#64748b", "#94a3b8", "#cbd5e1", "#f1f5f9"]
+      },
+      "muted": {
+        "role": "neutral",
+        "displayName": "Gedämpft",
+        "canonical": "#526074",
+        "tonalRamp": ["#151a22", "#2a3340", "#526074", "#6d7c90", "#8b99ab", "#b0bac7", "#d5dce4", "#f2f5f8"]
+      },
+      "line": {
+        "role": "neutral",
+        "displayName": "Linie",
+        "canonical": "#6d7b90",
+        "tonalRamp": ["#1c2836", "#314256", "#4d6278", "#6f8498", "#98aaba", "#c0ccd8", "#d5deea", "#f5f8fb"]
+      },
+      "card": {
+        "role": "neutral",
+        "displayName": "Karte",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#14181e", "#2a3038", "#454c56", "#6a7280", "#9aa2ad", "#c8ced6", "#e7ebf0", "#ffffff"]
+      },
+      "sidebar-ink": {
+        "role": "neutral",
+        "displayName": "Türschrift",
+        "canonical": "#ffffff",
+        "tonalRamp": ["#14181e", "#2c333c", "#4a545f", "#6e7a86", "#9aa4ae", "#c5ccd3", "#e6eaee", "#ffffff"]
+      },
+      "signal-teal": {
+        "role": "secondary",
+        "displayName": "Signal-Teal",
+        "canonical": "#0f766e",
+        "tonalRamp": ["#042421", "#0a3d38", "#0f766e", "#149688", "#2dd4bf", "#5eead4", "#99f6e4", "#e6fffa"]
+      },
+      "crimson": {
+        "role": "semantic",
+        "displayName": "Karmesin",
+        "canonical": "#9f1239",
+        "tonalRamp": ["#3f0718", "#6b0f2c", "#9f1239", "#be185d", "#e11d48", "#fb7185", "#fecdd3", "#fff1f2"]
+      },
+      "forest": {
+        "role": "semantic",
+        "displayName": "Waldgrün",
+        "canonical": "#166534",
+        "tonalRamp": ["#052e16", "#14532d", "#166534", "#15803d", "#22c55e", "#4ade80", "#86efac", "#dcfce7"]
+      },
+      "night-paper": {
+        "role": "neutral",
+        "displayName": "Nachtpapier",
+        "canonical": "#0b1220",
+        "tonalRamp": ["#05080f", "#0b1220", "#152033", "#24344c", "#3d5270", "#6b7f99", "#a8b6c8", "#e8eef6"]
+      },
+      "night-card": {
+        "role": "neutral",
+        "displayName": "Nachtkarte",
+        "canonical": "#172234",
+        "tonalRamp": ["#0c121c", "#172234", "#243348", "#3a4d68", "#5c7290", "#8b9bb0", "#c5d0dc", "#f1f5f9"]
+      },
+      "night-line": {
+        "role": "neutral",
+        "displayName": "Nachtlinie",
+        "canonical": "#8aa0bd",
+        "tonalRamp": ["#121820", "#1c2736", "#2c3b52", "#44556e", "#6a7d96", "#97a6b8", "#cdd5e0", "#f4f7fb"]
+      },
+      "night-ink": {
+        "role": "neutral",
+        "displayName": "Nachttinte",
+        "canonical": "#e8eef8",
+        "tonalRamp": ["#121820", "#243044", "#3d4e66", "#5c7090", "#8b9cb3", "#b7c4d4", "#d5deea", "#e8eef8"]
+      },
+      "night-muted": {
+        "role": "neutral",
+        "displayName": "Nachtgedämpft",
+        "canonical": "#b7c3d6",
+        "tonalRamp": ["#1a2230", "#2e3a4c", "#4a5a70", "#6d7f96", "#8fa0b4", "#b7c3d6", "#d7e0ea", "#f4f7fb"]
+      },
+      "night-sidebar": {
+        "role": "neutral",
+        "displayName": "Nachtseite",
+        "canonical": "#1b2838",
+        "tonalRamp": ["#0c121a", "#1b2838", "#2a3b50", "#41556e", "#647892", "#93a3b6", "#c9d3de", "#f2f5f8"]
+      },
+      "night-sidebar-ink": {
+        "role": "neutral",
+        "displayName": "Nachtschrift",
+        "canonical": "#f8fafc",
+        "tonalRamp": ["#14181e", "#2c333c", "#4a545f", "#6e7a86", "#9aa4ae", "#c5ccd3", "#e6eaee", "#f8fafc"]
+      },
+      "night-action": {
+        "role": "primary",
+        "displayName": "Nachtaktion",
+        "canonical": "#e8eef8",
+        "tonalRamp": ["#121820", "#243044", "#3d4e66", "#5c7090", "#8b9cb3", "#b7c4d4", "#d5deea", "#e8eef8"]
+      },
+      "night-action-ink": {
+        "role": "primary",
+        "displayName": "Nachtaktion-Tinte",
+        "canonical": "#0f172a",
+        "tonalRamp": ["#070b14", "#0f172a", "#1b2740", "#2c3d5c", "#4d5e7a", "#7d8da3", "#b7c2d0", "#e8edf3"]
+      },
+      "night-teal": {
+        "role": "secondary",
+        "displayName": "Nacht-Teal",
+        "canonical": "#5eead4",
+        "tonalRamp": ["#042f2c", "#0f766e", "#149688", "#2dd4bf", "#5eead4", "#99f6e4", "#ccfbf1", "#f0fdfa"]
+      },
+      "night-danger": {
+        "role": "semantic",
+        "displayName": "Nachtgefahr",
+        "canonical": "#fb7185",
+        "tonalRamp": ["#4c0519", "#9f1239", "#e11d48", "#fb7185", "#fda4af", "#fecdd3", "#ffe4e6", "#fff1f2"]
+      },
+      "night-ok": {
+        "role": "semantic",
+        "displayName": "Nachtbereit",
+        "canonical": "#86efac",
+        "tonalRamp": ["#052e16", "#166534", "#16a34a", "#4ade80", "#86efac", "#bbf7d0", "#dcfce7", "#f0fdf4"]
+      }
+    },
+    "typographyMeta": {
+      "headline": { "displayName": "Headline", "purpose": "Seitentitel, 1.6rem, ohne eigene Schriftfamilie." },
+      "title": { "displayName": "Title", "purpose": "Überschrift in einer Karte, 1.05rem." },
+      "body": { "displayName": "Body", "purpose": "Tabelle, Fließtext und Meldungen in der Dokumentgröße." },
+      "label": { "displayName": "Label", "purpose": "Feldbeschriftung, 0.92rem, über der Kontrolle." }
+    },
+    "shadows": [
+      {
+        "name": "rest-hint",
+        "value": "0 1px 2px rgba(15, 23, 42, .06)",
+        "purpose": "Nur Karten im Hellen. Im Dunkeln ist der Schatten aus."
+      }
+    ],
+    "breakpoints": [
+      { "name": "stack", "value": "800px" }
+    ]
+  },
+  "components": [
+    {
+      "name": "Primary Button",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Gefüllte Hauptaktion. Im Hellen die Türfarbe, im Dunkeln die helle Nachtaktion.",
+      "html": "<button class=\"ds-btn-primary\" type=\"button\">Speichern</button>",
+      "css": ".ds-btn-primary { background: var(--action, #0f172a); color: var(--action-ink, #ffffff); border: 1px solid var(--line, #d5deea); border-radius: 0.6rem; min-height: 2.5rem; padding: 0.35rem 0.7rem; font-family: \"Segoe UI\", sans-serif; font-size: 1rem; cursor: pointer; } .ds-btn-primary:hover { background: var(--action, #0f172a); } .ds-btn-primary:focus, .ds-btn-primary:focus-visible { outline: 3px solid var(--focus, #0f766e); outline-offset: 2px; }"
+    },
+    {
+      "name": "Ghost Button",
+      "kind": "button",
+      "refersTo": "button-ghost",
+      "description": "Zweite Aktion ohne Füllung.",
+      "html": "<button class=\"ds-btn-ghost\" type=\"button\">Abbrechen</button>",
+      "css": ".ds-btn-ghost { background: transparent; color: var(--ink, #142033); border: 1px solid var(--line, #d5deea); border-radius: 0.6rem; min-height: 2.5rem; padding: 0.35rem 0.7rem; font-family: \"Segoe UI\", sans-serif; font-size: 1rem; cursor: pointer; } .ds-btn-ghost:hover { background: transparent; } .ds-btn-ghost:focus, .ds-btn-ghost:focus-visible { outline: 3px solid var(--focus, #0f766e); outline-offset: 2px; }"
+    },
+    {
+      "name": "Danger Button",
+      "kind": "button",
+      "refersTo": "button-danger",
+      "description": "Zerstörende Aktion, Karmesin, ohne eigenen Hover-Ton.",
+      "html": "<button class=\"ds-btn-danger\" type=\"button\">Löschen</button>",
+      "css": ".ds-btn-danger { background: var(--danger, #9f1239); color: #ffffff; border: 1px solid var(--danger, #9f1239); border-radius: 0.6rem; min-height: 2.5rem; padding: 0.35rem 0.7rem; font-family: \"Segoe UI\", sans-serif; font-size: 1rem; cursor: pointer; } .ds-btn-danger:hover { background: var(--danger, #9f1239); } .ds-btn-danger:focus, .ds-btn-danger:focus-visible { outline: 3px solid var(--focus, #0f766e); outline-offset: 2px; }"
+    },
+    {
+      "name": "Text Input",
+      "kind": "input",
+      "refersTo": "input",
+      "description": "Textfeld mit Label darüber und Teal-Fokusring.",
+      "html": "<label class=\"ds-field\">Name<input class=\"ds-input\" type=\"text\" value=\"Testprodukt\"></label>",
+      "css": ".ds-field { display: grid; gap: 0.25rem; font-family: \"Segoe UI\", sans-serif; font-size: 0.92rem; color: var(--ink, #142033); } .ds-input { min-height: 2.5rem; border-radius: 0.6rem; border: 1px solid var(--line, #d5deea); background: var(--card, #ffffff); color: var(--ink, #142033); padding: 0.35rem 0.7rem; font: inherit; font-size: 1rem; } .ds-input:hover { border-color: var(--line, #d5deea); } .ds-input:focus, .ds-input:focus-visible { outline: 3px solid var(--focus, #0f766e); outline-offset: 2px; }"
+    },
+    {
+      "name": "Sidebar",
+      "kind": "nav",
+      "refersTo": "sidebar",
+      "description": "Tür mit Anwendungsnamen und Blocklinks. Fokusring auf der Tür ist weiß.",
+      "html": "<nav class=\"ds-side\" aria-label=\"Verwaltung\"><p class=\"ds-side-brand\">Ferrum</p><a href=\"#\">Übersicht</a><a href=\"#\">Modelle</a></nav>",
+      "css": ".ds-side { background: var(--sidebar, #0f172a); color: var(--sidebar-ink, #ffffff); padding: 1.25rem; width: 16rem; font-family: \"Segoe UI\", sans-serif; } .ds-side-brand { font-weight: 700; margin: 0 0 1rem; } .ds-side a { color: var(--sidebar-ink, #ffffff); display: block; padding: 0.45rem 0; text-decoration: none; } .ds-side a:hover { text-decoration: none; } .ds-side a:focus, .ds-side a:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }"
+    },
+    {
+      "name": "Card",
+      "kind": "card",
+      "refersTo": "card",
+      "description": "Arbeitsfläche mit Linie, 1rem Ecke und Ruhehauch nur im Hellen.",
+      "html": "<section class=\"ds-card\"><h2>Produkt</h2><p>Testprodukt</p></section>",
+      "css": ".ds-card { background: var(--card, #ffffff); color: var(--ink, #142033); border: 1px solid var(--line, #d5deea); border-radius: 1rem; padding: 1rem; box-shadow: var(--shadow, 0 1px 2px rgba(15, 23, 42, .06)); font-family: \"Segoe UI\", sans-serif; max-width: 40rem; } .ds-card h2 { margin: 0 0 0.6rem; font-size: 1.05rem; font-weight: 700; } .ds-card p { margin: 0; line-height: 1.5; }"
+    },
+    {
+      "name": "Notice",
+      "kind": "custom",
+      "refersTo": "card",
+      "description": "Erfolgsmeldung über dem Inhalt, Waldgrün gemischt in die Karte.",
+      "html": "<p class=\"ds-notice\" role=\"status\">Die Änderungen wurden gespeichert.</p>",
+      "css": ".ds-notice { background: color-mix(in srgb, var(--ok, #166534) 18%, var(--card, #ffffff)); color: var(--ink, #142033); border: 1px solid var(--ok, #166534); padding: 0.7rem 0.9rem; border-radius: 0.7rem; font-family: \"Segoe UI\", sans-serif; line-height: 1.5; margin: 0; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Die Nachtschicht",
+    "overview": "Der Admin ist die Schicht, nicht die Bühne. Hell und Dunkel sind zwei gleichwertige Arbeitsmodi. Wer umschaltet, wechselt die Beleuchtung des gleichen Tisches, nicht das Möbel. Die Fläche bleibt zurückhaltend und bestimmt: Listen, Formulare und eine klare Hauptaktion, ohne Werbegeste und ohne die graue Feldkasten-Haut eines klassischen Django-Admins.\n\nDie Dichte ist die einer Verwaltung, nicht die eines Dashboards mit Kacheln um ihrer selbst willen. Die Marke sitzt an der Tür. Im Hellen ist das die Projektfarbe, mit Schiefertür als eingebautem Standard. Im Dunkeln bleiben Seitenleiste und Primärbutton auf festen Nachtflächen, bis ein Kontrastnachweis die Projektfarbe auch dort trägt. Diese Erweiterung ist beschlossen und nicht gebaut.",
+    "keyCharacteristics": [
+      "Hell und Dunkel sind Arbeitsmodi, kein nachträgliches Theme.",
+      "Eine Systemschrift, keine Display-Schrift.",
+      "Flächen liegen im Ruhezustand flach. Tiefe kommt aus Ton, nicht aus Schattenwurf.",
+      "Fokus ist ein Ring, nicht eine Farbfläche.",
+      "Kernaktionen bleiben ohne Script sichtbar und benutzbar."
+    ],
+    "rules": [
+      {
+        "name": "The Equal Shift Rule",
+        "body": "Hell und Dunkel bilden dieselben Rollen ab. Ein Modus ist nicht die eingefärbte Variante des anderen.",
+        "section": "colors"
+      },
+      {
+        "name": "The Contrast Gate Rule",
+        "body": "Die Projektfarbe darf Tür und Primärbutton in beiden Modi färben, sobald der Kontrast hält. Bis dieser Nachweis im Code steht, färbt sie nur den hellen Modus. Die Nachtflächen bleiben fest.",
+        "section": "colors"
+      },
+      {
+        "name": "The One Face Rule",
+        "body": "Segoe UI bleibt die einzige Familie. Eine dekorative Überschriftenschrift würde die Schicht zur Werbefläche machen.",
+        "section": "typography"
+      },
+      {
+        "name": "The Open Stair Rule",
+        "body": "Was auf dem großen Schirm nebeneinander steht, stapelt unter 800px. Es verschwindet nicht hinter einem Schalter.",
+        "section": "layout"
+      },
+      {
+        "name": "The Flat Rest Rule",
+        "body": "Eine Fläche wirft im Ruhezustand keinen Schatten, außer der Karte im Hellen. Hover erzeugt keine zusätzliche Hebung.",
+        "section": "elevation"
+      }
+    ],
+    "dos": [
+      "Do Hell und Dunkel als dieselben Rollen behandeln: Papier, Karte, Tinte, Linie, Tür, Aktion, Teal, Gefahr, Erfolg.",
+      "Do den Fokusring 3px stark und 2px außerhalb der Kante zeichnen. Auf der Tür ist der Ring weiß.",
+      "Do unter 800px stapeln, statt Aktionen zu verstecken.",
+      "Do Status mit Worten tragen. Farbe allein unterscheidet Staff, Superuser und Aktiv nicht.",
+      "Do Segoe UI für Titel, Label und Tabelle verwenden."
+    ],
+    "donts": [
+      "Don't eine Display-Schrift oder eine zweite Familie einführen.",
+      "Don't die Fläche als Werbebild bauen: kein Hero, keine großen Bilder, keine Dekorflächen.",
+      "Don't die graue Feldkasten-Haut eines klassischen Django-Admins nachbauen.",
+      "Don't die Projektfarbe im Dunkeln auf Tür oder Primärbutton legen, bevor der Kontrast geprüft ist.",
+      "Don't im Dunkeln den Ruhehauch der hellen Karte weiterverwenden.",
+      "Don't eine Kernaktion nur nach einem Script zeigen oder nur über Hover erreichbar machen."
+    ]
+  }
+}

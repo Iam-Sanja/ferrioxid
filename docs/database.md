@@ -94,7 +94,7 @@ Deserialisierungsfehler und unbekannte SQL-Fehler werden `FerrumError::Database`
 
 ## Tests
 
-`cargo test --workspace` führt `sqlite_http_roundtrip` gegen `sqlite::memory:` aus. Der Test verändert `db.sqlite3` nicht. `postgres_http_roundtrip` bleibt `#[ignore]` und verlangt eine gesetzte `DATABASE_URL`. Ohne laufenden PostgreSQL-Server ist er kein Erfolgsnachweis. Die CI startet keinen Datenbankserver. Siehe [testing.md](testing.md).
+`cargo test --workspace` führt `sqlite_http_roundtrip` gegen `sqlite::memory:` aus. Der Test verändert `db.sqlite3` nicht. `postgres_http_roundtrip` bleibt `#[ignore]` und verlangt eine gesetzte `DATABASE_URL`. Ohne laufenden PostgreSQL-Server ist er kein Erfolgsnachweis. `.github/workflows/ci.yml` enthält einen separaten PostgreSQL-Job für die ignorierten Tests. Ein lokaler Workspace-Lauf startet diesen Server nicht. Siehe [testing.md](testing.md).
 
 ## Admin-Listen
 

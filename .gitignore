@@ -1,15 +1,57 @@
+# Rust build output, including nested workspaces and generated projects.
 /target/
-.ferrum/
-crates/ferrum-admin/embedded-admin/
+**/target/
+
+# Local environment files. Example configuration stays tracked.
+.env
+.env.*
+!.env.example
+
+# Private keys and certificates.
+*.pem
+*.key
+*.p12
+*.pfx
+
+# Local databases and SQLite sidecars. Source migrations stay tracked.
+*.sqlite
 *.sqlite3
 *.sqlite3-journal
 *.sqlite3-wal
 *.sqlite3-shm
-.env
-.env.*
-!.env.example
-examples/myshop/media/*
-!examples/myshop/media/.gitkeep
+*.sqlite-journal
+*.sqlite-wal
+*.sqlite-shm
+*.db-journal
+*.db-wal
+*.db-shm
+
+# Logs, backups, and temporary files.
+*.log
+*.tmp
+*.bak
+*.orig
+*~
+
+# Operating system and editor caches.
+.DS_Store
+Thumbs.db
+Desktop.ini
 .idea/
 .vscode/
-.DS_Store
+*.swp
+
+# Local framework metadata and embedded admin build output.
+.ferrum/
+crates/ferrum-admin/embedded-admin/
+
+# Uploaded example media. The keep-file stays tracked.
+examples/myshop/media/*
+!examples/myshop/media/.gitkeep
+
+# Local agent tooling. Do not publish the installed tool or its executable.
+.cursor/
+
+# Machine-local design tooling. Shared design files stay eligible for review.
+.impeccable/config.local.json
+.impeccable/critique/

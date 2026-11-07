@@ -1,0 +1,43 @@
+name: Feature request
+description: Propose a change to Ferrum's developer experience.
+title: "feat: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Ferrum is pre-release. A proposal is not a commitment to implement it.
+        Security work belongs in the process described by SECURITY.md.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Problem statement
+      description: What is difficult or impossible for an application developer today?
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Proposed solution
+    validations:
+      required: true
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives
+      description: Other approaches you considered, including doing nothing.
+    validations:
+      required: true
+  - type: textarea
+    id: experience
+    attributes:
+      label: Expected developer experience
+      description: CLI commands, types, or configuration an application author would use.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Backward compatibility
+      description: Effect on existing projects, migrations, routes, and the Cargo 0.1.0 API.
+    validations:
+      required: true

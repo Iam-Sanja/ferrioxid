@@ -1,0 +1,74 @@
+name: Bug report
+description: Report a defect in Ferrum with enough detail to reproduce it.
+title: "fix: "
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Security vulnerabilities do not belong in this form. Follow SECURITY.md.
+        Remove passwords, session cookies, reset tokens, and job payloads from logs.
+  - type: input
+    id: revision
+    attributes:
+      label: Framework version or Git revision
+      description: Cargo version, milestone note, or `git rev-parse --short HEAD`.
+      placeholder: 0.1.0, revision abc1234
+    validations:
+      required: true
+  - type: input
+    id: os
+    attributes:
+      label: Operating system
+      placeholder: Windows 11 or Ubuntu 24.04
+    validations:
+      required: true
+  - type: input
+    id: rust
+    attributes:
+      label: Rust version
+      description: Output of `rustc --version`.
+    validations:
+      required: true
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database backend
+      options:
+        - SQLite
+        - PostgreSQL
+        - Not applicable
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      description: Commands, configuration, and the smallest project that shows the bug.
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant sanitized logs
+      description: Remove secrets and personal data before pasting.
+    validations:
+      required: false
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Minimal reproduction
+      description: A small Ferrum project or test is welcome. Do not attach a real user database.
+    validations:
+      required: false

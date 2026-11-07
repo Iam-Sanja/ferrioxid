@@ -1,0 +1,5 @@
+# Repository ownership for review routing.
+# CODEOWNERS does not grant access and does not require approval.
+# Enable "Require review from Code Owners" in GitHub branch protection separately.
+
+* @Iam-Sanja
