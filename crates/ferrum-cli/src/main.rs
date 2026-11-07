@@ -77,8 +77,10 @@ enum AdminCommand {
         /// Login. Ohne Angabe wird die Adresse abgefragt.
         #[arg(long)]
         email: Option<String>,
+        /// Öffnet die Verwaltung. Ein Superuser ohne dieses Flag bleibt ausgesperrt.
         #[arg(long)]
         staff: bool,
+        /// Modellrechte. Setzt Staff nicht und öffnet die Verwaltung nicht allein.
         #[arg(long)]
         superuser: bool,
         #[arg(long)]
@@ -540,7 +542,32 @@ fn run_admin(action: AdminCommand) -> Result<(), String> {
                     .await
                     .map_err(auth_message)
             })?;
-            println!("Benutzer angelegt: {} ({})", user.email, user.id);
+            println!(
+                "{} {} ({})",
+                crate::text::line("user_created"),
+                user.email,
+                user.id
+            );
+            println!("{}", crate::text::line("flag_active"));
+            println!(
+                "{}",
+                crate::text::line(if user.is_staff {
+                    "flag_staff_on"
+                } else {
+                    "flag_staff_off"
+                })
+            );
+            println!(
+                "{}",
+                crate::text::line(if user.is_superuser {
+                    "flag_super_on"
+                } else {
+                    "flag_super_off"
+                })
+            );
+            if user.is_superuser && !user.is_staff {
+                println!("{}", crate::text::line("super_without_staff"));
+            }
             Ok(())
         }
     }

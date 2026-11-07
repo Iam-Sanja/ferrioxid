@@ -1,43 +1,108 @@
 {% extends "base.html" %}
 {% block content %}
-<nav class="crumbs" aria-label="Breadcrumb"><a href="/admin">{{ i18n.dashboard }}</a> / <span>{{ model_label }}</span></nav>
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <span>{{ model_label }}</span></nav>
 <div class="toolbar">
-<form method="get" action="{{ list_path }}">
+<form class="filters" method="get" action="{{ list_path }}">
+{% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
+{% if dir %}<input type="hidden" name="dir" value="{{ dir }}">{% endif %}
+<div class="filter-fields">
 <label>{{ i18n.search }} <input name="q" value="{{ query }}"></label>
 {% for filter in filters %}
-<label>{{ filter.label }} <input name="filter.{{ filter.name }}" value="{{ filter.value }}"></label>
+<label>{{ filter.label }}
+{% if filter.kind == "boolean" %}
+<select name="filter.{{ filter.name }}">
+<option value="">{{ i18n.all }}</option>
+<option value="true" {% if filter.value == "true" %}selected{% endif %}>{{ filter.yes }}</option>
+<option value="false" {% if filter.value == "false" %}selected{% endif %}>{{ filter.no }}</option>
+</select>
+{% elif filter.kind == "uuid" %}
+<select name="filter.{{ filter.name }}">
+<option value="">{{ i18n.all }}</option>
+{% for option in filter.options %}
+<option value="{{ option.id }}" {% if option.id == filter.value %}selected{% endif %}>{{ option.label }}</option>
 {% endfor %}
-<button type="submit">{{ i18n.filter }}</button>
+</select>
+{% elif filter.kind == "number" %}
+<input name="filter.{{ filter.name }}" type="number" inputmode="numeric" value="{{ filter.value }}">
+{% else %}
+<input name="filter.{{ filter.name }}" value="{{ filter.value }}">
+{% endif %}
+</label>
+{% endfor %}
+</div>
+<div class="filter-actions">
+<button class="ghost" type="submit">{{ i18n.filter }}</button>
+{% if filtering %}<a class="button ghost" href="{{ list_path }}">{{ i18n.reset }}</a>{% endif %}
+</div>
 </form>
 {% if can_create %}<a class="button" href="{{ list_path }}/new">{{ i18n.new_record }}</a>{% endif %}
 </div>
 <p class="meta">{{ i18n.total }}: {{ total }} · {{ i18n.results }}: {{ shown }} · {{ i18n.page }} {{ page }}</p>
 {% if rows | length == 0 %}
+<div class="empty-state">
 <p class="empty">{{ i18n.empty }}</p>
+{% if can_create %}<a class="button" href="{{ list_path }}/new">{{ i18n.new_record }}</a>{% endif %}
+</div>
 {% else %}
+{% if actions %}
+<form method="post" action="{{ list_path }}/bulk">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="page" value="{{ page }}">
+{% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
+{% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
+{% if dir %}<input type="hidden" name="dir" value="{{ dir }}">{% endif %}
+{% for filter in filters %}{% if filter.value %}<input type="hidden" name="filter.{{ filter.name }}" value="{{ filter.value }}">{% endif %}{% endfor %}
+<div class="bulk-bar">
+<label class="check"><input type="checkbox" name="scope" value="page"><span>{{ i18n.bulk_page }}</span></label>
+<label>{{ i18n.bulk_action }}
+<select name="action" required>
+<option value="">{{ i18n.choose }}</option>
+{% for action in actions %}
+<option value="{{ action.name }}">{{ action.label }}</option>
+{% endfor %}
+</select>
+</label>
+<button type="submit">{{ i18n.bulk_run }}</button>
+</div>
+{% endif %}
 <div class="table-wrap">
 <table>
+<caption class="sr-only">{{ model_label }}</caption>
 <thead>
 <tr>
+{% if actions %}<th scope="col">{{ i18n.select }}</th>{% endif %}
 {% for column in columns %}
-<th><a href="{{ column.sort_href }}">{{ column.label }}{% if column.mark %} {{ column.mark }}{% endif %}</a></th>
+<th scope="col" {% if column.sorted %}aria-sort="{{ column.sort_state }}"{% endif %}>
+{% if column.sortable %}<a href="{{ column.sort_href }}">{{ column.label }}{% if column.mark %} <span aria-hidden="true">{{ column.mark }}</span> <span class="sr-only">{% if column.sort_state == "descending" %}{{ i18n.sort_desc }}{% else %}{{ i18n.sort_asc }}{% endif %}</span>{% endif %}</a>{% else %}{{ column.label }}{% endif %}
+{% if column.readonly %}<span class="hint"> {{ i18n.readonly }}</span>{% endif %}
+</th>
 {% endfor %}
-<th>{{ i18n.actions }}</th>
+<th scope="col">{{ i18n.actions }}</th>
 </tr>
 </thead>
 <tbody>
 {% for row in rows %}
 <tr>
-{% for cell in row.cells %}<td>{{ cell }}</td>{% endfor %}
-<td><a href="{{ list_path }}/{{ row.id }}">{{ i18n.detail }}</a></td>
+{% if actions %}<td><label class="check"><input type="checkbox" name="ids" value="{{ row.id }}"><span class="sr-only">{{ i18n.select }}</span></label></td>{% endif %}
+{% for cell in row.cells %}
+<td class="{% if cell.lead %}is-lead{% endif %}{% if cell.uuid %} is-uuid{% endif %}">{% if cell.link %}<a href="{{ list_path }}/{{ row.id }}">{% endif %}{% if cell.relation %}<span>{{ cell.text }}</span> <span class="uuid" title="{{ cell.ref }}">{{ cell.short }}</span>{% elif cell.uuid %}<span class="uuid" title="{{ cell.text }}">{{ cell.short }}</span>{% else %}{{ cell.text }}{% endif %}{% if cell.link %}</a>{% endif %}</td>
+{% endfor %}
+<td>
+<div class="row-actions">
+<a class="button ghost" href="{{ list_path }}/{{ row.id }}">{{ i18n.detail }}</a>
+{% if can_update %}<a class="button ghost" href="{{ list_path }}/{{ row.id }}/edit">{{ i18n.edit }}</a>{% endif %}
+{% if can_delete %}<a class="button ghost danger" href="{{ list_path }}/{{ row.id }}/delete">{{ i18n.delete }}</a>{% endif %}
+</div>
+</td>
 </tr>
 {% endfor %}
 </tbody>
 </table>
 </div>
+{% if actions %}</form>{% endif %}
 {% endif %}
 <nav class="pager" aria-label="{{ i18n.page }}">
-{% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% endif %}
-{% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% endif %}
+{% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% else %}<span class="hint">{{ i18n.previous }}</span>{% endif %}
+{% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% else %}<span class="hint">{{ i18n.next }}</span>{% endif %}
 </nav>
 {% endblock %}

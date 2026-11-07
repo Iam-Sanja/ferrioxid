@@ -1,0 +1,15 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ list_path }}">{{ model_label }}</a></nav>
+<form class="card" method="post" action="{{ action }}">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<input type="hidden" name="confirm" value="1">
+<h2>{{ i18n.bulk_confirm }}</h2>
+<p>{{ action_label }}</p>
+<p class="meta">{{ i18n.bulk_count }}: {{ count }}</p>
+<div class="actions">
+<button type="submit" class="danger">{{ i18n.confirm }}</button>
+<a class="button ghost" href="{{ list_path }}">{{ i18n.cancel }}</a>
+</div>
+</form>
+{% endblock %}

@@ -27,6 +27,10 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let mut admin_enabled = false;
     let mut admin_label: Option<String> = None;
     let mut admin_permission: Option<String> = None;
+    let mut admin_ordering: Option<String> = None;
+    let mut admin_per_page: Option<u16> = None;
+    let mut admin_fieldsets: Vec<(String, String, bool)> = Vec::new();
+    let mut admin_inlines: Vec<String> = Vec::new();
     for attr in &input.attrs {
         if !attr.path().is_ident("ferrum") {
             continue;
@@ -58,6 +62,21 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 admin_label = Some(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("admin_permission") {
                 admin_permission = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("admin_ordering") {
+                admin_ordering = Some(meta.value()?.parse::<LitStr>()?.value());
+            } else if meta.path.is_ident("admin_per_page") {
+                let value = meta.value()?.parse::<LitInt>()?.base10_parse::<u16>()?;
+                if !(1..=100).contains(&value) {
+                    return Err(meta.error("admin_per_page must be from 1 to 100"));
+                }
+                admin_per_page = Some(value);
+            } else if meta.path.is_ident("admin_fieldset") {
+                admin_fieldsets.push(
+                    parse_fieldset(&meta.value()?.parse::<LitStr>()?.value())
+                        .map_err(|error| meta.error(error))?,
+                );
+            } else if meta.path.is_ident("admin_inline") {
+                admin_inlines.push(meta.value()?.parse::<LitStr>()?.value());
             } else if meta.path.is_ident("has_many") {
                 has_many.push(
                     parse_has_many(&meta.value()?.parse::<LitStr>()?.value())
@@ -92,10 +111,16 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             ));
         }
     }
-    if !admin_enabled && (admin_label.is_some() || admin_permission.is_some()) {
+    if !admin_enabled
+        && (admin_label.is_some()
+            || admin_permission.is_some()
+            || admin_ordering.is_some()
+            || admin_per_page.is_some()
+            || !admin_fieldsets.is_empty())
+    {
         return Err(syn::Error::new_spanned(
             &name,
-            "admin_label and admin_permission require admin = true",
+            "admin settings require admin = true",
         ));
     }
     if let Some(value) = &admin_permission {
@@ -229,6 +254,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let mut admin_filter = false;
         let mut admin_readonly = false;
         let mut admin_hidden = false;
+        let mut admin_link = false;
+        let mut admin_fieldset: Option<String> = None;
+        let mut admin_sensitive = false;
         let mut admin_field_label: Option<String> = None;
         let mut saw_admin_attr = false;
         for attr in &field.attrs {
@@ -249,11 +277,17 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     admin_readonly = true;
                 } else if meta.path.is_ident("hidden") {
                     admin_hidden = true;
+                } else if meta.path.is_ident("list_link") {
+                    admin_link = true;
+                } else if meta.path.is_ident("fieldset") {
+                    admin_fieldset = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("sensitive") {
+                    admin_sensitive = true;
                 } else if meta.path.is_ident("label") {
                     admin_field_label = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else {
                     return Err(meta.error(
-                        "unknown admin attribute; expected list_display, searchable, sortable, filterable, readonly, hidden or label",
+                        "unknown admin attribute; expected list_display, list_link, searchable, sortable, filterable, readonly, hidden, sensitive, fieldset or label",
                     ));
                 }
                 Ok(())
@@ -269,11 +303,30 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             if field_name == "id" && admin_hidden {
                 return Err(syn::Error::new_spanned(&ident, "id cannot be hidden"));
             }
-            if admin_hidden && (admin_list || admin_search || admin_sort || admin_filter) {
+            if admin_hidden
+                && (admin_list || admin_link || admin_search || admin_sort || admin_filter)
+            {
                 return Err(syn::Error::new_spanned(
                     &ident,
                     "hidden admin fields cannot be displayed, searched, sorted or filtered",
                 ));
+            }
+            if admin_link && !admin_list && field_name != "id" {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "list_link requires list_display",
+                ));
+            }
+            if let Some(section) = &admin_fieldset {
+                if section.trim().is_empty()
+                    || section.chars().count() > 80
+                    || !admin_fieldsets.iter().any(|(name, _, _)| name == section)
+                {
+                    return Err(syn::Error::new_spanned(
+                        &ident,
+                        "fieldset must name a declared admin_fieldset of 1 to 80 characters",
+                    ));
+                }
             }
             if admin_search && type_name != "String" {
                 return Err(syn::Error::new_spanned(
@@ -281,12 +334,12 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     "searchable requires String",
                 ));
             }
-            if sensitive_admin_name(&field_name)
+            if (admin_sensitive || sensitive_admin_name(&field_name))
                 && (!admin_hidden || admin_list || admin_search || admin_sort || admin_filter)
             {
                 return Err(syn::Error::new_spanned(
                     &ident,
-                    "password, token and secret fields must be #[admin(hidden)] and cannot be listed",
+                    "password, token, secret and sensitive fields must be #[admin(hidden)] and cannot be listed",
                 ));
             }
             if let Some(label) = &admin_field_label {
@@ -301,11 +354,14 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 name: field_name.clone(),
                 label: admin_field_label.unwrap_or_else(|| field_label(&field_name)),
                 list_display: admin_list || field_name == "id",
+                list_link: admin_link,
                 searchable: admin_search,
                 sortable: admin_sort,
                 filterable: admin_filter,
                 readonly: admin_readonly || primary || readonly,
                 hidden: admin_hidden,
+                sensitive: admin_sensitive || sensitive_admin_name(&field_name),
+                fieldset: admin_fieldset.unwrap_or_default(),
             });
         }
         if primary || auto {
@@ -588,6 +644,59 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             }
         });
     }
+    if admin_enabled {
+        let mut seen_sections = Vec::new();
+        for (section, _, _) in &admin_fieldsets {
+            if seen_sections
+                .iter()
+                .any(|existing: &String| existing == section)
+            {
+                return Err(syn::Error::new_spanned(
+                    &name,
+                    "admin_fieldset names must be unique",
+                ));
+            }
+            seen_sections.push(section.clone());
+        }
+        if !admin_fieldsets.is_empty() {
+            for field in &admin_fields {
+                if !field.hidden && field.fieldset.is_empty() {
+                    return Err(syn::Error::new_spanned(
+                        &name,
+                        format!("field {} needs a fieldset", field.name),
+                    ));
+                }
+            }
+            for (section, _, _) in &admin_fieldsets {
+                if !admin_fields
+                    .iter()
+                    .any(|field| !field.hidden && &field.fieldset == section)
+                {
+                    return Err(syn::Error::new_spanned(
+                        &name,
+                        format!("fieldset {section} has no fields"),
+                    ));
+                }
+            }
+        } else if admin_fields.iter().any(|field| !field.fieldset.is_empty()) {
+            return Err(syn::Error::new_spanned(
+                &name,
+                "fieldset requires admin_fieldset on the model",
+            ));
+        }
+        if let Some(ordering) = &admin_ordering {
+            let column = ordering.strip_prefix('-').unwrap_or(ordering);
+            let allowed = admin_fields.iter().any(|field| {
+                field.name == column && !field.hidden && (field.sortable || field.name == "id")
+            });
+            if !valid_ident(column) || !allowed {
+                return Err(syn::Error::new_spanned(
+                    &name,
+                    "admin_ordering must be a sortable field or id, with an optional leading -",
+                ));
+            }
+        }
+    }
     if !seen_id {
         return Err(syn::Error::new_spanned(
             &name,
@@ -603,6 +712,16 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         Some(value) => quote! { ::core::option::Option::Some(#value) },
         None => quote! { ::core::option::Option::None },
     };
+    let resolved_inlines = if admin_enabled {
+        resolve_inlines(&name, &admin_inlines, &has_many)?
+    } else if admin_inlines.is_empty() {
+        Vec::new()
+    } else {
+        return Err(syn::Error::new_spanned(
+            &name,
+            "admin_inline requires admin = true",
+        ));
+    };
     let admin_meta_fn = if admin_enabled {
         let resolved = admin_permission.clone().or(permission.clone());
         let permission_meta = match &resolved {
@@ -614,32 +733,69 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             let name = &field.name;
             let label = &field.label;
             let list_display = field.list_display;
+            let list_link = field.list_link;
             let searchable = field.searchable;
             let sortable = field.sortable;
             let filterable = field.filterable;
             let readonly = field.readonly;
             let hidden = field.hidden;
+            let sensitive = field.sensitive;
+            let fieldset = &field.fieldset;
             quote! {
                 ::ferrum::core::AdminFieldMeta {
                     name: #name,
                     label: #label,
                     list_display: #list_display,
+                    list_link: #list_link,
                     searchable: #searchable,
                     sortable: #sortable,
                     filterable: #filterable,
                     readonly: #readonly,
                     hidden: #hidden,
+                    sensitive: #sensitive,
+                    fieldset: #fieldset,
                 }
             }
         });
+        let ordering_meta = match &admin_ordering {
+            Some(value) => quote! { ::core::option::Option::Some(#value) },
+            None => quote! { ::core::option::Option::None },
+        };
+        let per_page = admin_per_page.unwrap_or(25);
+        let inline_tokens = resolved_inlines.iter().map(|(method, child, column)| {
+            quote! {
+                ::ferrum::core::AdminInline {
+                    name: #method,
+                    child_table: #child,
+                    column: #column,
+                }
+            }
+        });
+        let fieldset_tokens = admin_fieldsets
+            .iter()
+            .map(|(section, description, optional)| {
+                quote! {
+                    ::ferrum::core::AdminFieldset {
+                        name: #section,
+                        description: #description,
+                        optional: #optional,
+                    }
+                }
+            });
         quote! {
             fn admin_meta() -> ::core::option::Option<&'static ::ferrum::core::AdminModelMeta> {
                 static FIELDS: &[::ferrum::core::AdminFieldMeta] = &[#(#field_tokens),*];
+                static FIELDSETS: &[::ferrum::core::AdminFieldset] = &[#(#fieldset_tokens),*];
+                static INLINES: &[::ferrum::core::AdminInline] = &[#(#inline_tokens),*];
                 static META: ::ferrum::core::AdminModelMeta = ::ferrum::core::AdminModelMeta {
                     key: #table,
                     label: #label_value,
                     permission: #permission_meta,
                     fields: FIELDS,
+                    ordering: #ordering_meta,
+                    per_page: #per_page,
+                    fieldsets: FIELDSETS,
+                    inlines: INLINES,
                 };
                 ::core::option::Option::Some(&META)
             }
@@ -718,20 +874,13 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 id: ::ferrum::uuid::Uuid,
                 scope: &::ferrum::core::QueryScope,
             ) -> Result<Option<Self>, ::ferrum::core::FerrumError> {
-                ::ferrum::db::get_record(db, #table, #columns_ident, id, scope).await?
-                    .map(|record| ::ferrum::serde_json::from_value::<Self>(record)
-                        .map_err(::ferrum::core::FerrumError::database))
-                    .transpose()
+                Self::get_in(db, id, scope).await
             }
 
             async fn create(db: &::ferrum::sea_orm::DatabaseConnection, payload: Self::Create)
                 -> Result<Self, ::ferrum::core::FerrumError>
             {
-                #(#checks)*
-                let values: Vec<::ferrum::sea_orm::Value> = vec![#(#values),*];
-                let record = ::ferrum::db::insert_record(db, #table, #columns_ident, values).await?;
-                ::ferrum::serde_json::from_value::<Self>(record)
-                    .map_err(::ferrum::core::FerrumError::database)
+                Self::create_in(db, payload).await
             }
 
             async fn update(
@@ -748,11 +897,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 payload: Self::Update,
                 scope: &::ferrum::core::QueryScope,
             ) -> Result<Self, ::ferrum::core::FerrumError> {
-                let mut changes: Vec<(&str, ::ferrum::sea_orm::Value)> = Vec::new();
-                #(#update_bindings)*
-                let record = ::ferrum::db::update_record(db, #table, #columns_ident, id, changes, scope).await?;
-                ::ferrum::serde_json::from_value::<Self>(record)
-                    .map_err(::ferrum::core::FerrumError::database)
+                Self::update_in(db, id, payload, scope).await
             }
 
             async fn delete(
@@ -767,6 +912,95 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 id: ::ferrum::uuid::Uuid,
                 scope: &::ferrum::core::QueryScope,
             ) -> Result<::ferrum::db::DeleteOutcome, ::ferrum::core::FerrumError> {
+                Self::delete_in(db, id, scope).await
+            }
+
+            async fn get_tx(
+                db: &::ferrum::sea_orm::DatabaseTransaction,
+                id: ::ferrum::uuid::Uuid,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<Option<Self>, ::ferrum::core::FerrumError> {
+                Self::get_in(db, id, scope).await
+            }
+
+            async fn create_tx(
+                db: &::ferrum::sea_orm::DatabaseTransaction,
+                payload: Self::Create,
+            ) -> Result<Self, ::ferrum::core::FerrumError> {
+                Self::create_in(db, payload).await
+            }
+
+            async fn update_tx(
+                db: &::ferrum::sea_orm::DatabaseTransaction,
+                id: ::ferrum::uuid::Uuid,
+                payload: Self::Update,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<Self, ::ferrum::core::FerrumError> {
+                Self::update_in(db, id, payload, scope).await
+            }
+
+            async fn delete_tx(
+                db: &::ferrum::sea_orm::DatabaseTransaction,
+                id: ::ferrum::uuid::Uuid,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<::ferrum::db::DeleteOutcome, ::ferrum::core::FerrumError> {
+                Self::delete_in(db, id, scope).await
+            }
+        }
+
+        impl #name {
+            pub async fn get_in<C>(
+                db: &C,
+                id: ::ferrum::uuid::Uuid,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<Option<Self>, ::ferrum::core::FerrumError>
+            where
+                C: ::ferrum::sea_orm::ConnectionTrait,
+            {
+                ::ferrum::db::get_record(db, #table, #columns_ident, id, scope).await?
+                    .map(|record| ::ferrum::serde_json::from_value::<Self>(record)
+                        .map_err(::ferrum::core::FerrumError::database))
+                    .transpose()
+            }
+
+            pub async fn create_in<C>(
+                db: &C,
+                payload: #create_dto,
+            ) -> Result<Self, ::ferrum::core::FerrumError>
+            where
+                C: ::ferrum::sea_orm::ConnectionTrait,
+            {
+                #(#checks)*
+                let values: Vec<::ferrum::sea_orm::Value> = vec![#(#values),*];
+                let record = ::ferrum::db::insert_record(db, #table, #columns_ident, values).await?;
+                ::ferrum::serde_json::from_value::<Self>(record)
+                    .map_err(::ferrum::core::FerrumError::database)
+            }
+
+            pub async fn update_in<C>(
+                db: &C,
+                id: ::ferrum::uuid::Uuid,
+                payload: #update_dto,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<Self, ::ferrum::core::FerrumError>
+            where
+                C: ::ferrum::sea_orm::ConnectionTrait,
+            {
+                let mut changes: Vec<(&str, ::ferrum::sea_orm::Value)> = Vec::new();
+                #(#update_bindings)*
+                let record = ::ferrum::db::update_record(db, #table, #columns_ident, id, changes, scope).await?;
+                ::ferrum::serde_json::from_value::<Self>(record)
+                    .map_err(::ferrum::core::FerrumError::database)
+            }
+
+            pub async fn delete_in<C>(
+                db: &C,
+                id: ::ferrum::uuid::Uuid,
+                scope: &::ferrum::core::QueryScope,
+            ) -> Result<::ferrum::db::DeleteOutcome, ::ferrum::core::FerrumError>
+            where
+                C: ::ferrum::sea_orm::ConnectionTrait,
+            {
                 let affected = ::ferrum::db::delete_record(db, #table, id, scope, #columns_ident).await?;
                 if affected == 0 {
                     Ok(::ferrum::db::DeleteOutcome::Missing)
@@ -774,9 +1008,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     Ok(::ferrum::db::DeleteOutcome::Deleted)
                 }
             }
-        }
 
-        impl #name {
             #(#relation_methods)*
         }
     })
@@ -806,6 +1038,48 @@ fn split_names(value: &str, label: &str) -> Result<Vec<String>, String> {
         return Err(format!("{label} contains an invalid column name"));
     }
     Ok(names)
+}
+
+fn resolve_inlines(
+    name: &syn::Ident,
+    declared: &[String],
+    has_many: &[(String, String, String)],
+) -> syn::Result<Vec<(String, String, String)>> {
+    let mut resolved = Vec::new();
+    for value in declared {
+        let (method, child, column) =
+            parse_admin_inline(value).map_err(|error| syn::Error::new_spanned(name, error))?;
+        let matched = has_many
+            .iter()
+            .any(|(existing, _, has_column)| existing == &method && has_column == &column);
+        if !matched {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("admin_inline {method} must match has_many {method}=Type.{column}"),
+            ));
+        }
+        if resolved.iter().any(|(existing, _, _)| existing == &method) {
+            return Err(syn::Error::new_spanned(
+                name,
+                format!("admin_inline {method} is declared twice"),
+            ));
+        }
+        resolved.push((method, child, column));
+    }
+    Ok(resolved)
+}
+
+fn parse_admin_inline(value: &str) -> Result<(String, String, String), String> {
+    let (method, rest) = value
+        .split_once('=')
+        .ok_or("admin_inline must look like products=products.category_id")?;
+    let (table, column) = rest
+        .rsplit_once('.')
+        .ok_or("admin_inline must name a table and a column")?;
+    if !valid_ident(method) || !valid_ident(table) || !valid_ident(column) {
+        return Err("admin_inline contains an invalid name".to_owned());
+    }
+    Ok((method.to_owned(), table.to_owned(), column.to_owned()))
 }
 
 fn parse_has_many(value: &str) -> Result<(String, String, String), String> {
@@ -1036,11 +1310,30 @@ struct AdminFieldBits {
     name: String,
     label: String,
     list_display: bool,
+    list_link: bool,
     searchable: bool,
     sortable: bool,
     filterable: bool,
     readonly: bool,
     hidden: bool,
+    sensitive: bool,
+    fieldset: String,
+}
+
+fn parse_fieldset(value: &str) -> Result<(String, String, bool), String> {
+    let mut parts = value.splitn(3, '|');
+    let name = parts.next().unwrap_or("").trim();
+    let description = parts.next().unwrap_or("").trim();
+    let flag = parts.next().unwrap_or("").trim();
+    if name.is_empty() || name.chars().count() > 80 || description.chars().count() > 160 {
+        return Err("admin_fieldset needs a name of 1 to 80 characters".into());
+    }
+    let optional = match flag {
+        "" => false,
+        "optional" => true,
+        _ => return Err("admin_fieldset flag must be empty or optional".into()),
+    };
+    Ok((name.to_owned(), description.to_owned(), optional))
 }
 
 fn field_label(name: &str) -> String {

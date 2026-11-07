@@ -11,6 +11,7 @@ embedded-admin = []
 [dependencies]
 ferrum-core = { path = "../ferrum-core" }
 ferrum-db = { path = "../ferrum-db" }
+ferrum-forms = { path = "../ferrum-forms" }
 ferrum-auth = { path = "../ferrum-auth" }
 async-trait.workspace = true
 axum.workspace = true

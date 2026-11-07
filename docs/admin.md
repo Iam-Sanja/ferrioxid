@@ -2,7 +2,9 @@
 
 [Zur Übersicht](index.md) · Backend: [admin-backend.md](admin-backend.md) · Oberfläche: [admin-frontend.md](admin-frontend.md) · Sicherheit: [admin-security.md](admin-security.md)
 
-**Stand:** v0.13 rendert den Admin serverseitig. v0.13.1 bindet die Login-Origins an die tatsächliche Serveradresse. Die Cargo-Version bleibt `0.1.0`. Admin-Metadaten ändern das Datenbankschema nicht. Anlegen verwendet dieselbe `can_create`-Regel wie REST. Listen filtern in SQL. Das Verzeichnis bleibt Staff-Superusern vorbehalten. Branding kommt aus `ferrum.toml`. Details stehen in [admin-native.md](admin-native.md).
+**Stand:** v0.18. Die Cargo-Version bleibt `0.1.0`. Admin-Metadaten ändern das Datenbankschema nicht. Die Auth-Migration `0002_admin_journal` legt Entwürfe und Audit an. Anlegen verwendet dieselbe `can_create`-Regel wie REST. Listen filtern in SQL. Das Verzeichnis bleibt Staff-Superusern vorbehalten. Branding kommt aus `ferrum.toml`. Details stehen in [admin-native.md](admin-native.md). Listen: [admin-list-configuration.md](admin-list-configuration.md). Abschnitte: [admin-fieldsets.md](admin-fieldsets.md). Auswahl: [admin-relational-widgets.md](admin-relational-widgets.md). Entwürfe: [admin-form-drafts.md](admin-form-drafts.md). Inlines: [admin-inlines.md](admin-inlines.md). Sammelaktionen: [admin-bulk-actions.md](admin-bulk-actions.md). Historie: [admin-audit-log.md](admin-audit-log.md). Eigene Aktionen: [admin-custom-actions.md](admin-custom-actions.md).
+
+Eine angemeldete 403-Seite enthält ein Abmeldeformular. Listen ohne weiteres `list_display` wählen ein sichtbares Feld und die ID. Die Fläche und die Rollenauswahl sind in v0.15 umgesetzt. Die Phasen v0.16 bis v0.18 stehen in [roadmap.md](roadmap.md).
 
 ## Zweck
 
@@ -55,11 +57,11 @@ Jede Admin-Anfrage braucht eine gültige Sitzung und `is_staff = true`. `allow_a
 
 ## Tests
 
-`examples/myshop/tests/admin_http.rs` prüft die JSON-API. `examples/myshop/tests/admin_html.rs` prüft Login, Liste, Suche, Filter, Sortierung, Blättern, Anlegen, Ändern, Löschen, Verzeichnis, CSRF und Escaping über HTML-Formulare.
+`examples/myshop/tests/admin_http.rs` prüft die JSON-API. `examples/myshop/tests/admin_html.rs` prüft Login, Liste, Suche, Filter, Sortierung, Blättern, Anlegen, Ändern, Löschen, Verzeichnis, Benutzerpflege, Bestätigung, relationale Namen, CSRF und Escaping über HTML-Formulare.
 
 ## Grenzen
 
-Kein Plugin-System, kein OAuth, kein MFA, kein Mandantensystem. Sprachen sind Deutsch und Englisch. Superuser-Flags lassen sich im Admin nicht setzen. Die Benutzerverwaltung ist Superusern vorbehalten und kein generisches Modell-CRUD.
+Kein Plugin-System, kein OAuth, kein MFA, kein Mandantensystem. Sprachen sind Deutsch und Englisch. Superuser-Flags lassen sich im Admin nicht setzen. Die Benutzerverwaltung ist Superusern vorbehalten und kein generisches Modell-CRUD. Anlegen, Bearbeiten und Passwort sind eigene Verzeichnisrouten. Löschen eines Benutzers ist Deaktivieren.
 
 ## Später
 

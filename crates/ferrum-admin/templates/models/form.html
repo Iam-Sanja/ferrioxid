@@ -1,27 +1,38 @@
 {% extends "base.html" %}
 {% block content %}
-<nav class="crumbs"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ list_path }}">{{ model_label }}</a></nav>
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ list_path }}">{{ model_label }}</a></nav>
 <form class="card" method="post" action="{{ action }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-{% for field in fields %}
-<label for="{{ field.name }}">{{ field.label }}{% if field.required %} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %} <span class="hint">{{ i18n.optional }}</span>{% endif %}</label>
-{% if field.kind == "boolean" %}
-<input type="hidden" name="{{ field.name }}" value="false">
-<input id="{{ field.name }}" name="{{ field.name }}" type="checkbox" value="true" {% if field.checked %}checked{% endif %} {% if field.invalid %}aria-invalid="true"{% endif %}>
-{% elif field.kind == "select" %}
-<select id="{{ field.name }}" name="{{ field.name }}" {% if field.invalid %}aria-invalid="true"{% endif %}>
-<option value="">{{ i18n.none }}</option>
-{% for option in field.options %}
-<option value="{{ option.id }}" {% if option.selected %}selected{% endif %}>{{ option.label }}</option>
+{% if draft %}<input type="hidden" name="_draft" value="{{ draft }}">{% endif %}
+<button class="sr-only" type="submit" name="save" value="detail" tabindex="-1">{{ i18n.save }}</button>
+{% for section in sections %}
+{% if section.fields | length == 0 %}
+{% elif section.optional %}
+<details class="form-section">
+<summary>{{ section.name }}</summary>
+{% if section.description %}<p class="hint">{{ section.description }}</p>{% endif %}
+{% for field in section.fields %}
+{% include "field.html" %}
 {% endfor %}
-</select>
+</details>
+{% elif section.name %}
+<fieldset class="form-section">
+<legend>{{ section.name }}</legend>
+{% if section.description %}<p class="hint">{{ section.description }}</p>{% endif %}
+{% for field in section.fields %}
+{% include "field.html" %}
+{% endfor %}
+</fieldset>
 {% else %}
-<input id="{{ field.name }}" name="{{ field.name }}" type="{{ field.input }}" value="{{ field.value }}" {% if field.required %}required{% endif %} {% if field.invalid %}aria-invalid="true"{% endif %}>
+{% for field in section.fields %}
+{% include "field.html" %}
+{% endfor %}
 {% endif %}
-{% if field.error %}<p class="field-error" role="alert">{{ field.error }}</p>{% endif %}
 {% endfor %}
 <div class="actions">
-<button type="submit">{{ i18n.save }}</button>
+<button type="submit" name="save" value="detail">{{ i18n.save }}</button>
+<button type="submit" name="save" value="edit">{{ i18n.save_continue }}</button>
+<button type="submit" name="save" value="new">{{ i18n.save_add }}</button>
 <a class="button ghost" href="{{ cancel }}">{{ i18n.cancel }}</a>
 </div>
 </form>

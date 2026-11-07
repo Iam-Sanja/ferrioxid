@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a></nav>
+{% if rows | length == 0 %}
+<p class="empty">{{ i18n.audit_empty }}</p>
+{% else %}
+<div class="table-wrap">
+<table>
+<caption class="sr-only">{{ i18n.history }}</caption>
+<thead>
+<tr>
+<th scope="col">{{ i18n.when }}</th>
+<th scope="col">{{ i18n.actor }}</th>
+<th scope="col">{{ i18n.actions }}</th>
+<th scope="col">{{ i18n.record }}</th>
+<th scope="col">{{ i18n.outcome }}</th>
+<th scope="col">{{ i18n.details }}</th>
+</tr>
+</thead>
+<tbody>
+{% for row in rows %}
+<tr>
+<td>{{ row.when }}</td>
+<td>{{ row.actor }}</td>
+<td>{{ row.action }}</td>
+<td><span class="uuid" title="{{ row.record }}">{{ row.record_short }}</span></td>
+<td>{% if row.ok %}{{ i18n.succeeded }}{% else %}{{ i18n.denied }}{% endif %}</td>
+<td class="audit-detail">{{ row.summary }}</td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% endif %}
+<nav class="pager" aria-label="{{ i18n.page }}">
+{% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% endif %}
+{% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% endif %}
+</nav>
+{% endblock %}

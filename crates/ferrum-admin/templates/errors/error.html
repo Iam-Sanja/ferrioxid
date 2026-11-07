@@ -1,5 +1,15 @@
 {% extends "base.html" %}
 {% block content %}
-<p class="empty">{{ message }}</p>
-{% if signed_in %}<a href="/admin">{{ i18n.dashboard }}</a>{% else %}<a href="/admin/login">{{ i18n.login }}</a>{% endif %}
+<p class="alert" role="alert">{{ message }}</p>
+{% if signed_in %}
+<div class="actions">
+<form method="post" action="/admin/logout">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<button class="ghost" type="submit">{{ i18n.logout }}</button>
+</form>
+{% if nav %}<a class="button ghost" href="/admin">{{ i18n.dashboard }}</a>{% endif %}
+</div>
+{% else %}
+<p><a href="/admin/login">{{ i18n.login }}</a></p>
+{% endif %}
 {% endblock %}

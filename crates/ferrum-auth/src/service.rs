@@ -106,6 +106,95 @@ impl AuthService {
         store::list_user_role_names(&self.db).await
     }
 
+    pub async fn get_user(&self, id: Uuid) -> Result<Option<PublicUser>, AuthError> {
+        Ok(store::find_user_by_id(&self.db, id)
+            .await?
+            .as_ref()
+            .map(public_user))
+    }
+
+    /// Admin-Anlage. Superuser bleibt der CLI vorbehalten.
+    pub async fn create_directory_user(
+        &self,
+        email: &str,
+        password: &str,
+        is_active: bool,
+        is_staff: bool,
+    ) -> Result<PublicUser, AuthError> {
+        let created = self.create_user(email, password, is_staff, false).await?;
+        if !is_active {
+            self.set_user_active(&created.email, false).await?;
+        }
+        Ok(PublicUser {
+            is_active,
+            ..created
+        })
+    }
+
+    pub async fn update_profile(
+        &self,
+        id: Uuid,
+        email: &str,
+        is_active: bool,
+        is_staff: bool,
+    ) -> Result<PublicUser, AuthError> {
+        let user = store::find_user_by_id(&self.db, id)
+            .await?
+            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
+        if user.is_superuser {
+            return Err(AuthError::Forbidden);
+        }
+        let email = normalize_email(email)?;
+        if let Some(existing) = store::find_user_by_email(&self.db, &email).await? {
+            if existing.id != user.id {
+                return Err(AuthError::Validation("email is already registered".into()));
+            }
+        }
+        let now = unix_now()?;
+        store::update_profile(&self.db, user.id, &email, is_active, is_staff, now).await?;
+        if !is_active {
+            store::revoke_user_sessions(&self.db, user.id, now).await?;
+        }
+        Ok(PublicUser {
+            id: user.id,
+            email,
+            is_active,
+            is_staff,
+            is_superuser: false,
+        })
+    }
+
+    /// Setzt das Passwort ohne das bisherige zu kennen und widerruft alle Sitzungen dieses Benutzers.
+    pub async fn reset_password(&self, id: Uuid, password: &str) -> Result<(), AuthError> {
+        validate_new_password(password)?;
+        let user = store::find_user_by_id(&self.db, id)
+            .await?
+            .ok_or_else(|| AuthError::Validation("user was not found".into()))?;
+        if user.is_superuser {
+            return Err(AuthError::Forbidden);
+        }
+        let now = unix_now()?;
+        let transaction = self.db.begin().await.map_err(AuthError::database)?;
+        store::update_password(&transaction, user.id, &hash_password(password)?, now).await?;
+        store::revoke_user_sessions(&transaction, user.id, now).await?;
+        transaction.commit().await.map_err(AuthError::database)?;
+        Ok(())
+    }
+
+    pub async fn list_user_permissions(&self, id: Uuid) -> Result<Vec<String>, AuthError> {
+        let links = store::list_user_role_names(&self.db).await?;
+        let mut codes = std::collections::BTreeSet::new();
+        for (user_id, role) in links {
+            if user_id != id {
+                continue;
+            }
+            for code in self.list_role_permissions(&role).await? {
+                codes.insert(code);
+            }
+        }
+        Ok(codes.into_iter().collect())
+    }
+
     pub async fn set_user_active(&self, email: &str, active: bool) -> Result<(), AuthError> {
         let email = normalize_email(email)?;
         let user = store::find_user_by_email(&self.db, &email)

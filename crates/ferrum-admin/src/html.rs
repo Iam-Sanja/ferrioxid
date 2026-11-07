@@ -1,9 +1,12 @@
 //! Serverseitige Admin-Seiten. Schreibende Aktionen sind POST und nutzen das bestehende CSRF.
 
+use crate::actions::ActionOperation;
+use crate::audit::{self, Event};
+use crate::drafts;
 use crate::http::{
     access_scope, display_column, filters_from, gate, list_blocked, permit, reject_locked,
 };
-use crate::localization::{catalog, normalize, notice, validation_text};
+use crate::localization::{bulk_notice, catalog, normalize, notice, validation_text};
 use crate::registry::{redact, sensitive, AdminRegistry, ManagedModel};
 use crate::rendering::render;
 use axum::body::Bytes;
@@ -14,7 +17,11 @@ use axum::routing::{get, post};
 use axum::Router;
 use ferrum_auth::{AppState, AuthConfig, AuthError, AuthUser, CookieSameSite};
 use ferrum_core::{ColumnKind, ColumnSpec, FerrumError};
-use sea_orm::Value as DbValue;
+use ferrum_db::{delete_record, get_record, query_labels, update_record};
+use ferrum_forms::{
+    reject_unknown, require_confirmation, required_bool, required_text, FormValues, TextSpec,
+};
+use sea_orm::{TransactionTrait, Value as DbValue};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use uuid::Uuid;
@@ -27,11 +34,28 @@ pub fn routes(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSt
             .route("/admin/login", get(login_form).post(login_submit))
             .route("/admin/logout", post(logout))
             .route("/admin/preferences", post(preferences))
+            .route("/admin/audit", get(audit_page))
             .route("/admin/models", get(model_index))
             .route("/admin/models/{model}", get(model_list))
+            .route("/admin/models/{model}/bulk", post(model_bulk))
+            .route(
+                "/admin/models/{model}/bulk/{draft}",
+                get(bulk_confirm).post(bulk_apply),
+            )
+            .route("/admin/models/{model}/draft", post(model_draft))
             .route(
                 "/admin/models/{model}/new",
                 get(model_new).post(model_create),
+            )
+            .route("/admin/models/{model}/pick/{field}", get(model_pick))
+            .route(
+                "/admin/models/{model}/{id}/pick/{field}",
+                get(model_record_pick),
+            )
+            .route("/admin/models/{model}/{id}/draft", post(model_record_draft))
+            .route(
+                "/admin/models/{model}/{id}/inline/{inline}/new",
+                get(inline_new).post(inline_create),
             )
             .route("/admin/models/{model}/{id}", get(model_detail))
             .route(
@@ -43,6 +67,16 @@ pub fn routes(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSt
                 get(model_delete).post(model_remove),
             )
             .route("/admin/directory/users", get(users))
+            .route(
+                "/admin/directory/users/new",
+                get(user_new).post(user_create),
+            )
+            .route("/admin/directory/users/{id}", get(user_detail))
+            .route(
+                "/admin/directory/users/{id}/edit",
+                get(user_edit).post(user_update),
+            )
+            .route("/admin/directory/users/{id}/password", post(user_password))
             .route("/admin/directory/users/{id}/active", post(user_active))
             .route("/admin/directory/users/{id}/staff", post(user_staff))
             .route("/admin/directory/roles", get(roles).post(role_create))
@@ -108,18 +142,31 @@ async fn login_submit(
     let form = parse_form(&body);
     let Some(auth) = state.auth.as_ref() else {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::FORBIDDEN,
             "forbidden",
             false,
             "",
-        );
+        )
+        .await;
     };
     let supplied = form.get("csrf_token").map(String::as_str).unwrap_or("");
     if let Err(reason) = login_gate(auth, &headers, supplied) {
         log_login_rejection(&headers, reason);
-        return error_page(&registry, &locale, StatusCode::FORBIDDEN, "csrf", false, "");
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "csrf",
+            false,
+            "",
+        )
+        .await;
     }
     let next =
         safe_next(form.get("next").map(String::as_str).unwrap_or("/admin")).unwrap_or("/admin");
@@ -140,14 +187,19 @@ async fn login_submit(
             );
             response
         }
-        Err(AuthError::RateLimited) => error_page(
-            &registry,
-            &locale,
-            StatusCode::TOO_MANY_REQUESTS,
-            "rate_limited",
-            false,
-            "",
-        ),
+        Err(AuthError::RateLimited) => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::TOO_MANY_REQUESTS,
+                "rate_limited",
+                false,
+                "",
+            )
+            .await
+        }
         Err(AuthError::InvalidCredentials) => {
             let token = login_token(&headers);
             let mut response = page(
@@ -169,14 +221,19 @@ async fn login_submit(
             append_cookie(&mut response, &login_cookie(Some(auth.config()), &token));
             response
         }
-        Err(_) => error_page(
-            &registry,
-            &locale,
-            StatusCode::FORBIDDEN,
-            "forbidden",
-            false,
-            "",
-        ),
+        Err(_) => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                false,
+                "",
+            )
+            .await
+        }
     }
 }
 
@@ -193,13 +250,16 @@ async fn logout(
     );
     let Some(auth) = state.auth.as_ref() else {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::FORBIDDEN,
             "forbidden",
             false,
             "",
-        );
+        )
+        .await;
     };
     let form = parse_form(&body);
     if auth
@@ -211,7 +271,17 @@ async fn logout(
         .await
         .is_err()
     {
-        return error_page(&registry, &locale, StatusCode::FORBIDDEN, "csrf", true, "");
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "csrf",
+            true,
+            "",
+        )
+        .await;
     }
     let token = cookie(&headers, &auth.config().cookie_name);
     let cleared = auth.logout(token.as_deref()).await.unwrap_or_default();
@@ -234,7 +304,17 @@ async fn preferences(
         &registry.branding().fallback_locale,
     );
     if require_post(&state, &headers, &body).await.is_err() {
-        return error_page(&registry, &locale, StatusCode::FORBIDDEN, "csrf", true, "");
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "csrf",
+            true,
+            "",
+        )
+        .await;
     }
     let form = parse_form(&body);
     let next =
@@ -273,19 +353,22 @@ async fn dashboard(
         &registry.branding().default_locale,
         &registry.branding().fallback_locale,
     );
-    let user = match require_get(&state, &headers, "/admin").await {
+    let user = match require_get(&state, &headers, &registry, "/admin").await {
         Ok(user) => user,
         Err(response) => return response,
     };
     let Some(auth) = state.auth.as_ref() else {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::FORBIDDEN,
             "forbidden",
             false,
             "",
-        );
+        )
+        .await;
     };
     let mut models = Vec::new();
     for model in registry.models() {
@@ -317,8 +400,12 @@ async fn dashboard(
     )
 }
 
-async fn model_index(State(state): State<AppState>, headers: HeaderMap) -> Response {
-    require_get(&state, &headers, "/admin/models")
+async fn model_index(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+) -> Response {
+    require_get(&state, &headers, &registry, "/admin/models")
         .await
         .map_or_else(|response| response, |_| redirect("/admin"))
 }
@@ -336,55 +423,54 @@ async fn model_list(
         &registry.branding().default_locale,
         &registry.branding().fallback_locale,
     );
-    let user = match require_get(&state, &headers, &format!("/admin/models/{model_key}")).await {
+    let user = match require_get(
+        &state,
+        &headers,
+        &registry,
+        &format!("/admin/models/{model_key}"),
+    )
+    .await
+    {
         Ok(user) => user,
         Err(response) => return response,
     };
     let Some(model) = registry.find(&model_key) else {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     };
     if gate(&state, &user, model.as_ref(), "read").await.is_err() || list_blocked(model.as_ref()) {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::FORBIDDEN,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     let page_number = params
         .get("page")
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(1)
         .max(1);
-    let sort = params.get("sort").map(String::as_str).unwrap_or("id");
-    if !model
-        .meta()
-        .fields
-        .iter()
-        .any(|field| field.name == sort && (field.sortable || field.name == "id"))
-    {
-        return error_page(
-            &registry,
-            &locale,
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "forbidden",
-            true,
-            &user.email,
-        );
-    }
-    let filters = match filters_from(raw.as_deref().unwrap_or(""), model.columns(), model.meta()) {
-        Ok(filters) => filters,
-        Err(_) => {
+    let (sort, descending) = match resolved_sort(model.meta(), &params) {
+        Ok(value) => value,
+        Err(()) => {
             return error_page(
+                &state,
+                &headers,
                 &registry,
                 &locale,
                 StatusCode::UNPROCESSABLE_ENTITY,
@@ -392,6 +478,23 @@ async fn model_list(
                 true,
                 &user.email,
             )
+            .await;
+        }
+    };
+    let filters = match filters_from(raw.as_deref().unwrap_or(""), model.columns(), model.meta()) {
+        Ok(filters) => filters,
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await
         }
     };
     let filter_refs: Vec<(&str, DbValue)> = filters
@@ -408,23 +511,26 @@ async fn model_list(
     let query = params.get("q").cloned().unwrap_or_default();
     if !query.is_empty() && search_columns.is_empty() {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::UNPROCESSABLE_ENTITY,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     let scope = access_scope(model.as_ref(), &user, false);
-    let page_size = 25_u64;
+    let page_size = u64::from(model.meta().per_page.clamp(1, 100));
     let listed = model
         .page(
             &state.db,
             &search_columns,
             (!query.is_empty()).then_some(query.as_str()),
-            sort,
-            params.get("dir").map(String::as_str) == Some("desc"),
+            &sort,
+            descending,
             &filter_refs,
             u64::from(page_number - 1) * page_size,
             page_size,
@@ -435,6 +541,8 @@ async fn model_list(
         Ok(value) => value,
         Err(_) => {
             return error_page(
+                &state,
+                &headers,
                 &registry,
                 &locale,
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -442,6 +550,7 @@ async fn model_list(
                 true,
                 &user.email,
             )
+            .await
         }
     };
     for row in &mut rows {
@@ -449,18 +558,115 @@ async fn model_list(
     }
     let columns = list_columns(
         model.meta(),
+        model.columns(),
         &model_key,
-        &query,
-        params.get("dir").map(String::as_str).unwrap_or("asc"),
-        sort,
+        &params,
+        &sort,
+        descending,
     );
-    let rendered_rows: Vec<Value> = rows.iter().map(|row| json!({
-        "id": row.get("id").and_then(Value::as_str).unwrap_or(""),
-        "cells": columns.iter().map(|column| display_cell(&locale, registry.branding().currency.as_str(), column["name"].as_str().unwrap_or(""), row.get(column["name"].as_str().unwrap_or("")).unwrap_or(&Value::Null))).collect::<Vec<_>>()
-    })).collect();
+    let links = link_names(model.meta(), model.columns());
+    let relations = match relation_names(&registry, &state, &user, model.columns(), &rows).await {
+        Ok(relations) => relations,
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await
+        }
+    };
+    let rendered_rows: Vec<Value> = rows
+        .iter()
+        .map(|row| {
+            let mut lead_taken = false;
+            let cells: Vec<Value> = columns
+                .iter()
+                .map(|column| {
+                    let name = column["name"].as_str().unwrap_or("");
+                    let mut cell = present_cell(
+                        &locale,
+                        registry.branding().currency.as_str(),
+                        model.columns(),
+                        name,
+                        row.get(name).unwrap_or(&Value::Null),
+                        &relations,
+                        user.is_superuser,
+                        &mut lead_taken,
+                    );
+                    if links.contains(&name) {
+                        cell["link"] = json!(true);
+                    }
+                    cell
+                })
+                .collect();
+            json!({
+                "id": row.get("id").and_then(Value::as_str).unwrap_or(""),
+                "cells": cells
+            })
+        })
+        .collect();
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
     let list_path = format!("/admin/models/{model_key}");
     let preserved = preserve_query(&params, page_number);
+    let filters = filter_inputs(
+        &locale,
+        &registry,
+        &state,
+        &user,
+        model.meta(),
+        model.columns(),
+        &params,
+    )
+    .await;
+    let filtering = !query.is_empty()
+        || filters.iter().any(|item| {
+            item.get("value")
+                .and_then(Value::as_str)
+                .is_some_and(|value| !value.is_empty())
+        });
+    let can_update = permit(state.auth.as_ref().unwrap(), &user, model.meta(), "update")
+        .await
+        .is_ok();
+    let can_delete = permit(state.auth.as_ref().unwrap(), &user, model.meta(), "delete")
+        .await
+        .is_ok();
+    let mut actions = Vec::new();
+    for action in registry.actions_for(model.meta(), model.columns()) {
+        if permit(
+            state.auth.as_ref().unwrap(),
+            &user,
+            model.meta(),
+            action.permission,
+        )
+        .await
+        .is_ok()
+        {
+            actions.push(json!({
+                "name": action.name,
+                "label": if locale == "de" { action.label_de } else { action.label_en }
+            }));
+        }
+    }
+    let changed = params
+        .get("changed")
+        .and_then(|value| value.parse::<u32>().ok())
+        .filter(|count| *count <= 100);
+    let notice = if params.get("notice").map(String::as_str) == Some("changed") {
+        changed
+            .map(|count| bulk_notice(&locale, count))
+            .unwrap_or_default()
+    } else {
+        flash(
+            &locale,
+            params.get("notice").map(String::as_str).unwrap_or(""),
+        )
+    };
     page(
         &registry,
         "list.html",
@@ -472,17 +678,20 @@ async fn model_list(
         &user.email,
         &csrf,
         &list_path,
-        &flash(
-            &locale,
-            params.get("notice").map(String::as_str).unwrap_or(""),
-        ),
+        &notice,
         "",
         json!({
             "model_label": model.meta().label,
+            "actions": actions,
             "list_path": list_path,
             "query": query,
-            "filters": filter_inputs(model.meta(), model.columns(), &params),
+            "sort": if params.contains_key("sort") { sort.clone() } else { String::new() },
+            "dir": if params.contains_key("dir") { if descending { "desc" } else { "asc" }.to_owned() } else { String::new() },
+            "filters": filters,
+            "filtering": filtering,
             "can_create": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "create").await.is_ok(),
+            "can_update": can_update,
+            "can_delete": can_delete,
             "columns": columns,
             "rows": rendered_rows,
             "total": total,
@@ -499,15 +708,39 @@ async fn model_new(
     headers: HeaderMap,
     Extension(registry): Extension<AdminRegistry>,
     Path(model_key): Path<String>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
+    let mut values = Map::new();
+    if params.contains_key("draft") {
+        values.insert("_draft".to_owned(), json!(params.get("draft")));
+        values.insert("_use_draft".to_owned(), json!(true));
+    }
+    if let Some(model) = registry.find(&model_key) {
+        let mut picks = Map::new();
+        apply_picks(model.meta(), model.columns(), &params, &mut picks);
+        if !picks.is_empty() {
+            values.insert("_picks".to_owned(), Value::Object(picks));
+        }
+    }
+    let notice = flash(
+        &locale_of(
+            &headers,
+            &registry.branding().default_locale,
+            &registry.branding().fallback_locale,
+        ),
+        params.get("notice").map(String::as_str).unwrap_or(""),
+    );
     form_page(
         &state,
         &headers,
         &registry,
         &model_key,
         None,
-        Map::new(),
-        "",
+        values,
+        FormFeedback {
+            notice: &notice,
+            alert: "",
+        },
     )
     .await
 }
@@ -534,42 +767,69 @@ async fn model_detail(
         &registry.branding().default_locale,
         &registry.branding().fallback_locale,
     );
-    let user = match require_get(&state, &headers, &format!("/admin/models/{model_key}/{id}")).await
+    let user = match require_get(
+        &state,
+        &headers,
+        &registry,
+        &format!("/admin/models/{model_key}/{id}"),
+    )
+    .await
     {
         Ok(user) => user,
         Err(response) => return response,
     };
     let Some(model) = registry.find(&model_key) else {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     };
     if gate(&state, &user, model.as_ref(), "read").await.is_err() {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     let Some(mut record) = read_visible(&state, &user, model.as_ref(), id, "read").await else {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     };
     redact(model.meta(), &mut record);
+    let relations = relation_names(&registry, &state, &user, model.columns(), &[record.clone()])
+        .await
+        .unwrap_or_default();
+    let fields = visible_fields(
+        &locale,
+        registry.branding().currency.as_str(),
+        model.meta(),
+        model.columns(),
+        &record,
+        &relations,
+        user.is_superuser,
+    );
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
     let list_path = format!("/admin/models/{model_key}");
     page(
@@ -592,9 +852,10 @@ async fn model_detail(
             "model_label": model.meta().label,
             "list_path": list_path,
             "id": id.to_string(),
-            "fields": visible_fields(&locale, registry.branding().currency.as_str(), model.meta(), model.columns(), &record),
+            "fields": fields,
             "can_update": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "update").await.is_ok(),
-            "can_delete": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "delete").await.is_ok()
+            "can_delete": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "delete").await.is_ok(),
+            "inlines": inline_sections(&state, &registry, &user, model.as_ref(), id, &query).await
         }),
     )
 }
@@ -604,31 +865,59 @@ async fn model_edit(
     headers: HeaderMap,
     Extension(registry): Extension<AdminRegistry>,
     Path((model_key, id)): Path<(String, Uuid)>,
+    Query(params): Query<HashMap<String, String>>,
 ) -> Response {
     if let Err(response) = require_get(
         &state,
         &headers,
+        &registry,
         &format!("/admin/models/{model_key}/{id}/edit"),
     )
     .await
     {
         return response;
     }
-    let Some(record) = load_for_form(&state, &headers, &registry, &model_key, id).await else {
+    let Some(mut record) = load_for_form(&state, &headers, &registry, &model_key, id).await else {
         let locale = locale_of(
             &headers,
             &registry.branding().default_locale,
             &registry.branding().fallback_locale,
         );
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             "",
-        );
+        )
+        .await;
     };
+    if params.contains_key("draft") {
+        record.insert(
+            "_draft".to_owned(),
+            json!(params.get("draft").map(String::as_str).unwrap_or("")),
+        );
+        record.insert("_use_draft".to_owned(), json!(true));
+    }
+    if let Some(model) = registry.find(&model_key) {
+        let mut picks = Map::new();
+        apply_picks(model.meta(), model.columns(), &params, &mut picks);
+        if !picks.is_empty() {
+            record.insert("_picks".to_owned(), Value::Object(picks));
+        }
+    }
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let notice = flash(
+        &locale,
+        params.get("notice").map(String::as_str).unwrap_or(""),
+    );
     form_page(
         &state,
         &headers,
@@ -636,7 +925,10 @@ async fn model_edit(
         &model_key,
         Some(id),
         record,
-        "",
+        FormFeedback {
+            notice: &notice,
+            alert: "",
+        },
     )
     .await
 }
@@ -665,6 +957,7 @@ async fn model_delete(
     let user = match require_get(
         &state,
         &headers,
+        &registry,
         &format!("/admin/models/{model_key}/{id}/delete"),
     )
     .await
@@ -674,28 +967,49 @@ async fn model_delete(
     };
     let Some(model) = registry.find(&model_key) else {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     };
-    if gate(&state, &user, model.as_ref(), "delete").await.is_err()
-        || read_visible(&state, &user, model.as_ref(), id, "delete")
-            .await
-            .is_none()
-    {
+    if gate(&state, &user, model.as_ref(), "delete").await.is_err() {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
+    let Some(record) = read_visible(&state, &user, model.as_ref(), id, "delete").await else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let named = display_column(model.meta(), model.columns())
+        .and_then(|name| record.get(name))
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+        .unwrap_or("")
+        .to_owned();
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
     page(
         &registry,
@@ -713,7 +1027,10 @@ async fn model_delete(
         json!({
             "action": format!("/admin/models/{model_key}/{id}/delete"),
             "cancel": format!("/admin/models/{model_key}/{id}"),
-            "label": id.to_string()
+            "label": if named.is_empty() { id.to_string() } else { named },
+            "record_id": id.to_string(),
+            "model_label": model.meta().label,
+            "list_path": format!("/admin/models/{model_key}")
         }),
     )
 }
@@ -732,17 +1049,32 @@ async fn model_remove(
     );
     let user = match require_post(&state, &headers, &body).await {
         Ok(user) => user,
-        Err(_) => return error_page(&registry, &locale, StatusCode::FORBIDDEN, "csrf", true, ""),
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "csrf",
+                true,
+                "",
+            )
+            .await
+        }
     };
     let Some(model) = registry.find(&model_key) else {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     };
     if gate(&state, &user, model.as_ref(), "delete").await.is_err()
         || read_visible(&state, &user, model.as_ref(), id, "delete")
@@ -750,27 +1082,35 @@ async fn model_remove(
             .is_none()
     {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     let scope = access_scope(model.as_ref(), &user, true);
-    match model.remove(&state.db, id, &scope).await {
+    match model.remove(&state.db, id, &scope, &user).await {
         Ok(ferrum_db::DeleteOutcome::Deleted) => {
             redirect(&format!("/admin/models/{model_key}?notice=deleted"))
         }
-        _ => error_page(
-            &registry,
-            &locale,
-            StatusCode::NOT_FOUND,
-            "not_found",
-            true,
-            &user.email,
-        ),
+        _ => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::NOT_FOUND,
+                "not_found",
+                true,
+                &user.email,
+            )
+            .await
+        }
     }
 }
 
@@ -785,12 +1125,26 @@ async fn users(
         &registry.branding().default_locale,
         &registry.branding().fallback_locale,
     );
-    let user = match require_directory(&state, &headers, "/admin/directory/users").await {
+    let user = match require_directory(&state, &headers, &registry, "/admin/directory/users").await
+    {
         Ok(user) => user,
         Err(response) => return response,
     };
     let auth = state.auth.as_ref().unwrap();
     let listed = auth.list_users().await.unwrap_or_default();
+    let mut emails: Vec<String> = listed
+        .iter()
+        .map(|candidate| candidate.email.clone())
+        .collect();
+    emails.sort();
+    let mut role_choices: Vec<String> = auth
+        .list_roles()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(_, name)| name)
+        .collect();
+    role_choices.sort();
     let links = auth.list_user_role_names().await.unwrap_or_default();
     let mut roles: HashMap<Uuid, Vec<String>> = HashMap::new();
     for (id, name) in links {
@@ -834,10 +1188,12 @@ async fn users(
                 "is_staff": candidate.is_staff,
                 "is_superuser": candidate.is_superuser,
                 "roles": names.join(", "),
+                "can_edit": !candidate.is_superuser,
                 "mutable": !candidate.is_superuser && candidate.id != user.id
             })
         })
         .collect();
+    let shown = users.len();
     let csrf = session_csrf(auth, &headers).await;
     page(
         &registry,
@@ -859,9 +1215,20 @@ async fn users(
             "users": users,
             "query": query,
             "total": total,
+            "shown": shown,
+            "page": page_number,
+            "emails": emails,
+            "role_choices": role_choices,
+            "email_mark": if descending { "↓" } else { "↑" },
+            "email_state": if descending { "descending" } else { "ascending" },
+            "email_sort": format!(
+                "/admin/directory/users?q={}&sort=email&dir={}",
+                url_encode(&query),
+                if descending { "asc" } else { "desc" }
+            ),
             "email_dir": if descending { "asc" } else { "desc" },
-            "previous": (page_number > 1).then(|| format!("/admin/directory/users?q={query}&page={}", page_number - 1)),
-            "next_page": (start + 25 < total).then(|| format!("/admin/directory/users?q={query}&page={}", page_number + 1))
+            "previous": (page_number > 1).then(|| format!("/admin/directory/users?q={}&dir={}&page={}", url_encode(&query), if descending { "desc" } else { "asc" }, page_number - 1)),
+            "next_page": (start + 25 < total).then(|| format!("/admin/directory/users?q={}&dir={}&page={}", url_encode(&query), if descending { "desc" } else { "asc" }, page_number + 1))
         }),
     )
 }
@@ -896,7 +1263,8 @@ async fn roles(
         &registry.branding().default_locale,
         &registry.branding().fallback_locale,
     );
-    let user = match require_directory(&state, &headers, "/admin/directory/roles").await {
+    let user = match require_directory(&state, &headers, &registry, "/admin/directory/roles").await
+    {
         Ok(user) => user,
         Err(response) => return response,
     };
@@ -947,13 +1315,16 @@ async fn role_create(
     let name = parse_form(&body).get("name").cloned().unwrap_or_default();
     if !identifier(&name) {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::UNPROCESSABLE_ENTITY,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     if state
         .auth
@@ -964,13 +1335,16 @@ async fn role_create(
         .is_err()
     {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::UNPROCESSABLE_ENTITY,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     redirect("/admin/directory/roles?notice=updated")
 }
@@ -986,7 +1360,9 @@ async fn permissions_page(
         &registry.branding().default_locale,
         &registry.branding().fallback_locale,
     );
-    let user = match require_directory(&state, &headers, "/admin/directory/permissions").await {
+    let user = match require_directory(&state, &headers, &registry, "/admin/directory/permissions")
+        .await
+    {
         Ok(user) => user,
         Err(response) => return response,
     };
@@ -1042,13 +1418,29 @@ async fn permission_change(
     let code = form.get("code").cloned().unwrap_or_default();
     if !identifier(&role) || !identifier(&code) {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::UNPROCESSABLE_ENTITY,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
+    }
+    if let Err(code) = confirmed(&body) {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            code,
+            true,
+            &user.email,
+        )
+        .await;
     }
     let auth = state.auth.as_ref().unwrap();
     let result = if form.get("action").map(String::as_str) == Some("grant") {
@@ -1060,13 +1452,16 @@ async fn permission_change(
     };
     if result.is_err() {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::UNPROCESSABLE_ENTITY,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     redirect("/admin/directory/permissions?notice=updated")
 }
@@ -1091,15 +1486,45 @@ async fn assignment(
     let role = form.get("role").cloned().unwrap_or_default();
     if !identifier(&role) {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::UNPROCESSABLE_ENTITY,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     let auth = state.auth.as_ref().unwrap();
+    let known = auth.list_roles().await.unwrap_or_default();
+    if !known.iter().any(|(_, name)| name == &role) {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "unknown_role",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    if let Err(code) = confirmed(&body) {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            code,
+            true,
+            &user.email,
+        )
+        .await;
+    }
     let result = if form.get("action").map(String::as_str) == Some("revoke") {
         auth.revoke_role(&email, &role).await
     } else {
@@ -1107,15 +1532,346 @@ async fn assignment(
     };
     if result.is_err() {
         return error_page(
+            &state,
+            &headers,
             &registry,
             &locale,
             StatusCode::UNPROCESSABLE_ENTITY,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
+    let _ = audit::insert(
+        &state.db,
+        &Event {
+            actor_id: user.id,
+            model_key: "_ferrum_users".to_owned(),
+            record_id: email,
+            action: if form.get("action").map(String::as_str) == Some("revoke") {
+                "role_revoke"
+            } else {
+                "role_assign"
+            }
+            .to_owned(),
+            outcome: "ok".to_owned(),
+            summary: role,
+        },
+    )
+    .await;
     redirect("/admin/directory/users?notice=updated")
+}
+
+async fn model_pick(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path((model_key, field)): Path<(String, String)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    pick_page(
+        &state, &headers, &registry, &model_key, None, &field, &params,
+    )
+    .await
+}
+
+async fn model_record_pick(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path((model_key, id, field)): Path<(String, Uuid, String)>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    pick_page(
+        &state,
+        &headers,
+        &registry,
+        &model_key,
+        Some(id),
+        &field,
+        &params,
+    )
+    .await
+}
+
+async fn pick_page(
+    state: &AppState,
+    headers: &HeaderMap,
+    registry: &AdminRegistry,
+    model_key: &str,
+    record_id: Option<Uuid>,
+    field: &str,
+    params: &HashMap<String, String>,
+) -> Response {
+    let locale = locale_of(
+        headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let back = match record_id {
+        Some(id) => format!("/admin/models/{model_key}/{id}/edit"),
+        None => format!("/admin/models/{model_key}/new"),
+    };
+    let user = match require_get(state, headers, registry, &back).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Some(model) = registry.find(model_key) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let action_name = if record_id.is_some() {
+        "update"
+    } else {
+        "create"
+    };
+    if gate(state, &user, model.as_ref(), action_name)
+        .await
+        .is_err()
+    {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    if let Some(id) = record_id {
+        if load_for_form(state, headers, registry, model_key, id)
+            .await
+            .is_none()
+        {
+            return error_page(
+                state,
+                headers,
+                registry,
+                &locale,
+                StatusCode::NOT_FOUND,
+                "not_found",
+                true,
+                &user.email,
+            )
+            .await;
+        }
+    }
+    let Some(column) = model
+        .columns()
+        .iter()
+        .find(|column| column.name == field && column.foreign_table.is_some())
+    else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    if model
+        .meta()
+        .fields
+        .iter()
+        .any(|item| item.name == field && (item.hidden || item.readonly || sensitive(item.name)))
+    {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let Some(target) = registry
+        .models()
+        .iter()
+        .find(|candidate| candidate.descriptor().table == column.foreign_table.unwrap_or(""))
+    else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    if list_blocked(target.as_ref())
+        || permit(state.auth.as_ref().unwrap(), &user, target.meta(), "read")
+            .await
+            .is_err()
+    {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let Some(label) = display_column(target.meta(), target.columns()) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let page_number = params
+        .get("page")
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(1)
+        .clamp(1, 10_000);
+    let page_size = u64::from(target.meta().per_page.clamp(1, 100));
+    let search_columns: Vec<&str> = target
+        .meta()
+        .fields
+        .iter()
+        .filter(|item| item.searchable && !item.hidden && !sensitive(item.name))
+        .map(|item| item.name)
+        .collect();
+    let query = params.get("q").cloned().unwrap_or_default();
+    if query.chars().count() > 200 || (!query.is_empty() && search_columns.is_empty()) {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let scope = access_scope(target.as_ref(), &user, false);
+    let listed = target
+        .page(
+            &state.db,
+            &search_columns,
+            (!query.is_empty()).then_some(query.as_str()),
+            label,
+            false,
+            &[],
+            u64::from(page_number - 1) * page_size,
+            page_size,
+            &scope,
+        )
+        .await;
+    let (rows, has_more, total) = match listed {
+        Ok(value) => value,
+        Err(_) => {
+            return error_page(
+                state,
+                headers,
+                registry,
+                &locale,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await
+        }
+    };
+    let picker = match record_id {
+        Some(id) => format!("/admin/models/{model_key}/{id}/pick/{field}"),
+        None => format!("/admin/models/{model_key}/pick/{field}"),
+    };
+    let mut preserved = if query.is_empty() {
+        String::new()
+    } else {
+        format!("q={}", url_encode(&query))
+    };
+    if let Some(draft) = params
+        .get("draft")
+        .filter(|value| Uuid::parse_str(value).is_ok())
+    {
+        if !preserved.is_empty() {
+            preserved.push('&');
+        }
+        preserved.push_str("draft=");
+        preserved.push_str(&url_encode(draft));
+    }
+    let choices: Vec<Value> = rows
+        .iter()
+        .filter_map(|row| {
+            let id = row.get("id")?.as_str()?;
+            let text = row.get(label)?.as_str().unwrap_or("");
+            Some(json!({
+                "label": text,
+                "href": choice_href(&back, field, id, params.get("draft").map(String::as_str))
+            }))
+        })
+        .collect();
+    let join = if preserved.is_empty() { "" } else { "&" };
+    let csrf = session_csrf(state.auth.as_ref().unwrap(), headers).await;
+    page(
+        registry,
+        "pick.html",
+        &locale,
+        theme_of(headers),
+        catalog(&locale)
+            .get("pick_heading")
+            .and_then(Value::as_str)
+            .unwrap_or("Choose"),
+        true,
+        user.is_superuser,
+        &user.email,
+        &csrf,
+        &picker,
+        "",
+        "",
+        json!({
+            "back": back,
+            "action": picker,
+            "query": query,
+            "rows": choices,
+            "total": total,
+            "page": page_number,
+            "previous": (page_number > 1).then(|| format!("{picker}?{preserved}{join}page={}", page_number - 1)),
+            "next_page": has_more.then(|| format!("{picker}?{preserved}{join}page={}", page_number + 1))
+        }),
+    )
+}
+
+struct FormFeedback<'a> {
+    notice: &'a str,
+    alert: &'a str,
 }
 
 async fn form_page(
@@ -1125,7 +1881,7 @@ async fn form_page(
     model_key: &str,
     id: Option<Uuid>,
     values: Map<String, Value>,
-    alert: &str,
+    feedback: FormFeedback<'_>,
 ) -> Response {
     let locale = locale_of(
         headers,
@@ -1133,19 +1889,22 @@ async fn form_page(
         &registry.branding().fallback_locale,
     );
     let back = format!("/admin/models/{model_key}");
-    let user = match require_get(state, headers, &back).await {
+    let user = match require_get(state, headers, registry, &back).await {
         Ok(user) => user,
         Err(response) => return response,
     };
     let Some(model) = registry.find(model_key) else {
         return error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     };
     let action_name = if id.is_some() { "update" } else { "create" };
     if gate(state, &user, model.as_ref(), action_name)
@@ -1153,34 +1912,57 @@ async fn form_page(
         .is_err()
     {
         return error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::FORBIDDEN,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     if id.is_some() && values.is_empty() {
         return error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
+    let mut values = values;
+    let draft_id = take_draft(state, &user, model_key, id, &mut values).await;
+    if let Some(id) = id {
+        values
+            .entry("id".to_owned())
+            .or_insert_with(|| json!(id.to_string()));
+    }
+    let custom_action = values
+        .get("_action")
+        .and_then(Value::as_str)
+        .map(str::to_owned);
     let csrf = session_csrf(state.auth.as_ref().unwrap(), headers).await;
     let fields = input_fields(&locale, registry, state, &user, model.as_ref(), &values).await;
-    let action = match id {
+    let sections = form_sections(model.meta(), &fields);
+    let action = custom_action.unwrap_or_else(|| match id {
         Some(id) => format!("/admin/models/{model_key}/{id}/edit"),
         None => format!("/admin/models/{model_key}/new"),
-    };
+    });
     let list_path = back.clone();
-    let cancel = id
-        .map(|value| format!("/admin/models/{model_key}/{value}"))
-        .unwrap_or_else(|| back.clone());
+    let cancel = values
+        .get("_cancel")
+        .and_then(Value::as_str)
+        .map(str::to_owned)
+        .unwrap_or_else(|| {
+            id.map(|value| format!("/admin/models/{model_key}/{value}"))
+                .unwrap_or_else(|| back.clone())
+        });
     page(
         registry,
         "form.html",
@@ -1192,14 +1974,15 @@ async fn form_page(
         &user.email,
         &csrf,
         &back,
-        "",
-        alert,
+        feedback.notice,
+        feedback.alert,
         json!({
             "model_label": model.meta().label,
             "list_path": list_path,
             "action": action,
             "cancel": cancel,
-            "fields": fields
+            "draft": draft_id,
+            "sections": sections
         }),
     )
 }
@@ -1219,17 +2002,32 @@ async fn save_form(
     );
     let user = match require_post(state, headers, body).await {
         Ok(user) => user,
-        Err(_) => return error_page(registry, &locale, StatusCode::FORBIDDEN, "csrf", true, ""),
+        Err(_) => {
+            return error_page(
+                state,
+                headers,
+                registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "csrf",
+                true,
+                "",
+            )
+            .await
+        }
     };
     let Some(model) = registry.find(model_key) else {
         return error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     };
     let action_name = if id.is_some() { "update" } else { "create" };
     if gate(state, &user, model.as_ref(), action_name)
@@ -1237,17 +2035,21 @@ async fn save_form(
         .is_err()
     {
         return error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::FORBIDDEN,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
     let form = parse_form(body);
     let (object, mut raw) = payload(model.meta(), model.columns(), &form);
     if let Err(message) = reject_locked(model.meta(), &object, id.is_none()) {
+        let text = validation_text(&locale, &message);
         return form_page(
             state,
             headers,
@@ -1255,7 +2057,45 @@ async fn save_form(
             model_key,
             id,
             raw,
-            &validation_text(&locale, &message),
+            FormFeedback {
+                notice: "",
+                alert: &text,
+            },
+        )
+        .await;
+    }
+    let save = form.get("save").map(String::as_str).unwrap_or("detail");
+    if !matches!(save, "detail" | "edit" | "new") {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    if let Err(field) = ensure_relations(state, registry, &user, model.columns(), &object).await {
+        let text = catalog(&locale)
+            .get("invalid_relation")
+            .and_then(Value::as_str)
+            .unwrap_or("Choose a visible record.")
+            .to_owned();
+        raw.insert("__error".into(), json!({ "field": field, "text": text }));
+        return form_page(
+            state,
+            headers,
+            registry,
+            model_key,
+            id,
+            raw,
+            FormFeedback {
+                notice: "",
+                alert: &text,
+            },
         )
         .await;
     }
@@ -1265,13 +2105,16 @@ async fn save_form(
             .is_none()
         {
             return error_page(
+                state,
+                headers,
                 registry,
                 &locale,
                 StatusCode::NOT_FOUND,
                 "not_found",
                 true,
                 &user.email,
-            );
+            )
+            .await;
         }
         model
             .update(
@@ -1279,6 +2122,7 @@ async fn save_form(
                 id,
                 Value::Object(object),
                 &access_scope(model.as_ref(), &user, true),
+                &user,
             )
             .await
     } else {
@@ -1286,14 +2130,20 @@ async fn save_form(
     };
     match result {
         Ok(created) => {
+            if let Some(token) = form
+                .get("_draft")
+                .and_then(|value| Uuid::parse_str(value).ok())
+            {
+                let _ = drafts::delete(&state.db, token, user.session_id, user.id).await;
+            }
+            let notice = if id.is_some() { "saved" } else { "created" };
             let target = created
                 .get("id")
                 .and_then(Value::as_str)
-                .map(|value| {
-                    format!(
-                        "/admin/models/{model_key}/{value}?notice={}",
-                        if id.is_some() { "saved" } else { "created" }
-                    )
+                .map(|value| match save {
+                    "edit" => format!("/admin/models/{model_key}/{value}/edit?notice={notice}"),
+                    "new" => format!("/admin/models/{model_key}/new?notice={notice}"),
+                    _ => format!("/admin/models/{model_key}/{value}?notice={notice}"),
                 })
                 .unwrap_or_else(|| format!("/admin/models/{model_key}?notice=saved"));
             redirect(&target)
@@ -1304,6 +2154,7 @@ async fn save_form(
                 "__error".into(),
                 json!({ "field": field, "text": validation_text(&locale, &message) }),
             );
+            let text = validation_text(&locale, &message);
             form_page(
                 state,
                 headers,
@@ -1311,26 +2162,39 @@ async fn save_form(
                 model_key,
                 id,
                 raw,
-                &validation_text(&locale, &message),
+                FormFeedback {
+                    notice: "",
+                    alert: &text,
+                },
             )
             .await
         }
-        Err(FerrumError::NotFound) => error_page(
-            registry,
-            &locale,
-            StatusCode::NOT_FOUND,
-            "not_found",
-            true,
-            &user.email,
-        ),
-        Err(_) => error_page(
-            registry,
-            &locale,
-            StatusCode::FORBIDDEN,
-            "forbidden",
-            true,
-            &user.email,
-        ),
+        Err(FerrumError::NotFound) => {
+            error_page(
+                state,
+                headers,
+                registry,
+                &locale,
+                StatusCode::NOT_FOUND,
+                "not_found",
+                true,
+                &user.email,
+            )
+            .await
+        }
+        Err(_) => {
+            error_page(
+                state,
+                headers,
+                registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await
+        }
     }
 }
 
@@ -1341,7 +2205,7 @@ async fn load_for_form(
     model_key: &str,
     id: Uuid,
 ) -> Option<Map<String, Value>> {
-    let user = require_get(state, headers, "/admin").await.ok()?;
+    let user = require_get(state, headers, registry, "/admin").await.ok()?;
     let model = registry.find(model_key)?;
     let mut record = read_visible(state, &user, model.as_ref(), id, "update").await?;
     redact(model.meta(), &mut record);
@@ -1371,7 +2235,7 @@ async fn read_visible(
 }
 
 async fn input_fields(
-    _locale: &str,
+    locale: &str,
     registry: &AdminRegistry,
     state: &AppState,
     user: &AuthUser,
@@ -1388,9 +2252,14 @@ async fn input_fields(
         .and_then(|value| value.get("text"))
         .and_then(Value::as_str)
         .unwrap_or("");
+    let hint_select = catalog(locale)
+        .get("hint_select")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
     let mut fields = Vec::new();
     for field in model.meta().fields {
-        if field.hidden || field.readonly || sensitive(field.name) || field.name == "id" {
+        if field.hidden || sensitive(field.name) {
             continue;
         }
         let Some(column) = model
@@ -1401,19 +2270,52 @@ async fn input_fields(
             continue;
         };
         let current = values.get(field.name).cloned().unwrap_or(Value::Null);
+        let locked = values.get("_lock").and_then(Value::as_str) == Some(field.name);
+        if field.readonly || field.name == "id" || locked {
+            if field.name == "id" && !values.contains_key(field.name) {
+                continue;
+            }
+            fields.push(json!({
+                "name": field.name,
+                "label": field.label,
+                "fieldset": field.fieldset,
+                "kind": "readonly",
+                "required": false,
+                "invalid": false,
+                "error": "",
+                "hint": "",
+                "pick": "",
+                "value": display_cell(locale, registry.branding().currency.as_str(), field.name, &current),
+                "raw": match &current {
+                    Value::String(text) => text.clone(),
+                    _ => String::new(),
+                },
+                "locked": locked,
+                "checked": false
+            }));
+            continue;
+        }
         let mut input = json!({
             "name": field.name,
             "label": field.label,
+            "fieldset": field.fieldset,
+            "pick": if column.foreign_table.is_some() { pick_path(model.meta().key, values, field.name) } else { String::new() },
             "required": !column.nullable && column.default_bool.is_none(),
             "invalid": error_field == field.name,
             "error": if error_field == field.name { error_text } else { "" },
+            "hint": if column.foreign_table.is_some() { hint_select.clone() } else { String::new() },
             "value": match &current {
                 Value::String(text) => text.clone(),
                 Value::Number(number) => number.to_string(),
                 Value::Bool(flag) => flag.to_string(),
                 _ => String::new(),
             },
-            "checked": current.as_bool().unwrap_or(false) || current.as_str() == Some("true")
+            "checked": match &current {
+                Value::Bool(flag) => *flag,
+                Value::String(text) => text == "true" || text == "1",
+                Value::Null => column.default_bool.unwrap_or(false),
+                _ => false,
+            }
         });
         if column.foreign_table.is_some() {
             input["kind"] = json!("select");
@@ -1465,7 +2367,7 @@ async fn relation_options(
     {
         return json!([]);
     }
-    let Some(label) = display_column(target.meta()) else {
+    let Some(label) = display_column(target.meta(), target.columns()) else {
         return json!([]);
     };
     let scope = access_scope(target.as_ref(), user, false);
@@ -1475,10 +2377,141 @@ async fn relation_options(
     else {
         return json!([]);
     };
-    Value::Array(rows.into_iter().filter_map(|row| {
-        let id = row.get("id")?.as_str()?;
-        Some(json!({ "id": id, "label": row.get(label)?.as_str().unwrap_or(""), "selected": id == current }))
-    }).collect())
+    let mut options: Vec<Value> = rows
+        .into_iter()
+        .filter_map(|row| {
+            let id = row.get("id")?.as_str()?;
+            Some(json!({
+                "id": id,
+                "label": row.get(label)?.as_str().unwrap_or(""),
+                "selected": id == current
+            }))
+        })
+        .collect();
+    if !current.is_empty()
+        && !options
+            .iter()
+            .any(|option| option.get("id").and_then(Value::as_str) == Some(current))
+    {
+        if let Ok(id) = Uuid::parse_str(current) {
+            if let Some(record) = read_visible(state, user, target.as_ref(), id, "read").await {
+                options.insert(
+                    0,
+                    json!({
+                        "id": current,
+                        "label": record.get(label).and_then(Value::as_str).unwrap_or(""),
+                        "selected": true
+                    }),
+                );
+            }
+        }
+    }
+    Value::Array(options)
+}
+
+fn pick_path(model_key: &str, values: &Map<String, Value>, _field: &str) -> String {
+    match values
+        .get("id")
+        .and_then(Value::as_str)
+        .filter(|value| !value.is_empty())
+    {
+        Some(id) => format!("/admin/models/{model_key}/{id}/draft"),
+        None => format!("/admin/models/{model_key}/draft"),
+    }
+}
+
+fn apply_picks(
+    meta: &ferrum_core::AdminModelMeta,
+    columns: &[ColumnSpec],
+    params: &HashMap<String, String>,
+    values: &mut Map<String, Value>,
+) {
+    for field in meta.fields {
+        if field.hidden || field.readonly {
+            continue;
+        }
+        let Some(column) = columns.iter().find(|column| column.name == field.name) else {
+            continue;
+        };
+        if column.foreign_table.is_none() {
+            continue;
+        }
+        let Some(value) = params.get(field.name) else {
+            continue;
+        };
+        if Uuid::parse_str(value).is_ok() {
+            values.insert(field.name.to_owned(), json!(value));
+        }
+    }
+}
+
+fn form_sections(meta: &ferrum_core::AdminModelMeta, fields: &[Value]) -> Vec<Value> {
+    if meta.fieldsets.is_empty() {
+        return vec![json!({
+            "name": "",
+            "description": "",
+            "optional": false,
+            "fields": fields
+        })];
+    }
+    meta.fieldsets
+        .iter()
+        .map(|section| {
+            let group: Vec<&Value> = fields
+                .iter()
+                .filter(|field| field.get("fieldset").and_then(Value::as_str) == Some(section.name))
+                .collect();
+            json!({
+                "name": section.name,
+                "description": section.description,
+                "optional": section.optional,
+                "fields": group
+            })
+        })
+        .collect()
+}
+
+async fn ensure_relations(
+    state: &AppState,
+    registry: &AdminRegistry,
+    user: &AuthUser,
+    columns: &[ColumnSpec],
+    object: &Map<String, Value>,
+) -> Result<(), String> {
+    for column in columns {
+        if column.foreign_table.is_none() {
+            continue;
+        }
+        let Some(value) = object.get(column.name) else {
+            continue;
+        };
+        if value.is_null() {
+            continue;
+        }
+        let Some(text) = value.as_str() else {
+            return Err(column.name.to_owned());
+        };
+        if text.is_empty() {
+            continue;
+        }
+        let Ok(id) = Uuid::parse_str(text) else {
+            return Err(column.name.to_owned());
+        };
+        let Some(target) = registry
+            .models()
+            .iter()
+            .find(|candidate| candidate.descriptor().table == column.foreign_table.unwrap_or(""))
+        else {
+            continue;
+        };
+        if read_visible(state, user, target.as_ref(), id, "read")
+            .await
+            .is_none()
+        {
+            return Err(column.name.to_owned());
+        }
+    }
+    Ok(())
 }
 
 fn payload(
@@ -1489,7 +2522,19 @@ fn payload(
     let mut object = Map::new();
     let mut raw = Map::new();
     for (key, value) in form {
-        if key == "csrf_token" || key == "next" {
+        if key == "csrf_token"
+            || key == "next"
+            || key == "save"
+            || key == "pick_field"
+            || key == "_action"
+            || key == "_lock"
+            || key == "_use_draft"
+            || key == "_picks"
+        {
+            continue;
+        }
+        if key == "_draft" {
+            raw.insert(key.clone(), json!(value));
             continue;
         }
         raw.insert(key.clone(), json!(value));
@@ -1523,50 +2568,339 @@ fn visible_fields(
     locale: &str,
     currency: &str,
     meta: &ferrum_core::AdminModelMeta,
-    _columns: &[ColumnSpec],
+    columns: &[ColumnSpec],
     record: &Value,
+    relations: &HashMap<String, HashMap<String, String>>,
+    superuser: bool,
 ) -> Vec<Value> {
-    meta.fields.iter().filter(|field| !field.hidden && !sensitive(field.name)).map(|field| json!({
-        "label": field.label,
-        "readonly": field.readonly || field.name == "id",
-        "value": display_cell(locale, currency, field.name, record.get(field.name).unwrap_or(&Value::Null))
-    })).collect::<Vec<_>>()
+    meta.fields
+        .iter()
+        .filter(|field| !field.hidden && !sensitive(field.name))
+        .map(|field| {
+            let mut lead = false;
+            let cell = present_cell(
+                locale,
+                currency,
+                columns,
+                field.name,
+                record.get(field.name).unwrap_or(&Value::Null),
+                relations,
+                superuser,
+                &mut lead,
+            );
+            json!({
+                "label": field.label,
+                "readonly": field.readonly || field.name == "id",
+                "value": cell["text"].as_str().unwrap_or(""),
+                "relation": cell["relation"].as_bool().unwrap_or(false),
+                "ref": cell["ref"].as_str().unwrap_or(""),
+                "short": cell["short"].as_str().unwrap_or("")
+            })
+        })
+        .collect()
+}
+
+fn resolved_sort(
+    meta: &ferrum_core::AdminModelMeta,
+    params: &HashMap<String, String>,
+) -> Result<(String, bool), ()> {
+    if let Some(sort) = params.get("sort").filter(|value| !value.is_empty()) {
+        if meta.fields.iter().any(|field| {
+            field.name == sort && !field.hidden && (field.sortable || field.name == "id")
+        }) {
+            Ok((
+                sort.clone(),
+                params.get("dir").map(String::as_str) == Some("desc"),
+            ))
+        } else {
+            Err(())
+        }
+    } else if let Some(ordering) = meta.ordering {
+        Ok((
+            ordering.trim_start_matches('-').to_owned(),
+            ordering.starts_with('-'),
+        ))
+    } else {
+        Ok((
+            "id".to_owned(),
+            params.get("dir").map(String::as_str) == Some("desc"),
+        ))
+    }
+}
+
+fn link_names(meta: &ferrum_core::AdminModelMeta, specs: &[ColumnSpec]) -> Vec<&'static str> {
+    let listed = listed_fields(meta, specs);
+    let chosen: Vec<&'static str> = listed
+        .iter()
+        .filter(|field| field.list_link)
+        .map(|field| field.name)
+        .collect();
+    if !chosen.is_empty() {
+        return chosen;
+    }
+    listed
+        .iter()
+        .find(|field| field.name != "id")
+        .or_else(|| listed.first())
+        .map(|field| vec![field.name])
+        .unwrap_or_default()
 }
 
 fn list_columns(
     meta: &ferrum_core::AdminModelMeta,
+    specs: &[ColumnSpec],
     model: &str,
-    query: &str,
-    dir: &str,
-    sort: &str,
-) -> Vec<Value> {
-    meta.fields.iter().filter(|field| field.list_display && !field.hidden && !sensitive(field.name)).map(|field| {
-        let next_dir = if sort == field.name && dir != "desc" { "desc" } else { "asc" };
-        json!({
-            "name": field.name,
-            "label": field.label,
-            "mark": if sort == field.name { if dir == "desc" { "↓" } else { "↑" } } else { "" },
-            "sort_href": format!("/admin/models/{model}?q={}&sort={}&dir={next_dir}", url_encode(query), field.name)
-        })
-    }).collect()
-}
-
-fn filter_inputs(
-    meta: &ferrum_core::AdminModelMeta,
-    _columns: &[ColumnSpec],
     params: &HashMap<String, String>,
+    sort: &str,
+    descending: bool,
 ) -> Vec<Value> {
-    meta.fields
-        .iter()
-        .filter(|field| field.filterable && !field.hidden)
+    let dir = if descending { "desc" } else { "asc" };
+    listed_fields(meta, specs)
+        .into_iter()
         .map(|field| {
+            let next_dir = if sort == field.name && dir != "desc" {
+                "desc"
+            } else {
+                "asc"
+            };
+            let sortable = field.sortable || field.name == "id";
+            let active = sortable && sort == field.name;
             json!({
                 "name": field.name,
                 "label": field.label,
-                "value": params.get(&format!("filter.{}", field.name)).cloned().unwrap_or_default()
+                "readonly": field.readonly && field.name != "id",
+                "sortable": sortable,
+                "sorted": active,
+                "sort_state": if active { if dir == "desc" { "descending" } else { "ascending" } } else { "" },
+                "mark": if active { if dir == "desc" { "↓" } else { "↑" } } else { "" },
+                "sort_href": format!("/admin/models/{model}?{}", sort_query(params, field.name, next_dir))
             })
         })
         .collect()
+}
+
+/// Spalten der Liste.
+///
+/// 1. Felder mit `#[admin(list_display)]` in Struct-Reihenfolge. `id` bleibt dabei, weil das Makro es immer als Listenspalte führt.
+/// 2. Ohne solche Felder das erste sichtbare Textfeld, danach `id`.
+/// 3. Ohne Textfeld das erste andere sichtbare Feld, danach `id`.
+/// 4. Sonst nur `id`.
+///
+/// `hidden` und sensible Namen fallen in jedem Schritt weg. Ein Feld heißt nicht zwingend `name`.
+fn listed_fields<'a>(
+    meta: &'a ferrum_core::AdminModelMeta,
+    specs: &[ColumnSpec],
+) -> Vec<&'a ferrum_core::AdminFieldMeta> {
+    let visible = |field: &ferrum_core::AdminFieldMeta| !field.hidden && !sensitive(field.name);
+    let explicit: Vec<_> = meta
+        .fields
+        .iter()
+        .filter(|field| field.list_display && field.name != "id" && visible(field))
+        .collect();
+    if !explicit.is_empty() {
+        return meta
+            .fields
+            .iter()
+            .filter(|field| field.list_display && visible(field))
+            .collect();
+    }
+    let mut chosen = Vec::new();
+    let text = meta.fields.iter().find(|field| {
+        field.name != "id"
+            && visible(field)
+            && column_kind(specs, field.name) == Some(ColumnKind::Text)
+    });
+    let other = meta.fields.iter().find(|field| {
+        field.name != "id" && visible(field) && column_kind(specs, field.name).is_some()
+    });
+    if let Some(field) = text.or(other) {
+        chosen.push(field);
+    }
+    if let Some(id) = meta
+        .fields
+        .iter()
+        .find(|field| field.name == "id" && visible(field))
+    {
+        chosen.push(id);
+    }
+    chosen
+}
+
+fn column_kind(specs: &[ColumnSpec], name: &str) -> Option<ColumnKind> {
+    specs
+        .iter()
+        .find(|column| column.name == name)
+        .map(|column| column.kind)
+}
+
+async fn filter_inputs(
+    locale: &str,
+    registry: &AdminRegistry,
+    state: &AppState,
+    user: &AuthUser,
+    meta: &ferrum_core::AdminModelMeta,
+    columns: &[ColumnSpec],
+    params: &HashMap<String, String>,
+) -> Vec<Value> {
+    let mut filters = Vec::new();
+    for field in meta
+        .fields
+        .iter()
+        .filter(|field| field.filterable && !field.hidden)
+    {
+        let column = columns.iter().find(|column| column.name == field.name);
+        let raw = params
+            .get(&format!("filter.{}", field.name))
+            .cloned()
+            .unwrap_or_default();
+        let (kind, options) = match column {
+            Some(column) if column.foreign_table.is_some() => (
+                "uuid",
+                relation_options(registry, state, user, column, &raw).await,
+            ),
+            Some(column) if column.kind == ColumnKind::Boolean => ("boolean", json!([])),
+            Some(column) if column.kind == ColumnKind::BigInt => ("number", json!([])),
+            _ => ("text", json!([])),
+        };
+        let value = if kind == "boolean" {
+            match raw.as_str() {
+                "true" | "1" => "true".to_owned(),
+                "false" | "0" => "false".to_owned(),
+                _ => String::new(),
+            }
+        } else {
+            raw
+        };
+        filters.push(json!({
+            "name": field.name,
+            "label": field.label,
+            "kind": kind,
+            "value": value,
+            "options": options,
+            "yes": catalog(locale)["yes"].as_str().unwrap_or("Yes"),
+            "no": catalog(locale)["no"].as_str().unwrap_or("No")
+        }));
+    }
+    filters
+}
+
+#[allow(clippy::too_many_arguments)]
+fn present_cell(
+    locale: &str,
+    currency: &str,
+    columns: &[ColumnSpec],
+    name: &str,
+    value: &Value,
+    relations: &HashMap<String, HashMap<String, String>>,
+    superuser: bool,
+    lead_taken: &mut bool,
+) -> Value {
+    let text = display_cell(locale, currency, name, value);
+    let foreign = columns
+        .iter()
+        .find(|column| column.name == name)
+        .and_then(|column| column.foreign_table);
+    if let Some(table) = foreign {
+        if text.is_empty() || text == "—" {
+            return json!({ "text": "—", "short": "", "uuid": false, "lead": false, "relation": false, "ref": "" });
+        }
+        let resolved = relations.get(table).and_then(|labels| labels.get(&text));
+        let shown = if let Some(label) = resolved {
+            label.clone()
+        } else if superuser {
+            catalog(locale)["missing_relation"]
+                .as_str()
+                .unwrap_or("Missing")
+                .to_owned()
+        } else {
+            catalog(locale)["hidden_relation"]
+                .as_str()
+                .unwrap_or("Not visible")
+                .to_owned()
+        };
+        let lead = !*lead_taken;
+        *lead_taken = true;
+        return json!({
+            "text": shown,
+            "short": shorten_uuid(&text),
+            "uuid": false,
+            "lead": lead,
+            "relation": true,
+            "ref": text
+        });
+    }
+    let uuid = is_uuid(&text);
+    let lead = !uuid && !*lead_taken;
+    if lead {
+        *lead_taken = true;
+    }
+    json!({
+        "text": text,
+        "short": if uuid { shorten_uuid(&text) } else { text.clone() },
+        "uuid": uuid,
+        "lead": lead,
+        "relation": false,
+        "ref": ""
+    })
+}
+
+async fn relation_names(
+    registry: &AdminRegistry,
+    state: &AppState,
+    user: &AuthUser,
+    columns: &[ColumnSpec],
+    rows: &[Value],
+) -> Result<HashMap<String, HashMap<String, String>>, FerrumError> {
+    let mut grouped: HashMap<&str, Vec<Uuid>> = HashMap::new();
+    for column in columns
+        .iter()
+        .filter(|column| column.foreign_table.is_some())
+    {
+        let Some(table) = column.foreign_table else {
+            continue;
+        };
+        for row in rows {
+            let Some(text) = row.get(column.name).and_then(Value::as_str) else {
+                continue;
+            };
+            if let Ok(id) = Uuid::parse_str(text) {
+                grouped.entry(table).or_default().push(id);
+            }
+        }
+    }
+    let mut resolved = HashMap::new();
+    for (table, ids) in grouped {
+        let Some(target) = registry
+            .models()
+            .iter()
+            .find(|candidate| candidate.descriptor().table == table)
+        else {
+            continue;
+        };
+        if list_blocked(target.as_ref())
+            || permit(state.auth.as_ref().unwrap(), user, target.meta(), "read")
+                .await
+                .is_err()
+        {
+            resolved.insert(table.to_owned(), HashMap::new());
+            continue;
+        }
+        let Some(label) = display_column(target.meta(), target.columns()) else {
+            continue;
+        };
+        let scope = access_scope(target.as_ref(), user, false);
+        let pairs = query_labels(
+            &state.db,
+            target.descriptor().table,
+            target.columns(),
+            label,
+            &ids,
+            &scope,
+        )
+        .await?;
+        resolved.insert(table.to_owned(), pairs.into_iter().collect());
+    }
+    Ok(resolved)
 }
 
 fn display_cell(locale: &str, currency: &str, name: &str, value: &Value) -> String {
@@ -1606,6 +2940,846 @@ fn group_int(locale: &str, value: i64) -> String {
     }
 }
 
+fn confirmed(body: &Bytes) -> Result<(), &'static str> {
+    let values = FormValues::parse_urlencoded(&String::from_utf8_lossy(body))
+        .map_err(|_| "confirm_invalid")?;
+    match require_confirmation(&values) {
+        Ok(()) => Ok(()),
+        Err(errors) if errors.for_field("confirm") == Some("validation.invalid") => {
+            Err("confirm_invalid")
+        }
+        Err(_) => Err("confirm_required"),
+    }
+}
+
+async fn role_names(auth: &ferrum_auth::AuthService) -> Vec<String> {
+    let mut names: Vec<String> = auth
+        .list_roles()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .map(|(_, name)| name)
+        .collect();
+    names.sort();
+    names
+}
+
+async fn user_new(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+) -> Response {
+    user_form(&state, &headers, &registry, None, None, "").await
+}
+
+async fn user_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    body: Bytes,
+) -> Response {
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let actor = match require_directory_post(&state, &headers, &registry, &body).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    if let Err(code) = confirmed(&body) {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            code,
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    let values = match FormValues::parse_urlencoded(&String::from_utf8_lossy(&body)) {
+        Ok(values) => values,
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "confirm_invalid",
+                true,
+                &actor.email,
+            )
+            .await
+        }
+    };
+    if reject_unknown(
+        &values,
+        &[
+            "confirm",
+            "email",
+            "password",
+            "password_confirm",
+            "active",
+            "staff",
+            "roles",
+        ],
+    )
+    .is_err()
+    {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    let email = required_text(
+        &values,
+        TextSpec {
+            name: "email",
+            required: true,
+            min_length: None,
+            max_length: Some(254),
+            email: true,
+            url: false,
+        },
+    );
+    let password = values.get("password").unwrap_or("");
+    let password_confirm = values.get("password_confirm").unwrap_or("");
+    let active = required_bool(&values, "active");
+    let staff = required_bool(&values, "staff");
+    let roles = repeated(&body, "roles");
+    if email.is_err() || active.is_err() || staff.is_err() || password != password_confirm {
+        let copy = catalog(&locale);
+        let message = if password != password_confirm {
+            copy["password_mismatch"]
+                .as_str()
+                .unwrap_or("The passwords do not match.")
+        } else if email.is_err() {
+            copy["invalid_credentials"]
+                .as_str()
+                .unwrap_or("Invalid email or password.")
+        } else {
+            copy["confirm_invalid"]
+                .as_str()
+                .unwrap_or("The confirmation is invalid.")
+        };
+        let mut draft = user_draft(&values, Some(roles));
+        if email.is_err() {
+            draft.email_error = message.to_owned();
+        }
+        if password != password_confirm {
+            draft.password_error = message.to_owned();
+        }
+        return user_form(&state, &headers, &registry, None, Some(draft), message).await;
+    }
+    let auth = state.auth.as_ref().unwrap();
+    let known = role_names(auth).await;
+    if roles
+        .iter()
+        .any(|role| !known.iter().any(|known| known == role))
+    {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "unknown_role",
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    let created = auth
+        .create_directory_user(
+            email.as_ref().unwrap(),
+            password,
+            active.unwrap(),
+            staff.unwrap(),
+        )
+        .await;
+    let created = match created {
+        Ok(user) => user,
+        Err(AuthError::Validation(message)) if message.contains("password") => {
+            let text = catalog(&locale)["password_invalid"]
+                .as_str()
+                .unwrap_or("The password must contain 12 to 128 characters.")
+                .to_owned();
+            let mut draft = user_draft(&values, Some(roles.clone()));
+            draft.password_error = text.clone();
+            return user_form(&state, &headers, &registry, None, Some(draft), &text).await;
+        }
+        Err(AuthError::Validation(_)) => {
+            let text = catalog(&locale)["email_taken"]
+                .as_str()
+                .unwrap_or("That email is already registered.")
+                .to_owned();
+            let mut draft = user_draft(&values, Some(roles.clone()));
+            draft.email_error = text.clone();
+            return user_form(&state, &headers, &registry, None, Some(draft), &text).await;
+        }
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "forbidden",
+                true,
+                &actor.email,
+            )
+            .await
+        }
+    };
+    for role in roles {
+        if auth.assign_role(&created.email, &role).await.is_err() {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "unknown_role",
+                true,
+                &actor.email,
+            )
+            .await;
+        }
+    }
+    let _ = audit::insert(
+        &state.db,
+        &Event {
+            actor_id: actor.id,
+            model_key: "_ferrum_users".to_owned(),
+            record_id: created.id.to_string(),
+            action: "user_create".to_owned(),
+            outcome: "ok".to_owned(),
+            summary: created.email.clone(),
+        },
+    )
+    .await;
+    redirect(&format!(
+        "/admin/directory/users/{}?notice=created",
+        created.id
+    ))
+}
+
+async fn user_detail(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path(id): Path<Uuid>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let actor = match require_directory(&state, &headers, &registry, "/admin/directory/users").await
+    {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let auth = state.auth.as_ref().unwrap();
+    let Some(target) = auth.get_user(id).await.ok().flatten() else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &actor.email,
+        )
+        .await;
+    };
+    let roles = auth
+        .list_user_role_names()
+        .await
+        .unwrap_or_default()
+        .into_iter()
+        .filter_map(|(user_id, name)| (user_id == id).then_some(name))
+        .collect::<Vec<_>>();
+    let permissions = auth.list_user_permissions(id).await.unwrap_or_default();
+    let csrf = session_csrf(auth, &headers).await;
+    page(
+        &registry,
+        "user_detail.html",
+        &locale,
+        theme_of(&headers),
+        &target.email,
+        true,
+        true,
+        &actor.email,
+        &csrf,
+        "/admin/directory/users",
+        &flash(
+            &locale,
+            params.get("notice").map(String::as_str).unwrap_or(""),
+        ),
+        "",
+        json!({
+            "id": id,
+            "email": target.email,
+            "is_active": target.is_active,
+            "is_staff": target.is_staff,
+            "is_superuser": target.is_superuser,
+            "roles": roles,
+            "permissions": permissions,
+            "can_edit": !target.is_superuser
+        }),
+    )
+}
+
+async fn user_edit(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path(id): Path<Uuid>,
+) -> Response {
+    user_form(&state, &headers, &registry, Some(id), None, "").await
+}
+
+async fn user_update(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path(id): Path<Uuid>,
+    body: Bytes,
+) -> Response {
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let actor = match require_directory_post(&state, &headers, &registry, &body).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let auth = state.auth.as_ref().unwrap();
+    let Some(target) = auth.get_user(id).await.ok().flatten() else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &actor.email,
+        )
+        .await;
+    };
+    if target.is_superuser {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    if let Err(code) = confirmed(&body) {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            code,
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    let values = match FormValues::parse_urlencoded(&String::from_utf8_lossy(&body)) {
+        Ok(values) => values,
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "confirm_invalid",
+                true,
+                &actor.email,
+            )
+            .await
+        }
+    };
+    if reject_unknown(&values, &["confirm", "email", "active", "staff"]).is_err() {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    let email = required_text(
+        &values,
+        TextSpec {
+            name: "email",
+            required: true,
+            min_length: None,
+            max_length: Some(254),
+            email: true,
+            url: false,
+        },
+    );
+    let active = required_bool(&values, "active");
+    let staff = required_bool(&values, "staff");
+    let email_invalid = email.is_err();
+    let (Ok(email), Ok(active), Ok(staff)) = (email, active, staff) else {
+        let message = if email_invalid {
+            catalog(&locale)["invalid_credentials"]
+                .as_str()
+                .unwrap_or("Invalid email or password.")
+                .to_owned()
+        } else {
+            catalog(&locale)["confirm_invalid"]
+                .as_str()
+                .unwrap_or("The confirmation is invalid.")
+                .to_owned()
+        };
+        let mut draft = user_draft(&values, None);
+        if email_invalid {
+            draft.email_error = message.clone();
+        }
+        return user_form(&state, &headers, &registry, Some(id), Some(draft), &message).await;
+    };
+    if actor.id == id && (!active || !staff && target.is_staff) {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    match auth.update_profile(id, &email, active, staff).await {
+        Ok(_) => {
+            let _ = audit::insert(
+                &state.db,
+                &Event {
+                    actor_id: actor.id,
+                    model_key: "_ferrum_users".to_owned(),
+                    record_id: id.to_string(),
+                    action: "user_update".to_owned(),
+                    outcome: "ok".to_owned(),
+                    summary: email,
+                },
+            )
+            .await;
+            redirect(&format!("/admin/directory/users/{id}?notice=updated"))
+        }
+        Err(AuthError::Forbidden) => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                true,
+                &actor.email,
+            )
+            .await
+        }
+        Err(AuthError::Validation(message)) if message.contains("email") => {
+            let text = catalog(&locale)["email_taken"]
+                .as_str()
+                .unwrap_or("That email is already registered.")
+                .to_owned();
+            let mut draft = user_draft(&values, None);
+            draft.email_error = text.clone();
+            user_form(&state, &headers, &registry, Some(id), Some(draft), &text).await
+        }
+        Err(_) => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "forbidden",
+                true,
+                &actor.email,
+            )
+            .await
+        }
+    }
+}
+
+async fn user_password(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path(id): Path<Uuid>,
+    body: Bytes,
+) -> Response {
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let actor = match require_directory_post(&state, &headers, &registry, &body).await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let auth = state.auth.as_ref().unwrap();
+    let Some(target) = auth.get_user(id).await.ok().flatten() else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &actor.email,
+        )
+        .await;
+    };
+    if target.is_superuser {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    if let Err(code) = confirmed(&body) {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            code,
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    let values = FormValues::parse_urlencoded(&String::from_utf8_lossy(&body)).unwrap_or_default();
+    if reject_unknown(&values, &["confirm", "password", "password_confirm"]).is_err() {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &actor.email,
+        )
+        .await;
+    }
+    let password = values.get("password").unwrap_or("");
+    let password_confirm = values.get("password_confirm").unwrap_or("");
+    if password != password_confirm {
+        let text = catalog(&locale)["password_mismatch"]
+            .as_str()
+            .unwrap_or("The passwords do not match.")
+            .to_owned();
+        return user_form(
+            &state,
+            &headers,
+            &registry,
+            Some(id),
+            Some(UserDraft {
+                email: None,
+                active: None,
+                staff: None,
+                roles: None,
+                email_error: String::new(),
+                password_error: text.clone(),
+            }),
+            &text,
+        )
+        .await;
+    }
+    match auth.reset_password(id, password).await {
+        Ok(()) => {
+            let _ = audit::insert(
+                &state.db,
+                &Event {
+                    actor_id: actor.id,
+                    model_key: "_ferrum_users".to_owned(),
+                    record_id: id.to_string(),
+                    action: "password_reset".to_owned(),
+                    outcome: "ok".to_owned(),
+                    summary: String::new(),
+                },
+            )
+            .await;
+            if actor.id == id {
+                redirect("/admin/login")
+            } else {
+                redirect(&format!("/admin/directory/users/{id}?notice=updated"))
+            }
+        }
+        Err(AuthError::Forbidden) => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                true,
+                &actor.email,
+            )
+            .await
+        }
+        Err(AuthError::Validation(_)) => {
+            let text = catalog(&locale)["password_invalid"]
+                .as_str()
+                .unwrap_or("The password must contain 12 to 128 characters.")
+                .to_owned();
+            user_form(
+                &state,
+                &headers,
+                &registry,
+                Some(id),
+                Some(UserDraft {
+                    email: None,
+                    active: None,
+                    staff: None,
+                    roles: None,
+                    email_error: String::new(),
+                    password_error: text.clone(),
+                }),
+                &text,
+            )
+            .await
+        }
+        Err(_) => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "forbidden",
+                true,
+                &actor.email,
+            )
+            .await
+        }
+    }
+}
+
+struct UserDraft {
+    email: Option<String>,
+    active: Option<bool>,
+    staff: Option<bool>,
+    roles: Option<Vec<String>>,
+    email_error: String,
+    password_error: String,
+}
+
+fn user_draft(values: &FormValues, roles: Option<Vec<String>>) -> UserDraft {
+    let flag = |name: &str| match values.get(name) {
+        Some("true") | Some("1") | Some("on") => Some(true),
+        Some("false") | Some("0") => Some(false),
+        _ => None,
+    };
+    UserDraft {
+        email: Some(values.get("email").unwrap_or("").to_owned()),
+        active: flag("active"),
+        staff: flag("staff"),
+        roles,
+        email_error: String::new(),
+        password_error: String::new(),
+    }
+}
+
+async fn user_form(
+    state: &AppState,
+    headers: &HeaderMap,
+    registry: &AdminRegistry,
+    id: Option<Uuid>,
+    draft: Option<UserDraft>,
+    alert: &str,
+) -> Response {
+    let locale = locale_of(
+        headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let actor = match require_directory(state, headers, registry, "/admin/directory/users").await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let auth = state.auth.as_ref().unwrap();
+    let target = if let Some(id) = id {
+        match auth.get_user(id).await.ok().flatten() {
+            Some(user) if !user.is_superuser => Some(user),
+            Some(_) => {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::FORBIDDEN,
+                    "forbidden",
+                    true,
+                    &actor.email,
+                )
+                .await
+            }
+            None => {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::NOT_FOUND,
+                    "not_found",
+                    true,
+                    &actor.email,
+                )
+                .await
+            }
+        }
+    } else {
+        None
+    };
+    let assigned = if let Some(id) = id {
+        auth.list_user_role_names()
+            .await
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|(user_id, name)| (user_id == id).then_some(name))
+            .collect::<Vec<_>>()
+    } else {
+        Vec::new()
+    };
+    let email = draft
+        .as_ref()
+        .and_then(|item| item.email.clone())
+        .or_else(|| target.as_ref().map(|user| user.email.clone()))
+        .unwrap_or_default();
+    let is_active = draft
+        .as_ref()
+        .and_then(|item| item.active)
+        .or_else(|| target.as_ref().map(|user| user.is_active))
+        .unwrap_or(true);
+    let is_staff = draft
+        .as_ref()
+        .and_then(|item| item.staff)
+        .or_else(|| target.as_ref().map(|user| user.is_staff))
+        .unwrap_or(false);
+    let known_roles = role_names(auth).await;
+    let selected = draft
+        .as_ref()
+        .and_then(|item| item.roles.clone())
+        .unwrap_or_default();
+    let role_checks: Vec<Value> = known_roles
+        .iter()
+        .map(|name| {
+            json!({
+                "name": name,
+                "checked": selected.iter().any(|role| role == name)
+            })
+        })
+        .collect();
+    let email_error = draft
+        .as_ref()
+        .map(|item| item.email_error.clone())
+        .unwrap_or_default();
+    let password_error = draft
+        .as_ref()
+        .map(|item| item.password_error.clone())
+        .unwrap_or_default();
+    let csrf = session_csrf(auth, headers).await;
+    let action = match id {
+        Some(id) => format!("/admin/directory/users/{id}/edit"),
+        None => "/admin/directory/users/new".to_owned(),
+    };
+    let mut response = page(
+        registry,
+        "user_form.html",
+        &locale,
+        theme_of(headers),
+        catalog(&locale)[if id.is_some() { "edit" } else { "add_user" }]
+            .as_str()
+            .unwrap_or("User"),
+        true,
+        true,
+        &actor.email,
+        &csrf,
+        "/admin/directory/users",
+        "",
+        alert,
+        json!({
+            "id": id.map(|value| value.to_string()).unwrap_or_default(),
+            "creating": id.is_none(),
+            "action": action,
+            "email": email,
+            "email_error": email_error,
+            "password_error": password_error,
+            "is_active": is_active,
+            "is_staff": is_staff,
+            "self_edit": id == Some(actor.id),
+            "roles": known_roles,
+            "role_checks": role_checks,
+            "assigned": assigned
+        }),
+    );
+    if !alert.is_empty() {
+        *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
+    }
+    response
+}
+
+fn repeated(body: &Bytes, name: &str) -> Vec<String> {
+    let mut values = Vec::new();
+    for pair in String::from_utf8_lossy(body).split('&') {
+        let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
+        if decode(key) == name {
+            let value = decode(value);
+            if !value.is_empty() {
+                values.push(value);
+            }
+        }
+    }
+    values
+}
+
 async fn mutate_user(
     state: &AppState,
     headers: &HeaderMap,
@@ -1632,26 +3806,45 @@ async fn mutate_user(
         .and_then(|users| users.into_iter().find(|candidate| candidate.id == id))
     else {
         return error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::NOT_FOUND,
             "not_found",
             true,
             &user.email,
-        );
+        )
+        .await;
     };
     if target.is_superuser
         || (user.id == id
             && form_flag(&form, if active_flag { "active" } else { "staff" }) == Some(false))
     {
         return error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::FORBIDDEN,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
+    }
+    if let Err(code) = confirmed(body) {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            code,
+            true,
+            &user.email,
+        )
+        .await;
     }
     let result = if active_flag {
         auth.set_user_active(&target.email, form_flag(&form, "active").unwrap_or(false))
@@ -1662,14 +3855,29 @@ async fn mutate_user(
     };
     if result.is_err() {
         return error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::UNPROCESSABLE_ENTITY,
             "forbidden",
             true,
             &user.email,
-        );
+        )
+        .await;
     }
+    let _ = audit::insert(
+        &state.db,
+        &Event {
+            actor_id: user.id,
+            model_key: "_ferrum_users".to_owned(),
+            record_id: id.to_string(),
+            action: "user_update".to_owned(),
+            outcome: "ok".to_owned(),
+            summary: String::new(),
+        },
+    )
+    .await;
     redirect("/admin/directory/users?notice=updated")
 }
 
@@ -1677,6 +3885,7 @@ async fn mutate_user(
 async fn require_get(
     state: &AppState,
     headers: &HeaderMap,
+    registry: &AdminRegistry,
     next: &str,
 ) -> Result<AuthUser, Response> {
     let Some(auth) = state.auth.as_ref() else {
@@ -1687,12 +3896,29 @@ async fn require_get(
     };
     match auth.authenticate(headers, &Method::GET).await {
         Ok(user) if user.is_staff => Ok(user),
-        Ok(_) => Err(plain(StatusCode::FORBIDDEN, "staff access is required")),
+        Ok(user) => {
+            let locale = locale_of(
+                headers,
+                &registry.branding().default_locale,
+                &registry.branding().fallback_locale,
+            );
+            Err(error_page(
+                state,
+                headers,
+                registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "staff_required",
+                true,
+                &user.email,
+            )
+            .await)
+        }
         Err(AuthError::Unauthenticated) => Err(redirect(&format!(
             "/admin/login?next={}",
             url_encode(safe_next(next).unwrap_or("/admin"))
         ))),
-        Err(_) => Err(plain(StatusCode::FORBIDDEN, "staff access is required")),
+        Err(_) => Err(plain(StatusCode::FORBIDDEN, "authentication failed")),
     }
 }
 
@@ -1716,16 +3942,29 @@ async fn require_post(state: &AppState, headers: &HeaderMap, body: &Bytes) -> Re
 async fn require_directory(
     state: &AppState,
     headers: &HeaderMap,
+    registry: &AdminRegistry,
     next: &str,
 ) -> Result<AuthUser, Response> {
-    let user = require_get(state, headers, next).await?;
+    let user = require_get(state, headers, registry, next).await?;
     if user.is_superuser {
         Ok(user)
     } else {
-        Err(plain(
+        let locale = locale_of(
+            headers,
+            &registry.branding().default_locale,
+            &registry.branding().fallback_locale,
+        );
+        Err(error_page(
+            state,
+            headers,
+            registry,
+            &locale,
             StatusCode::FORBIDDEN,
-            "this directory action requires a superuser",
-        ))
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await)
     }
 }
 
@@ -1758,22 +3997,1542 @@ async fn require_directory_post(
     {
         Ok(user) if user.is_superuser => Ok(user),
         Ok(user) => Err(error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::FORBIDDEN,
             "forbidden",
             true,
             &user.email,
-        )),
+        )
+        .await),
         Err(_) => Err(error_page(
+            state,
+            headers,
             registry,
             &locale,
             StatusCode::FORBIDDEN,
             "csrf",
             false,
             "",
-        )),
+        )
+        .await),
     }
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn model_draft(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path(model_key): Path<String>,
+    body: Bytes,
+) -> Response {
+    keep_draft(&state, &headers, &registry, &model_key, None, &body).await
+}
+
+async fn model_record_draft(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path((model_key, id)): Path<(String, Uuid)>,
+    body: Bytes,
+) -> Response {
+    keep_draft(&state, &headers, &registry, &model_key, Some(id), &body).await
+}
+
+async fn keep_draft(
+    state: &AppState,
+    headers: &HeaderMap,
+    registry: &AdminRegistry,
+    model_key: &str,
+    id: Option<Uuid>,
+    body: &Bytes,
+) -> Response {
+    let locale = locale_of(
+        headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let user = match require_post(state, headers, body).await {
+        Ok(user) => user,
+        Err(_) => {
+            return error_page(
+                state,
+                headers,
+                registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "csrf",
+                true,
+                "",
+            )
+            .await
+        }
+    };
+    let Some(model) = registry.find(model_key) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let action_name = if id.is_some() { "update" } else { "create" };
+    if gate(state, &user, model.as_ref(), action_name)
+        .await
+        .is_err()
+    {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let form = parse_form(body);
+    let Some(field) = form.get("pick_field").map(String::as_str) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let allowed = model.meta().fields.iter().any(|item| {
+        item.name == field
+            && !item.hidden
+            && !item.readonly
+            && !item.sensitive
+            && !sensitive(item.name)
+    }) && model
+        .columns()
+        .iter()
+        .any(|column| column.name == field && column.foreign_table.is_some());
+    if !allowed {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let values = draft_values(model.meta(), model.columns(), &form);
+    let record = id.map(|value| value.to_string());
+    let draft = drafts::insert(
+        &state.db,
+        user.session_id,
+        user.id,
+        model_key,
+        record.as_deref(),
+        "form",
+        &values,
+    )
+    .await;
+    let Ok(draft) = draft else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let target = match id {
+        Some(id) => format!("/admin/models/{model_key}/{id}/pick/{field}?draft={draft}"),
+        None => format!("/admin/models/{model_key}/pick/{field}?draft={draft}"),
+    };
+    redirect(&target)
+}
+
+async fn inline_new(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path((model_key, id, inline)): Path<(String, Uuid, String)>,
+    Query(query): Query<HashMap<String, String>>,
+) -> Response {
+    let user = match require_get(
+        &state,
+        &headers,
+        &registry,
+        &format!("/admin/models/{model_key}/{id}"),
+    )
+    .await
+    {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Some(parent) = registry.find(&model_key) else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale_of(
+                &headers,
+                &registry.branding().default_locale,
+                &registry.branding().fallback_locale,
+            ),
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(child) = child_inline(&registry, parent.as_ref(), &inline) else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale_of(
+                &headers,
+                &registry.branding().default_locale,
+                &registry.branding().fallback_locale,
+            ),
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    if read_visible(&state, &user, parent.as_ref(), id, "read")
+        .await
+        .is_none()
+        || gate(&state, &user, child.as_ref(), "create").await.is_err()
+    {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale_of(
+                &headers,
+                &registry.branding().default_locale,
+                &registry.branding().fallback_locale,
+            ),
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let spec = parent
+        .meta()
+        .inlines
+        .iter()
+        .find(|item| item.name == inline)
+        .expect("inline");
+    let mut values = Map::new();
+    values.insert(spec.column.to_owned(), json!(id.to_string()));
+    values.insert("_lock".to_owned(), json!(spec.column));
+    values.insert(
+        "_action".to_owned(),
+        json!(format!(
+            "/admin/models/{model_key}/{id}/inline/{inline}/new"
+        )),
+    );
+    values.insert(
+        "_cancel".to_owned(),
+        json!(format!("/admin/models/{model_key}/{id}")),
+    );
+    if query.contains_key("draft") {
+        values.insert("_draft".to_owned(), json!(query.get("draft")));
+        values.insert("_use_draft".to_owned(), json!(true));
+    }
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    form_page(
+        &state,
+        &headers,
+        &registry,
+        child.meta().key,
+        None,
+        values,
+        FormFeedback {
+            notice: &flash(&locale, ""),
+            alert: "",
+        },
+    )
+    .await
+}
+
+async fn inline_create(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path((model_key, id, inline)): Path<(String, Uuid, String)>,
+    body: Bytes,
+) -> Response {
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let user = match require_post(&state, &headers, &body).await {
+        Ok(user) => user,
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "csrf",
+                true,
+                "",
+            )
+            .await
+        }
+    };
+    let Some(parent) = registry.find(&model_key) else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(child) = child_inline(&registry, parent.as_ref(), &inline) else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(spec) = parent
+        .meta()
+        .inlines
+        .iter()
+        .find(|item| item.name == inline)
+    else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    if read_visible(&state, &user, parent.as_ref(), id, "read")
+        .await
+        .is_none()
+        || gate(&state, &user, child.as_ref(), "create").await.is_err()
+    {
+        let _ = audit::insert(
+            &state.db,
+            &Event {
+                actor_id: user.id,
+                model_key: child.meta().key.to_owned(),
+                record_id: String::new(),
+                action: "create".to_owned(),
+                outcome: "denied".to_owned(),
+                summary: String::new(),
+            },
+        )
+        .await;
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let form = parse_form(&body);
+    let (mut object, mut raw) = payload(child.meta(), child.columns(), &form);
+    object.insert(spec.column.to_owned(), json!(id.to_string()));
+    raw.insert(spec.column.to_owned(), json!(id.to_string()));
+    raw.insert("_lock".to_owned(), json!(spec.column));
+    raw.insert(
+        "_action".to_owned(),
+        json!(format!(
+            "/admin/models/{model_key}/{id}/inline/{inline}/new"
+        )),
+    );
+    raw.insert(
+        "_cancel".to_owned(),
+        json!(format!("/admin/models/{model_key}/{id}")),
+    );
+    if let Err(message) = reject_locked(child.meta(), &object, true) {
+        let text = validation_text(&locale, &message);
+        raw.insert(
+            "__error".into(),
+            json!({ "field": message.split_whitespace().next().unwrap_or(""), "text": text }),
+        );
+        return form_page(
+            &state,
+            &headers,
+            &registry,
+            child.meta().key,
+            None,
+            raw,
+            FormFeedback {
+                notice: "",
+                alert: &text,
+            },
+        )
+        .await;
+    }
+    if let Err(field) = ensure_relations(&state, &registry, &user, child.columns(), &object).await {
+        let text = catalog(&locale)
+            .get("invalid_relation")
+            .and_then(Value::as_str)
+            .unwrap_or("Choose a visible record.")
+            .to_owned();
+        raw.insert("__error".into(), json!({ "field": field, "text": text }));
+        return form_page(
+            &state,
+            &headers,
+            &registry,
+            child.meta().key,
+            None,
+            raw,
+            FormFeedback {
+                notice: "",
+                alert: &text,
+            },
+        )
+        .await;
+    }
+    match child.create(&state.db, Value::Object(object), &user).await {
+        Ok(_) => redirect(&format!("/admin/models/{model_key}/{id}?notice=created")),
+        Err(FerrumError::Validation(message)) => {
+            let text = validation_text(&locale, &message);
+            let field = message.split_whitespace().next().unwrap_or("");
+            raw.insert("__error".into(), json!({ "field": field, "text": text }));
+            form_page(
+                &state,
+                &headers,
+                &registry,
+                child.meta().key,
+                None,
+                raw,
+                FormFeedback {
+                    notice: "",
+                    alert: &text,
+                },
+            )
+            .await
+        }
+        Err(FerrumError::Denied(_)) => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await
+        }
+        Err(_) => {
+            error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await
+        }
+    }
+}
+
+async fn model_bulk(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path(model_key): Path<String>,
+    body: Bytes,
+) -> Response {
+    stage_bulk(&state, &headers, &registry, &model_key, &body).await
+}
+
+async fn bulk_confirm(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path((model_key, draft)): Path<(String, Uuid)>,
+) -> Response {
+    show_bulk(&state, &headers, &registry, &model_key, draft).await
+}
+
+async fn bulk_apply(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path((model_key, draft)): Path<(String, Uuid)>,
+    body: Bytes,
+) -> Response {
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let user = match require_post(&state, &headers, &body).await {
+        Ok(user) => user,
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "csrf",
+                true,
+                "",
+            )
+            .await
+        }
+    };
+    if confirmed(&body).is_err() {
+        return show_bulk(&state, &headers, &registry, &model_key, draft).await;
+    }
+    apply_bulk(
+        &state, &headers, &registry, &user, &locale, &model_key, draft,
+    )
+    .await
+}
+
+async fn audit_page(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let user = match require_get(&state, &headers, &registry, "/admin/audit").await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let page_number = params
+        .get("page")
+        .and_then(|value| value.parse::<u32>().ok())
+        .unwrap_or(1)
+        .max(1);
+    let actor = (!user.is_superuser).then_some(user.id);
+    let listed = audit::page(
+        &state.db,
+        actor,
+        u64::from(page_number - 1) * audit::PAGE_SIZE,
+    )
+    .await;
+    let (events, has_more) = match listed {
+        Ok(value) => value,
+        Err(_) => {
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await
+        }
+    };
+    let rows: Vec<Value> = events
+        .into_iter()
+        .map(|event| {
+            let actor_label = if event.actor_id == user.id {
+                user.email.clone()
+            } else {
+                event.actor_id.to_string()
+            };
+            json!({
+                "when": event.created_at.to_string(),
+                "actor": actor_label,
+                "action": event.action,
+                "record": event.record_id,
+                "record_short": event.record_id.chars().take(8).collect::<String>(),
+                "ok": event.outcome == "ok",
+                "summary": event.summary
+            })
+        })
+        .collect();
+    let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
+    page(
+        &registry,
+        "audit.html",
+        &locale,
+        theme_of(&headers),
+        catalog(&locale)
+            .get("history")
+            .and_then(Value::as_str)
+            .unwrap_or("History"),
+        true,
+        user.is_superuser,
+        &user.email,
+        &csrf,
+        "/admin/audit",
+        "",
+        "",
+        json!({
+            "rows": rows,
+            "previous": (page_number > 1).then(|| format!("/admin/audit?page={}", page_number - 1)),
+            "next_page": has_more.then(|| format!("/admin/audit?page={}", page_number + 1))
+        }),
+    )
+}
+
+fn child_inline<'a>(
+    registry: &'a AdminRegistry,
+    parent: &dyn ManagedModel,
+    name: &str,
+) -> Option<&'a std::sync::Arc<dyn ManagedModel>> {
+    let spec = parent
+        .meta()
+        .inlines
+        .iter()
+        .find(|item| item.name == name)?;
+    let child = registry.find(spec.child_table)?;
+    child.columns().iter().find(|column| {
+        column.name == spec.column && column.foreign_table == Some(parent.meta().key)
+    })?;
+    Some(child)
+}
+
+fn draft_values(
+    meta: &ferrum_core::AdminModelMeta,
+    columns: &[ColumnSpec],
+    form: &HashMap<String, String>,
+) -> Map<String, Value> {
+    let mut values = Map::new();
+    for field in meta.fields {
+        if field.hidden
+            || field.readonly
+            || field.sensitive
+            || sensitive(field.name)
+            || field.name == "id"
+        {
+            continue;
+        }
+        let Some(value) = form.get(field.name) else {
+            continue;
+        };
+        if value.chars().count() > 2_000 {
+            continue;
+        }
+        if columns.iter().any(|column| column.name == field.name) {
+            values.insert(field.name.to_owned(), json!(value));
+        }
+    }
+    values
+}
+
+async fn take_draft(
+    state: &AppState,
+    user: &AuthUser,
+    model_key: &str,
+    id: Option<Uuid>,
+    values: &mut Map<String, Value>,
+) -> String {
+    let picks = match values.remove("_picks") {
+        Some(Value::Object(map)) => map,
+        _ => Map::new(),
+    };
+    let use_draft = values
+        .remove("_use_draft")
+        .and_then(|value| value.as_bool())
+        .unwrap_or(false);
+    let token = values
+        .get("_draft")
+        .and_then(Value::as_str)
+        .and_then(|value| Uuid::parse_str(value).ok());
+    let mut shown = String::new();
+    if use_draft {
+        if let Some(token) = token {
+            if let Ok(Some(draft)) = drafts::load(
+                &state.db,
+                token,
+                user.session_id,
+                user.id,
+                model_key,
+                "form",
+            )
+            .await
+            {
+                let record = draft.record_id.unwrap_or_default();
+                let matches = match id {
+                    Some(id) => record == id.to_string(),
+                    None => record.is_empty(),
+                };
+                if matches {
+                    for (key, value) in draft.values {
+                        values.entry(key).or_insert(value);
+                    }
+                    shown = token.to_string();
+                }
+            }
+        }
+    } else if let Some(token) = token {
+        shown = token.to_string();
+    }
+    for (key, value) in picks {
+        values.insert(key, value);
+    }
+    if shown.is_empty() {
+        values.remove("_draft");
+    } else {
+        values.insert("_draft".to_owned(), json!(shown));
+    }
+    shown
+}
+
+fn choice_href(back: &str, field: &str, id: &str, draft: Option<&str>) -> String {
+    match draft.filter(|value| Uuid::parse_str(value).is_ok()) {
+        Some(draft) => format!("{back}?draft={}&{field}={id}", url_encode(draft)),
+        None => format!("{back}?{field}={id}"),
+    }
+}
+
+async fn inline_sections(
+    state: &AppState,
+    registry: &AdminRegistry,
+    user: &AuthUser,
+    parent: &dyn ManagedModel,
+    parent_id: Uuid,
+    query: &HashMap<String, String>,
+) -> Vec<Value> {
+    let mut sections = Vec::new();
+    for spec in parent.meta().inlines {
+        let Some(child) = child_inline(registry, parent, spec.name) else {
+            continue;
+        };
+        if list_blocked(child.as_ref())
+            || permit(state.auth.as_ref().unwrap(), user, child.meta(), "read")
+                .await
+                .is_err()
+        {
+            continue;
+        }
+        let page_number = query
+            .get(&format!("inline.{}", spec.name))
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(1)
+            .clamp(1, 10_000);
+        let limit = u64::from(child.meta().per_page.clamp(1, 25));
+        let scope = access_scope(child.as_ref(), user, false);
+        let filters = [(spec.column, DbValue::from(parent_id))];
+        let Ok((rows, has_more, _)) = child
+            .page(
+                &state.db,
+                &[],
+                None,
+                "id",
+                false,
+                &filters,
+                u64::from(page_number - 1) * limit,
+                limit,
+                &scope,
+            )
+            .await
+        else {
+            continue;
+        };
+        let label_field = child
+            .meta()
+            .fields
+            .iter()
+            .find(|field| {
+                field.list_display
+                    && !field.hidden
+                    && !field.sensitive
+                    && field.name != spec.column
+                    && field.name != "id"
+            })
+            .map(|field| field.name)
+            .unwrap_or("id");
+        let rendered = rows
+            .iter()
+            .filter_map(|row| {
+                let id = row.get("id")?.as_str()?;
+                let text = row
+                    .get(label_field)
+                    .map(|value| match value {
+                        Value::String(text) => text.clone(),
+                        Value::Number(number) => number.to_string(),
+                        Value::Bool(flag) => flag.to_string(),
+                        _ => id.to_owned(),
+                    })
+                    .unwrap_or_else(|| id.to_owned());
+                Some(json!({
+                    "text": text,
+                    "href": format!("/admin/models/{}/{}", child.meta().key, id)
+                }))
+            })
+            .collect::<Vec<_>>();
+        let can_create = permit(state.auth.as_ref().unwrap(), user, child.meta(), "create")
+            .await
+            .is_ok();
+        sections.push(json!({
+            "label": child.meta().label,
+            "rows": rendered,
+            "add": can_create.then(|| format!("/admin/models/{}/{parent_id}/inline/{}/new", parent.meta().key, spec.name)),
+            "next": has_more.then(|| format!("/admin/models/{}/{parent_id}?inline.{}={}", parent.meta().key, spec.name, page_number + 1))
+        }));
+    }
+    sections
+}
+
+async fn stage_bulk(
+    state: &AppState,
+    headers: &HeaderMap,
+    registry: &AdminRegistry,
+    model_key: &str,
+    body: &Bytes,
+) -> Response {
+    let locale = locale_of(
+        headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let user = match require_post(state, headers, body).await {
+        Ok(user) => user,
+        Err(_) => {
+            return error_page(
+                state,
+                headers,
+                registry,
+                &locale,
+                StatusCode::FORBIDDEN,
+                "csrf",
+                true,
+                "",
+            )
+            .await
+        }
+    };
+    let Some(model) = registry.find(model_key) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let form = parse_form(body);
+    let Some(name) = form.get("action").map(String::as_str) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(action) = registry
+        .actions_for(model.meta(), model.columns())
+        .into_iter()
+        .find(|action| action.name == name)
+    else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    if permit(
+        state.auth.as_ref().unwrap(),
+        &user,
+        model.meta(),
+        action.permission,
+    )
+    .await
+    .is_err()
+    {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let ids = if form.get("scope").map(String::as_str) == Some("page") {
+        let (sort, descending) = match resolved_sort(model.meta(), &form) {
+            Ok(value) => value,
+            Err(()) => {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "forbidden",
+                    true,
+                    &user.email,
+                )
+                .await
+            }
+        };
+        let filters = match filters_from(
+            &String::from_utf8_lossy(body),
+            model.columns(),
+            model.meta(),
+        ) {
+            Ok(filters) => filters,
+            Err(_) => {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "forbidden",
+                    true,
+                    &user.email,
+                )
+                .await
+            }
+        };
+        let page_number = form
+            .get("page")
+            .and_then(|value| value.parse::<u32>().ok())
+            .unwrap_or(1)
+            .max(1);
+        let page_size = u64::from(model.meta().per_page.clamp(1, 100));
+        let search: Vec<&str> = model
+            .meta()
+            .fields
+            .iter()
+            .filter(|field| field.searchable && !field.hidden && !sensitive(field.name))
+            .map(|field| field.name)
+            .collect();
+        let query = form.get("q").map(String::as_str).unwrap_or("");
+        let listed = model
+            .page(
+                &state.db,
+                &search,
+                (!query.is_empty()).then_some(query),
+                &sort,
+                descending,
+                &filters,
+                u64::from(page_number - 1) * page_size,
+                page_size,
+                &access_scope(model.as_ref(), &user, true),
+            )
+            .await;
+        match listed {
+            Ok((rows, _, _)) => rows
+                .iter()
+                .filter_map(|row| {
+                    row.get("id")
+                        .and_then(Value::as_str)
+                        .and_then(|value| Uuid::parse_str(value).ok())
+                })
+                .collect::<Vec<_>>(),
+            Err(_) => {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "forbidden",
+                    true,
+                    &user.email,
+                )
+                .await
+            }
+        }
+    } else {
+        let mut ids = Vec::new();
+        for value in repeated(body, "ids") {
+            let Ok(id) = Uuid::parse_str(&value) else {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "forbidden",
+                    true,
+                    &user.email,
+                )
+                .await;
+            };
+            if !ids.contains(&id) {
+                ids.push(id);
+            }
+        }
+        ids
+    };
+    if ids.is_empty() {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "bulk_empty",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    if ids.len() > action.max_ids {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let verb = if action.permission == "delete" {
+        "delete"
+    } else {
+        "update"
+    };
+    let scope = access_scope(model.as_ref(), &user, true);
+    for id in &ids {
+        match model.read(&state.db, *id, &scope).await {
+            Ok(Some(row)) if model.object_allows(&user, verb, &row) => {}
+            Ok(_) => {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::NOT_FOUND,
+                    "bulk_denied",
+                    true,
+                    &user.email,
+                )
+                .await
+            }
+            Err(_) => {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "bulk_failed",
+                    true,
+                    &user.email,
+                )
+                .await
+            }
+        }
+    }
+    let mut payload = Map::new();
+    payload.insert("action".to_owned(), json!(action.name));
+    payload.insert(
+        "ids".to_owned(),
+        json!(ids.iter().map(ToString::to_string).collect::<Vec<_>>()),
+    );
+    let draft = drafts::insert(
+        &state.db,
+        user.session_id,
+        user.id,
+        model_key,
+        None,
+        "bulk",
+        &payload,
+    )
+    .await;
+    let Ok(draft) = draft else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    redirect(&format!("/admin/models/{model_key}/bulk/{draft}"))
+}
+
+async fn show_bulk(
+    state: &AppState,
+    headers: &HeaderMap,
+    registry: &AdminRegistry,
+    model_key: &str,
+    draft: Uuid,
+) -> Response {
+    let locale = locale_of(
+        headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let user = match require_get(
+        state,
+        headers,
+        registry,
+        &format!("/admin/models/{model_key}"),
+    )
+    .await
+    {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Some(model) = registry.find(model_key) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(stored) = drafts::load(
+        &state.db,
+        draft,
+        user.session_id,
+        user.id,
+        model_key,
+        "bulk",
+    )
+    .await
+    .ok()
+    .flatten() else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(name) = stored.values.get("action").and_then(Value::as_str) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(action) = registry
+        .actions_for(model.meta(), model.columns())
+        .into_iter()
+        .find(|item| item.name == name)
+    else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let count = stored
+        .values
+        .get("ids")
+        .and_then(Value::as_array)
+        .map(|ids| ids.len())
+        .unwrap_or(0);
+    let csrf = session_csrf(state.auth.as_ref().unwrap(), headers).await;
+    page(
+        registry,
+        "bulk.html",
+        &locale,
+        theme_of(headers),
+        catalog(&locale)
+            .get("bulk_confirm")
+            .and_then(Value::as_str)
+            .unwrap_or("Confirm"),
+        true,
+        user.is_superuser,
+        &user.email,
+        &csrf,
+        &format!("/admin/models/{model_key}"),
+        "",
+        "",
+        json!({
+            "model_label": model.meta().label,
+            "list_path": format!("/admin/models/{model_key}"),
+            "action": format!("/admin/models/{model_key}/bulk/{draft}"),
+            "action_label": if locale == "de" { action.label_de } else { action.label_en },
+            "count": count
+        }),
+    )
+}
+
+async fn apply_bulk(
+    state: &AppState,
+    headers: &HeaderMap,
+    registry: &AdminRegistry,
+    user: &AuthUser,
+    locale: &str,
+    model_key: &str,
+    draft: Uuid,
+) -> Response {
+    let Some(model) = registry.find(model_key) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(stored) = drafts::load(
+        &state.db,
+        draft,
+        user.session_id,
+        user.id,
+        model_key,
+        "bulk",
+    )
+    .await
+    .ok()
+    .flatten() else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(name) = stored.values.get("action").and_then(Value::as_str) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let Some(action) = registry
+        .actions_for(model.meta(), model.columns())
+        .into_iter()
+        .find(|item| item.name == name)
+    else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    if permit(
+        state.auth.as_ref().unwrap(),
+        user,
+        model.meta(),
+        action.permission,
+    )
+    .await
+    .is_err()
+    {
+        let _ = audit::insert(
+            &state.db,
+            &Event {
+                actor_id: user.id,
+                model_key: model.meta().key.to_owned(),
+                record_id: String::new(),
+                action: if action.permission == "delete" {
+                    "bulk_delete"
+                } else {
+                    "bulk_update"
+                }
+                .to_owned(),
+                outcome: "denied".to_owned(),
+                summary: String::new(),
+            },
+        )
+        .await;
+        return error_page(
+            state,
+            headers,
+            registry,
+            locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let Some(raw_ids) = stored.values.get("ids").and_then(Value::as_array) else {
+        return error_page(
+            state,
+            headers,
+            registry,
+            locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let mut ids = Vec::new();
+    for value in raw_ids {
+        let Some(id) = value.as_str().and_then(|text| Uuid::parse_str(text).ok()) else {
+            return error_page(
+                state,
+                headers,
+                registry,
+                locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await;
+        };
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    if ids.is_empty() || ids.len() > action.max_ids {
+        return error_page(
+            state,
+            headers,
+            registry,
+            locale,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    }
+    let verb = if action.permission == "delete" {
+        "delete"
+    } else {
+        "update"
+    };
+    let scope = access_scope(model.as_ref(), user, true);
+    let applied = {
+        let txn = match state.db.begin().await {
+            Ok(txn) => txn,
+            Err(_) => {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    locale,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "bulk_failed",
+                    true,
+                    &user.email,
+                )
+                .await;
+            }
+        };
+        async {
+            let mut rows = Vec::new();
+            for id in &ids {
+                match get_record(&txn, model.descriptor().table, model.columns(), *id, &scope).await
+                {
+                    Ok(Some(row)) if model.object_allows(user, verb, &row) => rows.push((*id, row)),
+                    Ok(_) => return Err((StatusCode::NOT_FOUND, "bulk_denied")),
+                    Err(_) => return Err((StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed")),
+                }
+            }
+            let audit_action = if matches!(action.operation, ActionOperation::Delete) {
+                "bulk_delete"
+            } else {
+                "bulk_update"
+            };
+            for (id, before) in &rows {
+                let after = match action.operation {
+                    ActionOperation::Delete => {
+                        match delete_record(
+                            &txn,
+                            model.descriptor().table,
+                            *id,
+                            &scope,
+                            model.columns(),
+                        )
+                        .await
+                        {
+                            Ok(1) => None,
+                            Ok(_) => return Err((StatusCode::NOT_FOUND, "bulk_denied")),
+                            Err(_) => {
+                                return Err((StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed"))
+                            }
+                        }
+                    }
+                    ActionOperation::SetBool { column, value } => {
+                        match update_record(
+                            &txn,
+                            model.descriptor().table,
+                            model.columns(),
+                            *id,
+                            vec![(column, DbValue::from(value))],
+                            &scope,
+                        )
+                        .await
+                        {
+                            Ok(row) => Some(row),
+                            Err(_) => {
+                                return Err((StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed"))
+                            }
+                        }
+                    }
+                };
+                let summary = audit::change_summary(model.meta(), Some(before), after.as_ref());
+                if audit::insert(
+                    &txn,
+                    &Event {
+                        actor_id: user.id,
+                        model_key: model.meta().key.to_owned(),
+                        record_id: id.to_string(),
+                        action: audit_action.to_owned(),
+                        outcome: "ok".to_owned(),
+                        summary,
+                    },
+                )
+                .await
+                .is_err()
+                {
+                    return Err((StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed"));
+                }
+            }
+            let count = rows.len();
+            txn.commit()
+                .await
+                .map_err(|_| (StatusCode::INTERNAL_SERVER_ERROR, "bulk_failed"))?;
+            Ok(count)
+        }
+        .await
+    };
+    let count = match applied {
+        Ok(count) => count,
+        Err((status, key)) => {
+            return error_page(
+                state,
+                headers,
+                registry,
+                locale,
+                status,
+                key,
+                true,
+                &user.email,
+            )
+            .await;
+        }
+    };
+    let _ = drafts::delete(&state.db, draft, user.session_id, user.id).await;
+    redirect(&format!(
+        "/admin/models/{model_key}?notice=changed&changed={count}"
+    ))
 }
 
 #[allow(clippy::too_many_arguments)]
@@ -1801,9 +5560,16 @@ fn page(
         "site_title": branding.site_title,
         "site_header": branding.site_header,
         "app_name": branding.app_name,
-        "primary_color": branding.primary_color,
+        "primary_color": brand_for_ui(&branding.primary_color),
+        "nav_dashboard": template != "error.html" && (path == "/admin" || path == "/admin/"),
+        "nav_models": path.starts_with("/admin/models"),
+        "nav_audit": path.starts_with("/admin/audit"),
+        "nav_users": path.starts_with("/admin/directory/users"),
+        "nav_roles": path.starts_with("/admin/directory/roles") && !path.starts_with("/admin/directory/permissions"),
+        "nav_permissions": path.starts_with("/admin/directory/permissions"),
         "i18n": catalog(locale),
         "signed_in": signed_in,
+        "nav": signed_in,
         "superuser": superuser,
         "user_email": email,
         "csrf_token": csrf,
@@ -1825,7 +5591,10 @@ fn page(
     }
 }
 
-fn error_page(
+#[allow(clippy::too_many_arguments)]
+async fn error_page(
+    state: &AppState,
+    headers: &HeaderMap,
     registry: &AdminRegistry,
     locale: &str,
     status: StatusCode,
@@ -1838,20 +5607,43 @@ fn error_page(
         .and_then(Value::as_str)
         .unwrap_or("Error")
         .to_owned();
+    let title = catalog(locale)
+        .get("error")
+        .and_then(Value::as_str)
+        .unwrap_or("Error")
+        .to_owned();
+    let csrf = if signed_in {
+        match state.auth.as_ref() {
+            Some(auth) => session_csrf(auth, headers).await,
+            None => String::new(),
+        }
+    } else {
+        String::new()
+    };
+    let signed_in = signed_in && !csrf.is_empty();
+    let show_nav = signed_in && key != "staff_required";
+    let superuser = match state.auth.as_ref() {
+        Some(auth) => auth
+            .authenticate(headers, &Method::GET)
+            .await
+            .ok()
+            .is_some_and(|user| user.is_superuser),
+        None => false,
+    };
     let mut response = page(
         registry,
         "error.html",
         locale,
-        "system",
-        &message,
+        theme_of(headers),
+        &title,
         signed_in,
-        false,
+        superuser,
         email,
-        "",
+        &csrf,
         "/admin",
         "",
         "",
-        json!({ "message": message }),
+        json!({ "message": message, "nav": show_nav }),
     );
     *response.status_mut() = status;
     response
@@ -2125,6 +5917,108 @@ fn safe_next(value: &str) -> Option<&str> {
     }
 }
 
+fn sort_query(params: &HashMap<String, String>, sort: &str, dir: &str) -> String {
+    let mut pairs = vec![
+        format!(
+            "q={}",
+            url_encode(params.get("q").map(String::as_str).unwrap_or(""))
+        ),
+        format!("sort={sort}"),
+        format!("dir={dir}"),
+    ];
+    let mut keys: Vec<&String> = params
+        .keys()
+        .filter(|key| key.starts_with("filter."))
+        .collect();
+    keys.sort();
+    for key in keys {
+        pairs.push(format!(
+            "{}={}",
+            url_encode(key),
+            url_encode(params.get(key).map(String::as_str).unwrap_or(""))
+        ));
+    }
+    pairs.join("&")
+}
+
+fn is_uuid(value: &str) -> bool {
+    let bytes = value.as_bytes();
+    bytes.len() == 36
+        && bytes[8] == b'-'
+        && bytes[13] == b'-'
+        && bytes[18] == b'-'
+        && bytes[23] == b'-'
+        && bytes
+            .iter()
+            .enumerate()
+            .all(|(index, byte)| matches!(index, 8 | 13 | 18 | 23) || byte.is_ascii_hexdigit())
+}
+
+fn shorten_uuid(value: &str) -> String {
+    format!("{}…{}", &value[..8], &value[value.len() - 4..])
+}
+
+/// Projektfarbe nur, wenn weiße Schrift darauf mindestens 4,5:1 erreicht.
+fn brand_for_ui(hex: &str) -> String {
+    if contrast_ratio(hex, "#ffffff") >= 4.5 {
+        hex.to_owned()
+    } else {
+        "#0f172a".to_owned()
+    }
+}
+
+fn contrast_ratio(left: &str, right: &str) -> f64 {
+    let Some(left) = relative_luminance(left) else {
+        return 1.0;
+    };
+    let Some(right) = relative_luminance(right) else {
+        return 1.0;
+    };
+    let (hi, lo) = if left > right {
+        (left, right)
+    } else {
+        (right, left)
+    };
+    (hi + 0.05) / (lo + 0.05)
+}
+
+fn relative_luminance(hex: &str) -> Option<f64> {
+    let (red, green, blue) = rgb(hex)?;
+    Some(0.2126 * channel_lin(red) + 0.7152 * channel_lin(green) + 0.0722 * channel_lin(blue))
+}
+
+fn rgb(hex: &str) -> Option<(u8, u8, u8)> {
+    let hex = hex.strip_prefix('#')?;
+    let expanded;
+    let hex = if hex.len() == 3 {
+        expanded = hex.chars().fold(String::new(), |mut output, char| {
+            output.push(char);
+            output.push(char);
+            output
+        });
+        expanded.as_str()
+    } else {
+        hex
+    };
+    if hex.len() != 6 {
+        return None;
+    }
+    Some((
+        u8::from_str_radix(&hex[0..2], 16).ok()?,
+        u8::from_str_radix(&hex[2..4], 16).ok()?,
+        u8::from_str_radix(&hex[4..6], 16).ok()?,
+    ))
+}
+
+fn channel_lin(channel: u8) -> f64 {
+    let value = f64::from(channel) / 255.0;
+    if value <= 0.04045 {
+        value / 12.92
+    } else {
+        ((value + 0.055) / 1.055).powf(2.4)
+    }
+}
+
 fn url_encode(value: &str) -> String {
     let mut output = String::new();
     for byte in value.bytes() {
@@ -2166,4 +6060,28 @@ fn identifier(value: &str) -> bool {
         && value
             .chars()
             .all(|char| char.is_ascii_alphanumeric() || matches!(char, '_' | '.'))
+}
+
+#[cfg(test)]
+mod contrast_tests {
+    use super::{brand_for_ui, contrast_ratio, is_uuid};
+
+    #[test]
+    fn pale_brand_falls_back_to_slate() {
+        assert_eq!(brand_for_ui("#ffffff"), "#0f172a");
+        assert_eq!(brand_for_ui("#f4f7fb"), "#0f172a");
+    }
+
+    #[test]
+    fn readable_brand_keeps_its_hex() {
+        assert_eq!(brand_for_ui("#0f172a"), "#0f172a");
+        assert!(contrast_ratio("#ffffff", "#9f1239") >= 4.5);
+        assert_eq!(brand_for_ui("#9f1239"), "#9f1239");
+    }
+
+    #[test]
+    fn uuids_are_not_ordinary_labels() {
+        assert!(is_uuid("11111111-1111-1111-1111-111111111111"));
+        assert!(!is_uuid("Apfel"));
+    }
 }

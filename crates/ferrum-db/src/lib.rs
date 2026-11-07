@@ -3,14 +3,15 @@
 mod sql;
 
 use ferrum_core::{FerrumError, FerrumModel};
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, DatabaseTransaction};
 use serde::{de::DeserializeOwned, Serialize};
 pub use sql::{
     delete_record, find_by_column, get_record, insert_record, kind_of, list_records,
-    query_admin_page, render_add_column, render_add_column_referencing, render_create_index,
-    render_create_table, render_drop_column, render_drop_index, render_drop_table,
-    render_rename_column, render_rename_table, render_schema, render_table_bundle, update_record,
-    AdminPage, AdminPageRequest, ForeignKeyClause, PhysicalColumn, ValuePage,
+    query_admin_page, query_labels, render_add_column, render_add_column_referencing,
+    render_create_index, render_create_table, render_drop_column, render_drop_index,
+    render_drop_table, render_rename_column, render_rename_table, render_schema,
+    render_table_bundle, update_record, AdminPage, AdminPageRequest, ForeignKeyClause,
+    PhysicalColumn, ValuePage,
 };
 
 #[derive(Debug, Serialize)]
@@ -86,6 +87,23 @@ pub trait ModelRepository: FerrumModel + Serialize + DeserializeOwned {
     ) -> Result<Self, FerrumError>;
     async fn delete_scoped(
         db: &DatabaseConnection,
+        id: uuid::Uuid,
+        scope: &ferrum_core::QueryScope,
+    ) -> Result<DeleteOutcome, FerrumError>;
+    async fn get_tx(
+        db: &DatabaseTransaction,
+        id: uuid::Uuid,
+        scope: &ferrum_core::QueryScope,
+    ) -> Result<Option<Self>, FerrumError>;
+    async fn create_tx(db: &DatabaseTransaction, input: Self::Create) -> Result<Self, FerrumError>;
+    async fn update_tx(
+        db: &DatabaseTransaction,
+        id: uuid::Uuid,
+        input: Self::Update,
+        scope: &ferrum_core::QueryScope,
+    ) -> Result<Self, FerrumError>;
+    async fn delete_tx(
+        db: &DatabaseTransaction,
         id: uuid::Uuid,
         scope: &ferrum_core::QueryScope,
     ) -> Result<DeleteOutcome, FerrumError>;

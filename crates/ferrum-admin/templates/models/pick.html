@@ -1,0 +1,22 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ back }}">{{ i18n.pick_back }}</a></nav>
+<form class="filters" method="get" action="{{ action }}">
+<label>{{ i18n.search }} <input name="q" value="{{ query }}"></label>
+<button class="ghost" type="submit">{{ i18n.search }}</button>
+</form>
+<p class="meta">{{ i18n.total }}: {{ total }} · {{ i18n.page }} {{ page }}</p>
+{% if rows | length == 0 %}
+<p class="empty">{{ i18n.pick_empty }}</p>
+{% else %}
+<ul class="choice-list">
+{% for row in rows %}
+<li><a href="{{ row.href }}">{{ row.label }}</a></li>
+{% endfor %}
+</ul>
+{% endif %}
+<nav class="pager" aria-label="{{ i18n.page }}">
+{% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% endif %}
+{% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% endif %}
+</nav>
+{% endblock %}

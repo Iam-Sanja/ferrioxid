@@ -121,6 +121,14 @@ Rust-Modelle + Makros
 - API-JSON-Rejections von Axum verwenden nicht den Ferrum-Fehlerkörper.
 - Die HTTP-Listenabfrage beschränkt die Antwort auf maximal 100 Datensätze; keine Pagination.
 - `CREATE TABLE IF NOT EXISTS` meldet keinen Schema-Drift.
-- Keine Authentication, Migration Engine, Admin-UI, OpenAPI, sichere Produktionskonfiguration.
+- OpenAPI und ein allgemeines Plugin-System sind nicht implementiert. Auth, Migrationen und der native Admin sind vorhanden.
 
-Weiterlesen: [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [security.md](security.md).
+## 8. Admin-Schreiben in v0.18
+
+`ModelRepository` hat `get_tx`, `create_tx`, `update_tx` und `delete_tx` auf `&DatabaseTransaction`. Die SQL-Helfer nehmen `&impl ConnectionTrait`. `ManagedModel::update` und `remove` erhalten den `AuthUser`. Ein erfolgreiches Anlegen, Ändern oder Löschen im Admin öffnet eine Transaktion, schreibt die Zeile, schreibt `_ferrum_admin_audit` und committet. Ein Abbruch verwirft beides. `ModelRepository::create` ohne den Admin-Pfad schreibt keine Historie.
+
+Verzeichnisereignisse (`user_create`, `user_update`, `password_reset`, `role_assign`, `role_revoke`) entstehen nach dem `AuthService`-Aufruf. Sie teilen sich keine Transaktion mit der Auth-Änderung.
+
+Entwürfe liegen in `_ferrum_admin_drafts` und verweisen als Text-UUID auf `_ferrum_sessions.id`. Auth speichert Sitzungs-IDs als Text. Dieselbe Textbindung gilt für Audit-IDs. Die Migration ist `crates/ferrum-auth/migrations/0002_admin_journal.json`. `0001_auth_schema` bleibt unverändert.
+
+Weiterlesen: [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [security.md](security.md), [admin-audit-log.md](admin-audit-log.md).

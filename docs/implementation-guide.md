@@ -65,6 +65,14 @@ Migrationsaufwand:
 
 Vorgeschlagene ADR-Themen: Macro ↔ ORM-Strategie; Schema-Format; Zugriffspolicy; Admin-Schema-API; Migrations- und Rollback-Semantik. SOLL heißt hier **vorgeschlagen** – keine bereits existierenden ADRs voraussetzen.
 
-## 7. Aktueller Schwerpunkt
+## 7. Nächste Admin-Phasen
+
+Lies [roadmap.md](roadmap.md), bevor du den Admin erweiterst. v0.14 bis v0.18 sind umgesetzt. Datum und Uhrzeit sind bewusst nicht ergänzt.
+
+Impeccable, ein Cloudflare-Audit-Skill, ub-mode und Ponytail sind im Arbeitsbaum nicht als Skill hinterlegt. Installiere sie nicht nebenbei. Lies einen Skill erst nach ausdrücklicher Zustimmung und nur für die Phase, die ihn nennt. Kein Skill und kein Hook erzeugt Commits oder Pushes.
+
+Ein Admin-Auftrag, der nur die Roadmap erweitert, ändert keine Handler und keine Templates außer der Dokumentation.
+
+## 8. Aktueller Schwerpunkt
 
 SQLite ist die lokale Standarddatenbank. PostgreSQL bleibt über `DATABASE_URL` unterstützt. Neue Spaltenabbildungen gehören nach `crates/ferrum-db/src/sql.rs`. Neue Migrationsregeln gehören nach `crates/ferrum-migrations`. Ein SQLite-Umbau darf nur laufen, wenn die geänderte Spalte vorher geprüft ist und die Transaktion bei Fehler alles zurücknimmt. Foreign Keys auf bestehenden Spalten werden nicht umgebaut. Authentifizierung ist vorhanden. Der Admin ist in v0.8 vorhanden und seit v0.13 serverseitiges HTML, beschrieben in [admin-native.md](admin-native.md). v0.9 ergänzt `can_create`, das Feature `admin-ui` und die Befehle `new`, `dev`, `doctor`, `check`, `generate model` und `build`. v0.10 ergänzt Settings und Tera-Seiten. Die Cargo-Version bleibt `0.1.0`. Many-to-Many und Eager Loading nur nach ausdrücklicher Beauftragung. Die Roadmap ist keine Freigabe. Constraints und Beziehungen sind in [constraints.md](constraints.md) und [relations.md](relations.md) beschrieben.

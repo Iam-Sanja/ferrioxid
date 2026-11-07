@@ -32,6 +32,13 @@ const TEMPLATES: &[(&str, &str)] = &[
     ),
     ("list.html", include_str!("../templates/models/list.html")),
     ("form.html", include_str!("../templates/models/form.html")),
+    ("pick.html", include_str!("../templates/models/pick.html")),
+    ("bulk.html", include_str!("../templates/models/bulk.html")),
+    ("audit.html", include_str!("../templates/audit.html")),
+    (
+        "field.html",
+        include_str!("../templates/partials/field.html"),
+    ),
     (
         "detail.html",
         include_str!("../templates/models/detail.html"),
@@ -43,6 +50,14 @@ const TEMPLATES: &[(&str, &str)] = &[
     (
         "users.html",
         include_str!("../templates/directory/users.html"),
+    ),
+    (
+        "user_form.html",
+        include_str!("../templates/directory/user_form.html"),
+    ),
+    (
+        "user_detail.html",
+        include_str!("../templates/directory/user_detail.html"),
     ),
     (
         "roles.html",

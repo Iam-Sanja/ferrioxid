@@ -178,15 +178,23 @@ async fn sessions_permissions_and_repeatable_migrations() {
     assert!(applied.is_empty());
     let history = auth
         .database()
-        .query_one(Statement::from_string(
+        .query_all(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "SELECT id FROM _ferrum_auth_migrations",
+            "SELECT id FROM _ferrum_auth_migrations ORDER BY id",
         ))
         .await
-        .unwrap()
         .unwrap();
-    let id: String = history.try_get("", "id").unwrap();
-    assert_eq!(id, "0001_auth_schema");
+    let ids = history
+        .iter()
+        .map(|row| row.try_get::<String>("", "id").unwrap())
+        .collect::<Vec<_>>();
+    assert_eq!(
+        ids,
+        vec![
+            "0001_auth_schema".to_owned(),
+            "0002_admin_journal".to_owned()
+        ]
+    );
     assert_eq!(auth.list_users().await.unwrap().len(), 2);
 }
 

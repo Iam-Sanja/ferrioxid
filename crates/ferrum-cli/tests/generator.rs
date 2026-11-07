@@ -4,7 +4,41 @@ use std::path::PathBuf;
 use std::process::Command;
 
 fn ferrum() -> Command {
-    Command::new(env!("CARGO_BIN_EXE_ferrum"))
+    let mut command = Command::new(env!("CARGO_BIN_EXE_ferrum"));
+    seal(&mut command);
+    command
+}
+
+/// Kindprozesse bekommen eine eigene SQLite-Datei. Die geerbte `DATABASE_URL` des Testprozesses wird dabei ersetzt, nicht global verändert.
+fn seal(command: &mut Command) -> &mut Command {
+    static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
+    let path = std::env::temp_dir().join(format!(
+        "ferrum-isolated-{}-{}.sqlite",
+        std::process::id(),
+        NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed)
+    ));
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        path.to_string_lossy().replace('\\', "/")
+    );
+    command
+        .env("DATABASE_URL", url)
+        .env_remove("FERRUM_E2E_DATABASE")
+        .env_remove("FERRUM_PASSWORD")
+}
+
+fn cleanup_isolated_databases() {
+    let prefix = format!("ferrum-isolated-{}-", std::process::id());
+    let Ok(entries) = std::fs::read_dir(std::env::temp_dir()) else {
+        return;
+    };
+    for entry in entries.flatten() {
+        let name = entry.file_name();
+        let name = name.to_string_lossy();
+        if name.starts_with(&prefix) {
+            let _ = std::fs::remove_file(entry.path());
+        }
+    }
 }
 
 fn repository() -> PathBuf {
@@ -62,6 +96,7 @@ fn rejects_names_and_existing_directories() {
         .unwrap();
     assert!(!again.status.success());
     let _ = std::fs::remove_dir_all(&root);
+    cleanup_isolated_databases();
 }
 
 #[test]
@@ -170,6 +205,7 @@ fn generated_api_and_fullstack_projects_compile() {
         assert!(build_out.contains("target"), "{label}: {build_out}");
     }
     let _ = std::fs::remove_dir_all(&root);
+    cleanup_isolated_databases();
 }
 
 fn create(
@@ -191,7 +227,9 @@ fn cargo(
     target: &std::path::Path,
     args: &[&str],
 ) -> std::process::Output {
-    Command::new("cargo")
+    let mut command = Command::new("cargo");
+    seal(&mut command);
+    command
         .args(args)
         .current_dir(project)
         .env("CARGO_TARGET_DIR", target)

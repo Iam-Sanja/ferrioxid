@@ -2,11 +2,13 @@
 {% block content %}
 <p>{{ i18n.welcome }}{% if user_email %}, {{ user_email }}{% endif %}.</p>
 {% if models | length == 0 %}
+<div class="empty-state">
 <p class="empty">{{ i18n.no_models }}</p>
+</div>
 {% else %}
 <ul class="cards">
 {% for model in models %}
-<li class="card"><h2>{{ model.label }}</h2><a href="/admin/models/{{ model.key }}">{{ i18n.open }}</a></li>
+<li class="card"><h2>{{ model.label }}</h2><a class="button ghost" href="/admin/models/{{ model.key }}">{{ i18n.open }}</a></li>
 {% endfor %}
 </ul>
 {% endif %}

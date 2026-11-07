@@ -20,7 +20,7 @@ pub use error::AuthError;
 pub use password::{hash_password, verify_password};
 pub use policy::ObjectPolicy;
 pub use routes::{mount, AppState, ClientIp};
-pub use schema::{apply_migrations, migration_file, schema};
+pub use schema::{apply_migrations, migration_file, schema, ADMIN_AUDIT, ADMIN_DRAFTS};
 pub use service::{
     csrf_header_name, normalize_email, AuthService, AuthUser, IssuedSession, PublicUser,
 };

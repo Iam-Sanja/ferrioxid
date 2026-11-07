@@ -8,18 +8,21 @@
 <style>:root { --brand: {{ primary_color }}; }</style>
 </head>
 <body>
-<a class="skip" href="#content">{{ i18n.open }}</a>
+<a class="skip" href="#content">{{ i18n.skip }}</a>
 <div class="shell">
-{% if signed_in %}
+{% if signed_in and nav %}
 <aside class="sidebar">
 <p class="brand">{{ app_name }}</p>
-<nav aria-label="{{ i18n.dashboard }}">
-<a href="/admin">{{ i18n.dashboard }}</a>
-<a href="/admin/models">{{ i18n.models }}</a>
+<p class="brand-note">{{ site_header }}</p>
+<nav aria-label="{{ i18n.navigation }}">
+<a href="/admin" {% if nav_dashboard %}aria-current="page"{% endif %}>{{ i18n.dashboard }}</a>
+<a href="/admin/models" {% if nav_models %}aria-current="page"{% endif %}>{{ i18n.models }}</a>
+<a href="/admin/audit" {% if nav_audit %}aria-current="page"{% endif %}>{{ i18n.history }}</a>
 {% if superuser %}
-<a href="/admin/directory/users">{{ i18n.users }}</a>
-<a href="/admin/directory/roles">{{ i18n.roles }}</a>
-<a href="/admin/directory/permissions">{{ i18n.permissions }}</a>
+<p class="nav-group">{{ i18n.directory }}</p>
+<a href="/admin/directory/users" {% if nav_users %}aria-current="page"{% endif %}>{{ i18n.users }}</a>
+<a href="/admin/directory/roles" {% if nav_roles %}aria-current="page"{% endif %}>{{ i18n.roles }}</a>
+<a href="/admin/directory/permissions" {% if nav_permissions %}aria-current="page"{% endif %}>{{ i18n.permissions }}</a>
 {% endif %}
 </nav>
 </aside>
@@ -27,11 +30,13 @@
 <div class="main">
 <header class="top">
 <div>
-<p class="eyebrow">{{ site_header }}</p>
 <h1>{{ title }}</h1>
 </div>
 {% if signed_in %}
 <div class="tools">
+<div>
+{% if user_email %}<p class="who">{{ user_email }}</p>{% endif %}
+{% if nav %}
 <form method="post" action="/admin/preferences">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="next" value="{{ current_path }}">
@@ -48,8 +53,10 @@
 <option value="dark" {% if theme == "dark" %}selected{% endif %}>{{ i18n.dark }}</option>
 </select>
 </label>
-<button type="submit">{{ i18n.apply }}</button>
+<button type="submit" class="ghost">{{ i18n.apply }}</button>
 </form>
+{% endif %}
+</div>
 <form method="post" action="/admin/logout">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <button type="submit" class="ghost">{{ i18n.logout }}</button>
@@ -57,7 +64,7 @@
 </div>
 {% endif %}
 </header>
-{% if notice %}<p class="notice" role="status">{{ notice }}</p>{% endif %}
+{% if notice %}<p class="notice" role="status" tabindex="-1" {% if not alert %}autofocus{% endif %}>{{ notice }}</p>{% endif %}
 {% if alert %}<p class="alert" role="alert">{{ alert }}</p>{% endif %}
 <main id="content">{% block content %}{% endblock %}</main>
 </div>

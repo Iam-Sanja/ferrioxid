@@ -20,6 +20,10 @@
 | GET | `/admin/models/{model}/{id}/delete` | Bestätigung. Löscht nichts. |
 | POST | `/admin/models/{model}/{id}/delete` | Löschen, danach 303 auf die Liste. |
 | GET | `/admin/directory/users` | Benutzer. Nur Staff-Superuser. |
+| GET, POST | `/admin/directory/users/new` | Benutzer anlegen. Kein Superuser-Feld. |
+| GET | `/admin/directory/users/{id}` | Benutzerdetail ohne Hash. |
+| GET, POST | `/admin/directory/users/{id}/edit` | E-Mail, Aktiv und Staff. |
+| POST | `/admin/directory/users/{id}/password` | Passwort setzen und Sitzungen des Ziels widerrufen. |
 | POST | `/admin/directory/users/{id}/active` | Aktivieren oder deaktivieren. |
 | POST | `/admin/directory/users/{id}/staff` | Staff geben oder entziehen. |
 | GET, POST | `/admin/directory/roles` | Rollen anzeigen und anlegen. |

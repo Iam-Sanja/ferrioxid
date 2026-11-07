@@ -15,6 +15,8 @@ pub const ROLES: &str = "_ferrum_roles";
 pub const PERMISSIONS: &str = "_ferrum_permissions";
 pub const USER_ROLES: &str = "_ferrum_user_roles";
 pub const ROLE_PERMISSIONS: &str = "_ferrum_role_permissions";
+pub const ADMIN_DRAFTS: &str = "_ferrum_admin_drafts";
+pub const ADMIN_AUDIT: &str = "_ferrum_admin_audit";
 
 pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
@@ -55,11 +57,89 @@ pub fn migration_file() -> Result<MigrationFile, AuthError> {
     .map_err(|error| AuthError::Validation(error.to_string()))
 }
 
+#[cfg(test)]
+pub fn admin_migration_file() -> Result<MigrationFile, AuthError> {
+    let from = schema()?;
+    let mut to = from.clone();
+    to.tables.push(admin_drafts());
+    to.tables.push(admin_audit());
+    to.validate()
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let plan = plan_change(&from, &to).map_err(|error| AuthError::Validation(error.to_string()))?;
+    if let Some(reason) = &plan.refusal {
+        return Err(AuthError::Validation(reason.clone()));
+    }
+    seal(
+        "0002_admin_journal".to_owned(),
+        "admin_journal".to_owned(),
+        from,
+        to,
+        &plan,
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
 pub async fn apply_migrations(db: &DatabaseConnection) -> Result<Vec<String>, AuthError> {
     let report = apply_directory_with_history(db, &migrations_dir(), false, AUTH_HISTORY_TABLE)
         .await
         .map_err(|error| AuthError::Validation(error.to_string()))?;
     Ok(report.applied)
+}
+
+#[cfg(test)]
+fn admin_drafts() -> TableSnapshot {
+    table(
+        ADMIN_DRAFTS,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("session_id", LogicalType::Uuid, false, false, None),
+            column("user_id", LogicalType::Uuid, false, false, None),
+            column("model_key", LogicalType::String, false, false, None),
+            column("record_id", LogicalType::String, false, true, None),
+            column("purpose", LogicalType::String, false, false, None),
+            column("payload", LogicalType::String, false, false, None),
+            column("created_at", LogicalType::I64, false, false, None),
+            column("expires_at", LogicalType::I64, false, false, None),
+        ],
+        Vec::new(),
+        vec![index(ADMIN_DRAFTS, &["session_id"])],
+        vec![foreign_key(ADMIN_DRAFTS, "session_id", SESSIONS)],
+    )
+}
+
+#[cfg(test)]
+fn admin_audit() -> TableSnapshot {
+    table(
+        ADMIN_AUDIT,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("created_at", LogicalType::I64, false, false, None),
+            column("actor_id", LogicalType::Uuid, false, false, None),
+            column("model_key", LogicalType::String, false, false, None),
+            column("record_id", LogicalType::String, false, false, None),
+            column("action", LogicalType::String, false, false, None),
+            column("outcome", LogicalType::String, false, false, None),
+            column("summary", LogicalType::String, false, false, None),
+        ],
+        Vec::new(),
+        vec![index(ADMIN_AUDIT, &["created_at"])],
+        Vec::new(),
+    )
+}
+
+#[cfg(test)]
+fn index(table_name: &str, columns: &[&str]) -> IndexSnapshot {
+    let mut name = format!("ix_{table_name}");
+    let mut owned = Vec::new();
+    for column in columns {
+        name.push('_');
+        name.push_str(column);
+        owned.push((*column).to_owned());
+    }
+    IndexSnapshot {
+        name,
+        columns: owned,
+    }
 }
 
 fn users() -> TableSnapshot {
@@ -223,7 +303,7 @@ fn foreign_key(table_name: &str, column_name: &str, referenced: &str) -> Foreign
 
 #[cfg(test)]
 mod tests {
-    use super::{migration_file, migrations_dir};
+    use super::{admin_migration_file, migration_file, migrations_dir};
 
     #[test]
     fn sealed_migration_matches_the_schema() {
@@ -236,5 +316,18 @@ mod tests {
         assert_eq!(loaded.id, "0001_auth_schema");
         assert_eq!(loaded.checksum, file.checksum);
         assert!(loaded.to_snapshot.tables.len() >= 6);
+    }
+
+    #[test]
+    fn admin_journal_migration_is_sealed() {
+        let file = admin_migration_file().expect("admin journal can be sealed");
+        let path = migrations_dir().join("0002_admin_journal.json");
+        if !path.exists() {
+            ferrum_migrations::save_migration(&migrations_dir(), &file).expect("write migration");
+        }
+        let loaded = ferrum_migrations::load_migration(&path).expect("load migration");
+        assert_eq!(loaded.id, "0002_admin_journal");
+        assert_eq!(loaded.checksum, file.checksum);
+        assert!(loaded.operations.len() >= 2);
     }
 }

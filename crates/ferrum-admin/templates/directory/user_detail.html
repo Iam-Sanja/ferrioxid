@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="/admin/directory/users">{{ i18n.users }}</a></nav>
+<dl class="card">
+<dt>{{ i18n.email }}</dt><dd>{{ email }}</dd>
+<dt>{{ i18n.active }}</dt><dd><span class="flag">{% if is_active %}{{ i18n.active }}{% else %}{{ i18n.inactive }}{% endif %}</span></dd>
+<dt>{{ i18n.staff }}</dt><dd><span class="flag">{% if is_staff %}{{ i18n.staff }}{% else %}{{ i18n.no_staff }}{% endif %}</span></dd>
+<dt>{{ i18n.superuser }}</dt><dd><span class="flag">{% if is_superuser %}{{ i18n.superuser }}{% else %}{{ i18n.no_superuser }}{% endif %}</span></dd>
+<dt>{{ i18n.roles }}</dt><dd>{% if roles | length == 0 %}—{% else %}{{ roles | join(sep=", ") }}{% endif %}</dd>
+<dt>{{ i18n.permissions }}</dt><dd>{% if permissions | length == 0 %}<span class="hint">{{ i18n.no_permissions }}</span>{% else %}{{ permissions | join(sep=", ") }}{% endif %}</dd>
+</dl>
+<div class="actions section">
+<a class="button ghost" href="/admin/directory/users">{{ i18n.back }}</a>
+{% if can_edit %}<a class="button" href="/admin/directory/users/{{ id }}/edit">{{ i18n.edit }}</a>{% endif %}
+</div>
+{% endblock %}

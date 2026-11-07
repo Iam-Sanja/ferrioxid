@@ -1,9 +1,54 @@
 # Changelog
 
+## Unreleased — Django-Admin-Parität II (v0.18)
+
+- Formularwerte überleben die Fremdschlüssel-Auswahl in einem sitzungsgebundenen Entwurf. Die URL trägt nur die zufällige Draft-ID und den gewählten Schlüssel. Passwörter, Hashes, CSRF und unbekannte Felder werden nicht gespeichert. Lebensdauer 30 Minuten, höchstens 8 KiB, höchstens 20 Entwürfe je Sitzung.
+- `admin_inline = "name=tabelle.spalte"` zeigt eine Has-Many-Liste am Elterndatensatz. Ein neuer Kinddatensatz entsteht in einem eigenen Formular. Der Parent-Fremdschlüssel kommt aus der URL und überschreibt den POST. Die Create-Policy bleibt.
+- Listen können registrierte Sammelaktionen ausführen: Löschen, und bei einem sichtbaren Bool-Feld `active` Aktivieren und Deaktivieren. Die erste POST-Anfrage schreibt nur einen Entwurf. Die Bestätigung verlangt `confirm=1` und CSRF. Eine verweigerte Zeile oder ein Fremdschlüsselfehler rollt die ganze Auswahl zurück.
+- Eigene Aktionen registriert `AdminRegistry::action` als `AdminAction` mit `ActionOperation::Delete` oder `SetBool`. Der HTTP-Name führt keinen Code und kein SQL aus.
+- `_ferrum_admin_audit` zeichnet erfolgreiche Modelländerungen in derselben Transaktion auf. Verzeichnisereignisse folgen dem Auth-Schreibvorgang und sind nicht dieselbe Transaktion. Superuser sehen die Historie. Anderes Staff sieht nur eigene Ereignisse. Passwörter, Hashes, Tokens und als sensibel markierte Felder fehlen in der Zusammenfassung.
+- Die Cargo-Version bleibt `0.1.0`. Datum und Uhrzeit bleiben offen.
+
+## Unreleased — Django-Admin-Parität I (v0.17)
+
+- Listen nutzen `list_display`, `list_link`, `admin_ordering`, `admin_per_page`, `filterable` und `searchable` aus den bestehenden Metadaten. Die HTML-Seite liegt zwischen 1 und 100. Es gibt kein unbegrenztes „alle zeigen“. Ein unbekanntes `sort` bleibt 422.
+- `admin_fieldset` und `#[admin(fieldset)]` teilen Formulare in benannte Abschnitte. Optionale Abschnitte sind `details`. Ohne Deklaration bleibt eine unbenannte Gruppe.
+- Modellformulare senden `save=detail`, `save=edit` oder `save=new`. Nur ein erfolgreiches Schreiben antwortet mit 303 auf eine serverseitig gebaute Admin-URL. Ein anderer Wert schreibt nicht.
+- Nach einem Validierungsfehler bleiben E-Mail, Text, Auswahl und Häkchen. Passwortfelder haben keinen `value`. CSRF-Tokens werden nicht protokolliert.
+- Fremdschlüssel über 100 Zeilen haben eine GET-Auswahlseite mit Suche, Seitengröße und Query-Scope. Eine UUID, die der Benutzer am registrierten Ziel nicht lesen darf, wird abgelehnt.
+- Datum und Uhrzeit sind nicht ergänzt. `ColumnKind` bleibt `Uuid`, `Text`, `BigInt` und `Boolean`.
+- Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Benutzerverwaltung und Relationen (v0.16)
+
+- Staff-Superuser legen Benutzer im Admin an und ändern E-Mail, Aktiv, Staff und Rollen. Das Passwort wird mit derselben Argon2id-Prüfung wie in der CLI gesetzt. Superuser bleibt der CLI vorbehalten. Es gibt kein physisches Löschen.
+- Deaktivieren, Staff ändern, Rollen, Rechte, Anlegen, Profil und Passwort verlangen serverseitig `confirm=1`. Fehlende oder andere Werte ändern nichts. Die Prüfung ersetzt weder CSRF noch die Staff-Superuser-Prüfung. Geschützte Superuser und die eigene Sperre bleiben 403.
+- Passwortänderung und Deaktivierung widerrufen die Sitzungen des Ziels. Staff-Entzug gilt bei der nächsten Anfrage, weil die Sitzung den Benutzer neu lädt.
+- Fremdschlüssel in Liste und Detail zeigen ein konfiguriertes Textfeld. Die UUID bleibt als technische Referenz. Auflösung ist eine begrenzte Abfrage je Zieltabelle und Query-Scope. Filter für Bool, Fremdschlüssel und Zahl sind Auswahl- oder Zahlenfelder.
+- Fehlerseiten lesen das Superuser-Flag aus der Sitzung. Generator-Kindprozesse bekommen eine eigene SQLite-Datei und übernehmen keine geerbte `DATABASE_URL`.
+- Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Admin-Gestaltung (v0.15)
+
+- Die Admin-Fläche nutzt Abstands-, Typo- und Farbtokens. Formulare sind Feldgruppen mit einheitlicher Kontrollhöhe, höchstens 40rem breit. Tabellen trennen lesbare Felder von gekürzten UUIDs, Suche und Filter von der Hauptaktion.
+- Die aktuelle Navigation ist unterstrichen und per `aria-current` benannt. Unter 800 Pixel bleibt sie eine offene Linkliste.
+- Rollen werden aus vorhandenen Namen gewählt. Eine unbekannte Rolle legt der Zuweisungs-POST nicht an. Sicherheitskritische Verzeichnisaktionen verlangen im Browser eine Bestätigung. Die Prüfung von Sitzung, Staff-Superuser und CSRF ist unverändert.
+- Helle Projektfarben, auf denen Weiß unter 4,5:1 liegt, färben die Tür nicht. Im Dunkeln bleibt die Tür bei der Nachtfläche. Gefahrentext im Dunkeln ist dunkel auf der hellen Gefahrenfläche.
+- Ein boolesches Feld ohne gesendeten Wert übernimmt den Spaltenstandard. `default = true` ist im Neuanlageformular angehakt. Ein gespeicherter Wert hat Vorrang.
+- Die Cargo-Version bleibt `0.1.0`.
+
+## Unreleased — Admin P0 (v0.14)
+
+- Angemeldete Benutzer ohne Staff erhalten eine HTML-403-Seite mit Abmeldung per POST. Die Abmeldung prüft weiter Sitzung und CSRF und verlangt kein `is_staff`. Ein fehlendes oder fremdes Token widerruft die Sitzung nicht.
+- `is_staff`, `is_superuser` und `is_active` bleiben getrennte Flags. Die CLI erklärt die gesetzten Flags. `--superuser` ohne `--staff` setzt Staff nicht.
+- Listen ohne weiteres `list_display` zeigen das erste sichtbare Textfeld, sonst ein anderes sichtbares Feld, und danach die ID. Explizite `list_display`-Felder haben Vorrang. Verborgene und sensible Felder bleiben unsichtbar.
+- Werkzeugleiste, Formularabstand und der Rollenabschnitt haben mehr Abstand. Die Rollenauswahl bleibt ein Textfeld.
+- Die Cargo-Version bleibt `0.1.0`.
+
 ## Unreleased — Admin-Login und lokale Origins (v0.13.1)
 
 - `POST /admin/login` scheitert nicht mehr, nur weil die erlaubten Origins fest auf Port 3000 stehen. Die Loopback-Origins kommen aus der Bind-Adresse des Prozesses (`ferrum.toml` oder `BIND_ADDRESS`).
-- `FERRUM_ALLOWED_ORIGINS` bleibt die explizite Liste und wird nicht erweitert. Der Host-Header der Anfrage fließt nicht in die Liste ein. `Origin: null` bleibt abgelehnt.
+- `FERRUM_ALLOWED_ORIGINS` bleibt die explizite Liste und wird nicht erweitert. Der Host-Header der Anfrage fließt nicht in die Liste ein. `Origin: null` bleibt abgelehnt, außer `Sec-Fetch-Site` ist genau `same-origin`.
 - Eine abgelehnte HTML-Anmeldung protokolliert nur einen Grundcode (`origin_rejected`, `form_token_missing`, `login_csrf_missing`, `login_csrf_mismatch`), nie Cookie oder Token.
 - Die Cargo-Version bleibt `0.1.0`.
 

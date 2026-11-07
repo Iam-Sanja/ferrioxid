@@ -1,0 +1,30 @@
+<div class="field{% if field.kind == "boolean" %} field-bool{% endif %}">
+{% if field.kind == "readonly" %}
+<span class="label" id="{{ field.name }}-label">{{ field.label }}</span>
+<p class="readonly" aria-labelledby="{{ field.name }}-label">{{ field.value }}</p>
+{% if field.locked %}<input type="hidden" name="{{ field.name }}" value="{{ field.raw }}">{% endif %}
+<p class="hint">{{ i18n.readonly }}</p>
+{% elif field.kind == "boolean" %}
+<input type="hidden" name="{{ field.name }}" value="false">
+<label class="check">
+<input id="{{ field.name }}" name="{{ field.name }}" type="checkbox" value="true" {% if field.checked %}checked{% endif %} {% if field.invalid %}aria-invalid="true"{% endif %} {% if field.error %}aria-describedby="{{ field.name }}-error"{% endif %}>
+<span>{{ field.label }} {% if field.required %}<span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %}<span class="hint">{{ i18n.optional }}</span>{% endif %}</span>
+</label>
+{% if field.hint %}<p class="hint" id="{{ field.name }}-hint">{{ field.hint }}</p>{% endif %}
+{% elif field.kind == "select" %}
+<label for="{{ field.name }}">{{ field.label }} {% if field.required %}<span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %}<span class="hint">{{ i18n.optional }}</span>{% endif %}</label>
+{% if field.hint %}<p class="hint" id="{{ field.name }}-hint">{{ field.hint }}</p>{% endif %}
+<select id="{{ field.name }}" name="{{ field.name }}" {% if field.required %}required{% endif %} {% if field.invalid %}aria-invalid="true"{% endif %} {% if field.hint and field.error %}aria-describedby="{{ field.name }}-hint {{ field.name }}-error"{% elif field.error %}aria-describedby="{{ field.name }}-error"{% elif field.hint %}aria-describedby="{{ field.name }}-hint"{% endif %}>
+{% if not field.required %}<option value="">{{ i18n.none }}</option>{% endif %}
+{% for option in field.options %}
+<option value="{{ option.id }}" {% if option.selected %}selected{% endif %}>{{ option.label }}</option>
+{% endfor %}
+</select>
+{% if field.pick %}<p class="hint"><button type="submit" class="button ghost" formaction="{{ field.pick }}" name="pick_field" value="{{ field.name }}">{{ i18n.pick_more }}</button></p>{% endif %}
+{% else %}
+<label for="{{ field.name }}">{{ field.label }} {% if field.required %}<span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %}<span class="hint">{{ i18n.optional }}</span>{% endif %}</label>
+{% if field.hint %}<p class="hint" id="{{ field.name }}-hint">{{ field.hint }}</p>{% endif %}
+<input id="{{ field.name }}" name="{{ field.name }}" type="{{ field.input }}" value="{{ field.value }}" {% if field.required %}required{% endif %} {% if field.invalid %}aria-invalid="true"{% endif %} {% if field.hint and field.error %}aria-describedby="{{ field.name }}-hint {{ field.name }}-error"{% elif field.error %}aria-describedby="{{ field.name }}-error"{% elif field.hint %}aria-describedby="{{ field.name }}-hint"{% endif %}>
+{% endif %}
+{% if field.error %}<p class="field-error" id="{{ field.name }}-error" role="alert">{{ field.error }}</p>{% endif %}
+</div>

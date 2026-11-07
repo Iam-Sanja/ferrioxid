@@ -319,7 +319,7 @@ async fn update_record(
             return failure(StatusCode::NOT_FOUND, "Resource not found");
         }
     }
-    match model.update(&state.db, id, body, &scope).await {
+    match model.update(&state.db, id, body, &scope, &user).await {
         Ok(mut updated) => {
             redact(model.meta(), &mut updated);
             Json(updated).into_response()
@@ -355,7 +355,7 @@ async fn delete_record(
             return failure(StatusCode::NOT_FOUND, "Resource not found");
         }
     }
-    match model.remove(&state.db, id, &scope).await {
+    match model.remove(&state.db, id, &scope, &user).await {
         Ok(DeleteOutcome::Deleted) => StatusCode::NO_CONTENT.into_response(),
         Ok(DeleteOutcome::Missing) => failure(StatusCode::NOT_FOUND, "Resource not found"),
         Err(error) => ferrum_failure(error),
@@ -417,7 +417,7 @@ async fn relation_options(
     if let Err(error) = permit(auth, &user, target.meta(), "read").await {
         return ferrum_failure(error);
     }
-    let Some(label) = display_column(target.meta()) else {
+    let Some(label) = display_column(target.meta(), target.columns()) else {
         return failure(
             StatusCode::UNPROCESSABLE_ENTITY,
             "relation has no searchable display field",
@@ -961,10 +961,28 @@ fn filter_value(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
     }
 }
 
-pub(crate) fn display_column(meta: &AdminModelMeta) -> Option<&'static str> {
+pub(crate) fn display_column(
+    meta: &AdminModelMeta,
+    columns: &[ColumnSpec],
+) -> Option<&'static str> {
+    let usable = |field: &AdminFieldMeta| {
+        field.name != "id"
+            && !field.hidden
+            && !sensitive(field.name)
+            && columns
+                .iter()
+                .any(|column| column.name == field.name && column.kind == ColumnKind::Text)
+    };
     meta.fields
         .iter()
-        .find_map(|field| (field.searchable && !field.hidden).then_some(field.name))
+        .find(|field| field.list_display && usable(field))
+        .or_else(|| {
+            meta.fields
+                .iter()
+                .find(|field| field.searchable && usable(field))
+        })
+        .or_else(|| meta.fields.iter().find(|field| usable(field)))
+        .map(|field| field.name)
 }
 
 fn schema_json(model: &dyn ManagedModel, actions: &[&str]) -> Value {

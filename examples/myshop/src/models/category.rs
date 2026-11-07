@@ -7,6 +7,7 @@ use ferrum::prelude::*;
     allow_anonymous = true,
     has_many = "products=super::product::Product.category_id",
     admin = true,
+    admin_inline = "products=products.category_id",
     admin_label = "Kategorien",
     admin_permission = "categories"
 )]

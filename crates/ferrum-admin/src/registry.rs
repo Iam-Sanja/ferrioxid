@@ -1,9 +1,11 @@
 //! Explizite Admin-Registry. Nur Modelle mit `admin = true` werden aufgenommen.
 
+use crate::actions::{self, AdminAction};
+use crate::audit::{self, Event};
 use ferrum_auth::{AuthUser, ObjectPolicy};
 use ferrum_core::{AdminModelMeta, ColumnSpec, FerrumError, ModelDescriptor, QueryScope};
 use ferrum_db::{query_admin_page, AdminPageRequest, DeleteOutcome, ModelRepository};
-use sea_orm::DatabaseConnection;
+use sea_orm::{DatabaseConnection, TransactionTrait};
 use serde_json::{Map, Value};
 use std::sync::Arc;
 
@@ -46,12 +48,14 @@ pub trait ManagedModel: Send + Sync {
         id: uuid::Uuid,
         body: Value,
         scope: &QueryScope,
+        user: &AuthUser,
     ) -> Result<Value, FerrumError>;
     async fn remove(
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
         scope: &QueryScope,
+        user: &AuthUser,
     ) -> Result<DeleteOutcome, FerrumError>;
     fn object_allows(&self, user: &AuthUser, action: &str, record: &Value) -> bool;
 }
@@ -131,6 +135,7 @@ fn is_hex_color(value: &str) -> bool {
 pub struct AdminRegistry {
     models: Arc<Vec<Arc<dyn ManagedModel>>>,
     branding: AdminBranding,
+    actions: Vec<AdminAction>,
 }
 
 impl AdminRegistry {
@@ -166,6 +171,23 @@ impl AdminRegistry {
             return self;
         }
         self.push(Arc::new(Policed::<M, P>::new()))
+    }
+
+    pub fn action(mut self, action: AdminAction) -> Self {
+        if !actions::valid_name(action.name)
+            || matches!(action.name, "delete" | "activate" | "deactivate")
+            || self.actions.iter().any(|existing| {
+                existing.model_key == action.model_key && existing.name == action.name
+            })
+        {
+            return self;
+        }
+        self.actions.push(action);
+        self
+    }
+
+    pub fn actions_for(&self, meta: &AdminModelMeta, columns: &[ColumnSpec]) -> Vec<AdminAction> {
+        actions::for_model(meta, columns, &self.actions)
     }
 
     pub fn models(&self) -> &[Arc<dyn ManagedModel>] {
@@ -268,12 +290,12 @@ where
         &self,
         db: &DatabaseConnection,
         body: Value,
-        _user: &AuthUser,
+        user: &AuthUser,
     ) -> Result<Value, FerrumError> {
         let input = serde_json::from_value(body).map_err(|error| {
             FerrumError::Validation(format!("request body is invalid: {error}"))
         })?;
-        Ok(json_of(M::create(db, input).await?))
+        audited_create::<M>(db, user, input).await
     }
     async fn update(
         &self,
@@ -281,19 +303,21 @@ where
         id: uuid::Uuid,
         body: Value,
         scope: &QueryScope,
+        user: &AuthUser,
     ) -> Result<Value, FerrumError> {
         let input = serde_json::from_value(body).map_err(|error| {
             FerrumError::Validation(format!("request body is invalid: {error}"))
         })?;
-        Ok(json_of(M::update_scoped(db, id, input, scope).await?))
+        audited_update::<M>(db, user, id, input, scope).await
     }
     async fn remove(
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
         scope: &QueryScope,
+        user: &AuthUser,
     ) -> Result<DeleteOutcome, FerrumError> {
-        M::delete_scoped(db, id, scope).await
+        audited_delete::<M>(db, user, id, scope).await
     }
     fn object_allows(&self, _user: &AuthUser, _action: &str, _record: &Value) -> bool {
         true
@@ -371,7 +395,7 @@ where
                 "create policy rejected the record".into(),
             ));
         }
-        Ok(json_of(M::create(db, input).await?))
+        audited_create::<M>(db, user, input).await
     }
     async fn update(
         &self,
@@ -379,19 +403,21 @@ where
         id: uuid::Uuid,
         body: Value,
         scope: &QueryScope,
+        user: &AuthUser,
     ) -> Result<Value, FerrumError> {
         let input = serde_json::from_value(body).map_err(|error| {
             FerrumError::Validation(format!("request body is invalid: {error}"))
         })?;
-        Ok(json_of(M::update_scoped(db, id, input, scope).await?))
+        audited_update::<M>(db, user, id, input, scope).await
     }
     async fn remove(
         &self,
         db: &DatabaseConnection,
         id: uuid::Uuid,
         scope: &QueryScope,
+        user: &AuthUser,
     ) -> Result<DeleteOutcome, FerrumError> {
-        M::delete_scoped(db, id, scope).await
+        audited_delete::<M>(db, user, id, scope).await
     }
     fn object_allows(&self, user: &AuthUser, action: &str, record: &Value) -> bool {
         let Ok(model) = serde_json::from_value::<M>(record.clone()) else {
@@ -435,6 +461,105 @@ async fn load_page<M: ModelRepository>(
     )
     .await?;
     Ok((page.rows, page.has_more, page.total))
+}
+
+async fn audited_create<M>(
+    db: &DatabaseConnection,
+    user: &AuthUser,
+    input: M::Create,
+) -> Result<Value, FerrumError>
+where
+    M: ModelRepository,
+{
+    let txn = db.begin().await.map_err(FerrumError::database)?;
+    let created = M::create_tx(&txn, input).await?;
+    let value = json_of(&created);
+    write_audit::<M>(&txn, user, "create", "ok", &value, None, Some(&value)).await?;
+    txn.commit().await.map_err(FerrumError::database)?;
+    Ok(value)
+}
+
+async fn audited_update<M>(
+    db: &DatabaseConnection,
+    user: &AuthUser,
+    id: uuid::Uuid,
+    input: M::Update,
+    scope: &QueryScope,
+) -> Result<Value, FerrumError>
+where
+    M: ModelRepository,
+{
+    let txn = db.begin().await.map_err(FerrumError::database)?;
+    let before = M::get_tx(&txn, id, scope).await?;
+    let updated = M::update_tx(&txn, id, input, scope).await?;
+    let value = json_of(&updated);
+    let previous = before.as_ref().map(json_of);
+    write_audit::<M>(
+        &txn,
+        user,
+        "update",
+        "ok",
+        &value,
+        previous.as_ref(),
+        Some(&value),
+    )
+    .await?;
+    txn.commit().await.map_err(FerrumError::database)?;
+    Ok(value)
+}
+
+async fn audited_delete<M>(
+    db: &DatabaseConnection,
+    user: &AuthUser,
+    id: uuid::Uuid,
+    scope: &QueryScope,
+) -> Result<DeleteOutcome, FerrumError>
+where
+    M: ModelRepository,
+{
+    let txn = db.begin().await.map_err(FerrumError::database)?;
+    let before = M::get_tx(&txn, id, scope).await?;
+    let outcome = M::delete_tx(&txn, id, scope).await?;
+    if outcome == DeleteOutcome::Deleted {
+        if let Some(record) = before {
+            let value = json_of(record);
+            write_audit::<M>(&txn, user, "delete", "ok", &value, Some(&value), None).await?;
+        }
+    }
+    txn.commit().await.map_err(FerrumError::database)?;
+    Ok(outcome)
+}
+
+async fn write_audit<M: ModelRepository>(
+    db: &impl sea_orm::ConnectionTrait,
+    user: &AuthUser,
+    action: &str,
+    outcome: &str,
+    record: &Value,
+    before: Option<&Value>,
+    after: Option<&Value>,
+) -> Result<(), FerrumError> {
+    let summary = M::admin_meta()
+        .map(|meta| audit::change_summary(meta, before, after))
+        .unwrap_or_default();
+    audit::insert(
+        db,
+        &Event {
+            actor_id: user.id,
+            model_key: M::admin_meta()
+                .map(|meta| meta.key.to_owned())
+                .unwrap_or_else(|| M::descriptor().table.to_owned()),
+            record_id: record
+                .get("id")
+                .and_then(Value::as_str)
+                .unwrap_or("")
+                .to_owned(),
+            action: action.to_owned(),
+            outcome: outcome.to_owned(),
+            summary,
+        },
+    )
+    .await
 }
 
 fn json_of<M: serde::Serialize>(model: M) -> Value {

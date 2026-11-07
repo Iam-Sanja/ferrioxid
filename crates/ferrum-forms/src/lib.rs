@@ -202,6 +202,21 @@ pub fn optional_uuid(
     required_uuid(values, name).map(Some)
 }
 
+/// Nur der exakte Checkbox-Wert `1` gilt. Andere Werte sind ungültig, ein fehlender Wert ist keine Bestätigung.
+pub fn require_confirmation(values: &FormValues) -> Result<(), FormErrors> {
+    let mut errors = FormErrors::default();
+    match values.get("confirm") {
+        Some("1") => {}
+        Some(_) => errors.push("confirm", "validation.invalid"),
+        None => errors.push("confirm", "validation.required"),
+    }
+    if errors.is_empty() {
+        Ok(())
+    } else {
+        Err(errors)
+    }
+}
+
 pub trait FerrumForm: Sized {
     fn from_form(values: &FormValues) -> Result<Self, FormErrors>;
 }
@@ -512,7 +527,33 @@ fn decode(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{escape, required_i64, required_uuid, ContactForm, FerrumForm, FormValues};
+    use super::{
+        escape, require_confirmation, required_i64, required_uuid, ContactForm, FerrumForm,
+        FormValues,
+    };
+
+    #[test]
+    fn confirmation_accepts_only_the_checkbox_value() {
+        let mut missing = FormValues::default();
+        missing.insert("email", "ada@example.com");
+        assert_eq!(
+            require_confirmation(&missing)
+                .expect_err("fehlt")
+                .for_field("confirm"),
+            Some("validation.required")
+        );
+        let mut forged = FormValues::default();
+        forged.insert("confirm", "true");
+        assert_eq!(
+            require_confirmation(&forged)
+                .expect_err("falsch")
+                .for_field("confirm"),
+            Some("validation.invalid")
+        );
+        let mut accepted = FormValues::default();
+        accepted.insert("confirm", "1");
+        assert!(require_confirmation(&accepted).is_ok());
+    }
 
     #[test]
     fn contact_form_collects_field_errors_and_escapes() {

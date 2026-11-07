@@ -1,48 +1,90 @@
-# Ferrum Roadmap – Status und Umsetzungsvoraussetzungen
+# Ferrum Roadmap – Status und nächste Phasen
 
-[Zur Übersicht](index.md) · **Stand:** CRUD und eine sichere Migrations-Teilmenge auf SQLite. PostgreSQL nutzt denselben Plan und ist nicht gegen einen lokalen Server gelaufen.
+[Zur Übersicht](index.md) · Admin-Vergleich: [admin-django-parity.md](admin-django-parity.md) · UX-Backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
 
-| Meilenstein | Status | Ziel | Voraussetzung |
+**Stand:** Funktionsstand v0.18. Die Cargo-Version bleibt `0.1.0`. Dieser Text trennt umgesetzte Meilensteine von geplanten Phasen. Eine geplante Phase ist keine Freigabe und kein fertiges Feature.
+
+## Produktentscheidung
+
+Der Standard-Admin bleibt serverseitiges HTML mit Rust, Axum und Tera. React, Vite und Node.js gehören nicht zum Standard-Admin. Kernaktionen, also Listen, Formulare, Löschen, Anmeldung, Abmeldung und Verzeichnis, müssen ohne JavaScript funktionieren. Das optionale `admin.js` darf nur Komfort bieten, zum Beispiel Fokus.
+
+Langfristig soll der Admin die relevanten Funktionen des Django-Admins funktionsgleichwertig abdecken. Die interne API muss nicht djangokompatibel sein. Die Oberfläche soll eine dichte Arbeitsumgebung werden, keine dekorative Neugestaltung.
+
+## Umgesetzte Meilensteine
+
+| Meilenstein | Status | Ziel | Grenze |
 |---|---|---|---|
-| v0.1 | Code vorhanden; SQLite ist der lokale Standard und wird im Workspace getestet | Typed Model, Liste, GET, POST, PATCH, DELETE, sichere Migrationen | Optionaler PostgreSQL-Lauf nur mit erreichbarem Server |
-| v0.6 | Implementiert und mit SQLite-Tests geprüft | Unique, zusammengesetzte Unique Constraints, Indizes, Foreign Keys, `restrict`/`cascade`/`set_null`, Belongs-To, Has-Many, Snapshot und Diff | Cargo-Version bleibt `0.1.0`. Many-to-Many, Eager Loading, `down` und PostgreSQL-Baseline fehlen |
-| v0.7 | Implementiert und mit SQLite-Tests geprüft | Argon2id, serverseitige Sitzungen, Cookies, CSRF, RBAC, Modellrechte, blockierte Objektlisten | Cargo-Version bleibt `0.1.0`. OAuth, MFA, JWT und Passwort-Reset fehlen |
-| v0.8 | Implementiert und mit SQLite- sowie Vitest-Tests geprüft | Admin-Metadaten, `/admin/api`, React-Oberfläche, CSRF-Bootstrap, Staff-Zugang | Cargo-Version bleibt `0.1.0`. Keine Superuser-Vergabe im Admin |
-| v0.8.1 | Implementiert | Stabiles CSRF, SQL-Query-Scopes, eingebettete Admin-Assets | Cargo-Version bleibt `0.1.0`. Kein OAuth, MFA, GraphQL oder JWT |
-| v0.9 | Implementiert | Create-Policy, Feature `admin-ui`, `ferrum new`, `dev`, `doctor`, `check`, `generate model`, `build` | Cargo-Version bleibt `0.1.0`. Besitzer-ID aus der Sitzung ist geplant |
-| v0.10 | Implementiert | Settings, Tera-Startseite, Admin-Suche und Filter, I18n-Katalog `de`/`en` | Weitere Sprachen bleiben erweiterbar |
-| v0.11 | Implementiert | Admin-Übersetzung `de`/`en`, stabile Fehlercodes, Branding-Endpunkt, lokalisierte Formate, Verzeichnis mit Rollen | Cargo-Version bleibt `0.1.0`. CLI-`migrate`-Texte und weitere Sprachen sind offen |
-| v0.12 | Implementiert | Formulare, Staticfiles, lokaler Upload-Speicher, Request-ID und Logging | Cargo-Version bleibt `0.1.0`. S3, Virenscanner und Formular-Derive sind geplant |
-| v0.13 | Implementiert | Serverseitiger Admin mit Axum und Tera, ohne React, Vite oder Node.js | Cargo-Version bleibt `0.1.0`. Die JSON-API bleibt |
+| v0.1 | Implementiert, SQLite im Workspace getestet | Typed Model, Liste, GET, POST, PATCH, DELETE, sichere Migrationen | PostgreSQL-HTTP-Test bleibt ignoriert, solange kein Server läuft |
+| v0.6 | Implementiert | Unique, Indizes, Foreign Keys, Belongs-To, Has-Many, Snapshot und Diff | Many-to-Many, Eager Loading, `down` und PostgreSQL-Baseline fehlen |
+| v0.7 | Implementiert | Argon2id, Sitzungen, Cookies, CSRF, RBAC, Modellrechte | OAuth, MFA, JWT und Passwort-Reset fehlen |
+| v0.8 bis v0.12 | Implementiert | Admin-Metadaten, JSON-API, Query-Scopes, Generator, Settings, Formulare, Staticfiles, Uploads, Middleware | Historische React-Oberfläche ist seit v0.13 entfernt |
+| v0.13 | Implementiert | Nativer Admin unter `/admin`, Tera, CSS im Binary, JSON-API bleibt | Cargo-Version bleibt `0.1.0` |
+| v0.13.1 | Implementiert | Login-Origins aus der Bind-Adresse, `Origin: null` nur mit `Sec-Fetch-Site: same-origin` | Host-Header wird nicht als Allowlist gelesen |
+| v0.14 | Implementiert | Abmelden auf authentifizierten 403-Seiten, Flag-Hinweise, Standardspalten | Benutzer anlegen bleibt v0.16 |
+| v0.15 | Implementiert | Design-Tokens, Feldgruppen, Tabellenrhythmus, Rollenauswahl, Kontrasttor | Cargo-Version bleibt `0.1.0` |
+| v0.16 | Implementiert | Benutzerpflege, serverseitige Bestätigung, lesbare Fremdschlüssel, Filterauswahl, isolierte Generator-Datenbanken | Superuser bleibt CLI. Kein Benutzer-Hard-Delete. JSON-API ohne `confirm` |
+| v0.17 | Implementiert | Listenkonfiguration, Fieldsets, drei Speicherziele, Formularzustand, Fremdschlüssel-Auswahlseite | Kein Datumstyp. Cargo-Version bleibt `0.1.0` |
+| v0.18 | Implementiert | Formularentwürfe, Has-Many-Inlines, Sammelaktionen, Audit, registrierte Aktionen | Kein gemeinsames Parent-Kind-Speichern. Verzeichnis-Audit ist nicht dieselbe Transaktion. Kein Datumstyp |
 
-## v0.1 enthalten
+## Offen nach v0.18
 
-- Cargo-Workspace mit `ferrum-migrations` und dem Beispiel myshop.
-- `FerrumModel`-Derive für `Uuid`, `String`, `i64`, `bool` und `Option` dieser Typen, außer nullable `id`.
-- Typisierte Repository-Methoden `list`, `get`, `create`, `update`, `delete`.
-- Versionierte Migrationen für neue Tabellen, sichere Spalten, explizite Umbenennungen, geprüfte `string`/`i64`- und Nullbarkeitsänderungen, SQLite-Baseline und ausdrücklich freigegebene Löschungen. Bootstrap ist Legacy.
-- GET/POST/PATCH/DELETE. Listen haben einen `truncated`-Indikator, maximal 100 Elemente. Update-DTOs nutzen `PatchField`.
-- Localhost-Demo mit SQLite-Datei. Docker Compose für PostgreSQL ist optional. Der PostgreSQL-HTTP-Test bleibt ignoriert.
+- Die JSON-Verzeichnis-API verlangt `confirm` nicht.
+- Ein Nicht-Superuser kann eine fehlende Fremdschlüsselzeile nicht von einer unsichtbaren unterscheiden.
+- Filterauswahlen und das Formular-Select zeigen höchstens 100 berechtigte Ziele. Die Auswahlseite blättert darüber hinaus.
+- Datum, Uhrzeit und `date_hierarchy` fehlen. `ColumnKind` hat keinen Datumstyp, und die bestehenden Migrationen bleiben unverändert.
 
-## Nicht enthalten
+## Geplante Phasen
 
-`migrate down`, Baseline für PostgreSQL, Many-to-Many, Eager Loading, Auth, RBAC, Admin, OpenAPI, weitere CLI-Scaffolding-Kommandos, Pagination über Limit 100, API-Dockerfile und MySQL. Einspaltige Foreign Keys, Unique Constraints, Indizes und Lazy-Loading-Beziehungen sind enthalten. Eine Foreign-Key-Änderung an einer bestehenden Spalte bleibt blockiert.
+Die Reihenfolge ist verbindlich für die nächste Arbeit. Eine spätere Phase beginnt nicht, bevor die vorherige P0-Abnahme erfüllt ist.
 
-## Reihenfolge für zukünftige Arbeit
+| Phase | Priorität | Inhalt | Hängt ab von |
+|---|---|---|---|
+| v0.15 | umgesetzt | Design-Tokens, Abstände, Formulargruppen, Auswahl statt Freitext für Rollen | v0.14 |
+| v0.16 | umgesetzt | Benutzer anlegen, E-Mail und Passwort ändern, Sitzungen widerrufen, Bestätigung und lesbare Relationen | v0.15 |
+| v0.17 | umgesetzt | Listenlinks, Standardsortierung, Seitengröße, Fieldsets, Speicherziele, Formularzustand, Auswahlseite | [admin-django-parity.md](admin-django-parity.md) |
+| v0.18 | umgesetzt | Entwürfe, Has-Many-Inlines, atomare Sammelaktionen, Audit, `AdminAction` | [admin-bulk-actions.md](admin-bulk-actions.md) |
 
-1. **v0.1 verifizieren**: Rustfmt, Clippy, Tests, optional DB-HTTP-Test; Fehler zuerst beheben.
-2. **Metadaten erweitern**: Felder, Typen, Constraints, Snapshot-Version.
-3. **Migrationen erweitern**: `down`, Sperren und eine PostgreSQL-Baseline. Explizite Umbenennung, der geprüfte SQLite-Umbau und die SQLite-Baseline sind vorhanden.
-4. **DTO-/HTTP-Operationen erweitern**: PATCH/DELETE, Error Contracts, OpenAPI.
-5. **Authentifizierung und Berechtigungen** als harte API-Grenze.
-6. **Admin** ist seit v0.13 serverseitiges HTML auf der bestehenden API.
-7. **Erweiterungen und Deployment** zum Schluss production-orientiert testen.
+Nicht in diesen Phasen: React-Rückkehr, OAuth, MFA, JWT, S3, Virenscanner, Many-to-Many, `migrate down`, PostgreSQL-Baseline, OpenAPI, automatische Superuser-Semantik.
 
-Die einzelnen Ziele und Abnahmen sind in den jeweiligen Teilbereichs-Dokumenten beschrieben. Keine Fertigstellungszeit und keine Build-Erfolge behaupten, solange sie nicht nachgewiesen sind.
+## Grenzen, die bleiben
 
-## Inkrementeller Ausbau nach v0.1 (Quellcode ergänzt, Verifikation ausstehend)
+- Cargo-Version `0.1.0`. Funktionsstände stehen nur im Changelog und in dieser Roadmap.
+- SQLite ist der lokale Standard. PostgreSQL-Tests bleiben ignoriert, bis ein Server erreichbar ist.
+- `0001_initial.json` und die Auth-Migration `0001_auth_schema` werden nicht umgeschrieben.
+- GET ändert keine Daten. Schreibzugriffe sind POST mit CSRF, außer die bestehende JSON-API, die den Header `x-csrf-token` nutzt.
+- Passwort-Hashes, Session-Tokens und CSRF-Tokens erscheinen nicht in HTML, URLs oder Logs.
+- Skills werden vor der Nutzung gelesen. Impeccable ist für v0.15, v0.16 und die Formularabschnitte in v0.17 gelesen worden. Kein Skill, Hook oder Agent committet oder pusht von sich aus.
 
-- Typisiertes `get(UUID)` mit parametrisiertem Select.
-- Generierte Detailroute `GET /{id}` und 404-Fehler.
-- 403-Sicherheitsprüfungen für nicht freigegebene Listen- und Detailrouten.
-- Kein PATCH/DELETE, keine Migrationen, keine Authentifizierung.
+## Skills für spätere Phasen
+
+Geprüft am 2026-11-07: Impeccable liegt unter `.cursor/skills/impeccable/` und wurde für v0.15 gelesen. Ausgeführt wurden Kontext, Critique (zwei getrennte Assessments), Audit, Layout und der Feinschliff am bestehenden System „Die Nachtschicht“. Es wurde nichts nachinstalliert und nichts committet.
+
+| Skill | Einsatz, erst nach Prüfung | Nicht tun |
+|---|---|---|
+| Impeccable | Designkritik, Audit, Layout und Feinschliff des nativen Admins in v0.15 | Externe Installation ohne Zustimmung, dekorative Umbauten ohne Funktionsgewinn |
+| Cloudflare Security Audit | Gezielte Prüfung von CSRF, XSS, Sessions und Dateizugriff vor v0.16 und v0.18 | Blindes Übernehmen von Befunden ohne Abgleich mit dem Ferrum-Code |
+| ub-mode | Architekturgrenzen und Tests für Verzeichnis und Audit | Neue Frameworks oder eine zweite CRUD-Engine |
+| Ponytail | Komplexität in `html.rs` und den Metadaten senken, wenn eine Phase sonst wächst | Verhalten streichen, das die Abnahme verlangt |
+
+## Umgesetzt in v0.16
+
+1. Benutzer anlegen, anzeigen, bearbeiten und Passwort setzen über eigene HTML-Routen und `AuthService`.
+2. `confirm=1` wird serverseitig geprüft. Superuser und die eigene Sperre bleiben geschützt.
+3. Fremdschlüssel zeigen einen Metadaten-Namen. Bool- und Fremdschlüssel-Filter sind Auswahlen.
+4. Generator-Kindprozesse überschreiben `DATABASE_URL` lokal und räumen die Testdatei auf.
+
+## Umgesetzt in v0.17
+
+1. `list_link`, `admin_ordering` und `admin_per_page` steuern Link, Standardsortierung und HTML-Seitengröße.
+2. `admin_fieldset` gruppiert Formularfelder. Drei Speicherknöpfe unterscheiden `save=detail`, `save=edit` und `save=new`.
+3. Validierungsfehler behalten Text, Auswahl und Häkchen. Passwörter werden nicht zurückgeschrieben.
+4. Die Fremdschlüssel-Auswahlseite sucht und blättert im Leserecht des Ziels. Eine unlesbare UUID wird nicht gespeichert.
+
+## Umgesetzt in v0.18
+
+1. Ein Sitzungsentwurf hält Text, Zahl, Häkchen und Auswahl, während die Fremdschlüssel-Seite offen ist.
+2. `admin_inline` zeigt verknüpfte Zeilen und legt einen Kinddatensatz mit festem Parent-Schlüssel an.
+3. Sammelaktionen sind POST, Bestätigung und eine Transaktion. Eine verweigerte Zeile ändert keine Zeile.
+4. Modelländerungen und ihr Audit-Eintrag teilen sich eine Transaktion. Die Historie ist für Staff auf eigene Ereignisse begrenzt.
+
+Abnahme und Grenzen stehen in [admin-ux-backlog.md](admin-ux-backlog.md).

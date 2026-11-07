@@ -679,6 +679,7 @@ dependencies = [
  "ferrum-auth",
  "ferrum-core",
  "ferrum-db",
+ "ferrum-forms",
  "sea-orm",
  "serde",
  "serde_json",

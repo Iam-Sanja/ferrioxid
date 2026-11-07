@@ -1,15 +1,42 @@
 {% extends "base.html" %}
 {% block content %}
-<nav class="crumbs"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ list_path }}">{{ model_label }}</a></nav>
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ list_path }}">{{ model_label }}</a></nav>
 <dl class="card">
 {% for field in fields %}
 <dt>{{ field.label }}{% if field.readonly %} <span class="hint">{{ i18n.readonly }}</span>{% endif %}</dt>
-<dd>{{ field.value }}</dd>
+<dd>{% if field.relation %}{{ field.value }} <span class="uuid" title="{{ field.ref }}">{{ field.short }}</span>{% else %}{{ field.value }}{% endif %}</dd>
 {% endfor %}
 </dl>
-<div class="actions">
+<div class="actions section">
 <a class="button ghost" href="{{ list_path }}">{{ i18n.back }}</a>
 {% if can_update %}<a class="button" href="{{ list_path }}/{{ id }}/edit">{{ i18n.edit }}</a>{% endif %}
 {% if can_delete %}<a class="button danger" href="{{ list_path }}/{{ id }}/delete">{{ i18n.delete }}</a>{% endif %}
 </div>
+{% for inline in inlines %}
+<section class="section inline-block">
+<div class="inline-head">
+<h2>{{ inline.label }}</h2>
+{% if inline.add %}<a class="button" href="{{ inline.add }}">{{ i18n.inline_add }}</a>{% endif %}
+</div>
+{% if inline.rows | length == 0 %}
+<p class="empty">{{ i18n.inline_empty }}</p>
+{% else %}
+<div class="table-wrap">
+<table>
+<caption class="sr-only">{{ inline.label }}</caption>
+<thead><tr><th scope="col">{{ i18n.record }}</th><th scope="col">{{ i18n.actions }}</th></tr></thead>
+<tbody>
+{% for row in inline.rows %}
+<tr>
+<td>{{ row.text }}</td>
+<td><a class="button ghost" href="{{ row.href }}">{{ i18n.inline_open }}</a></td>
+</tr>
+{% endfor %}
+</tbody>
+</table>
+</div>
+{% if inline.next %}<p class="pager"><a href="{{ inline.next }}">{{ i18n.next }}</a></p>{% endif %}
+{% endif %}
+</section>
+{% endfor %}
 {% endblock %}

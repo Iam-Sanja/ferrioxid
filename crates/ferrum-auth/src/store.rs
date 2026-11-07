@@ -300,6 +300,27 @@ pub async fn list_permission_codes(
     rows.iter().map(|row| required_text(row, "code")).collect()
 }
 
+pub async fn update_profile(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    email: &str,
+    active: bool,
+    staff: bool,
+    updated_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(USERS))
+        .values([
+            (Alias::new("email"), text(email)),
+            (Alias::new("is_active"), flag(active)),
+            (Alias::new("is_staff"), flag(staff)),
+            (Alias::new("updated_at"), number(updated_at)),
+        ])
+        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+    execute(db, &query).await
+}
+
 pub async fn set_staff(
     db: &impl ConnectionTrait,
     id: Uuid,

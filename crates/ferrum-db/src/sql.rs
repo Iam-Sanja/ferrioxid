@@ -401,6 +401,72 @@ pub async fn query_admin_page(
     })
 }
 
+/// Eine begrenzte Abfrage je 100 Bezeichner. Tabelle und Spalte müssen registrierte Identifier sein.
+pub async fn query_labels(
+    db: &DatabaseConnection,
+    table: &str,
+    columns: &[ColumnSpec],
+    label: &str,
+    ids: &[Uuid],
+    scope: &QueryScope,
+) -> Result<Vec<(String, String)>, FerrumError> {
+    if !is_safe_ident(table) {
+        return Err(FerrumError::Validation(format!(
+            "table {table} is not available"
+        )));
+    }
+    ensure_column(columns, "id")?;
+    ensure_column(columns, label)?;
+    if columns
+        .iter()
+        .any(|column| column.name == label && column.kind != ColumnKind::Text)
+    {
+        return Err(FerrumError::Validation(format!(
+            "column {label} is not text"
+        )));
+    }
+    let mut unique = Vec::new();
+    for id in ids {
+        if !unique.contains(id) {
+            unique.push(*id);
+        }
+    }
+    let mut found = Vec::new();
+    for chunk in unique.chunks(100) {
+        let mut query = Query::select();
+        query
+            .columns([Alias::new("id"), Alias::new(label)])
+            .from(Alias::new(table))
+            .limit(100);
+        query.and_where(Expr::col(Alias::new("id")).is_in(chunk.iter().copied()));
+        if let Some(condition) = scope_condition(columns, scope)? {
+            query.and_where(condition);
+        }
+        let rows = db
+            .query_all(statement(db, &query)?)
+            .await
+            .map_err(FerrumError::database)?;
+        for row in rows {
+            let id = row
+                .try_get::<Option<String>>("", "id")
+                .or_else(|_| {
+                    row.try_get::<Option<Uuid>>("", "id")
+                        .map(|value| value.map(|id| id.to_string()))
+                })
+                .map_err(FerrumError::database)?
+                .unwrap_or_default();
+            let text = row
+                .try_get::<Option<String>>("", label)
+                .map_err(FerrumError::database)?
+                .unwrap_or_default();
+            if !id.is_empty() && !text.trim().is_empty() {
+                found.push((id, text));
+            }
+        }
+    }
+    Ok(found)
+}
+
 fn constrain(
     query: &mut sea_orm::sea_query::SelectStatement,
     columns: &[ColumnSpec],
@@ -480,7 +546,7 @@ fn like_pattern(term: &str) -> String {
 }
 
 pub async fn get_record(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     table: &str,
     columns: &[ColumnSpec],
     id: Uuid,
@@ -502,7 +568,7 @@ pub async fn get_record(
 }
 
 pub async fn insert_record(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     table: &str,
     columns: &[ColumnSpec],
     values: Vec<Value>,
@@ -522,7 +588,7 @@ pub async fn insert_record(
 }
 
 pub async fn update_record(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     table: &str,
     columns: &[ColumnSpec],
     id: Uuid,
@@ -554,7 +620,7 @@ pub async fn update_record(
 }
 
 pub async fn delete_record(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     table: &str,
     id: Uuid,
     scope: &QueryScope,
@@ -655,7 +721,7 @@ fn sqlite_or_postgres_database(
 }
 
 fn statement(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     query: &impl sea_orm::sea_query::QueryStatementWriter,
 ) -> Result<Statement, FerrumError> {
     let backend = db.get_database_backend();

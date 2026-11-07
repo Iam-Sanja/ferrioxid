@@ -1,9 +1,11 @@
 {% extends "base.html" %}
 {% block content %}
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ list_path }}">{{ model_label }}</a></nav>
 <form class="card narrow" method="post" action="{{ action }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <p>{{ i18n.confirm_delete }}</p>
 <p><strong>{{ label }}</strong></p>
+{% if record_id %}<p class="hint">{{ record_id }}</p>{% endif %}
 <div class="actions">
 <button class="danger" type="submit">{{ i18n.delete }}</button>
 <a class="button ghost" href="{{ cancel }}">{{ i18n.cancel }}</a>

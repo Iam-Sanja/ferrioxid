@@ -1,6 +1,6 @@
 # Ferrum — Model-first Rust backend (experimental)
 
-Funktionsstand v0.13. Die Cargo-Version bleibt `0.1.0`. Der Admin ist serverseitiges HTML mit Axum und Tera. React, Vite und Node.js sind dafür nicht nötig. Die Beschreibung steht in `docs/admin-native.md`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware bleiben aus v0.12. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
+Funktionsstand v0.18. Die Cargo-Version bleibt `0.1.0`. Der Admin ist serverseitiges HTML mit Axum und Tera. React, Vite und Node.js sind dafür nicht nötig. Die Beschreibung steht in `docs/admin-native.md`. Die Fläche folgt `DESIGN.md` und `docs/admin-design-system.md`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware bleiben aus v0.12. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
 
 Ein neues Projekt außerhalb dieses Workspaces:
 

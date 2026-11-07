@@ -1,6 +1,6 @@
 //! HTML-Admin ohne JavaScript: Formulare, Links und Sitzungen über echtes HTTP.
 
-use ferrum::admin::AdminRegistry;
+use ferrum::admin::{ActionOperation, AdminAction, AdminRegistry};
 use ferrum::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
 use ferrum::core::{QueryScope, ScopeValue};
 use ferrum::db::ModelRepository;
@@ -13,9 +13,11 @@ use std::net::TcpStream;
 #[ferrum(
     table = "html_categories",
     api = "/api/v1/html_categories",
+    has_many = "items=HtmlProduct.category_id",
     admin = true,
     admin_label = "Kategorien",
-    admin_permission = "categories"
+    admin_permission = "categories",
+    admin_inline = "items=html_products.category_id"
 )]
 struct HtmlCategory {
     #[field(primary_key, auto)]
@@ -43,7 +45,7 @@ struct HtmlProduct {
     #[admin(list_display, sortable, label = "Preis")]
     price_cents: i64,
     #[field(foreign_key = "html_categories.id", on_delete = "restrict")]
-    #[admin(filterable, label = "Kategorie")]
+    #[admin(list_display, filterable, label = "Kategorie")]
     category_id: Option<Uuid>,
 }
 
@@ -80,6 +82,163 @@ struct HtmlPayroll {
     amount: String,
 }
 
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_titles",
+    api = "/api/v1/html_titles",
+    admin = true,
+    admin_label = "Titel"
+)]
+struct HtmlTitle {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(required, min_length = 1, max_length = 80)]
+    title: String,
+}
+
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_counts",
+    api = "/api/v1/html_counts",
+    admin = true,
+    admin_label = "Zaehler"
+)]
+struct HtmlCount {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[admin(filterable, label = "Total")]
+    total: i64,
+    #[admin(filterable, label = "Aktiv")]
+    active: bool,
+}
+
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_vaults",
+    api = "/api/v1/html_vaults",
+    admin = true,
+    admin_label = "Tresor"
+)]
+struct HtmlVault {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(required, min_length = 1, max_length = 80)]
+    label: String,
+    #[admin(hidden)]
+    password_hash: String,
+}
+
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_links",
+    api = "/api/v1/html_links",
+    admin = true,
+    admin_label = "Verknuepfungen",
+    admin_permission = "links"
+)]
+struct HtmlLink {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(foreign_key = "html_secrets.id", on_delete = "set_null")]
+    #[admin(list_display, filterable, label = "Geheimnis")]
+    secret_id: Option<Uuid>,
+}
+
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_codes",
+    api = "/api/v1/html_codes",
+    admin = true,
+    admin_label = "Codes"
+)]
+struct HtmlCode {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(required, min_length = 1, max_length = 40)]
+    #[admin(list_display, label = "Code")]
+    code: String,
+    #[field(required, min_length = 1, max_length = 80)]
+    note: String,
+}
+
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_offers",
+    api = "/api/v1/html_offers",
+    admin = true,
+    admin_label = "Angebote",
+    admin_permission = "offers",
+    admin_ordering = "-title",
+    admin_per_page = 2,
+    admin_fieldset = "Allgemein|Name und Kategorie",
+    admin_fieldset = "Preis und Verfuegbarkeit",
+    admin_fieldset = "System|Nur lesen|optional"
+)]
+struct HtmlOffer {
+    #[field(primary_key, auto)]
+    #[admin(fieldset = "System")]
+    id: Uuid,
+    #[field(required, min_length = 1, max_length = 80)]
+    #[admin(
+        list_display,
+        list_link,
+        searchable,
+        sortable,
+        label = "Titel",
+        fieldset = "Allgemein"
+    )]
+    title: String,
+    #[field(foreign_key = "html_categories.id", on_delete = "restrict")]
+    #[admin(label = "Kategorie", fieldset = "Allgemein")]
+    category_id: Option<Uuid>,
+    #[field(min = 0)]
+    #[admin(label = "Preis", fieldset = "Preis und Verfuegbarkeit")]
+    price_cents: i64,
+    #[admin(label = "Aktiv", fieldset = "Preis und Verfuegbarkeit")]
+    active: bool,
+}
+
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_bins",
+    api = "/api/v1/html_bins",
+    has_many = "notes=HtmlOwnedNote.bin_id",
+    admin = true,
+    admin_label = "Faecher",
+    admin_permission = "bins",
+    admin_inline = "notes=html_owned_notes.bin_id"
+)]
+struct HtmlBin {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(required, min_length = 1, max_length = 80)]
+    #[admin(list_display, label = "Name")]
+    name: String,
+}
+
+#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
+#[ferrum(
+    table = "html_owned_notes",
+    api = "/api/v1/html_owned_notes",
+    permissions = "notes",
+    object_policy = true,
+    admin = true,
+    admin_label = "Notizen",
+    admin_permission = "notes"
+)]
+struct HtmlOwnedNote {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(required)]
+    owner: String,
+    #[field(required, min_length = 1, max_length = 80)]
+    #[admin(list_display, label = "Titel")]
+    title: String,
+    #[field(foreign_key = "html_bins.id", on_delete = "restrict")]
+    #[admin(label = "Fach")]
+    bin_id: Option<Uuid>,
+}
+
 struct OwnerPolicy;
 
 impl ObjectPolicy<HtmlSecret> for OwnerPolicy {
@@ -102,6 +261,32 @@ impl ObjectPolicy<HtmlSecret> for OwnerPolicy {
         Self::read_scope(user)
     }
     fn can_create(user: &AuthUser, input: &HtmlSecretCreate) -> bool {
+        input.owner == user.id.to_string()
+    }
+}
+
+struct NotePolicy;
+
+impl ObjectPolicy<HtmlOwnedNote> for NotePolicy {
+    fn can_read(user: &AuthUser, object: &HtmlOwnedNote) -> bool {
+        object.owner == user.id.to_string()
+    }
+    fn can_update(user: &AuthUser, object: &HtmlOwnedNote) -> bool {
+        object.owner == user.id.to_string()
+    }
+    fn can_delete(user: &AuthUser, object: &HtmlOwnedNote) -> bool {
+        object.owner == user.id.to_string()
+    }
+    fn read_scope(user: &AuthUser) -> QueryScope {
+        QueryScope::Equals {
+            column: "owner",
+            value: ScopeValue::Text(user.id.to_string()),
+        }
+    }
+    fn write_scope(user: &AuthUser) -> QueryScope {
+        Self::read_scope(user)
+    }
+    fn can_create(user: &AuthUser, input: &HtmlOwnedNoteCreate) -> bool {
         input.owner == user.id.to_string()
     }
 }
@@ -132,6 +317,18 @@ async fn html_admin_works_without_javascript() {
     auth.create_user("gone@example.com", "correct-horse-battery", true, false)
         .await
         .unwrap();
+    let power = auth
+        .create_user("power@example.com", "correct-horse-battery", false, true)
+        .await
+        .unwrap();
+    assert!(!power.is_staff);
+    assert!(power.is_superuser);
+    auth.create_user("idle@example.com", "correct-horse-battery", true, true)
+        .await
+        .unwrap();
+    auth.set_user_active("idle@example.com", false)
+        .await
+        .unwrap();
     auth.ensure_role("catalog").await.unwrap();
     for code in [
         "products.read",
@@ -142,6 +339,8 @@ async fn html_admin_works_without_javascript() {
         "categories.create",
         "secrets.read",
         "secrets.create",
+        "links.read",
+        "links.create",
     ] {
         auth.ensure_permission(code).await.unwrap();
         auth.grant_permission("catalog", code).await.unwrap();
@@ -153,14 +352,26 @@ async fn html_admin_works_without_javascript() {
         .add::<HtmlCategory>()
         .add::<HtmlProduct>()
         .add_policy::<HtmlSecret, OwnerPolicy>()
-        .add::<HtmlPayroll>();
+        .add::<HtmlPayroll>()
+        .add::<HtmlTitle>()
+        .add::<HtmlCount>()
+        .add::<HtmlVault>()
+        .add::<HtmlCode>()
+        .add::<HtmlLink>()
+        .add::<HtmlOffer>();
     let app = ferrum::App::new(db.clone())
         .with_auth(auth.clone())
         .with_admin(registry)
         .register::<HtmlCategory>()
         .register::<HtmlProduct>()
         .register_policy::<HtmlSecret, OwnerPolicy>()
-        .register::<HtmlPayroll>();
+        .register::<HtmlPayroll>()
+        .register::<HtmlTitle>()
+        .register::<HtmlCount>()
+        .register::<HtmlVault>()
+        .register::<HtmlCode>()
+        .register::<HtmlLink>()
+        .register::<HtmlOffer>();
     app.bootstrap_schema().await.unwrap();
     for index in 0..26 {
         HtmlProduct::create(
@@ -174,6 +385,65 @@ async fn html_admin_works_without_javascript() {
         .await
         .unwrap();
     }
+    HtmlTitle::create(
+        &db,
+        HtmlTitleCreate {
+            title: "NurTitel".into(),
+        },
+    )
+    .await
+    .unwrap();
+    HtmlCount::create(
+        &db,
+        HtmlCountCreate {
+            total: 42,
+            active: true,
+        },
+    )
+    .await
+    .unwrap();
+    HtmlVault::create(
+        &db,
+        HtmlVaultCreate {
+            label: "SichtbaresEtikett".into(),
+            password_hash: "$argon2id$v=19$hidden-hash".into(),
+        },
+    )
+    .await
+    .unwrap();
+    HtmlCode::create(
+        &db,
+        HtmlCodeCreate {
+            code: "SICHTBARER-CODE".into(),
+            note: "GEHEIME-NOTIZ".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let _visible = HtmlSecret::create(
+        &db,
+        HtmlSecretCreate {
+            owner: staff.id.to_string(),
+            title: "StaffVisible".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let mut late_category = None;
+    for index in 0..=100 {
+        let created = HtmlCategory::create(
+            &db,
+            HtmlCategoryCreate {
+                name: format!("Zettel {index:03}"),
+            },
+        )
+        .await
+        .unwrap();
+        if index == 100 {
+            late_category = Some(created);
+        }
+    }
+    let late_category = late_category.unwrap();
     let hidden = HtmlSecret::create(
         &db,
         HtmlSecretCreate {
@@ -337,7 +607,146 @@ async fn html_admin_works_without_javascript() {
         .await
         .unwrap();
     assert_eq!(plain_home.status, 403);
-    assert!(plain_home.body.contains("staff access is required"));
+    assert!(plain_home
+        .body
+        .contains("Die Verwaltung verlangt einen Staff-Zugang."));
+    assert!(plain_home.body.contains("action=\"/admin/logout\""));
+    assert!(!plain_home.body.contains("<aside"));
+    assert!(!plain_home.body.contains("Stapel"));
+    assert!(!plain_home.body.contains("NurTitel"));
+    let plain_csrf = field_value(&plain_home.body, "csrf_token");
+    assert!(!plain_csrf.is_empty());
+    let english = call(
+        "GET",
+        "/admin".into(),
+        None,
+        format!("Cookie: ferrum_session={plain_session}; ferrum_locale=en\r\n"),
+    )
+    .await
+    .unwrap();
+    assert!(english
+        .body
+        .contains("Administration requires staff access."));
+    let missing_csrf = call(
+        "POST",
+        "/admin/logout".into(),
+        Some(form(&[("csrf_token", "")])),
+        cookie_header(&plain_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(missing_csrf.status, 403);
+    let foreign_csrf = call(
+        "POST",
+        "/admin/logout".into(),
+        Some(form(&[("csrf_token", &csrf)])),
+        cookie_header(&plain_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(foreign_csrf.status, 403);
+    let still_plain = call("GET", "/admin".into(), None, cookie_header(&plain_session))
+        .await
+        .unwrap();
+    assert_eq!(still_plain.status, 403);
+    let plain_out = call(
+        "POST",
+        "/admin/logout".into(),
+        Some(form(&[("csrf_token", &plain_csrf)])),
+        cookie_header(&plain_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(plain_out.status, 303);
+    assert_eq!(location(&plain_out.headers), "/admin/login");
+    let plain_after = call("GET", "/admin".into(), None, cookie_header(&plain_session))
+        .await
+        .unwrap();
+    assert_eq!(plain_after.status, 303);
+    assert!(location(&plain_after.headers).starts_with("/admin/login"));
+    let plain_models = call(
+        "GET",
+        "/admin/models/html_products".into(),
+        None,
+        cookie_header(&plain_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(plain_models.status, 303);
+
+    let power_login = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    let power_csrf = cookie_value(&power_login.headers, "ferrum_login_csrf");
+    let power_in = call(
+        "POST",
+        "/admin/login".into(),
+        Some(form(&[
+            ("csrf_token", &power_csrf),
+            ("email", "power@example.com"),
+            ("password", "correct-horse-battery"),
+            ("next", "/admin"),
+        ])),
+        format!("Cookie: ferrum_login_csrf={power_csrf}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(power_in.status, 303);
+    let power_session = cookie_value(&power_in.headers, "ferrum_session");
+    let power_home = call("GET", "/admin".into(), None, cookie_header(&power_session))
+        .await
+        .unwrap();
+    assert_eq!(power_home.status, 403);
+    assert!(power_home
+        .body
+        .contains("Die Verwaltung verlangt einen Staff-Zugang."));
+    assert!(!power_home.body.contains("NurTitel"));
+    let power_token = field_value(&power_home.body, "csrf_token");
+    let power_out = call(
+        "POST",
+        "/admin/logout".into(),
+        Some(form(&[("csrf_token", &power_token)])),
+        cookie_header(&power_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(power_out.status, 303);
+    let power_again = call(
+        "GET",
+        "/admin/models/html_titles".into(),
+        None,
+        cookie_header(&power_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(power_again.status, 303);
+    let stored = auth
+        .list_users()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|user| user.email == "power@example.com")
+        .unwrap();
+    assert!(!stored.is_staff && stored.is_superuser && stored.is_active);
+
+    let idle_login = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    let idle_csrf = cookie_value(&idle_login.headers, "ferrum_login_csrf");
+    let idle_in = call(
+        "POST",
+        "/admin/login".into(),
+        Some(form(&[
+            ("csrf_token", &idle_csrf),
+            ("email", "idle@example.com"),
+            ("password", "correct-horse-battery"),
+            ("next", "/admin"),
+        ])),
+        format!("Cookie: ferrum_login_csrf={idle_csrf}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(idle_in.status, 401);
 
     let list = call(
         "GET",
@@ -348,6 +757,8 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert_eq!(list.status, 200);
+    assert!(list.body.contains("Name"));
+    assert!(list.body.contains("Preis"));
     assert!(list.body.contains("sort=name"));
     assert!(list.body.contains("page=2"));
     assert!(list.body.contains("Stapel 00"));
@@ -457,6 +868,7 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert!(new_product.body.contains(&category_id));
+    assert!(new_product.body.contains("Obst"));
     let created = call(
         "POST",
         "/admin/models/html_products/new".into(),
@@ -483,6 +895,8 @@ async fn html_admin_works_without_javascript() {
     .unwrap();
     assert_eq!(detail.status, 200);
     assert!(detail.body.contains("Apfel"));
+    assert!(detail.body.contains("Obst"));
+    assert!(detail.body.contains(&category_id));
     assert!(detail.body.contains("Der Eintrag wurde angelegt."));
 
     let xss = call(
@@ -509,6 +923,8 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert!(searched.body.contains("Apfel"));
+    assert!(searched.body.contains("Obst"));
+    assert!(searched.body.contains(&format!("title=\"{category_id}\"")));
     assert!(!searched.body.contains("Stapel 00"));
     let filtered = call(
         "GET",
@@ -520,6 +936,8 @@ async fn html_admin_works_without_javascript() {
     .unwrap();
     assert_eq!(filtered.status, 200, "{}", filtered.body);
     assert!(filtered.body.contains("Apfel"));
+    assert!(filtered.body.contains("name=\"filter.category_id\""));
+    assert!(filtered.body.contains("Obst"));
     let escaped = call(
         "GET",
         "/admin/models/html_products?q=%3Cscript%3E".into(),
@@ -583,6 +1001,7 @@ async fn html_admin_works_without_javascript() {
     assert!(edit.body.contains("Apfel"));
     assert!(edit.body.contains("199"));
     assert!(edit.body.contains(&format!("value=\"{category_id}\"")));
+    assert!(edit.body.contains("Obst"));
     assert!(edit.body.contains("selected"));
     let saved = call(
         "POST",
@@ -608,6 +1027,31 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert!(renamed.body.contains("Birne"));
+    assert!(renamed.body.contains("Obst"));
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "PRAGMA foreign_keys=OFF",
+    ))
+    .await
+    .unwrap();
+    HtmlCategory::delete(&db, category_id.parse().unwrap())
+        .await
+        .expect("category delete");
+    let missing_relation = call(
+        "GET",
+        format!("/admin/models/html_products/{product_id}"),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert!(
+        missing_relation.body.contains("Nicht sichtbar"),
+        "{}",
+        missing_relation.body
+    );
+    assert!(!missing_relation.body.contains("Obst"));
+    assert!(missing_relation.body.contains(&category_id));
 
     let confirm = call(
         "GET",
@@ -665,6 +1109,48 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert_eq!(foreign_secret.status, 403);
+    let own_secret_id = record_id(&location(&own_secret.headers));
+    let own_link = call(
+        "POST",
+        "/admin/models/html_links/new".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("secret_id", &own_secret_id),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(own_link.status, 303, "{}", own_link.body);
+    let foreign_link = call(
+        "POST",
+        "/admin/models/html_links/new".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("secret_id", &hidden.id.to_string()),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_ne!(foreign_link.status, 303, "{}", foreign_link.body);
+    assert!(
+        foreign_link.body.contains("sichtbaren Eintrag"),
+        "{}",
+        foreign_link.body
+    );
+    let links = call(
+        "GET",
+        "/admin/models/html_links".into(),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(links.status, 200, "{}", links.body);
+    assert!(links.body.contains("Eigen"));
+    assert!(!links.body.contains("Nicht sichtbar"));
+    assert!(!links.body.contains("RootOnlySecret"));
 
     let root_login = call("GET", "/admin/login".into(), None, String::new())
         .await
@@ -684,6 +1170,61 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     let root_session = cookie_value(&root_in.headers, "ferrum_session");
+    let root_link_form = call(
+        "GET",
+        "/admin/models/html_links/new".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    let root_link_csrf = field_value(&root_link_form.body, "csrf_token");
+    let root_link = call(
+        "POST",
+        "/admin/models/html_links/new".into(),
+        Some(form(&[
+            ("csrf_token", &root_link_csrf),
+            ("secret_id", &hidden.id.to_string()),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(root_link.status, 303, "{}", root_link.body);
+    let hidden_label = call(
+        "GET",
+        "/admin/models/html_links".into(),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert!(
+        hidden_label.body.contains("Nicht sichtbar"),
+        "{}",
+        hidden_label.body
+    );
+    assert!(!hidden_label.body.contains("RootOnlySecret"));
+    let root_missing = call(
+        "GET",
+        format!("/admin/models/html_products/{product_id}"),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(root_missing.body.contains("Nicht vorhanden"));
+    assert!(!root_missing.body.contains("Obst"));
+    let root_links = call(
+        "GET",
+        "/admin/models/html_links".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(root_links.body.contains("Eigen"));
+    assert!(root_links.body.contains("RootOnlySecret"));
     let users = call(
         "GET",
         "/admin/directory/users".into(),
@@ -694,6 +1235,107 @@ async fn html_admin_works_without_javascript() {
     .unwrap();
     assert_eq!(users.status, 200);
     assert!(users.body.contains("staff@example.com"));
+    assert!(users.body.contains("Kein Staff"));
+    assert!(users.body.contains("Kein Superuser"));
+    assert!(users.body.contains(">Superuser<") || users.body.contains("Superuser</span>"));
+    assert!(users.body.contains("<select"));
+    assert!(users.body.contains("name=\"role\""));
+    assert!(!users.body.contains("<input name=\"role\""));
+    assert!(!users.body.contains("Nein · Superuser"));
+    let titles = call(
+        "GET",
+        "/admin/models/html_titles".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(titles.status, 200, "{}", titles.body);
+    assert!(titles.body.contains("NurTitel"));
+    let header = titles.body.find("<thead").expect("table header");
+    let head_end = titles.body[header..].find("</thead>").expect("header end");
+    let head = &titles.body[header..header + head_end];
+    let title_col = head.find("Title").expect("title column");
+    let id_col = head.find("Id").expect("id column");
+    assert!(title_col < id_col);
+    let counts = call(
+        "GET",
+        "/admin/models/html_counts".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(counts.status, 200, "{}", counts.body);
+    assert!(counts.body.contains("42"));
+    assert!(counts.body.contains("Total"));
+    assert!(counts.body.contains("name=\"filter.active\""));
+    assert!(counts.body.contains("name=\"filter.total\""));
+    assert!(counts.body.contains("type=\"number\""));
+    assert!(counts.body.contains(">Alle<"));
+    assert!(counts.body.contains(">Ja<"));
+    assert!(counts.body.contains(">Nein<"));
+    let counted = call(
+        "GET",
+        "/admin/models/html_counts?filter.total=42&filter.active=true".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(counted.status, 200, "{}", counted.body);
+    assert!(counted.body.contains("42"));
+    let bad_count = call(
+        "GET",
+        "/admin/models/html_counts?filter.total=abc".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(bad_count.status, 422);
+    let vault = call(
+        "GET",
+        "/admin/models/html_vaults".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(vault.status, 200, "{}", vault.body);
+    assert!(vault.body.contains("SichtbaresEtikett"));
+    assert!(!vault.body.contains("$argon2id$"));
+    assert!(!vault.body.contains("password_hash"));
+    let codes = call(
+        "GET",
+        "/admin/models/html_codes".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(codes.status, 200, "{}", codes.body);
+    assert!(codes.body.contains("SICHTBARER-CODE"));
+    assert!(!codes.body.contains("GEHEIME-NOTIZ"));
+    let hidden_sort = call(
+        "GET",
+        "/admin/models/html_codes?sort=note".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(hidden_sort.status, 422);
+    let staff_titles = call(
+        "GET",
+        "/admin/models/html_titles".into(),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(staff_titles.status, 403);
+    assert!(!staff_titles.body.contains("NurTitel"));
     let root_token = field_value(&users.body, "csrf_token");
     let staff_users = call(
         "GET",
@@ -742,6 +1384,7 @@ async fn html_admin_works_without_javascript() {
             ("csrf_token", &root_token),
             ("action", "grant"),
             ("code", "notes.read"),
+            ("confirm", "1"),
         ])),
         cookie_header(&root_session),
     )
@@ -764,6 +1407,7 @@ async fn html_admin_works_without_javascript() {
             ("csrf_token", &root_token),
             ("action", "revoke"),
             ("code", "notes.read"),
+            ("confirm", "1"),
         ])),
         cookie_header(&root_session),
     )
@@ -778,6 +1422,7 @@ async fn html_admin_works_without_javascript() {
             ("email", "staff@example.com"),
             ("role", "editor"),
             ("action", "assign"),
+            ("confirm", "1"),
         ])),
         cookie_header(&root_session),
     )
@@ -793,6 +1438,264 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert!(assigned.body.contains("editor"));
+    assert!(assigned.body.contains("Benutzer anlegen"));
+    assert!(assigned.body.contains("Anzeigen"));
+    let new_user = call(
+        "GET",
+        "/admin/directory/users/new".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(new_user.status, 200, "{}", new_user.body);
+    assert!(new_user.body.contains("name=\"password\""));
+    assert!(!new_user.body.contains("is_superuser"));
+    assert!(!new_user.body.contains("argon2"));
+    let unconfirmed_user = call(
+        "POST",
+        "/admin/directory/users/new".into(),
+        Some(form(&[
+            ("csrf_token", &root_token),
+            ("email", "clerk@example.com"),
+            ("password", "correct-horse-battery"),
+            ("password_confirm", "correct-horse-battery"),
+            ("active", "true"),
+            ("staff", "true"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(unconfirmed_user.status, 422, "{}", unconfirmed_user.body);
+    let invalid_confirm = call(
+        "POST",
+        "/admin/directory/users/new".into(),
+        Some(form(&[
+            ("csrf_token", &root_token),
+            ("email", "clerk@example.com"),
+            ("password", "correct-horse-battery"),
+            ("password_confirm", "correct-horse-battery"),
+            ("active", "true"),
+            ("staff", "true"),
+            ("confirm", "true"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(invalid_confirm.status, 422, "{}", invalid_confirm.body);
+    let elevated = call(
+        "POST",
+        "/admin/directory/users/new".into(),
+        Some(form(&[
+            ("csrf_token", &root_token),
+            ("email", "elevated@example.com"),
+            ("password", "correct-horse-battery"),
+            ("password_confirm", "correct-horse-battery"),
+            ("active", "true"),
+            ("staff", "true"),
+            ("is_superuser", "true"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(elevated.status, 422, "{}", elevated.body);
+    let staff_create = call(
+        "POST",
+        "/admin/directory/users/new".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("email", "clerk@example.com"),
+            ("password", "correct-horse-battery"),
+            ("password_confirm", "correct-horse-battery"),
+            ("active", "true"),
+            ("staff", "true"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(staff_create.status, 403);
+    let created_user = call(
+        "POST",
+        "/admin/directory/users/new".into(),
+        Some(form(&[
+            ("csrf_token", &root_token),
+            ("email", "clerk@example.com"),
+            ("password", "correct-horse-battery"),
+            ("password_confirm", "correct-horse-battery"),
+            ("active", "true"),
+            ("staff", "true"),
+            ("roles", "catalog"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(created_user.status, 303, "{}", created_user.body);
+    assert!(!location(&created_user.headers).contains("password"));
+    let clerk_id = record_id(&location(&created_user.headers));
+    let clerk_page = call(
+        "GET",
+        location(&created_user.headers),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(clerk_page.status, 200, "{}", clerk_page.body);
+    assert!(clerk_page.body.contains("clerk@example.com"));
+    assert!(clerk_page.body.contains("catalog"));
+    assert!(!clerk_page.body.contains("argon2"));
+    assert!(!clerk_page.body.contains("correct-horse-battery"));
+    let clerk_login_page = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    let clerk_csrf = cookie_value(&clerk_login_page.headers, "ferrum_login_csrf");
+    let clerk_in = call(
+        "POST",
+        "/admin/login".into(),
+        Some(form(&[
+            ("csrf_token", &clerk_csrf),
+            ("email", "clerk@example.com"),
+            ("password", "correct-horse-battery"),
+            ("next", "/admin"),
+        ])),
+        format!("Cookie: ferrum_login_csrf={clerk_csrf}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(clerk_in.status, 303, "{}", clerk_in.body);
+    let clerk_session = cookie_value(&clerk_in.headers, "ferrum_session");
+    let clerk_home = call("GET", "/admin".into(), None, cookie_header(&clerk_session))
+        .await
+        .unwrap();
+    assert_eq!(clerk_home.status, 200, "{}", clerk_home.body);
+    let reset = call(
+        "POST",
+        format!("/admin/directory/users/{clerk_id}/password"),
+        Some(form(&[
+            ("csrf_token", &root_token),
+            ("password", "replacement-horse-battery"),
+            ("password_confirm", "replacement-horse-battery"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(reset.status, 303, "{}", reset.body);
+    assert!(!location(&reset.headers).contains("replacement"));
+    let revoked = call("GET", "/admin".into(), None, cookie_header(&clerk_session))
+        .await
+        .unwrap();
+    assert_eq!(revoked.status, 303);
+    assert!(location(&revoked.headers).starts_with("/admin/login"));
+    let old_password = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    let old_csrf = cookie_value(&old_password.headers, "ferrum_login_csrf");
+    let old_in = call(
+        "POST",
+        "/admin/login".into(),
+        Some(form(&[
+            ("csrf_token", &old_csrf),
+            ("email", "clerk@example.com"),
+            ("password", "correct-horse-battery"),
+            ("next", "/admin"),
+        ])),
+        format!("Cookie: ferrum_login_csrf={old_csrf}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_ne!(old_in.status, 303);
+    let fresh_login = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    let fresh_csrf = cookie_value(&fresh_login.headers, "ferrum_login_csrf");
+    let fresh_in = call(
+        "POST",
+        "/admin/login".into(),
+        Some(form(&[
+            ("csrf_token", &fresh_csrf),
+            ("email", "clerk@example.com"),
+            ("password", "replacement-horse-battery"),
+            ("next", "/admin"),
+        ])),
+        format!("Cookie: ferrum_login_csrf={fresh_csrf}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(fresh_in.status, 303, "{}", fresh_in.body);
+    let fresh_session = cookie_value(&fresh_in.headers, "ferrum_session");
+    let staff_removed = call(
+        "POST",
+        format!("/admin/directory/users/{clerk_id}/edit"),
+        Some(form(&[
+            ("csrf_token", &root_token),
+            ("email", "clerk@example.com"),
+            ("active", "true"),
+            ("staff", "false"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(staff_removed.status, 303, "{}", staff_removed.body);
+    let staff_gone = call("GET", "/admin".into(), None, cookie_header(&fresh_session))
+        .await
+        .unwrap();
+    assert_eq!(staff_gone.status, 403, "{}", staff_gone.body);
+    let bad_csrf = call(
+        "POST",
+        format!("/admin/directory/users/{clerk_id}/active"),
+        Some(form(&[
+            (
+                "csrf_token",
+                "0000000000000000000000000000000000000000000000000000000000000000",
+            ),
+            ("active", "false"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(bad_csrf.status, 403);
+    let staff_attack = call(
+        "POST",
+        format!("/admin/directory/users/{}/active", plain.id),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("active", "false"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(staff_attack.status, 403);
+    let protected = call(
+        "POST",
+        format!("/admin/directory/users/{}/password", root.id),
+        Some(form(&[
+            ("csrf_token", &root_token),
+            ("password", "replacement-horse-battery"),
+            ("password_confirm", "replacement-horse-battery"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(protected.status, 403, "{}", protected.body);
+    assert!(protected.body.contains("/admin/directory/users"));
     let self_off = call(
         "POST",
         format!("/admin/directory/users/{}/active", root.id),
@@ -802,10 +1705,27 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert_eq!(self_off.status, 403);
-    let deactivate = call(
+    assert!(self_off.body.contains("/admin/directory/users"));
+    let unconfirmed = call(
         "POST",
         format!("/admin/directory/users/{}/active", plain.id),
         Some(form(&[("csrf_token", &root_token), ("active", "false")])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(unconfirmed.status, 422, "{}", unconfirmed.body);
+    assert!(unconfirmed
+        .body
+        .contains("Diese Aktion braucht eine Bestätigung."));
+    let deactivate = call(
+        "POST",
+        format!("/admin/directory/users/{}/active", plain.id),
+        Some(form(&[
+            ("csrf_token", &root_token),
+            ("active", "false"),
+            ("confirm", "1"),
+        ])),
         cookie_header(&root_session),
     )
     .await
@@ -858,6 +1778,282 @@ async fn html_admin_works_without_javascript() {
         .unwrap();
     assert_eq!(disabled.status, 303);
     assert!(location(&disabled.headers).starts_with("/admin/login"));
+
+    for title in ["Amsel", "Zebra", "Mitte"] {
+        HtmlOffer::create(
+            &db,
+            HtmlOfferCreate {
+                title: title.into(),
+                category_id: None,
+                price_cents: 10,
+                active: true,
+            },
+        )
+        .await
+        .unwrap();
+    }
+    let denied = call(
+        "GET",
+        "/admin/models/html_offers".into(),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.status, 403, "{}", denied.body);
+    let offers = call(
+        "GET",
+        "/admin/models/html_offers".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(offers.status, 200, "{}", offers.body);
+    let zebra = offers.body.find("Zebra").unwrap();
+    let mitte = offers.body.find("Mitte").unwrap();
+    assert!(zebra < mitte);
+    assert!(!offers.body.contains("Amsel"));
+    assert!(offers.body.contains("Zebra</a>"), "{}", offers.body);
+    let offer_page = call(
+        "GET",
+        "/admin/models/html_offers?page=2".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(offer_page.body.contains("Amsel"), "{}", offer_page.body);
+    let bad_sort = call(
+        "GET",
+        "/admin/models/html_offers?sort=title%3Bdrop".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(bad_sort.status, 422);
+    let ascending = call(
+        "GET",
+        "/admin/models/html_offers?sort=title&dir=asc".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    let amsel = ascending.body.find("Amsel").unwrap();
+    let zebra_again = ascending.body.find("Zebra");
+    assert!(zebra_again.is_none() || amsel < zebra_again.unwrap());
+    let offer_new = call(
+        "GET",
+        "/admin/models/html_offers/new".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(offer_new.body.contains("Allgemein"));
+    assert!(offer_new.body.contains("Preis und Verfuegbarkeit"));
+    assert!(offer_new.body.contains("Name und Kategorie"));
+    assert!(!offer_new.body.contains("<summary>System</summary>"));
+    let offer_csrf = field_value(&offer_new.body, "csrf_token");
+    let continued = call(
+        "POST",
+        "/admin/models/html_offers/new".into(),
+        Some(form(&[
+            ("csrf_token", &offer_csrf),
+            ("title", "Weiter"),
+            ("price_cents", "15"),
+            ("active", "true"),
+            ("save", "edit"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(continued.status, 303, "{}", continued.body);
+    let continued_at = location(&continued.headers);
+    assert!(
+        continued_at.contains("/edit?notice=created"),
+        "{continued_at}"
+    );
+    let another = call(
+        "POST",
+        "/admin/models/html_offers/new".into(),
+        Some(form(&[
+            ("csrf_token", &offer_csrf),
+            ("title", "Noch eins"),
+            ("price_cents", "16"),
+            ("active", "false"),
+            ("save", "new"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(another.status, 303, "{}", another.body);
+    assert_eq!(
+        location(&another.headers),
+        "/admin/models/html_offers/new?notice=created"
+    );
+    let before_bad = call(
+        "GET",
+        "/admin/models/html_offers".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    let rejected = call(
+        "POST",
+        "/admin/models/html_offers/new".into(),
+        Some(form(&[
+            ("csrf_token", &offer_csrf),
+            ("title", "Nicht speichern"),
+            ("price_cents", "17"),
+            ("active", "true"),
+            ("save", "https://evil.example"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rejected.status, 422, "{}", rejected.body);
+    let after_bad = call(
+        "GET",
+        "/admin/models/html_offers".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(
+        before_bad.body.matches("Nicht speichern").count(),
+        after_bad.body.matches("Nicht speichern").count()
+    );
+    let kept = "Bleibt-12345678901234567890123456789012345678901234567890123456789012345678901234";
+    let invalid = call(
+        "POST",
+        "/admin/models/html_offers/new".into(),
+        Some(form(&[
+            ("csrf_token", &offer_csrf),
+            ("title", kept),
+            ("category_id", &late_category.id.to_string()),
+            ("price_cents", "4"),
+            ("active", "true"),
+            ("save", "detail"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_ne!(invalid.status, 303, "{}", invalid.body);
+    assert!(invalid.body.contains(kept), "{}", invalid.body);
+    assert!(invalid.body.contains(&late_category.id.to_string()));
+    assert!(invalid.body.contains("value=\"true\" checked"));
+    let edited = call("GET", continued_at, None, cookie_header(&root_session))
+        .await
+        .unwrap();
+    assert!(
+        edited.body.contains("<summary>System</summary>"),
+        "{}",
+        edited.body
+    );
+    assert!(edited.body.contains("Nur lesen"));
+    let found = call(
+        "GET",
+        "/admin/models/html_offers/pick/category_id?q=Zettel%20100".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(found.status, 200, "{}", found.body);
+    assert!(found.body.contains("Zettel 100"), "{}", found.body);
+    assert!(!found.body.contains("Zettel 000"));
+    let later = call(
+        "GET",
+        "/admin/models/html_offers/pick/category_id?page=5".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(later.body.contains("Zettel 100"), "{}", later.body);
+    assert!(!later.body.contains("Zettel 000"));
+    let secret_pick = call(
+        "GET",
+        "/admin/models/html_links/pick/secret_id".into(),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(secret_pick.status, 200, "{}", secret_pick.body);
+    assert!(secret_pick.body.contains("StaffVisible"));
+    assert!(!secret_pick.body.contains("RootOnlySecret"));
+    let link_form = call(
+        "GET",
+        "/admin/models/html_links/new".into(),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    let link_csrf = field_value(&link_form.body, "csrf_token");
+    let forged = call(
+        "POST",
+        "/admin/models/html_links/new".into(),
+        Some(form(&[
+            ("csrf_token", &link_csrf),
+            ("secret_id", &hidden.id.to_string()),
+            ("save", "detail"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_ne!(forged.status, 303, "{}", forged.body);
+    assert!(
+        forged.body.contains("sichtbaren Eintrag"),
+        "{}",
+        forged.body
+    );
+    let user_form_page = call(
+        "GET",
+        "/admin/directory/users/new".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    let user_csrf = field_value(&user_form_page.body, "csrf_token");
+    let mismatched = call(
+        "POST",
+        "/admin/directory/users/new".into(),
+        Some(form(&[
+            ("csrf_token", &user_csrf),
+            ("email", "kept@example.com"),
+            ("password", "correct-horse-battery"),
+            ("password_confirm", "other-horse-battery"),
+            ("active", "true"),
+            ("staff", "false"),
+            ("roles", "catalog"),
+            ("confirm", "1"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(mismatched.status, 422, "{}", mismatched.body);
+    assert!(mismatched.body.contains("value=\"kept@example.com\""));
+    assert!(mismatched.body.contains("value=\"catalog\" checked"));
+    assert!(mismatched
+        .body
+        .contains("Die Passwörter stimmen nicht überein."));
+    assert!(!mismatched.body.contains("correct-horse-battery"));
+    assert!(!mismatched.body.contains("other-horse-battery"));
+    assert!(!mismatched.body.contains("csrf_token="));
 
     db.execute(Statement::from_string(
         DatabaseBackend::Sqlite,
@@ -1198,6 +2394,813 @@ async fn html_login_csrf_respects_the_bound_port() {
     assert!(!cookie_value(&relogin.headers, "ferrum_session").is_empty());
 
     server.abort();
+}
+
+#[tokio::test]
+async fn admin_v018_drafts_inlines_bulk_and_audit() {
+    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
+    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let auth = AuthService::new(db.clone(), AuthConfig::development());
+    let staff = auth
+        .create_user("staff@example.com", "correct-horse-battery", true, false)
+        .await
+        .unwrap();
+    let root = auth
+        .create_user("root@example.com", "correct-horse-battery", true, true)
+        .await
+        .unwrap();
+    auth.ensure_role("catalog").await.unwrap();
+    for code in [
+        "products.read",
+        "products.create",
+        "products.update",
+        "products.delete",
+        "categories.read",
+        "categories.create",
+        "secrets.read",
+        "secrets.delete",
+        "bins.read",
+        "notes.read",
+        "notes.create",
+    ] {
+        auth.ensure_permission(code).await.unwrap();
+        auth.grant_permission("catalog", code).await.unwrap();
+    }
+    auth.assign_role("staff@example.com", "catalog")
+        .await
+        .unwrap();
+    let registry = AdminRegistry::new()
+        .add::<HtmlCategory>()
+        .add::<HtmlProduct>()
+        .add::<HtmlCount>()
+        .add::<HtmlOffer>()
+        .add::<HtmlVault>()
+        .add::<HtmlBin>()
+        .add_policy::<HtmlSecret, OwnerPolicy>()
+        .add_policy::<HtmlOwnedNote, NotePolicy>()
+        .action(AdminAction {
+            model_key: "html_counts",
+            name: "feature",
+            label_de: "Hervorheben",
+            label_en: "Feature",
+            permission: "update",
+            confirm: true,
+            max_ids: 100,
+            operation: ActionOperation::SetBool {
+                column: "active",
+                value: true,
+            },
+        });
+    let app = ferrum::App::new(db.clone())
+        .with_auth(auth.clone())
+        .with_admin(registry)
+        .register::<HtmlCategory>()
+        .register::<HtmlProduct>()
+        .register::<HtmlCount>()
+        .register::<HtmlOffer>()
+        .register::<HtmlVault>()
+        .register::<HtmlBin>()
+        .register_policy::<HtmlSecret, OwnerPolicy>()
+        .register_policy::<HtmlOwnedNote, NotePolicy>();
+    app.bootstrap_schema().await.unwrap();
+    let obst = HtmlCategory::create(
+        &db,
+        HtmlCategoryCreate {
+            name: "Obst".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let other = HtmlCategory::create(
+        &db,
+        HtmlCategoryCreate {
+            name: "Gemuese".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let empty = HtmlCategory::create(
+        &db,
+        HtmlCategoryCreate {
+            name: "Leer".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let first = HtmlCount::create(
+        &db,
+        HtmlCountCreate {
+            total: 1,
+            active: false,
+        },
+    )
+    .await
+    .unwrap();
+    let second = HtmlCount::create(
+        &db,
+        HtmlCountCreate {
+            total: 2,
+            active: false,
+        },
+    )
+    .await
+    .unwrap();
+    let featured = HtmlCount::create(
+        &db,
+        HtmlCountCreate {
+            total: 3,
+            active: false,
+        },
+    )
+    .await
+    .unwrap();
+    let own_secret = HtmlSecret::create(
+        &db,
+        HtmlSecretCreate {
+            owner: staff.id.to_string(),
+            title: "EigenesGeheimnis".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let foreign_secret = HtmlSecret::create(
+        &db,
+        HtmlSecretCreate {
+            owner: root.id.to_string(),
+            title: "FremdesGeheimnis".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let bin = HtmlBin::create(
+        &db,
+        HtmlBinCreate {
+            name: "Ablage".into(),
+        },
+    )
+    .await
+    .unwrap();
+    HtmlOwnedNote::create(
+        &db,
+        HtmlOwnedNoteCreate {
+            owner: root.id.to_string(),
+            title: "RootGeheim".into(),
+            bin_id: Some(bin.id),
+        },
+    )
+    .await
+    .unwrap();
+    HtmlOwnedNote::create(
+        &db,
+        HtmlOwnedNoteCreate {
+            owner: staff.id.to_string(),
+            title: "StaffNotiz".into(),
+            bin_id: Some(bin.id),
+        },
+    )
+    .await
+    .unwrap();
+    let kept = HtmlProduct::create(
+        &db,
+        HtmlProductCreate {
+            name: "Bleibtprodukt".into(),
+            price_cents: 10,
+            category_id: Some(obst.id),
+        },
+    )
+    .await
+    .unwrap();
+    let also = HtmlProduct::create(
+        &db,
+        HtmlProductCreate {
+            name: "Auchprodukt".into(),
+            price_cents: 11,
+            category_id: Some(obst.id),
+        },
+    )
+    .await
+    .unwrap();
+    HtmlVault::create(
+        &db,
+        HtmlVaultCreate {
+            label: "AltEtikett".into(),
+            password_hash: "$argon2id$v=19$hidden-hash".into(),
+        },
+    )
+    .await
+    .unwrap();
+    // bootstrap_schema erzeugt keine Fremdschlüssel. Die Sammelaktion muss am echten RESTRICT scheitern.
+    for sql in [
+        "CREATE TABLE html_products_restricted (id text PRIMARY KEY NOT NULL, name text NOT NULL, price_cents integer NOT NULL, category_id text, CONSTRAINT fk_html_products_category FOREIGN KEY (category_id) REFERENCES html_categories (id) ON DELETE RESTRICT)",
+        "INSERT INTO html_products_restricted (id, name, price_cents, category_id) SELECT id, name, price_cents, category_id FROM html_products",
+        "DROP TABLE html_products",
+        "ALTER TABLE html_products_restricted RENAME TO html_products",
+    ] {
+        db.execute(Statement::from_string(DatabaseBackend::Sqlite, sql.to_owned()))
+            .await
+            .unwrap();
+    }
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
+    let call = |method: &'static str, path: String, body: Option<String>, extra: String| {
+        tokio::task::spawn_blocking(move || http(port, method, &path, body.as_deref(), &extra))
+    };
+    let mut root_session = String::new();
+    let mut staff_session = String::new();
+    for email in ["root@example.com", "staff@example.com"] {
+        let login = call("GET", "/admin/login".into(), None, String::new())
+            .await
+            .unwrap();
+        let token = cookie_value(&login.headers, "ferrum_login_csrf");
+        let signed = call(
+            "POST",
+            "/admin/login".into(),
+            Some(form(&[
+                ("csrf_token", &token),
+                ("email", email),
+                ("password", "correct-horse-battery"),
+                ("next", "/admin"),
+            ])),
+            format!("Cookie: ferrum_login_csrf={token}\r\n"),
+        )
+        .await
+        .unwrap();
+        assert_eq!(signed.status, 303, "{}", signed.body);
+        let session = cookie_value(&signed.headers, "ferrum_session");
+        if email.starts_with("root") {
+            root_session = session;
+        } else {
+            staff_session = session;
+        }
+    }
+    let root_home = call("GET", "/admin".into(), None, cookie_header(&root_session))
+        .await
+        .unwrap();
+    let root_csrf = field_value(&root_home.body, "csrf_token");
+    let staff_home = call("GET", "/admin".into(), None, cookie_header(&staff_session))
+        .await
+        .unwrap();
+    let staff_csrf = field_value(&staff_home.body, "csrf_token");
+
+    let login = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    assert!(login.body.contains("<label for=\"email\">"));
+    assert!(login.body.contains("<button type=\"submit\">"));
+    assert!(!login.body.contains("onkeydown") && !login.body.contains("onkeypress"));
+    let form_page = call(
+        "GET",
+        "/admin/models/html_offers/new".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(form_page.status, 200, "{}", form_page.body);
+    assert!(form_page.body.contains("<label class=\"check\">"));
+    assert!(!form_page.body.contains("class=\"check\" for="));
+    assert!(form_page.body.contains("type=\"checkbox\""));
+    assert!(form_page.body.contains("name=\"save\""));
+    assert!(form_page.body.contains("type=\"submit\""));
+    assert!(form_page.body.contains("<fieldset"));
+    let css = call("GET", "/admin/assets/admin.css".into(), None, String::new())
+        .await
+        .unwrap();
+    assert!(css.body.contains(":focus-visible"));
+    let script = call("GET", "/admin/assets/admin.js".into(), None, String::new())
+        .await
+        .unwrap();
+    assert!(!script.body.contains("keydown") && !script.body.contains("keyup"));
+
+    let draft = call(
+        "POST",
+        "/admin/models/html_offers/draft".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("title", "Bleibt-Name"),
+            ("price_cents", "199"),
+            ("active", "true"),
+            ("password", "hunter2-geheim"),
+            ("password_hash", "$argon2id$stored"),
+            ("pick_field", "category_id"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(draft.status, 303, "{}", draft.body);
+    let draft_url = location(&draft.headers);
+    assert!(draft_url.contains("draft="));
+    assert!(!draft_url.contains("Bleibt-Name") && !draft_url.contains("hunter2"));
+    let draft_id = draft_url
+        .split("draft=")
+        .nth(1)
+        .unwrap_or("")
+        .split('&')
+        .next()
+        .unwrap_or("");
+    let other_draft = call(
+        "POST",
+        "/admin/models/html_offers/draft".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("title", "Anderer-Name"),
+            ("price_cents", "250"),
+            ("active", "false"),
+            ("pick_field", "category_id"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    let other_id = location(&other_draft.headers)
+        .split("draft=")
+        .nth(1)
+        .unwrap_or("")
+        .split('&')
+        .next()
+        .unwrap_or("")
+        .to_owned();
+    let restored = call(
+        "GET",
+        format!("/admin/models/html_offers/new?draft={draft_id}"),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(
+        restored.body.contains("value=\"Bleibt-Name\""),
+        "{}",
+        restored.body
+    );
+    assert!(restored.body.contains("value=\"199\""), "{}", restored.body);
+    assert!(restored.body.contains("checked"), "{}", restored.body);
+    let second_view = call(
+        "GET",
+        format!("/admin/models/html_offers/new?draft={other_id}"),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(second_view.body.contains("value=\"Anderer-Name\""));
+    assert!(restored.body.contains("value=\"Bleibt-Name\""));
+    let stolen = call(
+        "GET",
+        format!("/admin/models/html_offers/new?draft={draft_id}"),
+        None,
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert!(!stolen.body.contains("Bleibt-Name"), "{}", stolen.body);
+    let payloads = db
+        .query_all(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "SELECT payload FROM _ferrum_admin_drafts",
+        ))
+        .await
+        .unwrap();
+    for row in &payloads {
+        let payload: String = row.try_get("", "payload").unwrap();
+        assert!(
+            !payload.contains("hunter2") && !payload.contains("argon2"),
+            "{payload}"
+        );
+    }
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        "UPDATE _ferrum_admin_drafts SET expires_at = 1",
+    ))
+    .await
+    .unwrap();
+    let expired = call(
+        "GET",
+        format!("/admin/models/html_offers/new?draft={draft_id}"),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(!expired.body.contains("Bleibt-Name"), "{}", expired.body);
+
+    let invalid = call(
+        "POST",
+        "/admin/models/html_offers/draft".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("title", "Korrigierbar"),
+            ("price_cents", "abc"),
+            ("active", "true"),
+            ("pick_field", "category_id"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    let invalid_id = location(&invalid.headers)
+        .split("draft=")
+        .nth(1)
+        .unwrap_or("")
+        .split('&')
+        .next()
+        .unwrap_or("")
+        .to_owned();
+    let invalid_form = call(
+        "GET",
+        format!("/admin/models/html_offers/new?draft={invalid_id}"),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(
+        invalid_form.body.contains("value=\"abc\""),
+        "{}",
+        invalid_form.body
+    );
+    let rejected = call(
+        "POST",
+        "/admin/models/html_offers/new".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("_draft", &invalid_id),
+            ("title", "Korrigierbar"),
+            ("price_cents", "abc"),
+            ("active", "true"),
+            ("category_id", &obst.id.to_string()),
+            ("save", "detail"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_ne!(rejected.status, 303, "{}", rejected.body);
+    assert!(rejected.body.contains("value=\"abc\""), "{}", rejected.body);
+    assert!(
+        rejected.body.contains("value=\"Korrigierbar\""),
+        "{}",
+        rejected.body
+    );
+
+    let picked = call(
+        "POST",
+        "/admin/models/html_offers/draft".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("title", "Auswahl-Name"),
+            ("price_cents", "321"),
+            ("active", "true"),
+            ("pick_field", "category_id"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    let pick = call(
+        "GET",
+        location(&picked.headers),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert!(pick.body.contains("Obst"), "{}", pick.body);
+    let choice = pick
+        .body
+        .split("href=\"")
+        .find(|part| part.contains("draft=") && part.contains("category_id="))
+        .unwrap_or("");
+    let choice = choice
+        .split('"')
+        .next()
+        .unwrap_or("")
+        .replace("&#x2F;", "/");
+    let chosen = call("GET", choice, None, cookie_header(&root_session))
+        .await
+        .unwrap();
+    assert!(
+        chosen.body.contains("value=\"Auswahl-Name\""),
+        "{}",
+        chosen.body
+    );
+    assert!(
+        chosen.body.contains(&obst.id.to_string()),
+        "{}",
+        chosen.body
+    );
+
+    let detail = call(
+        "GET",
+        format!("/admin/models/html_categories/{}", obst.id),
+        None,
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(detail.status, 200, "{}", detail.body);
+    assert!(detail.body.contains("Bleibtprodukt"), "{}", detail.body);
+    assert!(detail.body.contains("Hinzufügen"), "{}", detail.body);
+    let created = call(
+        "POST",
+        format!("/admin/models/html_categories/{}/inline/items/new", obst.id),
+        Some(form(&[
+            ("csrf_token", &staff_csrf),
+            ("name", "Inline-Apfel"),
+            ("price_cents", "199"),
+            ("category_id", &other.id.to_string()),
+        ])),
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(created.status, 303, "{}", created.body);
+    let products = HtmlProduct::list(&db).await.unwrap();
+    let stored = products
+        .data
+        .iter()
+        .find(|item| item.name == "Inline-Apfel")
+        .unwrap();
+    assert_eq!(stored.category_id, Some(obst.id));
+    let bin_page = call(
+        "GET",
+        format!("/admin/models/html_bins/{}", bin.id),
+        None,
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert!(bin_page.body.contains("StaffNotiz"), "{}", bin_page.body);
+    assert!(!bin_page.body.contains("RootGeheim"), "{}", bin_page.body);
+
+    let staged = call(
+        "POST",
+        "/admin/models/html_counts/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("action", "activate"),
+            ("ids", &first.id.to_string()),
+            ("ids", &second.id.to_string()),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(staged.status, 303, "{}", staged.body);
+    assert!(!HtmlCount::get(&db, first.id).await.unwrap().unwrap().active);
+    let confirm = call(
+        "GET",
+        location(&staged.headers),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(confirm.status, 200, "{}", confirm.body);
+    assert!(confirm.body.contains("Betroffene Datensätze"));
+    assert!(!HtmlCount::get(&db, first.id).await.unwrap().unwrap().active);
+    let unconfirmed = call(
+        "POST",
+        location(&staged.headers),
+        Some(form(&[("csrf_token", &root_csrf)])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_ne!(unconfirmed.status, 303);
+    assert!(
+        !HtmlCount::get(&db, second.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .active
+    );
+    let applied = call(
+        "POST",
+        location(&staged.headers),
+        Some(form(&[("csrf_token", &root_csrf), ("confirm", "1")])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(applied.status, 303, "{}", applied.body);
+    assert!(HtmlCount::get(&db, first.id).await.unwrap().unwrap().active);
+    assert!(
+        HtmlCount::get(&db, second.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .active
+    );
+
+    let denied = call(
+        "POST",
+        "/admin/models/html_secrets/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &staff_csrf),
+            ("action", "delete"),
+            ("ids", &own_secret.id.to_string()),
+            ("ids", &foreign_secret.id.to_string()),
+        ])),
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert_ne!(denied.status, 303, "{}", denied.body);
+    assert!(HtmlSecret::get(&db, own_secret.id).await.unwrap().is_some());
+    assert!(HtmlSecret::get(&db, foreign_secret.id)
+        .await
+        .unwrap()
+        .is_some());
+    let missing = call(
+        "POST",
+        "/admin/models/html_counts/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("action", "deactivate"),
+            ("ids", &first.id.to_string()),
+            ("ids", &Uuid::new_v4().to_string()),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_ne!(missing.status, 303, "{}", missing.body);
+    assert!(HtmlCount::get(&db, first.id).await.unwrap().unwrap().active);
+    let forged = call(
+        "POST",
+        "/admin/models/html_counts/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("action", "deactivate"),
+            ("ids", "not-a-uuid"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(forged.status, 422, "{}", forged.body);
+    let no_csrf = call(
+        "POST",
+        "/admin/models/html_counts/bulk".into(),
+        Some(form(&[
+            ("action", "deactivate"),
+            ("ids", &first.id.to_string()),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(no_csrf.status, 403, "{}", no_csrf.body);
+    let unknown = call(
+        "POST",
+        "/admin/models/html_counts/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("action", "nope"),
+            ("ids", &featured.id.to_string()),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(unknown.status, 422, "{}", unknown.body);
+    assert!(
+        !HtmlCount::get(&db, featured.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .active
+    );
+    let custom = call(
+        "POST",
+        "/admin/models/html_counts/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("action", "feature"),
+            ("ids", &featured.id.to_string()),
+            ("ids", &featured.id.to_string()),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(custom.status, 303, "{}", custom.body);
+    let custom_done = call(
+        "POST",
+        location(&custom.headers),
+        Some(form(&[("csrf_token", &root_csrf), ("confirm", "1")])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(custom_done.status, 303, "{}", custom_done.body);
+    assert!(
+        location(&custom_done.headers).contains("changed=1"),
+        "{}",
+        location(&custom_done.headers)
+    );
+    assert!(
+        HtmlCount::get(&db, featured.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .active
+    );
+
+    let queued = call(
+        "POST",
+        "/admin/models/html_products/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &staff_csrf),
+            ("action", "delete"),
+            ("ids", &kept.id.to_string()),
+            ("ids", &also.id.to_string()),
+        ])),
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(queued.status, 303, "{}", queued.body);
+    auth.revoke_permission("catalog", "products.delete")
+        .await
+        .unwrap();
+    let blocked = call(
+        "POST",
+        location(&queued.headers),
+        Some(form(&[("csrf_token", &staff_csrf), ("confirm", "1")])),
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(blocked.status, 403, "{}", blocked.body);
+    assert!(HtmlProduct::get(&db, kept.id).await.unwrap().is_some());
+    assert!(HtmlProduct::get(&db, also.id).await.unwrap().is_some());
+
+    let rollback = call(
+        "POST",
+        "/admin/models/html_categories/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("action", "delete"),
+            ("ids", &obst.id.to_string()),
+            ("ids", &empty.id.to_string()),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rollback.status, 303, "{}", rollback.body);
+    let failed = call(
+        "POST",
+        location(&rollback.headers),
+        Some(form(&[("csrf_token", &root_csrf), ("confirm", "1")])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_ne!(failed.status, 303, "{}", failed.body);
+    assert!(HtmlCategory::get(&db, obst.id).await.unwrap().is_some());
+    assert!(HtmlCategory::get(&db, empty.id).await.unwrap().is_some());
+
+    let history = call(
+        "GET",
+        "/admin/audit".into(),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(history.status, 200, "{}", history.body);
+    assert!(history.body.contains("bulk_update"), "{}", history.body);
+    assert!(
+        history.body.contains("Inline-Apfel") || history.body.contains("create"),
+        "{}",
+        history.body
+    );
+    assert!(!history.body.contains("hidden-hash"), "{}", history.body);
+    assert!(!history.body.contains("hunter2"), "{}", history.body);
+    let staff_history = call(
+        "GET",
+        "/admin/audit".into(),
+        None,
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert!(
+        staff_history.body.contains("Inline-Apfel"),
+        "{}",
+        staff_history.body
+    );
+    assert!(
+        !staff_history.body.contains("bulk_update"),
+        "{}",
+        staff_history.body
+    );
 }
 
 fn http(port: u16, method: &str, path: &str, body: Option<&str>, extra: &str) -> Reply {

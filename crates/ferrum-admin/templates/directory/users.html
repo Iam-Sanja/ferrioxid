@@ -1,45 +1,111 @@
 {% extends "base.html" %}
 {% block content %}
-<form method="get" class="toolbar">
+<p class="hint">{{ i18n.hint_flags }}</p>
+<div class="toolbar">
+<form class="filters" method="get">
+<div class="filter-fields">
 <label>{{ i18n.search }} <input name="q" value="{{ query }}"></label>
-<button type="submit">{{ i18n.search }}</button>
+</div>
+<div class="filter-actions">
+<button class="ghost" type="submit">{{ i18n.search }}</button>
+{% if query %}<a class="button ghost" href="/admin/directory/users">{{ i18n.reset }}</a>{% endif %}
+</div>
 </form>
-<p class="meta">{{ i18n.total }}: {{ total }}</p>
+<a class="button" href="/admin/directory/users/new">{{ i18n.add_user }}</a>
+</div>
+<p class="meta">{{ i18n.total }}: {{ total }} · {{ i18n.results }}: {{ shown }} · {{ i18n.page }} {{ page }}</p>
+{% if users | length == 0 %}
+<div class="empty-state"><p class="empty">{{ i18n.empty }}</p></div>
+{% else %}
 <div class="table-wrap">
 <table>
-<thead><tr><th><a href="?q={{ query }}&sort=email&dir={{ email_dir }}">{{ i18n.email }}</a></th><th>{{ i18n.active }}</th><th>{{ i18n.staff }}</th><th>{{ i18n.roles }}</th><th>{{ i18n.actions }}</th></tr></thead>
+<caption class="sr-only">{{ i18n.users }}</caption>
+<thead>
+<tr>
+<th scope="col" aria-sort="{{ email_state }}"><a href="{{ email_sort }}">{{ i18n.email }} <span aria-hidden="true">{{ email_mark }}</span> <span class="sr-only">{% if email_state == "descending" %}{{ i18n.sort_desc }}{% else %}{{ i18n.sort_asc }}{% endif %}</span></a></th>
+<th scope="col">{{ i18n.active }}</th>
+<th scope="col">{{ i18n.staff }}</th>
+<th scope="col">{{ i18n.superuser }}</th>
+<th scope="col">{{ i18n.roles }}</th>
+<th scope="col">{{ i18n.actions }}</th>
+</tr>
+</thead>
 <tbody>
 {% for user in users %}
 <tr>
-<td>{{ user.email }}</td>
-<td>{% if user.is_active %}{{ i18n.active }}{% else %}{{ i18n.inactive }}{% endif %}</td>
-<td>{% if user.is_staff %}{{ i18n.yes }}{% else %}{{ i18n.no }}{% endif %}{% if user.is_superuser %} · {{ i18n.superuser }}{% endif %}</td>
+<td class="is-lead">{{ user.email }}</td>
+<td><span class="flag">{% if user.is_active %}{{ i18n.active }}{% else %}{{ i18n.inactive }}{% endif %}</span></td>
+<td><span class="flag">{% if user.is_staff %}{{ i18n.staff }}{% else %}{{ i18n.no_staff }}{% endif %}</span></td>
+<td><span class="flag">{% if user.is_superuser %}{{ i18n.superuser }}{% else %}{{ i18n.no_superuser }}{% endif %}</span></td>
 <td>{{ user.roles }}</td>
 <td>
+<div class="row-actions">
+<a class="button ghost" href="/admin/directory/users/{{ user.id }}">{{ i18n.view }}</a>
+{% if user.can_edit %}
+<a class="button ghost" href="/admin/directory/users/{{ user.id }}/edit">{{ i18n.edit }}</a>
+<a class="button ghost" href="/admin/directory/users/{{ user.id }}/edit#roles">{{ i18n.manage_roles }}</a>
+{% else %}<span class="hint">{{ i18n.blocked }}</span>{% endif %}
 {% if user.mutable %}
 <form method="post" action="/admin/directory/users/{{ user.id }}/active">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="active" value="{% if user.is_active %}false{% else %}true{% endif %}">
-<button type="submit">{% if user.is_active %}{{ i18n.deactivate }}{% else %}{{ i18n.activate }}{% endif %}</button>
+<label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
+<button class="{% if user.is_active %}ghost danger{% else %}ghost{% endif %}" type="submit" aria-label="{% if user.is_active %}{{ i18n.deactivate }}{% else %}{{ i18n.activate }}{% endif %} {{ user.email }}">{% if user.is_active %}{{ i18n.deactivate }}{% else %}{{ i18n.activate }}{% endif %}</button>
 </form>
 <form method="post" action="/admin/directory/users/{{ user.id }}/staff">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="staff" value="{% if user.is_staff %}false{% else %}true{% endif %}">
-<button type="submit">{% if user.is_staff %}{{ i18n.remove_staff }}{% else %}{{ i18n.make_staff }}{% endif %}</button>
+<label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
+<button class="ghost" type="submit" aria-label="{% if user.is_staff %}{{ i18n.remove_staff }}{% else %}{{ i18n.make_staff }}{% endif %} {{ user.email }}">{% if user.is_staff %}{{ i18n.remove_staff }}{% else %}{{ i18n.make_staff }}{% endif %}</button>
 </form>
-{% else %}<span class="hint">{{ i18n.blocked }}</span>{% endif %}
+{% endif %}
+</div>
 </td>
 </tr>
 {% endfor %}
 </tbody>
 </table>
 </div>
-<nav class="pager">{% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% endif %}{% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% endif %}</nav>
+{% endif %}
+<nav class="pager" aria-label="{{ i18n.page }}">
+{% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% else %}<span class="hint">{{ i18n.previous }}</span>{% endif %}
+{% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% else %}<span class="hint">{{ i18n.next }}</span>{% endif %}
+</nav>
+<section class="section">
+<h2>{{ i18n.assign_heading }}</h2>
+{% if role_choices | length == 0 %}
+<div class="empty-state">
+<p class="empty">{{ i18n.no_roles }}</p>
+<a class="button" href="/admin/directory/roles">{{ i18n.add_role }}</a>
+</div>
+{% else %}
 <form class="card" method="post" action="/admin/directory/assignments">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<label>{{ i18n.email }} <input name="email" type="email" required></label>
-<label>{{ i18n.role }} <input name="role" required></label>
+<p class="hint">{{ i18n.hint_role }}</p>
+<div class="field">
+<label for="assign-email">{{ i18n.email }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
+<select id="assign-email" name="email" required>
+<option value="">{{ i18n.choose }}</option>
+{% for email in emails %}
+<option value="{{ email }}">{{ email }}</option>
+{% endfor %}
+</select>
+</div>
+<div class="field">
+<label for="assign-role">{{ i18n.role }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
+<select id="assign-role" name="role" required>
+<option value="">{{ i18n.choose }}</option>
+{% for role in role_choices %}
+<option value="{{ role }}">{{ role }}</option>
+{% endfor %}
+</select>
+</div>
+<label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
+<div class="actions">
 <button name="action" value="assign" type="submit">{{ i18n.assign }}</button>
-<button name="action" value="revoke" type="submit" class="ghost">{{ i18n.revoke }}</button>
+<button name="action" value="revoke" type="submit" class="ghost danger">{{ i18n.revoke }}</button>
+</div>
 </form>
+{% endif %}
+</section>
 {% endblock %}

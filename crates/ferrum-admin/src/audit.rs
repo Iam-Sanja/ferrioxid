@@ -1,0 +1,283 @@
+//! Änderungshistorie. Einträge entstehen in derselben Transaktion wie die Änderung.
+
+use ferrum_auth::ADMIN_AUDIT;
+use ferrum_core::{AdminFieldMeta, AdminModelMeta, FerrumError};
+use sea_orm::sea_query::{Alias, PostgresQueryBuilder, Query, SqliteQueryBuilder};
+use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value as DbValue};
+use serde_json::Value;
+use std::time::{SystemTime, UNIX_EPOCH};
+use uuid::Uuid;
+
+pub const PAGE_SIZE: u64 = 25;
+
+#[derive(Debug, Clone)]
+pub struct Event {
+    pub actor_id: Uuid,
+    pub model_key: String,
+    pub record_id: String,
+    pub action: String,
+    pub outcome: String,
+    pub summary: String,
+}
+
+#[derive(Debug, Clone)]
+#[allow(dead_code)]
+pub struct StoredEvent {
+    pub id: Uuid,
+    pub created_at: i64,
+    pub actor_id: Uuid,
+    pub model_key: String,
+    pub record_id: String,
+    pub action: String,
+    pub outcome: String,
+    pub summary: String,
+}
+
+pub async fn insert(db: &impl ConnectionTrait, event: &Event) -> Result<(), FerrumError> {
+    let backend = db.get_database_backend();
+    let mut query = Query::insert();
+    let values = [
+        DbValue::from(Uuid::new_v4().to_string()).into(),
+        DbValue::from(unix_now()).into(),
+        DbValue::from(event.actor_id.to_string()).into(),
+        DbValue::from(clip(&event.model_key, 80)).into(),
+        DbValue::from(clip(&event.record_id, 80)).into(),
+        DbValue::from(clip(&event.action, 40)).into(),
+        DbValue::from(clip(&event.outcome, 16)).into(),
+        DbValue::from(clip(&event.summary, 1500)).into(),
+    ];
+    query
+        .into_table(Alias::new(ADMIN_AUDIT))
+        .columns([
+            Alias::new("id"),
+            Alias::new("created_at"),
+            Alias::new("actor_id"),
+            Alias::new("model_key"),
+            Alias::new("record_id"),
+            Alias::new("action"),
+            Alias::new("outcome"),
+            Alias::new("summary"),
+        ])
+        .values_panic(values);
+    execute(db, backend, &query).await
+}
+
+pub async fn page(
+    db: &impl ConnectionTrait,
+    actor: Option<Uuid>,
+    offset: u64,
+) -> Result<(Vec<StoredEvent>, bool), FerrumError> {
+    let backend = db.get_database_backend();
+    let mut query = Query::select();
+    query
+        .columns([
+            Alias::new("id"),
+            Alias::new("created_at"),
+            Alias::new("actor_id"),
+            Alias::new("model_key"),
+            Alias::new("record_id"),
+            Alias::new("action"),
+            Alias::new("outcome"),
+            Alias::new("summary"),
+        ])
+        .from(Alias::new(ADMIN_AUDIT))
+        .order_by(Alias::new("created_at"), sea_orm::sea_query::Order::Desc)
+        .order_by(Alias::new("id"), sea_orm::sea_query::Order::Desc)
+        .limit(PAGE_SIZE + 1)
+        .offset(offset);
+    if let Some(actor) = actor {
+        query
+            .and_where(sea_orm::sea_query::Expr::col(Alias::new("actor_id")).eq(actor.to_string()));
+    }
+    let (sql, values) = build(backend, &query)?;
+    let rows = db
+        .query_all(Statement::from_sql_and_values(backend, sql, values))
+        .await
+        .map_err(FerrumError::database)?;
+    let mut events = Vec::new();
+    for row in rows {
+        events.push(StoredEvent {
+            id: read_uuid(&row, "id")?,
+            created_at: row
+                .try_get::<i64>("", "created_at")
+                .map_err(FerrumError::database)?,
+            actor_id: read_uuid(&row, "actor_id")?,
+            model_key: row
+                .try_get::<String>("", "model_key")
+                .map_err(FerrumError::database)?,
+            record_id: row
+                .try_get::<String>("", "record_id")
+                .map_err(FerrumError::database)?,
+            action: row
+                .try_get::<String>("", "action")
+                .map_err(FerrumError::database)?,
+            outcome: row
+                .try_get::<String>("", "outcome")
+                .map_err(FerrumError::database)?,
+            summary: row
+                .try_get::<String>("", "summary")
+                .map_err(FerrumError::database)?,
+        });
+    }
+    let has_more = events.len() > PAGE_SIZE as usize;
+    events.truncate(PAGE_SIZE as usize);
+    Ok((events, has_more))
+}
+
+pub fn change_summary(
+    meta: &AdminModelMeta,
+    before: Option<&Value>,
+    after: Option<&Value>,
+) -> String {
+    let mut lines = Vec::new();
+    for field in meta.fields {
+        if concealed(field) {
+            continue;
+        }
+        let previous = field_text(before, field.name);
+        let next = field_text(after, field.name);
+        if previous == next {
+            continue;
+        }
+        let line = match (previous, next) {
+            (None, Some(value)) => format!("{}: {}", field.label, quote_text(&value)),
+            (Some(value), None) => format!("{}: {}", field.label, quote_text(&value)),
+            (Some(left), Some(right)) => format!(
+                "{}: {} → {}",
+                field.label,
+                quote_text(&left),
+                quote_text(&right)
+            ),
+            (None, None) => continue,
+        };
+        lines.push(line);
+        if lines.len() == 12 {
+            break;
+        }
+    }
+    clip(&lines.join("\n"), 1500)
+}
+
+pub fn concealed(field: &AdminFieldMeta) -> bool {
+    field.hidden
+        || field.sensitive
+        || crate::registry::sensitive(field.name)
+        || field.name.ends_with("_hash")
+        || field.name.ends_with("_secret")
+}
+
+fn field_text(record: Option<&Value>, name: &str) -> Option<String> {
+    let value = record?.get(name)?;
+    match value {
+        Value::Null => None,
+        Value::String(text) if text.is_empty() => None,
+        Value::String(text) => Some(clip(text, 80)),
+        Value::Number(number) => Some(number.to_string()),
+        Value::Bool(flag) => Some(flag.to_string()),
+        _ => None,
+    }
+}
+
+fn quote_text(value: &str) -> String {
+    format!("\"{}\"", value.replace(['\n', '\r'], " "))
+}
+
+fn clip(value: &str, max: usize) -> String {
+    value.chars().take(max).collect()
+}
+
+fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FerrumError> {
+    if let Ok(value) = row.try_get::<Uuid>("", column) {
+        return Ok(value);
+    }
+    let text = row
+        .try_get::<String>("", column)
+        .map_err(FerrumError::database)?;
+    Uuid::parse_str(&text).map_err(|_| FerrumError::Validation("stored uuid is invalid".into()))
+}
+
+async fn execute(
+    db: &impl ConnectionTrait,
+    backend: DatabaseBackend,
+    query: &impl sea_orm::sea_query::QueryStatementWriter,
+) -> Result<(), FerrumError> {
+    let (sql, values) = build(backend, query)?;
+    db.execute(Statement::from_sql_and_values(backend, sql, values))
+        .await
+        .map(|_| ())
+        .map_err(FerrumError::database)
+}
+
+fn build(
+    backend: DatabaseBackend,
+    query: &impl sea_orm::sea_query::QueryStatementWriter,
+) -> Result<(String, Vec<DbValue>), FerrumError> {
+    let (sql, values) = match backend {
+        DatabaseBackend::Postgres => query.build(PostgresQueryBuilder),
+        DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
+        DatabaseBackend::MySql => {
+            return Err(FerrumError::Validation(
+                "MySQL wird nicht unterstützt.".into(),
+            ))
+        }
+    };
+    Ok((sql, values.0))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::change_summary;
+    use ferrum_core::{AdminFieldMeta, AdminModelMeta};
+
+    fn field(name: &'static str, sensitive: bool) -> AdminFieldMeta {
+        AdminFieldMeta {
+            name,
+            label: name,
+            list_display: false,
+            list_link: false,
+            searchable: false,
+            sortable: false,
+            filterable: false,
+            readonly: false,
+            hidden: sensitive,
+            sensitive,
+            fieldset: "",
+        }
+    }
+
+    #[test]
+    fn summary_skips_sensitive_values() {
+        let fields: &'static [AdminFieldMeta] = Box::leak(Box::new([
+            field("name", false),
+            field("password", true),
+            field("password_hash", true),
+        ]));
+        let meta = AdminModelMeta {
+            key: "products",
+            label: "Produkte",
+            permission: None,
+            fields,
+            ordering: None,
+            per_page: 25,
+            fieldsets: &[],
+            inlines: &[],
+        };
+        let before =
+            serde_json::json!({"name": "Apfel", "password": "secret", "password_hash": "hash"});
+        let after =
+            serde_json::json!({"name": "Birne", "password": "next", "password_hash": "other"});
+        let text = change_summary(&meta, Some(&before), Some(&after));
+        assert!(text.contains("Apfel"));
+        assert!(text.contains("Birne"));
+        assert!(!text.contains("secret"));
+        assert!(!text.contains("hash"));
+        assert!(!text.contains("next"));
+    }
+}

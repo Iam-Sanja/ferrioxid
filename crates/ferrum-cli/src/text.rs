@@ -15,6 +15,17 @@ fn line_for(locale: &str, key: &str) -> &'static str {
         ("de", "dev_stopped") => "Entwicklungsserver beendet.",
         ("de", "dev_test_stopped") => "Entwicklungsserver nach Testfrist beendet.",
         ("de", "admin_assets_missing") => "Der Admin wird mit dem Rust-Binary ausgeliefert.",
+        ("de", "user_created") => "Benutzer angelegt:",
+        ("de", "flag_active") => "Aktiv: ja. Ein inaktives Konto erhält keine Sitzung.",
+        ("de", "flag_staff_on") => "Staff: ja. Dieses Konto darf die Verwaltung öffnen.",
+        ("de", "flag_staff_off") => {
+            "Staff: nein. Ohne Staff bleibt die Verwaltung geschlossen."
+        }
+        ("de", "flag_super_on") => "Superuser: ja. Das ersetzt Staff nicht.",
+        ("de", "flag_super_off") => "Superuser: nein.",
+        ("de", "super_without_staff") => {
+            "Hinweis: --superuser ohne --staff. Die Modellrechte gelten, der Admin-Zugang bleibt zu."
+        }
         ("en", "project_created") => "Created project:",
         ("en", "model_created") => "Created model:",
         ("en", "dev_started") => "Development server for",
@@ -22,6 +33,15 @@ fn line_for(locale: &str, key: &str) -> &'static str {
         ("en", "dev_stopped") => "Development server stopped.",
         ("en", "dev_test_stopped") => "Development server stopped after the test limit.",
         ("en", "admin_assets_missing") => "The admin ships inside the Rust binary.",
+        ("en", "user_created") => "Created user:",
+        ("en", "flag_active") => "Active: yes. An inactive account cannot sign in.",
+        ("en", "flag_staff_on") => "Staff: yes. This account can open the admin.",
+        ("en", "flag_staff_off") => "Staff: no. Without staff the admin stays closed.",
+        ("en", "flag_super_on") => "Superuser: yes. This does not replace staff.",
+        ("en", "flag_super_off") => "Superuser: no.",
+        ("en", "super_without_staff") => {
+            "Note: --superuser without --staff. Model rights apply, but the admin stays closed."
+        }
         _ => "missing message",
     }
 }
@@ -59,5 +79,8 @@ mod tests {
         assert_eq!(line_for("en", "model_created"), "Created model:");
         assert_eq!(line_for("de", "model_created"), "Modell erzeugt:");
         assert_eq!(line_for("fr", "model_created"), "missing message");
+        assert!(line_for("de", "super_without_staff").contains("--superuser"));
+        assert!(line_for("en", "flag_staff_off").contains("Without staff"));
+        assert!(!line_for("de", "flag_super_on").contains("is_staff = true"));
     }
 }

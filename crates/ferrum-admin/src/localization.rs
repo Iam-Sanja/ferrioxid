@@ -56,6 +56,29 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("search", "Suchen", "Search"),
     ("filter", "Filtern", "Filter"),
     ("save", "Speichern", "Save"),
+    (
+        "save_continue",
+        "Speichern und weiter bearbeiten",
+        "Save and continue editing",
+    ),
+    (
+        "save_add",
+        "Speichern und weiteren Eintrag erstellen",
+        "Save and add another",
+    ),
+    ("pick_more", "Weiter suchen", "Search further"),
+    ("pick_heading", "Eintrag wählen", "Choose a record"),
+    (
+        "pick_empty",
+        "Kein passender Eintrag.",
+        "No matching record.",
+    ),
+    ("pick_back", "Zurück zum Formular", "Back to the form"),
+    (
+        "invalid_relation",
+        "Wählen Sie einen sichtbaren Eintrag.",
+        "Choose a visible record.",
+    ),
     ("cancel", "Abbrechen", "Cancel"),
     ("create", "Anlegen", "Create"),
     ("edit", "Bearbeiten", "Edit"),
@@ -113,7 +136,9 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("active", "Aktiv", "Active"),
     ("inactive", "Inaktiv", "Inactive"),
     ("staff", "Staff", "Staff"),
+    ("no_staff", "Kein Staff", "Not staff"),
     ("superuser", "Superuser", "Superuser"),
+    ("no_superuser", "Kein Superuser", "Not a superuser"),
     ("actions", "Aktionen", "Actions"),
     ("required", "Pflichtfeld", "Required"),
     ("optional", "Optional", "Optional"),
@@ -143,6 +168,142 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("open", "Öffnen", "Open"),
     ("new_record", "Neuer Eintrag", "New record"),
     ("results", "Treffer", "Results"),
+    ("skip", "Zum Inhalt", "Skip to content"),
+    ("navigation", "Navigation", "Navigation"),
+    ("breadcrumb", "Pfad", "Breadcrumb"),
+    ("reset", "Zurücksetzen", "Reset"),
+    ("error", "Fehler", "Error"),
+    ("sort_asc", "aufsteigend", "ascending"),
+    ("sort_desc", "absteigend", "descending"),
+    (
+        "hint_select",
+        "Wählen Sie einen vorhandenen Eintrag.",
+        "Choose an existing record.",
+    ),
+    (
+        "hint_flags",
+        "Staff öffnet die Verwaltung. Superuser ersetzt Staff nicht.",
+        "Staff opens administration. Superuser does not replace staff.",
+    ),
+    (
+        "hint_role",
+        "Nur vorhandene Rollen. Eine neue Rolle entsteht auf der Rollenseite.",
+        "Existing roles only. Create a new role on the roles page.",
+    ),
+    (
+        "hint_role_name",
+        "Buchstaben, Ziffern, Punkt oder Unterstrich.",
+        "Letters, digits, dot, or underscore.",
+    ),
+    (
+        "hint_permission",
+        "Buchstaben, Ziffern, Punkt oder Unterstrich. Beispiel: notes.read",
+        "Letters, digits, dot, or underscore. Example: notes.read",
+    ),
+    (
+        "confirm_check",
+        "Ich bestätige diese Änderung.",
+        "I confirm this change.",
+    ),
+    ("assign_heading", "Rolle zuweisen", "Assign role"),
+    (
+        "no_roles",
+        "Es gibt noch keine Rolle.",
+        "There is no role yet.",
+    ),
+    ("existing_roles", "Vorhandene Rollen", "Existing roles"),
+    (
+        "unknown_role",
+        "Diese Rolle gibt es nicht. Legen Sie sie zuerst an.",
+        "That role does not exist. Create it first.",
+    ),
+    ("choose", "Bitte wählen", "Choose"),
+    ("add_user", "Benutzer anlegen", "Add user"),
+    (
+        "password_confirm",
+        "Passwort wiederholen",
+        "Confirm password",
+    ),
+    (
+        "password_rules",
+        "12 bis 128 Zeichen. Das Passwort wird nicht angezeigt.",
+        "12 to 128 characters. The password is not shown.",
+    ),
+    ("password_heading", "Passwort setzen", "Set password"),
+    (
+        "password_mismatch",
+        "Die Passwörter stimmen nicht überein.",
+        "The passwords do not match.",
+    ),
+    (
+        "confirm_required",
+        "Diese Aktion braucht eine Bestätigung.",
+        "This action requires confirmation.",
+    ),
+    (
+        "confirm_invalid",
+        "Die Bestätigung ist ungültig.",
+        "The confirmation is invalid.",
+    ),
+    ("missing_relation", "Nicht vorhanden", "Missing"),
+    ("hidden_relation", "Nicht sichtbar", "Not visible"),
+    ("all", "Alle", "All"),
+    ("view", "Anzeigen", "View"),
+    ("manage_roles", "Rollen", "Roles"),
+    (
+        "email_taken",
+        "Diese E-Mail ist bereits vergeben.",
+        "That email is already registered.",
+    ),
+    (
+        "password_invalid",
+        "Das Passwort muss 12 bis 128 Zeichen haben.",
+        "The password must contain 12 to 128 characters.",
+    ),
+    ("no_permissions", "Keine Berechtigungen.", "No permissions."),
+    (
+        "user_saved",
+        "Der Benutzer wurde gespeichert.",
+        "The user was saved.",
+    ),
+    ("confirm", "Bestätigen", "Confirm"),
+    ("history", "Historie", "History"),
+    ("bulk_page", "Gesamte Seite", "Entire page"),
+    ("bulk_action", "Aktion", "Action"),
+    ("bulk_run", "Ausführen", "Run"),
+    ("select", "Auswählen", "Select"),
+    ("bulk_confirm", "Auswahl bestätigen", "Confirm selection"),
+    ("bulk_count", "Betroffene Datensätze", "Affected records"),
+    (
+        "bulk_empty",
+        "Keine Datensätze ausgewählt.",
+        "No records selected.",
+    ),
+    (
+        "bulk_denied",
+        "Die Auswahl enthält einen nicht erlaubten Datensatz. Es wurde nichts geändert.",
+        "The selection contains a record that is not allowed. Nothing was changed.",
+    ),
+    (
+        "bulk_failed",
+        "Die Aktion wurde zurückgerollt. Es wurde nichts geändert.",
+        "The action was rolled back. Nothing was changed.",
+    ),
+    ("inline_add", "Hinzufügen", "Add"),
+    (
+        "inline_empty",
+        "Keine verknüpften Einträge.",
+        "No related records.",
+    ),
+    ("inline_open", "Öffnen", "Open"),
+    ("audit_empty", "Keine Einträge.", "No entries."),
+    ("when", "Zeitpunkt", "When"),
+    ("actor", "Akteur", "Actor"),
+    ("outcome", "Ergebnis", "Outcome"),
+    ("details", "Details", "Details"),
+    ("record", "Datensatz", "Record"),
+    ("succeeded", "Erfolgreich", "Succeeded"),
+    ("denied", "Verweigert", "Denied"),
 ];
 
 pub fn notice(locale: &str, code: &str) -> Option<String> {
@@ -152,12 +313,21 @@ pub fn notice(locale: &str, code: &str) -> Option<String> {
         "saved" => "notice_saved",
         "deleted" => "notice_deleted",
         "updated" => "notice_updated",
+        "changed" => "notice_updated",
         _ => return None,
     };
     catalog
         .get(key)
         .and_then(|value| value.as_str())
         .map(str::to_owned)
+}
+
+pub fn bulk_notice(locale: &str, count: u32) -> String {
+    if locale == "de" {
+        format!("{count} Datensätze wurden geändert.")
+    } else {
+        format!("{count} records were changed.")
+    }
 }
 
 pub fn validation_text(locale: &str, detail: &str) -> String {

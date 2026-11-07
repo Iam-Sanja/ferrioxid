@@ -47,8 +47,9 @@ Ein neues Passwort hat 12 bis 128 Zeichen. Der Hash nutzt Argon2id, Version `0x1
 
 - Unbekannte E-Mail, falsches Passwort und deaktivierter Benutzer liefern dieselbe Meldung `Invalid email or password`.
 - Fehlt der Benutzer, wird ein festes Dummy-Hash geprüft, damit die Argon2-Arbeit nicht entfällt.
-- Deaktivierte Benutzer können sich nicht anmelden. Bestehende Sitzungen enden bei der nächsten Prüfung.
-- Eine Passwortänderung widerruft alle Sitzungen des Benutzers.
+- Deaktivierte Benutzer können sich nicht anmelden. Deaktivierung über CLI oder Admin widerruft die gespeicherten Sitzungen sofort.
+- Eine Passwortänderung über CLI oder Admin widerruft alle Sitzungen des Benutzers. Der Admin-Passwortweg nutzt `validate_new_password` und `hash_password`, zeigt den Hash nicht und legt das Passwort nicht in die Weiterleitung.
+- Staff- und Rollenänderungen schreibt der Admin in dieselbe Benutzerzeile. Die nächste `authenticate_token`-Prüfung liest die Flags neu. Dafür wird die Sitzung nicht zusätzlich gelöscht.
 - Login ist pro Prozess auf fünf Fehlversuche in 15 Minuten begrenzt. Der Schlüssel ist Peer plus normalisierte E-Mail.
 - `X-Forwarded-For` gilt nur, wenn `FERRUM_TRUST_PROXY` ausdrücklich `1` oder `true` ist. Gewertet wird der erste Hop.
 - Sicherheitslogs nennen keine Passwörter, Session-Tokens, Login-CSRF-Cookies oder Formular-Tokens.
@@ -89,8 +90,10 @@ Die Antwort setzt `Set-Cookie: ferrum_session=...` und liefert `user` plus `csrf
 
 - Das Rate-Limit liegt im Prozess. Mehrere Prozesse teilen es nicht. Die Map kann später ersetzt werden.
 - Es gibt kein E-Mail-Reset, kein MFA, kein OAuth und kein JWT für externe APIs.
-- `is_staff` ist ein Kennzeichen und umgeht keine Rechte.
-- Ein aktiver Superuser umgeht Rollen und Objektregeln. Ein deaktivierter Superuser kann sich nicht anmelden.
+- `is_active` ist nötig für eine Sitzung. Ein inaktives Konto wird bei der Anmeldung abgelehnt.
+- `is_staff` öffnet die Verwaltung und umgeht keine Modellrechte.
+- `is_superuser` umgeht Rollen und Objektregeln, ersetzt `is_staff` aber nicht. Ein Superuser ohne Staff erhält im Admin 403 und kann sich dort abmelden.
+- `ferrum admin create-user` setzt nur die übergebenen Flags und druckt Aktiv, Staff und Superuser. `--superuser` ohne `--staff` weist auf den geschlossenen Admin hin.
 
 ## Geplante Erweiterungen
 
@@ -98,4 +101,4 @@ Mehrprozess-Rate-Limit, Passwort-Reset, MFA und OAuth bleiben späteren Versione
 
 ## Admin und CSRF-Bootstrap
 
-`GET /auth/csrf` liefert das zur Sitzung gehörende Token erneut. Die Sitzung selbst bleibt, und andere Tabs bleiben gültig. Details stehen in [csrf.md](csrf.md). Der Admin verlangt zusätzlich `is_staff`. Das Verzeichnis unter `/admin/api/directory` ist Superusern vorbehalten und kann `is_superuser` nicht setzen. Siehe [admin-security.md](admin-security.md). Der SQLite-Test `sqlite_admin_security_crud_and_csrf_bootstrap` prüft den Bootstrap.
+`GET /auth/csrf` liefert das zur Sitzung gehörende Token erneut. Die Sitzung selbst bleibt, und andere Tabs bleiben gültig. Details stehen in [csrf.md](csrf.md). Der Admin verlangt zusätzlich `is_staff`. Das Verzeichnis unter `/admin/api/directory` und die HTML-Seiten unter `/admin/directory/users` sind Staff-Superusern vorbehalten und können `is_superuser` nicht setzen. Siehe [admin-directory.md](admin-directory.md) und [admin-security.md](admin-security.md). Der SQLite-Test `sqlite_admin_security_crud_and_csrf_bootstrap` prüft den Bootstrap.

@@ -41,17 +41,38 @@ pub enum QueryScope {
     },
 }
 
+/// Benannter Formularabschnitt. Die Feldreihenfolge bleibt die Struct-Reihenfolge.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdminFieldset {
+    pub name: &'static str,
+    pub description: &'static str,
+    pub optional: bool,
+}
+
 /// Admin-Feld. Die Werte stammen aus demselben Modell wie das Schema.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct AdminFieldMeta {
     pub name: &'static str,
     pub label: &'static str,
     pub list_display: bool,
+    pub list_link: bool,
     pub searchable: bool,
     pub sortable: bool,
     pub filterable: bool,
     pub readonly: bool,
     pub hidden: bool,
+    /// Werte dieses Feldes dürfen weder in Entwürfen noch in der Historie stehen.
+    pub sensitive: bool,
+    /// Leer, wenn das Modell keine Fieldsets deklariert.
+    pub fieldset: &'static str,
+}
+
+/// Has-Many-Abschnitt auf der Detailseite. `child_table` ist der Admin-Schlüssel des Kindes.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct AdminInline {
+    pub name: &'static str,
+    pub child_table: &'static str,
+    pub column: &'static str,
 }
 
 /// Admin-Freigabe eines Modells. `None` bei `admin_meta` bedeutet: nicht im Admin.
@@ -62,6 +83,12 @@ pub struct AdminModelMeta {
     /// `None`: nur ein aktiver Superuser. Sonst `{permission}.read|create|update|delete`.
     pub permission: Option<&'static str>,
     pub fields: &'static [AdminFieldMeta],
+    /// `Some("-name")` sortiert absteigend. `None` lässt die Liste bei `id` aufsteigend.
+    pub ordering: Option<&'static str>,
+    /// HTML-Seitengröße. Der Server deckelt sie bei 100.
+    pub per_page: u16,
+    pub fieldsets: &'static [AdminFieldset],
+    pub inlines: &'static [AdminInline],
 }
 
 /// Backend, für den Ferrum DDL und Abfragen erzeugt.
