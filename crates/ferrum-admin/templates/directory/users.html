@@ -39,27 +39,31 @@
 <td><span class="flag">{% if user.is_superuser %}{{ i18n.superuser }}{% else %}{{ i18n.no_superuser }}{% endif %}</span></td>
 <td>{{ user.roles }}</td>
 <td>
-<div class="row-actions">
-<a class="button ghost" href="/admin/directory/users/{{ user.id }}">{{ i18n.view }}</a>
+<details class="menu">
+<summary>{{ i18n.actions }}</summary>
+<div class="menu-panel">
+<a href="/admin/directory/users/{{ user.id }}">{{ i18n.view }}</a>
 {% if user.can_edit %}
-<a class="button ghost" href="/admin/directory/users/{{ user.id }}/edit">{{ i18n.edit }}</a>
-<a class="button ghost" href="/admin/directory/users/{{ user.id }}/edit#roles">{{ i18n.manage_roles }}</a>
+<a href="/admin/directory/users/{{ user.id }}/edit">{{ i18n.edit }}</a>
+<a href="/admin/directory/users/{{ user.id }}/edit#roles">{{ i18n.manage_roles }}</a>
 {% else %}<span class="hint">{{ i18n.blocked }}</span>{% endif %}
+<a href="/admin/audit?model=_ferrum_users&amp;record={{ user.id }}">{{ i18n.history }}</a>
 {% if user.mutable %}
 <form method="post" action="/admin/directory/users/{{ user.id }}/active">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="active" value="{% if user.is_active %}false{% else %}true{% endif %}">
 <label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
-<button class="{% if user.is_active %}ghost danger{% else %}ghost{% endif %}" type="submit" aria-label="{% if user.is_active %}{{ i18n.deactivate }}{% else %}{{ i18n.activate }}{% endif %} {{ user.email }}">{% if user.is_active %}{{ i18n.deactivate }}{% else %}{{ i18n.activate }}{% endif %}</button>
+<button class="{% if user.is_active %}ghost danger{% else %}ghost{% endif %}" type="submit">{% if user.is_active %}{{ i18n.deactivate }}{% else %}{{ i18n.activate }}{% endif %}</button>
 </form>
 <form method="post" action="/admin/directory/users/{{ user.id }}/staff">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="staff" value="{% if user.is_staff %}false{% else %}true{% endif %}">
 <label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
-<button class="ghost" type="submit" aria-label="{% if user.is_staff %}{{ i18n.remove_staff }}{% else %}{{ i18n.make_staff }}{% endif %} {{ user.email }}">{% if user.is_staff %}{{ i18n.remove_staff }}{% else %}{{ i18n.make_staff }}{% endif %}</button>
+<button class="ghost" type="submit">{% if user.is_staff %}{{ i18n.remove_staff }}{% else %}{{ i18n.make_staff }}{% endif %}</button>
 </form>
 {% endif %}
 </div>
+</details>
 </td>
 </tr>
 {% endfor %}
@@ -76,7 +80,7 @@
 {% if role_choices | length == 0 %}
 <div class="empty-state">
 <p class="empty">{{ i18n.no_roles }}</p>
-<a class="button" href="/admin/directory/roles">{{ i18n.add_role }}</a>
+<p><a href="/admin/directory/roles">{{ i18n.roles }}</a></p>
 </div>
 {% else %}
 <form class="card" method="post" action="/admin/directory/assignments">

@@ -144,6 +144,7 @@ impl TemplateCatalog {
 pub struct Registration<'a> {
     app: &'a mut App,
     name: &'static str,
+    label: &'static str,
     prefix: Option<&'static str>,
     depends_on: Vec<&'static str>,
 }
@@ -193,13 +194,13 @@ impl<'a> Registration<'a> {
         M: ModelRepository + 'static,
     {
         let registry = self.app.admin.take().unwrap_or_default();
-        self.app.admin = Some(registry.add::<M>());
+        self.app.admin = Some(registry.with_app(self.name, self.label).add::<M>());
         Ok(())
     }
 
     pub fn admin_view(&mut self, view: AdminView) -> Result<(), AppError> {
         let registry = self.app.admin.take().unwrap_or_default();
-        self.app.admin = Some(registry.view(view)?);
+        self.app.admin = Some(registry.with_app(self.name, self.label).view(view)?);
         Ok(())
     }
 
@@ -321,6 +322,7 @@ impl App {
         let mut registration = Registration {
             app: &mut self,
             name: config.name,
+            label: config.display_label(),
             prefix: config.prefix,
             depends_on: config.depends_on,
         };

@@ -364,6 +364,20 @@ const STRINGS: &[(&str, &str, &str)] = &[
     ("month_10", "Oktober", "October"),
     ("month_11", "November", "November"),
     ("month_12", "Dezember", "December"),
+    ("applications", "Anwendungen", "Applications"),
+    ("access", "Benutzer und Zugang", "Users and access"),
+    ("system", "System", "System"),
+    (
+        "time_utc",
+        "Zeitpunkte werden in UTC angezeigt. Gespeicherte Werte bleiben unverändert.",
+        "Times are shown in UTC. Stored values stay unchanged.",
+    ),
+    (
+        "time_unavailable",
+        "Zeitpunkt nicht lesbar",
+        "Time unavailable",
+    ),
+    ("menu", "Menü", "Menu"),
 ];
 
 pub fn notice(locale: &str, code: &str) -> Option<String> {

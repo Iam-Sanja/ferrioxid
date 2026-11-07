@@ -36,4 +36,8 @@ Verzeichnisereignisse und ein `|form`-Inline schreiben Audit in derselben Transa
 
 `GET /admin/audit` verlangt Staff. Superuser sehen alle Zeilen, absteigend nach Zeit und ID, 25 je Seite. Anderes Staff sieht nur `actor_id` gleich der eigenen ID. Dadurch werden unlesbare Datensätze und fremde Feldwerte nicht über die Historie sichtbar. Das ist enger als „jeder lesbare Datensatz“.
 
+Die Seite steht in der Seitenleiste unter System, nicht als Modell. `?model=` und `?record=` schränken die vorhandenen Spalten ein. Ungültige Filter werden verworfen. Detailseiten verlinken auf diese Filter, wenn Modellschlüssel und Datensatz-ID gespeichert sind. Verzeichnisrechte liegen weiter unter `_ferrum_users` mit dem Rollennamen als `record_id`.
+
+`created_at` bleibt Unix-Sekunden. Die HTML-Seite zeigt `YYYY-MM-DD HH:MM:SS UTC` in `<time>`. Die Zeitzone der Anzeige ist UTC. Ein nicht darstellbarer Wert wird als nicht lesbar bezeichnet. Der gespeicherte Wert wird nicht umgerechnet und nicht überschrieben.
+
 Code: `crates/ferrum-admin/src/audit.rs`. Test: `summary_skips_sensitive_values` und `admin_v018_drafts_inlines_bulk_and_audit`.

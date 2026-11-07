@@ -182,6 +182,10 @@ pub struct AdminRegistry {
     widgets: Vec<AdminWidget>,
     templates: Vec<(&'static str, &'static str)>,
     sealed: bool,
+    apps: Vec<(String, String)>,
+    model_apps: Vec<(String, String)>,
+    view_apps: Vec<(String, String)>,
+    pending_app: Option<String>,
 }
 
 impl AdminRegistry {
@@ -196,6 +200,43 @@ impl AdminRegistry {
 
     pub fn branding(&self) -> &AdminBranding {
         &self.branding
+    }
+
+    /// Die folgenden Modelle und Admin-Seiten gehören zu dieser App, bis `with_app` erneut kommt.
+    pub fn with_app(mut self, key: impl Into<String>, label: impl Into<String>) -> Self {
+        let key = key.into();
+        let label = label.into().trim().to_owned();
+        let mut chars = key.chars();
+        let key_ok = matches!(chars.next(), Some(char) if char.is_ascii_lowercase())
+            && chars.all(|char| char.is_ascii_lowercase() || char.is_ascii_digit() || char == '_')
+            && key.len() <= 40;
+        let label_ok =
+            !label.is_empty() && label.len() <= 80 && !label.chars().any(|char| char.is_control());
+        if key_ok && label_ok {
+            if !self.apps.iter().any(|(name, _)| name == &key) {
+                self.apps.push((key.clone(), label));
+            }
+            self.pending_app = Some(key);
+        }
+        self
+    }
+
+    pub(crate) fn app_catalog(&self) -> &[(String, String)] {
+        &self.apps
+    }
+
+    pub(crate) fn model_app(&self, key: &str) -> Option<&str> {
+        self.model_apps
+            .iter()
+            .find(|(model, _)| model == key)
+            .map(|(_, app)| app.as_str())
+    }
+
+    pub(crate) fn view_app(&self, key: &str) -> Option<&str> {
+        self.view_apps
+            .iter()
+            .find(|(view, _)| view == key)
+            .map(|(_, app)| app.as_str())
     }
 
     pub fn add<M>(self) -> Self
@@ -268,7 +309,13 @@ impl AdminRegistry {
             ));
         }
         self.sealed = false;
+        let key = view.key().to_owned();
         self.views.push(view);
+        if let Some(app) = &self.pending_app {
+            if !self.view_apps.iter().any(|(view, _)| view == &key) {
+                self.view_apps.push((key, app.clone()));
+            }
+        }
         Ok(self)
     }
 
@@ -430,6 +477,7 @@ impl AdminRegistry {
                 }))
     }
 
+    #[allow(dead_code)]
     pub(crate) fn nav(
         &self,
         locale: &str,
@@ -471,14 +519,17 @@ impl AdminRegistry {
         if model.meta().key.is_empty() {
             return self;
         }
+        let key = model.meta().key.to_owned();
         let models = Arc::make_mut(&mut self.models);
-        if models
-            .iter()
-            .any(|existing| existing.meta().key == model.meta().key)
-        {
+        if models.iter().any(|existing| existing.meta().key == key) {
             return self;
         }
         models.push(model);
+        if let Some(app) = &self.pending_app {
+            if !self.model_apps.iter().any(|(model, _)| model == &key) {
+                self.model_apps.push((key, app.clone()));
+            }
+        }
         self
     }
 }

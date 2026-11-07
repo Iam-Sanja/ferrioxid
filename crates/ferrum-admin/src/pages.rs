@@ -1,8 +1,6 @@
 //! Eigene Admin-Seiten unter `/admin/pages/{key}`.
 
-use crate::html::{
-    self, error_page, locale_of, page, parse_form, require_get, require_post, theme_of,
-};
+use crate::html::{self, error_page, locale_of, parse_form, require_get, require_post};
 use crate::registry::AdminRegistry;
 use crate::views::ViewRequest;
 use axum::body::Bytes;
@@ -10,7 +8,6 @@ use axum::extract::{Extension, Path, State};
 use axum::http::{HeaderMap, StatusCode};
 use axum::response::Response;
 use ferrum_auth::AppState;
-use serde_json::Value;
 
 pub async fn show(
     State(state): State<AppState>,
@@ -173,23 +170,14 @@ async fn render(
         }
     };
     let csrf = html::session_csrf(state.auth.as_ref().unwrap(), headers).await;
-    let nav = visible_nav(
+    let data = serde_json::Value::Object(rendered.data);
+    html::page_as(
         state,
         &user,
         registry,
-        &locale,
-        &format!("/admin/pages/{key}"),
-    )
-    .await;
-    let mut data = serde_json::Value::Object(rendered.data);
-    if let Some(object) = data.as_object_mut() {
-        object.insert("nav_custom".to_owned(), Value::Array(nav));
-    }
-    page(
-        registry,
         view.template_name(),
         &locale,
-        theme_of(headers),
+        html::theme_of(headers),
         view.title(&locale),
         true,
         user.is_superuser,
@@ -200,26 +188,11 @@ async fn render(
         &clip(&rendered.alert),
         data,
     )
+    .await
 }
 
-pub(crate) async fn visible_nav(
-    state: &AppState,
-    user: &ferrum_auth::AuthUser,
-    registry: &AdminRegistry,
-    locale: &str,
-    path: &str,
-) -> Vec<Value> {
-    let mut allowed = Vec::new();
-    for view in registry.views() {
-        if !view.in_navigation() {
-            continue;
-        }
-        let ok = holds(state, user, view.permission_code())
-            .await
-            .unwrap_or(false);
-        allowed.push((view.permission_code(), ok));
-    }
-    registry.nav(locale, path, &allowed)
+fn clip(value: &str) -> String {
+    value.chars().take(200).collect()
 }
 
 async fn holds(state: &AppState, user: &ferrum_auth::AuthUser, code: &str) -> Result<bool, ()> {
@@ -227,8 +200,4 @@ async fn holds(state: &AppState, user: &ferrum_auth::AuthUser, code: &str) -> Re
         return Err(());
     };
     auth.holds(user, code).await.map_err(|_| ())
-}
-
-fn clip(value: &str) -> String {
-    value.chars().take(200).collect()
 }

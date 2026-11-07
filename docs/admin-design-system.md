@@ -10,11 +10,11 @@ Die Fläche heißt in `DESIGN.md` „Die Nachtschicht“: hell und dunkel sind z
 
 ## Fläche
 
-Die Seite ist ein Raster aus Tür und Inhalt. Die Tür ist `16rem` breit und zeigt Marke, Anwendungskopf, Übersicht, Modelle und für Superuser die Gruppe Verzeichnis. Der aktuelle Eintrag trägt `aria-current="page"`, Schriftstärke 650 und eine Unterstreichung. Er bekommt keine zweite Farbfläche.
+Die Seite ist ein Raster aus Tür und Inhalt. Die Tür ist `16rem` breit. Sie zeigt Marke, Übersicht, die registrierten Apps mit ihren Modellen, für Superuser Benutzer und Rollen, und unter System die Historie. Der aktuelle Eintrag trägt `aria-current="page"`, Schriftstärke 650 und eine violette Fläche. Modelle stehen unter dem App-Namen. Ein einzelner Link „Modelle“ auf die Übersicht gibt es nicht.
 
 Der Kopf zeigt den Seitentitel, die E-Mail, Sprache, Darstellung und Abmelden. Sprache und Darstellung sind ein POST auf `/admin/preferences`. Abmelden ist ein POST mit CSRF. Ein Sprunglink führt zu `#content`.
 
-Unter 800 Pixel wird das Raster eine Spalte. Die Tür wird eine umbrechende Linkliste unter dem Kopf. Sie bleibt ohne Script offen.
+Unter 800 Pixel wird das Raster eine Spalte. Die Tür bleibt eine senkrechte Liste unter dem Kopf. Sie bleibt ohne Script offen.
 
 ## Tokens
 
@@ -32,7 +32,7 @@ Grundstufe ist `0.25rem`.
 | `--radius-notice` | 0.7rem | Hinweis und Fehlerfläche |
 | `--radius-table` | 0.8rem | Tabelle |
 | `--radius-card` | 1rem | Karte |
-| `--control` | 2.5rem | Mindesthöhe von Feld, Auswahl und Button |
+| `--control` | 2rem | Höhe von Feld, Auswahl und Button |
 | `--form-max` | 40rem | Formular in der Karte |
 | `--headline` | 1.6rem | Seitentitel |
 | `--title` | 1.05rem | Kartenüberschrift |
@@ -40,9 +40,9 @@ Grundstufe ist `0.25rem`.
 
 Farben sind Rollen, nicht Einzelflächen. `--ink`, `--muted`, `--paper`, `--card`, `--focus`, `--danger`, `--ok` wechseln mit `data-theme`. `--line` ist die Kontrollkante (`#6d7b90` hell, `#8aa0bd` dunkel) und hält mindestens 3:1 zur Fläche. `--divider` trennt Zeilen und Karten und ist ruhiger. `--danger-ink` ist im Hellen weiß und im Dunkeln `#0f172a`, weil Weiß auf `#fb7185` unter 4,5:1 liegt.
 
-`--brand` kommt aus der geprüften Primärfarbe, aber nur wenn weiße Schrift darauf mindestens 4,5:1 erreicht. Sonst bleibt `#0f172a`. Im Dunkeln färbt `--brand` weder Tür noch Primärbutton. Die JSON-API liefert die konfigurierte Farbe unverändert.
+`--focus` und `--action` sind Violett: `#5b21b6` und `#6d28d9` im Hellen, `#ddd6fe` im Dunkeln. Die Schrift auf der dunklen Aktion ist `#1e1033`. `--brand` färbt die helle Tür, wenn weiße Schrift darauf mindestens 4,5:1 erreicht. Sonst bleibt `#0f172a`. Im Dunkeln färbt `--brand` die Tür nicht.
 
-Der Fokus ist ein 3px-Ring, 2px außerhalb der Kante, nur bei `:focus-visible`. Auf der Tür ist der Ring in der Türschrift. Die Checkbox bleibt 1.2rem, die klickbare Beschriftung ist mindestens 2.75rem hoch. Dasselbe gilt für die Türlinks.
+Der Fokus ist ein 3px-Ring, 2px außerhalb der Kante, nur bei `:focus-visible`. Auf der Tür ist der Ring in der Türschrift. Die Checkbox bleibt 1.2rem. Türlinks sind 2rem hoch und unter 800 Pixel 2.75rem.
 
 Karten im Hellen haben den Ruhehauch `0 1px 2px rgba(15, 23, 42, .06)`. Im Dunkeln ist der Schatten aus.
 

@@ -12,6 +12,7 @@ mod filters;
 mod html;
 mod http;
 mod localization;
+mod nav;
 mod pages;
 mod registry;
 mod rendering;

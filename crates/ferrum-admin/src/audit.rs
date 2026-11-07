@@ -80,6 +80,16 @@ pub async fn page(
     actor: Option<Uuid>,
     offset: u64,
 ) -> Result<(Vec<StoredEvent>, bool), FerrumError> {
+    matching(db, actor, None, None, offset).await
+}
+
+pub async fn matching(
+    db: &impl ConnectionTrait,
+    actor: Option<Uuid>,
+    model_key: Option<&str>,
+    record_id: Option<&str>,
+    offset: u64,
+) -> Result<(Vec<StoredEvent>, bool), FerrumError> {
     let backend = db.get_database_backend();
     let mut query = Query::select();
     query
@@ -102,6 +112,12 @@ pub async fn page(
     if let Some(actor) = actor {
         query
             .and_where(sea_orm::sea_query::Expr::col(Alias::new("actor_id")).eq(actor.to_string()));
+    }
+    if let Some(model_key) = model_key {
+        query.and_where(sea_orm::sea_query::Expr::col(Alias::new("model_key")).eq(model_key));
+    }
+    if let Some(record_id) = record_id {
+        query.and_where(sea_orm::sea_query::Expr::col(Alias::new("record_id")).eq(record_id));
     }
     let (sql, values) = build(backend, &query)?;
     let rows = db
@@ -199,6 +215,14 @@ fn quote_text(value: &str) -> String {
 
 fn clip(value: &str, max: usize) -> String {
     value.chars().take(max).collect()
+}
+
+pub fn format_unix_utc(seconds: i64) -> Option<(String, String)> {
+    let stamp = chrono::DateTime::<chrono::Utc>::from_timestamp(seconds, 0)?;
+    Some((
+        stamp.format("%Y-%m-%d %H:%M:%S UTC").to_string(),
+        stamp.to_rfc3339_opts(chrono::SecondsFormat::Secs, true),
+    ))
 }
 
 fn unix_now() -> i64 {
@@ -340,5 +364,13 @@ mod tests {
         assert!(text.contains("2026-11-06T23:59:59Z"));
         assert!(text.contains("2026-11-07T00:00:00Z"));
         assert!(text.contains("→"));
+    }
+
+    #[test]
+    fn unix_seconds_render_as_utc_and_reject_an_unreadable_instant() {
+        let (label, iso) = super::format_unix_utc(0).expect("epoch");
+        assert_eq!(label, "1970-01-01 00:00:00 UTC");
+        assert_eq!(iso, "1970-01-01T00:00:00Z");
+        assert!(super::format_unix_utc(i64::MAX).is_none());
     }
 }

@@ -37,6 +37,8 @@ Aktiv, Staff und Superuser stehen in getrennten Spalten. Die Liste verlinkt Anze
 
 Diese Wege sind keine Modell-CRUD-Routen. Passwort-Hashes und Klartextpasswörter stehen nicht im HTML, in Logs oder in der Weiterleitung. Ein Superuser ohne Staff betritt den Admin nicht. Benutzer werden deaktiviert, nicht gelöscht.
 
+v0.28 trennt die Navigation: Benutzerliste und Rollenliste sind eigene Einträge unter „Benutzer und Zugang“. „Rolle anlegen“ steht nur auf `/admin/directory/roles`. Die Benutzerliste weist vorhandene Rollen zu. Ein physisches Löschen ist nicht vorhanden. Es würde Sitzungen, Rollenbindungen und die Historie betreffen und bleibt einem eigenen Funktionsstand vorbehalten. Die Oberfläche bietet es nicht an.
+
 Schreibende HTML-Aktionen des Verzeichnisses prüfen in dieser Reihenfolge: CSRF, Staff-Superuser, betroffene Zeile, Superuser- und Selbstsperre, dann `confirm`. Nur der Wert `1` gilt. Fehlt er, ist die Antwort 422 und der Datensatz bleibt. `true`, `on` oder ein leerer Wert gelten nicht. Die Bestätigung ersetzt keine Berechtigung.
 
 Passwortänderung und Deaktivierung widerrufen alle Sitzungen des Ziels. Ändert ein Superuser sein eigenes Passwort, endet auch seine Sitzung und die Antwort führt zur Anmeldung. Staff-Entzug löscht die Sitzung nicht. Die nächste Anfrage liest `is_staff` neu und erhält 403.
