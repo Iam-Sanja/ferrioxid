@@ -13,9 +13,7 @@ pub fn generate_worker() -> Result<PathBuf, String> {
 pub(crate) fn generate_worker_into(root: &Path) -> Result<PathBuf, String> {
     let path = root.join("src/bin/worker.rs");
     write_new(&path, WORKER_SOURCE)?;
-    println!(
-        "ferrioxid dev does not start this worker. Register app handlers in register_jobs."
-    );
+    println!("ferrioxid dev does not start this worker. Register app handlers in register_jobs.");
     Ok(path)
 }
 

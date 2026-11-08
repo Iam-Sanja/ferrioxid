@@ -49,9 +49,7 @@ pub fn worker(
         return ExitCode::from(2);
     }
     if config.concurrency > 1 && config.database_url.starts_with("sqlite") {
-        eprintln!(
-            "job.sqlite.concurrency SQLite uses one connection. Concurrency remains 1."
-        );
+        eprintln!("job.sqlite.concurrency SQLite uses one connection. Concurrency remains 1.");
         config.concurrency = 1;
     }
     println!("job.handlers.builtin The CLI worker runs only the built-in mail handler. Start app handlers with src/bin/worker.rs.");
@@ -100,9 +98,7 @@ pub fn inspect(url: String, id: String, show_payload: bool) -> ExitCode {
         let job = queue.get(id).await.map_err(show)?;
         println!("{}", describe_job(&job, show_payload));
         if show_payload {
-            eprintln!(
-                "job.payload.visible The requested payload may contain personal data."
-            );
+            eprintln!("job.payload.visible The requested payload may contain personal data.");
         }
         Ok(())
     })

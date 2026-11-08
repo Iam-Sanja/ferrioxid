@@ -457,14 +457,16 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
                 dependency.path.as_deref().unwrap_or("")
             ),
         ),
-        ferrioxid_migrations::DependencyKind::Git => {
-            report("OK", "project.dependency.git")
-        }
-        ferrioxid_migrations::DependencyKind::Registry => {
-            report("OK", "project.dependency.registry Cargo version 0.1.0 is not the internal template version.")
-        }
+        ferrioxid_migrations::DependencyKind::Git => report("OK", "project.dependency.git"),
+        ferrioxid_migrations::DependencyKind::Registry => report(
+            "OK",
+            "project.dependency.registry Cargo version 0.1.0 is not the internal template version.",
+        ),
         ferrioxid_migrations::DependencyKind::Missing => {
-            report("WARN", "project.dependency.unavailable Cargo.toml has no Ferrioxid dependency.");
+            report(
+                "WARN",
+                "project.dependency.unavailable Cargo.toml has no Ferrioxid dependency.",
+            );
             warnings += 1;
         }
     }

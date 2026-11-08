@@ -63,9 +63,7 @@ pub fn validate_model_name(name: &str) -> Result<(), String> {
         return Err("The model name cannot be empty.".to_owned());
     };
     if !first.is_ascii_uppercase() || !chars.all(|char| char.is_ascii_alphanumeric()) {
-        return Err(
-            "The model name must use PascalCase without path characters.".to_owned(),
-        );
+        return Err("The model name must use PascalCase without path characters.".to_owned());
     }
     Ok(())
 }

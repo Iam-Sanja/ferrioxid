@@ -953,9 +953,7 @@ fn auth_message(error: ferrioxid_auth::AuthError) -> String {
         ferrioxid_auth::AuthError::Validation(message) if message == "email is invalid" => {
             "Invalid email address.".to_owned()
         }
-        ferrioxid_auth::AuthError::Database(_) => {
-            "Database operation failed.".to_owned()
-        }
+        ferrioxid_auth::AuthError::Database(_) => "Database operation failed.".to_owned(),
         other => other.to_string(),
     }
 }
