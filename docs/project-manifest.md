@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · Legacy: [legacy-projects.md](legacy-projects.md)
 
-**IST:** `crates/ferrum-migrations/src/manifest.rs`. Datei: `.ferrum/project.json`. Die Cargo-Paketversion bleibt `0.1.0`. Die Template-Version ist unabhängig davon und steht im Manifest. Aktuell ist das `0.21`.
+**IST:** `crates/ferrioxid-migrations/src/manifest.rs`. Datei: `.ferrum/project.json`. Die Cargo-Paketversion bleibt `0.1.0`. Die Template-Version ist unabhängig davon und steht im Manifest. Aktuell ist das `0.21`.
 
 ## Schema
 
@@ -30,11 +30,11 @@ Das Manifest selbst steht nicht in `files`. Ein SHA-256 gilt nur für den aufgez
 
 ## Erzeugung
 
-`ferrum new` schreibt das Manifest für `api` und `fullstack`, nachdem die Projektdateien liegen. Es ist keine Laufzeitabhängigkeit und verlangt kein Node.js. Die Ferrum-Abhängigkeit bleibt ein Pfad, wenn `--ferrum-path` gesetzt ist.
+`ferrioxid new` schreibt das Manifest für `api` und `fullstack`, nachdem die Projektdateien liegen. Es ist keine Laufzeitabhängigkeit und verlangt kein Node.js. Die Ferrioxid-Abhängigkeit bleibt ein Pfad, wenn `--ferrioxid-path` gesetzt ist.
 
 ## Legacy
 
-Fehlt die Datei, ist das Projekt nicht fehlerhaft. `ferrum upgrade --yes` legt dann genau dieses Manifest an:
+Fehlt die Datei, ist das Projekt nicht fehlerhaft. `ferrioxid upgrade --yes` legt dann genau dieses Manifest an:
 
 ```json
 {

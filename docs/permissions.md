@@ -4,7 +4,7 @@
 
 ## Zweck
 
-Rechte gelten serverseitig. Eine Änderung an Rolle oder Berechtigung wirkt bei der nächsten Anfrage. Ferrum cached diese Rechte nicht in der Sitzung.
+Rechte gelten serverseitig. Eine Änderung an Rolle oder Berechtigung wirkt bei der nächsten Anfrage. Ferrioxid cached diese Rechte nicht in der Sitzung.
 
 ## Architektur
 
@@ -14,10 +14,10 @@ Ein Benutzer kann mehrere Rollen haben. Eine Rolle kann mehrere Berechtigungen h
 
 ## Zuständige Dateien
 
-- `crates/ferrum-auth/src/service.rs`
-- `crates/ferrum-auth/src/store.rs`
-- `crates/ferrum-macros/src/lib.rs` für `permissions`
-- `crates/ferrum-api/src/lib.rs` für die Zuordnung von HTTP-Methode zu Aktion
+- `crates/ferrioxid-auth/src/service.rs`
+- `crates/ferrioxid-auth/src/store.rs`
+- `crates/ferrioxid-macros/src/lib.rs` für `permissions`
+- `crates/ferrioxid-api/src/lib.rs` für die Zuordnung von HTTP-Methode zu Aktion
 
 ## Öffentliche API
 
@@ -45,7 +45,7 @@ Foreign Keys löschen Zuordnungen per `CASCADE`.
 ## Modellattribut
 
 ```rust
-#[ferrum(table = "internal_notes", api = "/api/v1/internal_notes", permissions = "notes")]
+#[ferrioxid(table = "internal_notes", api = "/api/v1/internal_notes", permissions = "notes")]
 ```
 
 | Attribut | Wirkung |
@@ -72,9 +72,9 @@ Fehlende Rechte sind HTTP 403 `Access denied`. Eine fehlende Sitzung ist HTTP 40
 ## Beispiel
 
 ```powershell
-cargo run -p ferrum-cli -- auth create-role editor
-cargo run -p ferrum-cli -- auth grant-permission notes.read --role editor
-cargo run -p ferrum-cli -- auth assign-role --email editor@example.com --role editor
+cargo run -p ferrioxid-cli -- auth create-role editor
+cargo run -p ferrioxid-cli -- auth grant-permission notes.read --role editor
+cargo run -p ferrioxid-cli -- auth assign-role --email editor@example.com --role editor
 ```
 
 myshop schützt `InternalNote` mit `permissions = "notes"`. `Product` und `Category` bleiben `allow_anonymous = true` und sind Demo-Endpunkte.

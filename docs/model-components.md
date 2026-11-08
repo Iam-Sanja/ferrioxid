@@ -4,25 +4,25 @@
 
 **IST.** Funktionsstand v0.26. Eine Feldgruppe ist keine Tabelle, keine REST-Route und keine Admin-Registrierung.
 
-Rust kann die Felder eines anderen Typs in einem Derive nicht zuverlässig nachschlagen. Ferrum fügt die Felder deshalb mit einem Makro in die konkrete Struct ein, bevor `FerrumModel` sie sieht. Die gespeicherten Spalten sind flach.
+Rust kann die Felder eines anderen Typs in einem Derive nicht zuverlässig nachschlagen. Ferrioxid fügt die Felder deshalb mit einem Makro in die konkrete Struct ein, bevor `FerrioxidModel` sie sieht. Die gespeicherten Spalten sind flach.
 
 ## Eigene Feldgruppe
 
 ```rust
-use ferrum::prelude::*;
+use ferrioxid::prelude::*;
 
-ferrum::model_fields! {
+ferrioxid::model_fields! {
     pub struct AuditStamp {
         #[field(managed = "created")]
-        pub created_at: ferrum::chrono::DateTime<ferrum::chrono::Utc>,
+        pub created_at: ferrioxid::chrono::DateTime<ferrioxid::chrono::Utc>,
         #[field(managed = "updated")]
-        pub updated_at: ferrum::chrono::DateTime<ferrum::chrono::Utc>,
+        pub updated_at: ferrioxid::chrono::DateTime<ferrioxid::chrono::Utc>,
     }
 }
 
-ferrum_fields_AuditStamp! {
-    #[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-    #[ferrum(table = "products", api = "/api/v1/products", allow_anonymous = true)]
+ferrioxid_fields_AuditStamp! {
+    #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+    #[ferrioxid(table = "products", api = "/api/v1/products", allow_anonymous = true)]
     pub struct Product {
         #[field(primary_key, auto)]
         pub id: Uuid,
@@ -32,17 +32,17 @@ ferrum_fields_AuditStamp! {
 }
 ```
 
-`model_fields!` erzeugt die Struct `AuditStamp` ohne Tabelle und das Makro `ferrum_fields_AuditStamp!` in derselben Crate. Das Makro kopiert die Felder in `Product`. Eine zweite Struct kann dasselbe Makro verwenden und erhält dieselben Spalten in einer anderen Tabelle.
+`model_fields!` erzeugt die Struct `AuditStamp` ohne Tabelle und das Makro `ferrioxid_fields_AuditStamp!` in derselben Crate. Das Makro kopiert die Felder in `Product`. Eine zweite Struct kann dasselbe Makro verwenden und erhält dieselben Spalten in einer anderen Tabelle.
 
 Gleiche Feldnamen in der konkreten Struct und in der Gruppe lehnt der Compiler ab. Ein unbekannter Attributwert ebenfalls. Die Gruppe selbst hat keine Migration.
 
 ## Django
 
-| Django | Ferrum |
+| Django | Ferrioxid |
 |---|---|
 | abstraktes Model | `model_fields!`, ohne Tabelle |
 | Vererbung | Makro, das Felder in die konkrete Struct kopiert |
-| `Model._meta` | `FerrumModel::columns` des konkreten Models |
+| `Model._meta` | `FerrioxidModel::columns` des konkreten Models |
 | eigene Tabelle der Basisklasse | gibt es nicht |
 | Mehrfachvererbung und MRO | nicht vorgesehen |
 

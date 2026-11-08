@@ -1,0 +1,27 @@
+[package]
+name = "ferrioxid-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferrioxid-core = { path = "../ferrioxid-core" }
+ferrioxid-auth = { path = "../ferrioxid-auth" }
+ferrioxid-jobs = { path = "../ferrioxid-jobs" }
+ferrioxid-mail = { path = "../ferrioxid-mail" }
+ferrioxid-admin = { path = "../ferrioxid-admin" }
+ferrioxid-db = { path = "../ferrioxid-db" }
+ferrioxid-migrations = { path = "../ferrioxid-migrations" }
+ferrioxid-static = { path = "../ferrioxid-static" }
+ferrioxid-middleware = { path = "../ferrioxid-middleware" }
+axum.workspace = true
+tera.workspace = true
+sea-orm.workspace = true
+serde_json.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+http-body-util = "0.1"
+tokio = { workspace = true }
+tower = { version = "0.5", features = ["util"] }

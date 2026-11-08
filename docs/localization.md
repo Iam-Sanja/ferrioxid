@@ -8,7 +8,7 @@ Der HTML-Admin formatiert Zahlen in `display_cell`. Deutsch gruppiert mit Punkt,
 
 ## Sprache der Startseite
 
-`negotiate_locale` in `crates/ferrum-api/src/pages.rs` prüft in dieser Reihenfolge:
+`negotiate_locale` in `crates/ferrioxid-api/src/pages.rs` prüft in dieser Reihenfolge:
 
 1. `?lang=` nur wenn der Wert `de` oder `en` ist, optional mit Region wie `de-DE`.
 2. Den ersten unterstützten Eintrag von `Accept-Language`, gewichtet mit `q`.
@@ -19,8 +19,8 @@ Der Wert wird in den Tera-Kontext als `locale` geschrieben. Er wird nicht an ein
 
 ## CLI
 
-`FERRUM_LOCALE=en` oder `de` überschreibt `default_locale`. Übersetzt sind die Meldungen für erzeugtes Projekt, erzeugtes Modell und Start und Stopp des Entwicklungsservers. `ferrum dev` gibt die Zeile `Ferrum lauscht` des generierten Programms unverändert aus. Migrationsstatus, `Angewendet` und `Keine Schemaänderung` bleiben unverändert.
+`FERRUM_LOCALE=en` oder `de` überschreibt `default_locale`. Übersetzt sind die Meldungen für erzeugtes Projekt, erzeugtes Modell und Start und Stopp des Entwicklungsservers. `ferrioxid dev` gibt die Zeile `Ferrioxid lauscht` des generierten Programms unverändert aus. Migrationsstatus, `Angewendet` und `Keine Schemaänderung` bleiben unverändert.
 
 ## Tests
 
-`examples/myshop/tests/admin_html.rs` prüft die deutsche Anmeldung, `Accept-Language: en` und den Sprachwechsel auf Englisch. `crates/ferrum-api/src/pages.rs` prüft den englischen Fallback und eine ungültige Locale. Abgelehnte Branding-Farben prüft die Registry in `ferrum-admin`.
+`examples/myshop/tests/admin_html.rs` prüft die deutsche Anmeldung, `Accept-Language: en` und den Sprachwechsel auf Englisch. `crates/ferrioxid-api/src/pages.rs` prüft den englischen Fallback und eine ungültige Locale. Abgelehnte Branding-Farben prüft die Registry in `ferrioxid-admin`.

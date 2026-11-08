@@ -1,0 +1,27 @@
+[package]
+name = "ferrioxid-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferrioxid-core = { path = "../ferrioxid-core" }
+ferrioxid-db = { path = "../ferrioxid-db" }
+ferrioxid-migrations = { path = "../ferrioxid-migrations" }
+ferrioxid-mail = { path = "../ferrioxid-mail" }
+argon2.workspace = true
+axum.workspace = true
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha2.workspace = true
+hmac = "0.12"
+getrandom = "0.2"
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

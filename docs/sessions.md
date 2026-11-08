@@ -14,10 +14,10 @@ Der Login erzeugt 32 Byte aus `OsRng` für das Session-Token. Das CSRF-Token ist
 
 ## Zuständige Dateien
 
-- `crates/ferrum-auth/src/service.rs`
-- `crates/ferrum-auth/src/cookie.rs`
-- `crates/ferrum-auth/src/config.rs`
-- `crates/ferrum-auth/migrations/0001_auth_schema.json`
+- `crates/ferrioxid-auth/src/service.rs`
+- `crates/ferrioxid-auth/src/cookie.rs`
+- `crates/ferrioxid-auth/src/config.rs`
+- `crates/ferrioxid-auth/migrations/0001_auth_schema.json`
 
 ## Öffentliche API
 
@@ -40,7 +40,7 @@ Standardlebensdauer: 12 Stunden absolut, 30 Minuten ohne Nutzung.
 
 ## Sicherheitsmechanismen
 
-Das Cookie heißt `ferrum_session`. Es ist `HttpOnly`, `Path=/`, `SameSite=Lax` und ohne `Domain`. `Secure` steht nur, wenn `cookie_secure` gesetzt ist. Das entscheidet `FERRUM_COOKIE_SECURE` oder, wenn die Variable fehlt, `FERRUM_ENV=production`. `BIND_ADDRESS` spielt keine Rolle. Lokales HTTP bleibt in der Entwicklung ohne `Secure` nutzbar. Produktion ohne `Secure` schreibt eine Warnung.
+Das Cookie heißt `ferrioxid_session`. Es ist `HttpOnly`, `Path=/`, `SameSite=Lax` und ohne `Domain`. `Secure` steht nur, wenn `cookie_secure` gesetzt ist. Das entscheidet `FERRUM_COOKIE_SECURE` oder, wenn die Variable fehlt, `FERRUM_ENV=production`. `BIND_ADDRESS` spielt keine Rolle. Lokales HTTP bleibt in der Entwicklung ohne `Secure` nutzbar. Produktion ohne `Secure` schreibt eine Warnung.
 
 Logout verwendet dieselben Cookie-Attribute und `Max-Age=0`.
 
@@ -54,7 +54,7 @@ Abgelaufene, widerrufene, unbekannte und zu lange ungenutzte Tokens ergeben `Una
 
 ```http
 POST /auth/logout
-Cookie: ferrum_session=...
+Cookie: ferrioxid_session=...
 x-csrf-token: ...
 ```
 

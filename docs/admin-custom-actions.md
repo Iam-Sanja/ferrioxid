@@ -17,7 +17,7 @@ registry.action(AdminAction {
 });
 ```
 
-`ferrum::admin` exportiert `AdminAction` und `ActionOperation`. `AdminRegistry::action` hängt den Eintrag an dieselbe Registry. Es gibt keine zweite Modellliste.
+`ferrioxid::admin` exportiert `AdminAction` und `ActionOperation`. `AdminRegistry::action` hängt den Eintrag an dieselbe Registry. Es gibt keine zweite Modellliste.
 
 ## Regeln
 
@@ -37,12 +37,12 @@ Beide Operationen laufen in der Transaktion aus [admin-bulk-actions.md](admin-bu
 ```rust
 struct MarkProcessed;
 
-#[ferrum::async_trait::async_trait]
-impl ferrum::admin::ActionHandler for MarkProcessed {
+#[ferrioxid::async_trait::async_trait]
+impl ferrioxid::admin::ActionHandler for MarkProcessed {
     async fn apply(
         &self,
-        context: &mut ferrum::admin::ActionContext,
-    ) -> Result<(), ferrum::admin::ActionError> {
+        context: &mut ferrioxid::admin::ActionContext,
+    ) -> Result<(), ferrioxid::admin::ActionError> {
         for id in context.ids() {
             context.set_text(id, "status", "processed")?;
         }
@@ -51,10 +51,10 @@ impl ferrum::admin::ActionHandler for MarkProcessed {
 }
 
 registry.try_action(
-    ferrum::admin::AdminAction::custom("orders", "mark_processed", std::sync::Arc::new(MarkProcessed))
+    ferrioxid::admin::AdminAction::custom("orders", "mark_processed", std::sync::Arc::new(MarkProcessed))
         .labels("Als bearbeitet markieren", "Mark processed")
         .writes(&["status"]),
 )?;
 ```
 
-Der HTTP-Parameter wählt nur den registrierten Namen. Ferrum prüft vorher `update`, die Auswahlgrenze, den Query-Scope und die Objektregel. `set_text`, `set_integer` und `set_bool` akzeptieren nur eine ID aus dieser Auswahl und eine Spalte aus `writes`. Die Methode öffnet keine Verbindung. Nach dem Plan schreibt `update_in` in derselben Transaktion wie das Audit. Ein Fehler rollt alles zurück. `Delete` und `SetBool` bleiben die bisherigen Literale.
+Der HTTP-Parameter wählt nur den registrierten Namen. Ferrioxid prüft vorher `update`, die Auswahlgrenze, den Query-Scope und die Objektregel. `set_text`, `set_integer` und `set_bool` akzeptieren nur eine ID aus dieser Auswahl und eine Spalte aus `writes`. Die Methode öffnet keine Verbindung. Nach dem Plan schreibt `update_in` in derselben Transaktion wie das Audit. Ein Fehler rollt alles zurück. `Delete` und `SetBool` bleiben die bisherigen Literale.

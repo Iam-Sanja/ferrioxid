@@ -1,6 +1,6 @@
-use ferrum::apps::FerrumApplication;
-use ferrum::jobs::{enqueue_notice, JobPolicy, JobStatus, Queue, SystemClock};
-use ferrum::mail::Notice;
+use ferrioxid::apps::FerrioxidApplication;
+use ferrioxid::jobs::{enqueue_notice, JobPolicy, JobStatus, Queue, SystemClock};
+use ferrioxid::mail::Notice;
 use notes::jobs::{NotePulse, NoteRetryHandler};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -18,7 +18,7 @@ fn worker_binary_starts_without_a_web_server() {
 
 #[test]
 fn duplicate_app_handlers_fail() {
-    let mut registry = ferrum::jobs::JobRegistry::new();
+    let mut registry = ferrioxid::jobs::JobRegistry::new();
     notes::NotesApp.register_jobs(&mut registry).expect("once");
     let error = notes::NotesApp
         .register_jobs(&mut registry)
@@ -28,7 +28,7 @@ fn duplicate_app_handlers_fail() {
 
 #[tokio::test]
 async fn notes_worker_binary_runs_restarts_and_leaves_unknown_jobs() {
-    let root = temp_dir("ferrum-notes-worker");
+    let root = temp_dir("ferrioxid-notes-worker");
     let path = root.join("jobs.sqlite");
     let url = sqlite_url(&path);
     std::fs::write(
@@ -39,15 +39,15 @@ async fn notes_worker_binary_runs_restarts_and_leaves_unknown_jobs() {
     )
     .expect("toml");
 
-    let db = ferrum::db::connect(&url).await.expect("sqlite");
+    let db = ferrioxid::db::connect(&url).await.expect("sqlite");
     drop(db);
     let child = spawn(&root, &url);
     let (status, stderr) = wait_exit(child);
     assert_eq!(status.code(), Some(2), "{stderr}");
     assert!(stderr.contains("job.migration.missing"), "{stderr}");
-    let db = ferrum::db::connect(&url).await.expect("sqlite");
-    assert!(!ferrum::jobs::table_ready(&db).await.expect("ready"));
-    ferrum::jobs::apply_migrations(&db)
+    let db = ferrioxid::db::connect(&url).await.expect("sqlite");
+    assert!(!ferrioxid::jobs::table_ready(&db).await.expect("ready"));
+    ferrioxid::jobs::apply_migrations(&db)
         .await
         .expect("migration");
     drop(db);
@@ -84,7 +84,7 @@ fn temp_dir(prefix: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "{prefix}-{}-{}",
         std::process::id(),
-        ferrum::uuid::Uuid::new_v4()
+        ferrioxid::uuid::Uuid::new_v4()
     ));
     std::fs::create_dir_all(&path).expect("dir");
     path
@@ -136,41 +136,41 @@ fn wait_exit(mut child: Child) -> (ExitStatus, String) {
     (status, stderr)
 }
 
-async fn enqueue_pulse(url: &str, label: &str) -> ferrum::uuid::Uuid {
+async fn enqueue_pulse(url: &str, label: &str) -> ferrioxid::uuid::Uuid {
     let queue = queue(url).await;
     let outcome = queue
         .enqueue::<notes::jobs::NotePulseHandler>(
             &NotePulse {
                 label: label.to_owned(),
             },
-            ferrum::jobs::When::now(),
+            ferrioxid::jobs::When::now(),
         )
         .await
         .expect("pulse");
-    let ferrum::jobs::EnqueueOutcome::Created(id) = outcome else {
+    let ferrioxid::jobs::EnqueueOutcome::Created(id) = outcome else {
         panic!("pulse created");
     };
     id
 }
 
-async fn enqueue_retry(url: &str) -> ferrum::uuid::Uuid {
+async fn enqueue_retry(url: &str) -> ferrioxid::uuid::Uuid {
     let queue = queue(url).await;
     let outcome = queue
         .enqueue::<NoteRetryHandler>(
             &NotePulse {
                 label: "erneut".into(),
             },
-            ferrum::jobs::When::now(),
+            ferrioxid::jobs::When::now(),
         )
         .await
         .expect("retry");
-    let ferrum::jobs::EnqueueOutcome::Created(id) = outcome else {
+    let ferrioxid::jobs::EnqueueOutcome::Created(id) = outcome else {
         panic!("retry created");
     };
     id
 }
 
-async fn enqueue_unknown(url: &str) -> ferrum::uuid::Uuid {
+async fn enqueue_unknown(url: &str) -> ferrioxid::uuid::Uuid {
     let queue = queue(url).await;
     let outcome = queue
         .enqueue_json(
@@ -179,17 +179,17 @@ async fn enqueue_unknown(url: &str) -> ferrum::uuid::Uuid {
             &NotePulse {
                 label: "unbekannt".into(),
             },
-            ferrum::jobs::When::now(),
+            ferrioxid::jobs::When::now(),
         )
         .await
         .expect("unknown");
-    let ferrum::jobs::EnqueueOutcome::Created(id) = outcome else {
+    let ferrioxid::jobs::EnqueueOutcome::Created(id) = outcome else {
         panic!("unknown created");
     };
     id
 }
 
-async fn enqueue_mail(url: &str) -> ferrum::uuid::Uuid {
+async fn enqueue_mail(url: &str) -> ferrioxid::uuid::Uuid {
     let queue = queue(url).await;
     let outcome = enqueue_notice(
         &queue,
@@ -197,11 +197,11 @@ async fn enqueue_mail(url: &str) -> ferrum::uuid::Uuid {
             to: "person@example.com".into(),
             locale: "de".into(),
         },
-        ferrum::jobs::When::now(),
+        ferrioxid::jobs::When::now(),
     )
     .await
     .expect("mail");
-    let ferrum::jobs::EnqueueOutcome::Created(id) = outcome else {
+    let ferrioxid::jobs::EnqueueOutcome::Created(id) = outcome else {
         panic!("mail created");
     };
     id
@@ -209,13 +209,13 @@ async fn enqueue_mail(url: &str) -> ferrum::uuid::Uuid {
 
 async fn queue(url: &str) -> Queue {
     Queue::new(
-        ferrum::db::connect(url).await.expect("sqlite"),
+        ferrioxid::db::connect(url).await.expect("sqlite"),
         Arc::new(SystemClock),
         JobPolicy::default(),
     )
 }
 
-async fn fetch(url: &str, id: ferrum::uuid::Uuid) -> ferrum::jobs::JobRecord {
+async fn fetch(url: &str, id: ferrioxid::uuid::Uuid) -> ferrioxid::jobs::JobRecord {
     for _ in 0..20 {
         let queue = queue(url).await;
         match queue.get(id).await {
@@ -229,7 +229,7 @@ async fn fetch(url: &str, id: ferrum::uuid::Uuid) -> ferrum::jobs::JobRecord {
     panic!("Die Job-Zeile blieb gesperrt.");
 }
 
-async fn wait_for(url: &str, id: ferrum::uuid::Uuid, status: JobStatus, child: &mut Child) {
+async fn wait_for(url: &str, id: ferrioxid::uuid::Uuid, status: JobStatus, child: &mut Child) {
     // CI machines can be busy running the rest of the workspace in parallel.
     // A deadline avoids turning slow worker startup into an arbitrary fixed
     // number of polls while keeping a bounded failure time.

@@ -1,8 +1,8 @@
-use ferrum::prelude::*;
+use ferrioxid::prelude::*;
 
 // v0.1: deliberately public for the local demo. Never expose real data this way.
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "products",
     api = "/api/v1/products",
     allow_anonymous = true,

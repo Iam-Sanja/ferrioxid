@@ -1,22 +1,22 @@
-# ferrum-macros – Compilerbasierte Modellgenerierung
+# ferrioxid-macros – Compilerbasierte Modellgenerierung
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-macros/src/lib.rs`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-macros/src/lib.rs`.
 
 ## Verantwortung und Verarbeitungsschritte (IST)
 
-1. `#[derive(FerrumModel)]` empfängt `syn::DeriveInput`.
-2. `#[ferrum(...)]` liest `table`, `api`, `allow_anonymous`, `admin`, `admin_label` und `admin_permission`. Felder lesen zusätzlich `#[admin(...)]`. Die Admin-Angaben erzeugen `admin_meta()` und keine zusätzliche Spalte. Details: [admin-customization.md](admin-customization.md).
+1. `#[derive(FerrioxidModel)]` empfängt `syn::DeriveInput`.
+2. `#[ferrioxid(...)]` liest `table`, `api`, `allow_anonymous`, `admin`, `admin_label` und `admin_permission`. Felder lesen zusätzlich `#[admin(...)]`. Die Admin-Angaben erzeugen `admin_meta()` und keine zusätzliche Spalte. Details: [admin-customization.md](admin-customization.md).
 3. Erlaubt sind nur Structs mit benannten Feldern.
 4. Pro Feld wird `#[field(...)]` geprüft.
 5. SQL-Datentyp, Constraints und generiertes Create-DTO werden bestimmt.
-6. `quote!` erzeugt `FerrumModel`- und `ModelRepository`-Implementierung plus `ProductCreate`-artigen Typ.
+6. `quote!` erzeugt `FerrioxidModel`- und `ModelRepository`-Implementierung plus `ProductCreate`-artigen Typ.
 7. Falsche Attribute erzeugen `syn::Error` als Compiler-Diagnose.
 
 ### Modellsyntax (IST, Pfad `examples/myshop/src/models/product.rs`)
 
 ```rust
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(table = "products", api = "/api/v1/products", allow_anonymous = true)]
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(table = "products", api = "/api/v1/products", allow_anonymous = true)]
 pub struct Product {
     #[field(primary_key, auto)] pub id: Uuid,
     #[field(required, index, min_length = 3, max_length = 150)] pub name: String,
@@ -27,7 +27,7 @@ pub struct Product {
 }
 ```
 
-`pub struct ProductCreate` und `pub struct ProductUpdate` werden im Modul des Models erzeugt. Create besitzt kein `id`. Bei `#[field(default = true)]` ist `active` im Create-DTO `Option<bool>` mit `#[serde(default)]` und wird bei `None` durch `true` ersetzt. Update enthält kein `id` und keine `#[field(readonly)]`-Felder. Jedes änderbare Feld hat den Typ `ferrum::db::PatchField<T>`. Der `Product`-Typ selbst muss Serde-Serialize und Deserialize ableiten.
+`pub struct ProductCreate` und `pub struct ProductUpdate` werden im Modul des Models erzeugt. Create besitzt kein `id`. Bei `#[field(default = true)]` ist `active` im Create-DTO `Option<bool>` mit `#[serde(default)]` und wird bei `None` durch `true` ersetzt. Update enthält kein `id` und keine `#[field(readonly)]`-Felder. Jedes änderbare Feld hat den Typ `ferrioxid::db::PatchField<T>`. Der `Product`-Typ selbst muss Serde-Serialize und Deserialize ableiten.
 
 ## Zulässige Typen (IST)
 
@@ -57,8 +57,8 @@ pub struct Product {
 
 - Identifikatoren: ASCII-Buchstaben/Unterstrich zuerst, danach Buchstaben/Ziffern/Unterstrich; SQL-Namen sind mit `"` gequotet.
 - API-Pfad: statische Abschnitte mit denselben Identifier-Regeln; keine Platzhalter, `*` oder `?`.
-- DDL für den Legacy-Bootstrap: `schema_sql(DatabaseKind)` ruft `render_schema` auf. Migrationen verwenden dieselben Spaltenmetadaten, aber die Crate `ferrum-migrations`.
-- INSERT, LIST, GET, UPDATE und DELETE rufen `ferrum::db` auf. SeaQuery bindet Werte und quotet Bezeichner.
+- DDL für den Legacy-Bootstrap: `schema_sql(DatabaseKind)` ruft `render_schema` auf. Migrationen verwenden dieselben Spaltenmetadaten, aber die Crate `ferrioxid-migrations`.
+- INSERT, LIST, GET, UPDATE und DELETE rufen `ferrioxid::db` auf. SeaQuery bindet Werte und quotet Bezeichner.
 - LIST liest 101 Zeilen, gibt höchstens 100 zurück und setzt `truncated`.
 - UPDATE schreibt nur Spalten, deren `PatchField` nicht `Missing` ist. Ein leeres Patch liest die Zeile.
 - DELETE filtert über die gebundene UUID und wertet `rows_affected` aus.
@@ -68,7 +68,7 @@ pub struct Product {
 
 - Der vom Makro generierte SQL-Text wird nicht auf die konkrete Datenbank-Schema-Version abgeglichen.
 - Validation läuft in `create` und `update`, nicht bei beliebigen direkten SQL-Zugriffen.
-- Serde-JSON-Fehler beim HTTP-Parsing stammen von Axum, nicht `FerrumError`.
+- Serde-JSON-Fehler beim HTTP-Parsing stammen von Axum, nicht `FerrioxidError`.
 - Ohne Versionsfeld gibt es keine Erkennung verlorener paralleler Updates.
 - Strenge Namensprüfung schließt viele Sonderzeichen aus, nicht ein SQL-Audit.
 

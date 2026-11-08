@@ -20,8 +20,8 @@
 - Zwei Worker bekommen denselben fälligen Job nicht beide als gültigen Claim.
 - Lesende CLI-Befehle legen keine SQLite-Datei und keine Historie an.
 
-`ferrum jobs inspect <id>` zeigt Status, Handler, Version, Versuche, Zeiten und Fehlercode. Die Payload erscheint als `payload [redigiert, N Bytes]`. `--show-payload` gibt das gespeicherte JSON aus und warnt auf stderr mit `job.payload.visible`. Auch diese ausdrücklich angeforderte Payload kann E-Mail-Adressen und andere personenbezogene Daten enthalten, die der Handler als normale Felder gespeichert hat. Das Lease-Token wird in beiden Fällen nicht ausgegeben.
+`ferrioxid jobs inspect <id>` zeigt Status, Handler, Version, Versuche, Zeiten und Fehlercode. Die Payload erscheint als `payload [redigiert, N Bytes]`. `--show-payload` gibt das gespeicherte JSON aus und warnt auf stderr mit `job.payload.visible`. Auch diese ausdrücklich angeforderte Payload kann E-Mail-Adressen und andere personenbezogene Daten enthalten, die der Handler als normale Felder gespeichert hat. Das Lease-Token wird in beiden Fällen nicht ausgegeben.
 
 Gewöhnliche Logs und Tracing schreiben die Payload nicht. Der CLI-Worker und der Anwendungs-Worker geben sie nicht aus.
 
-Die Tests liegen in `crates/ferrum-jobs/src/tests.rs` und `examples/notes/tests/jobs.rs`.
+Die Tests liegen in `crates/ferrioxid-jobs/src/tests.rs` und `examples/notes/tests/jobs.rs`.

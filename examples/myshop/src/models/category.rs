@@ -1,7 +1,7 @@
-use ferrum::prelude::*;
+use ferrioxid::prelude::*;
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "categories",
     api = "/api/v1/categories",
     allow_anonymous = true,

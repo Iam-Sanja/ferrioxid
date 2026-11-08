@@ -1,24 +1,24 @@
-use ferrum::jobs::{
+use ferrioxid::jobs::{
     enqueue_notice, Clock, EnqueueOutcome, JobPolicy, JobRegistry, JobStatus, ManualClock, Queue,
     When, Worker,
 };
-use ferrum::mail::{MailService, Notice};
+use ferrioxid::mail::{MailService, Notice};
 use notes::jobs::{register, NotePulse, NotePulseHandler};
 use std::sync::Arc;
 
 #[tokio::test]
 async fn notes_runs_immediate_delayed_recurring_and_mail_jobs() {
     let path = std::env::temp_dir().join(format!(
-        "ferrum-notes-jobs-{}-{}.sqlite",
+        "ferrioxid-notes-jobs-{}-{}.sqlite",
         std::process::id(),
-        ferrum::uuid::Uuid::new_v4()
+        ferrioxid::uuid::Uuid::new_v4()
     ));
     let url = format!(
         "sqlite://{}?mode=rwc",
         path.to_string_lossy().replace('\\', "/")
     );
-    let db = ferrum::db::connect(&url).await.expect("sqlite");
-    ferrum::jobs::apply_migrations(&db)
+    let db = ferrioxid::db::connect(&url).await.expect("sqlite");
+    ferrioxid::jobs::apply_migrations(&db)
         .await
         .expect("migration");
     let clock = ManualClock::new(1_800_000_000);
@@ -29,7 +29,7 @@ async fn notes_runs_immediate_delayed_recurring_and_mail_jobs() {
     register(&mut registry, handler).expect("register");
     let (mail, inbox) = MailService::memory("noreply@example.com", "http://127.0.0.1:3000");
     registry
-        .register(ferrum::jobs::MailNoticeHandler::new(mail))
+        .register(ferrioxid::jobs::MailNoticeHandler::new(mail))
         .expect("mail");
     let runner = Worker::new(queue.clone(), registry, 60, 50, 1);
 
@@ -89,7 +89,7 @@ async fn notes_runs_immediate_delayed_recurring_and_mail_jobs() {
     let _ = std::fs::remove_file(path);
 }
 
-async fn created(queue: &Queue, label: &str, when: When) -> ferrum::uuid::Uuid {
+async fn created(queue: &Queue, label: &str, when: When) -> ferrioxid::uuid::Uuid {
     match queue
         .enqueue::<NotePulseHandler>(
             &NotePulse {

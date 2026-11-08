@@ -29,4 +29,4 @@ Doppelte IDs zählen einmal. Eine unbekannte Aktion, eine Nicht-UUID oder eine �
 
 `App::bootstrap_schema` erzeugt keine Fremdschlüssel. Der Rollback-Test baut die Produkt-Tabelle deshalb mit `ON DELETE RESTRICT` neu. Produktiv gelten die Fremdschlüssel der Migration.
 
-Code: `crates/ferrum-admin/src/actions.rs`, `html.rs` `stage_bulk`, `show_bulk`, `apply_bulk`. Vorlage: `templates/models/bulk.html`.
+Code: `crates/ferrioxid-admin/src/actions.rs`, `html.rs` `stage_bulk`, `show_bulk`, `apply_bulk`. Vorlage: `templates/models/bulk.html`.

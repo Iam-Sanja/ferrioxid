@@ -7,7 +7,7 @@
 Das Attribut muss zu einem vorhandenen `has_many` passen. Die Kindtabelle steht ausdrücklich im Attribut, damit zwei Modelle mit derselben Spalte nicht zusammenfallen.
 
 ```rust
-#[ferrum(
+#[ferrioxid(
     has_many = "products=super::product::Product.category_id",
     admin_inline = "products=products.category_id"
 )]

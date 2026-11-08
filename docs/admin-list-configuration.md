@@ -6,7 +6,7 @@
 
 Die Liste liest dieselben `AdminFieldMeta`- und `AdminModelMeta`-Werte wie Formular und JSON-API. Es gibt keine zweite Konfiguration.
 
-| Django-Begriff | Ferrum-Attribut | Wirkung |
+| Django-Begriff | Ferrioxid-Attribut | Wirkung |
 |---|---|---|
 | `list_display` | `#[admin(list_display)]` | Spalten in Struct-Reihenfolge. `id` bleibt immer eine Spalte. Ohne Markierung: erstes sichtbares Textfeld, sonst ein anderes sichtbares Feld, plus `id` |
 | `list_display_links` | `#[admin(list_link)]` | Diese Spalten verlinken auf das Detail. `list_link` verlangt `list_display`, außer bei `id`. Ohne Markierung verlinkt die erste gelistete Spalte, die nicht `id` ist, sonst `id` |

@@ -1,0 +1,30 @@
+[package]
+name = "ferrioxid"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferrioxid-core = { path = "../ferrioxid-core" }
+ferrioxid-macros = { path = "../ferrioxid-macros" }
+ferrioxid-db = { path = "../ferrioxid-db" }
+ferrioxid-migrations = { path = "../ferrioxid-migrations" }
+ferrioxid-api = { path = "../ferrioxid-api" }
+ferrioxid-auth = { path = "../ferrioxid-auth" }
+ferrioxid-admin = { path = "../ferrioxid-admin" }
+ferrioxid-forms = { path = "../ferrioxid-forms" }
+ferrioxid-static = { path = "../ferrioxid-static" }
+ferrioxid-storage = { path = "../ferrioxid-storage" }
+ferrioxid-middleware = { path = "../ferrioxid-middleware" }
+ferrioxid-mail = { path = "../ferrioxid-mail" }
+ferrioxid-jobs = { path = "../ferrioxid-jobs" }
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+
+[features]
+default = []
+admin-ui = ["ferrioxid-admin/embedded-admin"]

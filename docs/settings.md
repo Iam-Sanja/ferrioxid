@@ -1,6 +1,6 @@
 # Settings
 
-[Zur Übersicht](index.md) · Eigene Werte: [custom-settings.md](custom-settings.md) · **IST-Datei:** `crates/ferrum-migrations/src/project.rs`.
+[Zur Übersicht](index.md) · Eigene Werte: [custom-settings.md](custom-settings.md) · **IST-Datei:** `crates/ferrioxid-migrations/src/project.rs`.
 
 ## Aufgabe
 
@@ -17,8 +17,8 @@ Ein unbekannter Abschnitt oder Schlüssel bleibt ein Fehler. Ausnahmen sind `[cu
 ## Lesen
 
 ```rust
-fn load() -> Result<ferrum::migrations::ProjectConfig, Box<dyn std::error::Error>> {
-    let settings = ferrum::migrations::Settings::discover(std::path::Path::new("."))?;
+fn load() -> Result<ferrioxid::migrations::ProjectConfig, Box<dyn std::error::Error>> {
+    let settings = ferrioxid::migrations::Settings::discover(std::path::Path::new("."))?;
     let project = settings.project();
     let _url = project.resolved_database_url();
     let _address = project.bind_address()?;
@@ -51,11 +51,11 @@ Die vorhandenen Bereiche bleiben: `project`, `server`, `database`, `admin`, `aut
 | `FERRUM_CSRF_SECRET` | 64 Hex-Zeichen in Produktion. Der Wert wird nicht protokolliert |
 | `FERRUM_ALLOWED_ORIGINS` | Kommagetrennte Origins. In Produktion ohne diese Variable ist die Liste leer, bis `apply_bound_address` Loopback setzt |
 
-Eine fehlende optionale Variable behält den Datei- oder Standardwert. Eine fehlende verpflichtende Produktionsangabe bleibt ein Fehler: `FERRUM_DEBUG` mit ungültigem Text, `BIND_ADDRESS` auf `0.0.0.0`, und `server.debug = true` zusammen mit `FERRUM_ENV=production`. Ferrum schaltet Debug in diesem Fall nicht still auf `false`.
+Eine fehlende optionale Variable behält den Datei- oder Standardwert. Eine fehlende verpflichtende Produktionsangabe bleibt ein Fehler: `FERRUM_DEBUG` mit ungültigem Text, `BIND_ADDRESS` auf `0.0.0.0`, und `server.debug = true` zusammen mit `FERRUM_ENV=production`. Ferrioxid schaltet Debug in diesem Fall nicht still auf `false`.
 
 ## Entwicklung und Produktion
 
-Entwicklung ist der Normalfall. Generierte Projekte setzen `debug = true` und binden `127.0.0.1`. Produktion ist ausschließlich `FERRUM_ENV=production`. Dann lehnt `enforce_runtime` aktives Debug ab. `ferrum check` und `ferrum doctor` rufen dieselbe Prüfung auf und öffnen dafür keine Datenbank- und keine SMTP-Verbindung. Erfolg ist `OK settings.runtime`. Ein Fehler ist `ERROR settings.runtime` und Exitcode 1.
+Entwicklung ist der Normalfall. Generierte Projekte setzen `debug = true` und binden `127.0.0.1`. Produktion ist ausschließlich `FERRUM_ENV=production`. Dann lehnt `enforce_runtime` aktives Debug ab. `ferrioxid check` und `ferrioxid doctor` rufen dieselbe Prüfung auf und öffnen dafür keine Datenbank- und keine SMTP-Verbindung. Erfolg ist `OK settings.runtime`. Ein Fehler ist `ERROR settings.runtime` und Exitcode 1.
 
 ## Debug und Logs
 
@@ -63,7 +63,7 @@ Entwicklung ist der Normalfall. Generierte Projekte setzen `debug = true` und bi
 
 ## CLI
 
-`ferrum check` und `ferrum doctor` lesen die Datei, prüfen die Laufzeitregeln und melden eine gesetzte `DATABASE_URL`, ohne sie auszugeben. Eine statische Prüfung verbindet sich nicht.
+`ferrioxid check` und `ferrioxid doctor` lesen die Datei, prüfen die Laufzeitregeln und melden eine gesetzte `DATABASE_URL`, ohne sie auszugeben. Eine statische Prüfung verbindet sich nicht.
 
 ## Beispiel
 

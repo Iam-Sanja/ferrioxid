@@ -1,6 +1,6 @@
 # Admin navigation
 
-The sidebar is rendered by `crates/ferrum-admin/src/nav.rs` from the sealed admin registry and the signed-in user.
+The sidebar is rendered by `crates/ferrioxid-admin/src/nav.rs` from the sealed admin registry and the signed-in user.
 
 ## Sections
 

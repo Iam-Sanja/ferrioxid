@@ -1,6 +1,6 @@
 # Fehlercodes
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-core/src/problem.rs`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-core/src/problem.rs`.
 
 ## Vertrag
 
@@ -69,4 +69,4 @@ Unbekannte Benutzer und falsche Passwörter erzeugen denselben Code und denselbe
 
 ## Tests
 
-`crates/ferrum-core/src/problem.rs` prüft gleiche Anmeldungsfehler, den Feldpräfix und unterdrücktes SQL. Die bestehenden Auth- und Admin-Tests lesen weiterhin `detail`.
+`crates/ferrioxid-core/src/problem.rs` prüft gleiche Anmeldungsfehler, den Feldpräfix und unterdrücktes SQL. Die bestehenden Auth- und Admin-Tests lesen weiterhin `detail`.

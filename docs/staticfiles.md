@@ -4,12 +4,12 @@
 
 ## Verantwortlichkeit
 
-`ferrum-static` liefert CSS, JavaScript, Bilder und Schriften aus einem ausdrücklich konfigurierten Verzeichnis. Eingebettete Admin-Assets unter `/admin` bleiben getrennt.
+`ferrioxid-static` liefert CSS, JavaScript, Bilder und Schriften aus einem ausdrücklich konfigurierten Verzeichnis. Eingebettete Admin-Assets unter `/admin` bleiben getrennt.
 
 ## Crates und Dateien
 
-- `crates/ferrum-static/src/lib.rs`
-- Einhängen: `ferrum::web::prepare` in `crates/ferrum-api/src/web.rs`
+- `crates/ferrioxid-static/src/lib.rs`
+- Einhängen: `ferrioxid::web::prepare` in `crates/ferrioxid-api/src/web.rs`
 - Beispiel: `examples/myshop/static/`
 - Generator: `static/css/app.css` und `static/js/app.js`
 
@@ -43,11 +43,11 @@ Fehlende, versteckte oder ausbrechende Pfade sind 404. Unbekannte Endungen sind 
 
 ## Beispiel
 
-`GET /static/css/app.css` nach `ferrum::static_files::mount(router, StaticOptions::new("static"))`.
+`GET /static/css/app.css` nach `ferrioxid::static_files::mount(router, StaticOptions::new("static"))`.
 
 ## Tests
 
-`cargo test -p ferrum-static` prüft CSS, JavaScript, PNG, MIME, 404, Cache, ETag, Traversal, versteckte Dateien und, wenn Windows den Symlink anlegen darf, einen Symlink nach außen.
+`cargo test -p ferrioxid-static` prüft CSS, JavaScript, PNG, MIME, 404, Cache, ETag, Traversal, versteckte Dateien und, wenn Windows den Symlink anlegen darf, einen Symlink nach außen.
 
 ## Einschränkungen
 

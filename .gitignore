@@ -43,7 +43,7 @@ Desktop.ini
 
 # Local framework metadata and embedded admin build output.
 .ferrum/
-crates/ferrum-admin/embedded-admin/
+crates/ferrioxid-admin/embedded-admin/
 
 # Uploaded example media. The keep-file stays tracked.
 examples/myshop/media/*

@@ -4,11 +4,11 @@
 
 ## Quelle
 
-Die Rust-Struct bleibt die Quelle. `#[field(...)]` und `#[ferrum(...)]` schreiben Metadaten in `ColumnSpec` und `TableConstraints`. `SchemaSnapshot::from_registered` prüft modellübergreifende Regeln. Das Derive-Makro sieht andere Dateien nicht und erfindet deshalb keine Prüfung über fremde Modelle.
+Die Rust-Struct bleibt die Quelle. `#[field(...)]` und `#[ferrioxid(...)]` schreiben Metadaten in `ColumnSpec` und `TableConstraints`. `SchemaSnapshot::from_registered` prüft modellübergreifende Regeln. Das Derive-Makro sieht andere Dateien nicht und erfindet deshalb keine Prüfung über fremde Modelle.
 
 ```rust
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(table = "categories", api = "/api/v1/categories", allow_anonymous = true)]
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(table = "categories", api = "/api/v1/categories", allow_anonymous = true)]
 pub struct Category {
     #[field(primary_key, auto)]
     pub id: Uuid,
@@ -17,8 +17,8 @@ pub struct Category {
     pub name: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "products",
     api = "/api/v1/products",
     allow_anonymous = true,
@@ -52,13 +52,13 @@ Ein Primärschlüssel erzeugt bereits einen eindeutigen Index. `unique` oder `in
 
 ## NULL bei Unique Constraints
 
-Es gilt das SQL-Standardverhalten von SQLite und PostgreSQL: mehrere `NULL`-Werte sind in einem Unique Index erlaubt. `NULL` gilt nicht als gleich `NULL`. Ferrum setzt kein `NULLS NOT DISTINCT`. Ein zweiter konkreter Wert, der schon vorkommt, wird abgelehnt.
+Es gilt das SQL-Standardverhalten von SQLite und PostgreSQL: mehrere `NULL`-Werte sind in einem Unique Index erlaubt. `NULL` gilt nicht als gleich `NULL`. Ferrioxid setzt kein `NULLS NOT DISTINCT`. Ein zweiter konkreter Wert, der schon vorkommt, wird abgelehnt.
 
 ## SQL
 
 Unique Constraints sind eindeutig benannte Unique Indexes, keine reine Rust-Prüfung.
 
-Beim `CREATE TABLE` schreibt Ferrum die Spalten und die Foreign Keys in die Tabellenanweisung. Unique Indexes und sekundäre Indexes folgen als eigene `CREATE UNIQUE INDEX`- und `CREATE INDEX`-Anweisungen. Dadurch bleibt der Name in `sqlite_master` sichtbar und `DROP INDEX` entfernt ihn.
+Beim `CREATE TABLE` schreibt Ferrioxid die Spalten und die Foreign Keys in die Tabellenanweisung. Unique Indexes und sekundäre Indexes folgen als eigene `CREATE UNIQUE INDEX`- und `CREATE INDEX`-Anweisungen. Dadurch bleibt der Name in `sqlite_master` sichtbar und `DROP INDEX` entfernt ihn.
 
 Eine neue nullable Spalte kann in derselben Migration einen Foreign Key tragen:
 
@@ -112,11 +112,11 @@ In der Datenbank folgt auf die Umbenennung `DROP INDEX` und `CREATE INDEX` für 
 
 | Verstoß | Abbildung |
 |---|---|
-| `UniqueViolation` | `FerrumError::Validation("unique constraint violated")` |
-| `ForeignKeyViolation` | `FerrumError::Validation("foreign key constraint violated")` |
+| `UniqueViolation` | `FerrioxidError::Validation("unique constraint violated")` |
+| `ForeignKeyViolation` | `FerrioxidError::Validation("foreign key constraint violated")` |
 | SQLite-Code `1811` mit der festen Meldung `FOREIGN KEY constraint failed` | dieselbe Foreign-Key-Validierung |
 
-SQLite setzt `ON DELETE RESTRICT` intern als `RAISE` um. Der erweiterte Code ist dann `1811` (`SQLITE_CONSTRAINT_TRIGGER`) und nicht `787`. Die Meldung ist der feste Text dieser Implementierung, kein freier Vergleich beliebiger Fehltexte. Andere Datenbankfehler bleiben `FerrumError::Database` und werden an der HTTP-Grenze zu 500 ohne SQL-Text.
+SQLite setzt `ON DELETE RESTRICT` intern als `RAISE` um. Der erweiterte Code ist dann `1811` (`SQLITE_CONSTRAINT_TRIGGER`) und nicht `787`. Die Meldung ist der feste Text dieser Implementierung, kein freier Vergleich beliebiger Fehltexte. Andere Datenbankfehler bleiben `FerrioxidError::Database` und werden an der HTTP-Grenze zu 500 ohne SQL-Text.
 
 ## SQLite-Umbau
 

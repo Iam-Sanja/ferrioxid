@@ -23,8 +23,8 @@ let category = product.category(&db).await?;
 
 | Feld | Rückgabe |
 |---|---|
-| `Option<Uuid>` | `Result<Option<Category>, FerrumError>` |
-| `Uuid` | `Result<Category, FerrumError>` |
+| `Option<Uuid>` | `Result<Option<Category>, FerrioxidError>` |
+| `Uuid` | `Result<Category, FerrioxidError>` |
 
 Ist der optionale Schlüssel `None`, kommt `Ok(None)` und es gibt keine zweite Abfrage. Ist ein Schlüssel gesetzt und die Elternzeile fehlt, kommt `NotFound`. Bei einem wirksamen Foreign Key tritt das nur auf, wenn die Datenbank den Constraint nicht enthält. Ein ungültiger Schlüssel wird schon beim Schreiben abgelehnt.
 
@@ -33,7 +33,7 @@ Ist der optionale Schlüssel `None`, kommt `Ok(None)` und es gibt keine zweite A
 Die Gegenrichtung muss explizit sein. Das Makro sieht die Kindmodelle nicht.
 
 ```rust
-#[ferrum(
+#[ferrioxid(
     table = "categories",
     api = "/api/v1/categories",
     allow_anonymous = true,
@@ -53,7 +53,7 @@ Die Form ist `methode=Typpfad.spalte`. Die Spalte muss auf dem Kindmodell existi
 let products = category.products(&db).await?;
 ```
 
-Die Rückgabe ist `Result<Vec<Product>, FerrumError>`. Keine Kinder ergeben einen leeren Vektor, keinen Fehler. Die Zeilen sind nach `id` aufsteigend sortiert.
+Die Rückgabe ist `Result<Vec<Product>, FerrioxidError>`. Keine Kinder ergeben einen leeren Vektor, keinen Fehler. Die Zeilen sind nach `id` aufsteigend sortiert.
 
 Gegenseitige Modulverweise sind zulässig, weil die Typen nur in Methodensignaturen stehen. `myshop` trennt `category.rs` und `product.rs`.
 
@@ -67,7 +67,7 @@ Die Repository-Methoden `list`, `get`, `create`, `update` und `delete` bleiben u
 
 ## HTTP
 
-Es gibt keine zusätzlichen Routen für Beziehungen. `GET /categories/{id}/products` existiert nicht. Die CRUD-Routen der registrierten Modelle bleiben. Unique- und Foreign-Key-Verletzungen werden zu `FerrumError::Validation` und damit zu HTTP 422. Die Antwort enthält den festen englischen Text `unique constraint violated` oder `foreign key constraint violated`, nicht das SQL und nicht die Datenbankmeldung. Eine fehlende Einzelzeile bleibt 404. Eine nicht freigegebene Route bleibt 403. Ein unbekannter Datenbankfehler bleibt 500.
+Es gibt keine zusätzlichen Routen für Beziehungen. `GET /categories/{id}/products` existiert nicht. Die CRUD-Routen der registrierten Modelle bleiben. Unique- und Foreign-Key-Verletzungen werden zu `FerrioxidError::Validation` und damit zu HTTP 422. Die Antwort enthält den festen englischen Text `unique constraint violated` oder `foreign key constraint violated`, nicht das SQL und nicht die Datenbankmeldung. Eine fehlende Einzelzeile bleibt 404. Eine nicht freigegebene Route bleibt 403. Ein unbekannter Datenbankfehler bleibt 500.
 
 `DELETE` einer Elternzeile mit `on_delete = "restrict"` und vorhandenen Kindern antwortet 422.
 

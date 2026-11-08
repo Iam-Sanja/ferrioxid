@@ -4,11 +4,11 @@
 
 ## Verantwortlichkeit
 
-Die Upload-Routen sind standardmäßig nicht montiert. Eine Anwendung ruft `ferrum::storage::routes` auf und hängt den Router mit `App::merge` ein. Ohne Auth-Service antworten die Routen mit 403.
+Die Upload-Routen sind standardmäßig nicht montiert. Eine Anwendung ruft `ferrioxid::storage::routes` auf und hängt den Router mit `App::merge` ein. Ohne Auth-Service antworten die Routen mit 403.
 
 ## Crates und Dateien
 
-- `crates/ferrum-storage/src/http.rs`
+- `crates/ferrioxid-storage/src/http.rs`
 - Beispiel: `examples/myshop/src/main.rs`
 - Speicherdetails: [storage.md](storage.md)
 
@@ -35,8 +35,8 @@ Deny-by-default. Authentifizierung ist erforderlich. Die Datei-ID ist eine UUID,
 ## Beispiel
 
 ```rust
-let storage = ferrum::storage::LocalStorage::open("media", 1024 * 1024, &["text/plain"])?;
-let app = app.merge(ferrum::storage::routes(std::sync::Arc::new(storage)));
+let storage = ferrioxid::storage::LocalStorage::open("media", 1024 * 1024, &["text/plain"])?;
+let app = app.merge(ferrioxid::storage::routes(std::sync::Arc::new(storage)));
 ```
 
 ## Tests

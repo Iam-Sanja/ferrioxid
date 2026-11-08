@@ -1,8 +1,8 @@
-use ferrum::prelude::*;
+use ferrioxid::prelude::*;
 
 /// Geschützte Ressource. Produkte und Kategorien bleiben ausdrücklich öffentliche Demo-Routen.
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "internal_notes",
     api = "/api/v1/internal_notes",
     permissions = "notes",

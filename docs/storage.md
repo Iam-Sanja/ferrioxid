@@ -4,13 +4,13 @@
 
 ## Verantwortlichkeit
 
-`ferrum-storage` speichert Bytes unter einem Root, den die Anwendung festlegt. Der Client-Dateiname wird nie zum Pfad.
+`ferrioxid-storage` speichert Bytes unter einem Root, den die Anwendung festlegt. Der Client-Dateiname wird nie zum Pfad.
 
 ## Crates und Dateien
 
-- Trait und Typen: `crates/ferrum-storage/src/lib.rs`
-- Lokal: `crates/ferrum-storage/src/local.rs`
-- HTTP, nur nach ausdrücklichem Einhängen: `crates/ferrum-storage/src/http.rs`
+- Trait und Typen: `crates/ferrioxid-storage/src/lib.rs`
+- Lokal: `crates/ferrioxid-storage/src/local.rs`
+- HTTP, nur nach ausdrücklichem Einhängen: `crates/ferrioxid-storage/src/http.rs`
 
 ## Öffentliche API
 
@@ -31,7 +31,7 @@ directory = "media"
 max_upload_size_mb = 10
 ```
 
-`backend` akzeptiert nur `local`. `directory` ist relativ ohne `..`. Die Größe liegt zwischen 1 und 100 MiB. `ferrum::web::prepare` setzt das Body-Limit mindestens auf diese Größe. myshop öffnet `examples/myshop/media` mit 1 MiB und der Allowlist `text/plain`, `image/png`, `image/jpeg`, `application/pdf`.
+`backend` akzeptiert nur `local`. `directory` ist relativ ohne `..`. Die Größe liegt zwischen 1 und 100 MiB. `ferrioxid::web::prepare` setzt das Body-Limit mindestens auf diese Größe. myshop öffnet `examples/myshop/media` mit 1 MiB und der Allowlist `text/plain`, `image/png`, `image/jpeg`, `application/pdf`.
 
 ## Sicherheit
 
@@ -50,7 +50,7 @@ let (_meta, bytes) = storage.read(user_id, stored.id).await?;
 
 ## Tests
 
-`cargo test -p ferrum-storage` speichert, liest, löscht, isoliert Owner, lehnt Größe, HTML und Pfadnamen ab und prüft anonyme sowie fremde HTTP-Zugriffe.
+`cargo test -p ferrioxid-storage` speichert, liest, löscht, isoliert Owner, lehnt Größe, HTML und Pfadnamen ab und prüft anonyme sowie fremde HTTP-Zugriffe.
 
 ## Einschränkungen
 

@@ -677,24 +677,24 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
-name = "ferrum"
+name = "ferrioxid"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "ferrum-admin",
- "ferrum-api",
- "ferrum-auth",
- "ferrum-core",
- "ferrum-db",
- "ferrum-forms",
- "ferrum-jobs",
- "ferrum-macros",
- "ferrum-mail",
- "ferrum-middleware",
- "ferrum-migrations",
- "ferrum-static",
- "ferrum-storage",
+ "ferrioxid-admin",
+ "ferrioxid-api",
+ "ferrioxid-auth",
+ "ferrioxid-core",
+ "ferrioxid-db",
+ "ferrioxid-forms",
+ "ferrioxid-jobs",
+ "ferrioxid-macros",
+ "ferrioxid-mail",
+ "ferrioxid-middleware",
+ "ferrioxid-migrations",
+ "ferrioxid-static",
+ "ferrioxid-storage",
  "sea-orm",
  "serde",
  "serde_json",
@@ -702,16 +702,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-admin"
+name = "ferrioxid-admin"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
  "chrono",
- "ferrum-auth",
- "ferrum-core",
- "ferrum-db",
- "ferrum-forms",
+ "ferrioxid-auth",
+ "ferrioxid-core",
+ "ferrioxid-db",
+ "ferrioxid-forms",
  "sea-orm",
  "serde",
  "serde_json",
@@ -722,19 +722,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-api"
+name = "ferrioxid-api"
 version = "0.1.0"
 dependencies = [
  "axum",
- "ferrum-admin",
- "ferrum-auth",
- "ferrum-core",
- "ferrum-db",
- "ferrum-jobs",
- "ferrum-mail",
- "ferrum-middleware",
- "ferrum-migrations",
- "ferrum-static",
+ "ferrioxid-admin",
+ "ferrioxid-auth",
+ "ferrioxid-core",
+ "ferrioxid-db",
+ "ferrioxid-jobs",
+ "ferrioxid-mail",
+ "ferrioxid-middleware",
+ "ferrioxid-migrations",
+ "ferrioxid-static",
  "http-body-util",
  "sea-orm",
  "serde_json",
@@ -746,15 +746,15 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-auth"
+name = "ferrioxid-auth"
 version = "0.1.0"
 dependencies = [
  "argon2",
  "axum",
- "ferrum-core",
- "ferrum-db",
- "ferrum-mail",
- "ferrum-migrations",
+ "ferrioxid-core",
+ "ferrioxid-db",
+ "ferrioxid-mail",
+ "ferrioxid-migrations",
  "getrandom 0.2.17",
  "hmac",
  "http-body-util",
@@ -770,16 +770,16 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-cli"
+name = "ferrioxid-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
  "ctrlc",
- "ferrum-auth",
- "ferrum-db",
- "ferrum-jobs",
- "ferrum-mail",
- "ferrum-migrations",
+ "ferrioxid-auth",
+ "ferrioxid-db",
+ "ferrioxid-jobs",
+ "ferrioxid-mail",
+ "ferrioxid-migrations",
  "notify",
  "rpassword",
  "sea-orm",
@@ -788,7 +788,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-core"
+name = "ferrioxid-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -799,12 +799,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-db"
+name = "ferrioxid-db"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "ferrum-core",
+ "ferrioxid-core",
  "sea-orm",
  "serde",
  "serde_json",
@@ -812,24 +812,24 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-forms"
+name = "ferrioxid-forms"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "ferrum-core",
+ "ferrioxid-core",
  "uuid",
 ]
 
 [[package]]
-name = "ferrum-jobs"
+name = "ferrioxid-jobs"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "ferrum-auth",
- "ferrum-core",
- "ferrum-db",
- "ferrum-mail",
- "ferrum-migrations",
+ "ferrioxid-auth",
+ "ferrioxid-core",
+ "ferrioxid-db",
+ "ferrioxid-mail",
+ "ferrioxid-migrations",
  "sea-orm",
  "serde",
  "serde_json",
@@ -840,7 +840,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-macros"
+name = "ferrioxid-macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
@@ -849,7 +849,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-mail"
+name = "ferrioxid-mail"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -861,7 +861,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-middleware"
+name = "ferrioxid-middleware"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -871,11 +871,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-migrations"
+name = "ferrioxid-migrations"
 version = "0.1.0"
 dependencies = [
- "ferrum-core",
- "ferrum-db",
+ "ferrioxid-core",
+ "ferrioxid-db",
  "sea-orm",
  "serde",
  "serde_json",
@@ -885,7 +885,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-static"
+name = "ferrioxid-static"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -894,14 +894,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrum-storage"
+name = "ferrioxid-storage"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
- "ferrum-auth",
- "ferrum-core",
- "ferrum-db",
+ "ferrioxid-auth",
+ "ferrioxid-core",
+ "ferrioxid-db",
  "serde",
  "serde_json",
  "thiserror",
@@ -1665,7 +1665,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "ferrum",
+ "ferrioxid",
  "serde",
  "serde_json",
  "tokio",
@@ -1701,7 +1701,7 @@ name = "notes"
 version = "0.1.0"
 dependencies = [
  "axum",
- "ferrum",
+ "ferrioxid",
  "http-body-util",
  "serde",
  "tokio",

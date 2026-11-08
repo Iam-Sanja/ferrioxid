@@ -10,7 +10,7 @@ Die Fremdschlüssel-Auswahl ist eine eigene GET-Seite. Der Entwurf hält die üb
 
 ## Speicher
 
-Tabelle `_ferrum_admin_drafts` aus `crates/ferrum-auth/migrations/0002_admin_journal.json`.
+Tabelle `_ferrum_admin_drafts` aus `crates/ferrioxid-auth/migrations/0002_admin_journal.json`.
 
 | Spalte | Inhalt |
 |---|---|
@@ -39,4 +39,4 @@ Passwortfelder, Namen mit `password`, `token`, `secret`, `csrf` oder Endungen `_
 
 Der endgültige POST prüft Felder, Relationen und Policies erneut. Der Entwurf ist keine Schreibfreigabe.
 
-Code: `crates/ferrum-admin/src/drafts.rs`, Handler in `html.rs`. Test: `admin_v018_drafts_inlines_bulk_and_audit`.
+Code: `crates/ferrioxid-admin/src/drafts.rs`, Handler in `html.rs`. Test: `admin_v018_drafts_inlines_bulk_and_audit`.

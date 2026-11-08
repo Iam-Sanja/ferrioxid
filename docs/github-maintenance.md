@@ -4,7 +4,7 @@ This page documents repository settings, the contributor workflow, and CI mainte
 
 The repository has been pushed to GitHub. The local development checkout uses `origin` to track its GitHub remote. GitHub settings and CI results can change independently of this document.
 
-The intended repository is <https://github.com/Iam-Sanja/neravol>. The framework name remains Ferrum. `neravol` is not a Rust crate.
+The intended repository is <https://github.com/Iam-Sanja/ferrioxid>. The framework name remains Ferrioxid. `ferrioxid` is not a Rust crate.
 
 ## Repository files
 
@@ -62,7 +62,7 @@ Issue forms do not assign labels. Create `dependencies` before expecting Dependa
 
 The repository is currently private. GitHub API queries during the initial setup returned a plan restriction: private-repository rulesets require an eligible paid GitHub plan. GitHub Free supports branch protection on public repositories; paid plans also support private repositories. Do **not** change repository visibility just to satisfy a branch-protection checklist.
 
-Track eligibility and eventual enforcement in [issue #12](https://github.com/Iam-Sanja/neravol/issues/12). Until protection is available, maintainers should voluntarily use pull requests and avoid direct pushes or force pushes to `main`. Once eligible, configure protection in GitHub Settings and verify it actually applies; documentation is not enforcement.
+Track eligibility and eventual enforcement in [issue #12](https://github.com/Iam-Sanja/ferrioxid/issues/12). Until protection is available, maintainers should voluntarily use pull requests and avoid direct pushes or force pushes to `main`. Once eligible, configure protection in GitHub Settings and verify it actually applies; documentation is not enforcement.
 
 Avoid requiring another person's approval in a single-maintainer repository unless a separate reviewer is available. CI and review rules should be enabled only when the corresponding checks and reviewers exist.
 
@@ -104,4 +104,4 @@ The PostgreSQL integration job runs separately against a disposable database. A 
 
 The Security audit uses `cargo audit` on `Cargo.lock`. Advisory matches can involve transitive or lockfile-only packages; investigate the dependency and feature tree before removing packages or considering a documented exception. Do not hide findings merely to turn a check green.
 
-As of the initial GitHub setup, see the independent tracking issues for [admin formatting](https://github.com/Iam-Sanja/neravol/issues/7) and [RSA dependency audit](https://github.com/Iam-Sanja/neravol/issues/8). These links are historical references; check their current status rather than assuming they are still open.
+As of the initial GitHub setup, see the independent tracking issues for [admin formatting](https://github.com/Iam-Sanja/ferrioxid/issues/7) and [RSA dependency audit](https://github.com/Iam-Sanja/ferrioxid/issues/8). These links are historical references; check their current status rather than assuming they are still open.

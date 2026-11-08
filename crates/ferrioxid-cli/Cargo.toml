@@ -1,0 +1,23 @@
+[package]
+name = "ferrioxid-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[[bin]]
+name = "ferrioxid"
+path = "src/main.rs"
+
+[dependencies]
+clap.workspace = true
+ctrlc = "3.4"
+ferrioxid-auth = { path = "../ferrioxid-auth" }
+ferrioxid-db = { path = "../ferrioxid-db" }
+ferrioxid-jobs = { path = "../ferrioxid-jobs" }
+ferrioxid-mail = { path = "../ferrioxid-mail" }
+ferrioxid-migrations = { path = "../ferrioxid-migrations" }
+notify = "6"
+rpassword.workspace = true
+tokio.workspace = true
+sea-orm.workspace = true
+uuid.workspace = true

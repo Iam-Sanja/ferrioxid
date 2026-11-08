@@ -1,4 +1,4 @@
-# Ferrum – Dokumentationsportal
+# Ferrioxid – Dokumentationsportal
 
 **Projektstand:** Funktionsstand v0.28 gruppiert den nativen Admin nach Apps: [admin-navigation.md](admin-navigation.md). Funktionsstand v0.27.1 ergänzt Anwendungs-Worker und verdeckte Job-Payloads: [workers.md](workers.md), [job-security.md](job-security.md). Funktionsstand v0.27 ergänzt Hintergrundjobs: [jobs.md](jobs.md), [workers.md](workers.md), [job-retries.md](job-retries.md), [job-security.md](job-security.md), [job-mail-integration.md](job-mail-integration.md). Funktionsstand v0.26 ergänzt Modellfelder: [models.md](models.md), [model-components.md](model-components.md), [model-timestamps.md](model-timestamps.md), [model-soft-delete.md](model-soft-delete.md), [app-lifecycle.md](app-lifecycle.md). Funktionsstand v0.25 ergänzt Apps: [apps.md](apps.md), [app-registry.md](app-registry.md), [app-migrations.md](app-migrations.md), [reusable-apps.md](reusable-apps.md), [create-app.md](create-app.md). Funktionsstand v0.24 ergänzt Settings, benannte Routen und Views: [settings.md](settings.md), [custom-settings.md](custom-settings.md), [urls.md](urls.md), [routing.md](routing.md), [views.md](views.md), [project-structure.md](project-structure.md). Funktionsstand v0.23 bleibt gültig. E-Mail: [mail.md](mail.md), [mail-smtp.md](mail-smtp.md), [mail-security.md](mail-security.md). Passwort-Reset: [password-reset.md](password-reset.md). Hinweise: [notifications.md](notifications.md). Funktionsstand v0.22 bleibt gültig. Erweiterung: [admin-extension-api.md](admin-extension-api.md), [admin-custom-views.md](admin-custom-views.md), [admin-custom-filters.md](admin-custom-filters.md), [admin-custom-widgets.md](admin-custom-widgets.md). Diagnose: [migration-diagnostics.md](migration-diagnostics.md). Upgrade: [project-upgrade.md](project-upgrade.md). Manifest: [project-manifest.md](project-manifest.md). Legacy: [legacy-projects.md](legacy-projects.md). v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Der Admin ist serverseitiges HTML: [admin-native.md](admin-native.md). Transaktionen: [transactions.md](transactions.md). Verzeichnis-Audit: [admin-directory-audit.md](admin-directory-audit.md). Eltern-Kind-Formulare: [admin-transactional-inlines.md](admin-transactional-inlines.md). Entwürfe, Inlines, Sammelaktionen und Historie: [admin-form-drafts.md](admin-form-drafts.md), [admin-inlines.md](admin-inlines.md), [admin-bulk-actions.md](admin-bulk-actions.md), [admin-audit-log.md](admin-audit-log.md), [admin-custom-actions.md](admin-custom-actions.md). Datum und Uhrzeit: [date-time-types.md](date-time-types.md). SQLite ist die lokale Standarddatenbank, PostgreSQL das optionale Backend. **Dokumentationssprache:** Deutsch
 
@@ -6,19 +6,19 @@
 
 Jedes Dokument trennt **IST** von **SOLL (Entwurf)**. SOLL bezeichnet eine Architekturentscheidung oder einen Vorschlag, **keine implementierte Funktion**. Beispiel-Code und CLI-Aufrufe in SOLL-Abschnitten sind nicht ausführbar, solange die Funktion nicht implementiert wurde. Authentifizierung ist v0.7. Der automatische Admin ist v0.8. Query-Scopes, stabiles CSRF und eingebettete Admin-Assets sind v0.8.1. Settings, Tera-Seiten und die vorbereitete Zweisprachigkeit sind v0.10: [settings.md](settings.md), [templates.md](templates.md), [i18n.md](i18n.md). Vollständige Admin-Übersetzung, Fehlercodes und Branding sind v0.11: [localization.md](localization.md), [error-codes.md](error-codes.md), [admin-directory.md](admin-directory.md). Create-Policies, das Admin-Feature und die Entwickler-CLI sind v0.9: [project-generator.md](project-generator.md), [project-templates.md](project-templates.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md). Formulare, Staticfiles, Uploads und Middleware sind v0.12: [forms.md](forms.md), [forms-validation.md](forms-validation.md), [staticfiles.md](staticfiles.md), [storage.md](storage.md), [uploads.md](uploads.md), [middleware.md](middleware.md), [request-lifecycle.md](request-lifecycle.md). Die Cargo-Version bleibt `0.1.0`.
 
-**Zentrale Regel:** Rust-Struct → `FerrumModel`-Makro → typisierte Repository-Implementierung und Modelldeskriptor → explizite Registrierung → HTTP-Routen. Schemaänderungen laufen über die Migrations-Engine. `myshop --bootstrap` ist Legacy.
+**Zentrale Regel:** Rust-Struct → `FerrioxidModel`-Makro → typisierte Repository-Implementierung und Modelldeskriptor → explizite Registrierung → HTTP-Routen. Schemaänderungen laufen über die Migrations-Engine. `myshop --bootstrap` ist Legacy.
 
 ## Teilbereiche und ihre Dokumente
 
 | Modul | Zustand | Dokument | Kernverantwortung |
 |---|---|---|---|
 | Gesamtarchitektur | IST + SOLL | [architecture.md](architecture.md) | Grenzen, Abhängigkeiten und Datenfluss |
-| Öffentliche API (`ferrum`) | IST | [facade.md](facade.md) | Re-Exports, Prelude, Stabilitätsgrenze |
-| `ferrum-core` | IST + SOLL | [core.md](core.md) | Traits, Metadaten, Fehler |
-| `ferrum-macros` | IST + SOLL | [macros.md](macros.md) | Parsing, Validierung, Codegenerierung |
-| `ferrum-db` | IST + SOLL | [database.md](database.md) | Typisierte Repositories, Connection, SQL |
-| `ferrum-api` | IST + SOLL | [api.md](api.md) | Axum-Routing, DTOs, Fehlerbehandlung |
-| `ferrum-cli` | IST | [cli.md](cli.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generator, Diagnose, Upgrade, Entwicklungsserver |
+| Öffentliche API (`ferrioxid`) | IST | [facade.md](facade.md) | Re-Exports, Prelude, Stabilitätsgrenze |
+| `ferrioxid-core` | IST + SOLL | [core.md](core.md) | Traits, Metadaten, Fehler |
+| `ferrioxid-macros` | IST + SOLL | [macros.md](macros.md) | Parsing, Validierung, Codegenerierung |
+| `ferrioxid-db` | IST + SOLL | [database.md](database.md) | Typisierte Repositories, Connection, SQL |
+| `ferrioxid-api` | IST + SOLL | [api.md](api.md) | Axum-Routing, DTOs, Fehlerbehandlung |
+| `ferrioxid-cli` | IST | [cli.md](cli.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generator, Diagnose, Upgrade, Entwicklungsserver |
 | `myshop` | IST | [example-myshop.md](example-myshop.md) | Integrationsbeispiel und Start |
 | Konfiguration | IST v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrum.toml`, Umgebung, eigene Abschnitte |
 | URLs und Views | IST v0.24 | [urls.md](urls.md), [routing.md](routing.md), [views.md](views.md), [project-structure.md](project-structure.md) | Benannte Axum-Routen, Antworten, Projektlayout |
@@ -46,10 +46,10 @@ Jedes Dokument trennt **IST** von **SOLL (Entwurf)**. SOLL bezeichnet eine Archi
 
 ## Verbindliche Begriffe
 
-- **Model:** Entwicklerseitige, serialisierbare Rust-Struct mit `#[derive(FerrumModel)]`.
+- **Model:** Entwicklerseitige, serialisierbare Rust-Struct mit `#[derive(FerrioxidModel)]`.
 - **Deskriptor:** `ModelDescriptor` mit Name, Tabelle, API-Pfad, `allow_anonymous`, `permission` und `requires_object_policy`. Spalten stehen zusätzlich in `ColumnSpec`.
 - **Repository:** Generierte typisierte Methoden `list`, `get`, `create`, `update` und `delete`. `update` nimmt `{Model}Update` mit `PatchField<T>`.
-- **Migration:** versionierte Datei unter `migrations/`, angewendet über `ferrum migrate up`.
+- **Migration:** versionierte Datei unter `migrations/`, angewendet über `ferrioxid migrate up`.
 - **Bootstrap:** Legacy-Befehl ohne Schemaänderung. `App::bootstrap_schema` bleibt ein Testhelfer für leere Datenbanken ohne Historie.
 - **Registrierung:** `App::new(db).register::<Product>()`, explizit und typisiert.
 - **SOLL:** Geplante Funktion; wird nicht als fertiges Feature kommuniziert.

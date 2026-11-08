@@ -12,7 +12,7 @@ Ein Nicht-Staff sieht eine 403-Seite ohne Seitenleiste und mit einem Abmeldeform
 
 ## Listenspalten
 
-`listed_fields` in `crates/ferrum-admin/src/html.rs` wählt die Spalten:
+`listed_fields` in `crates/ferrioxid-admin/src/html.rs` wählt die Spalten:
 
 1. Gibt es außer `id` mindestens ein Feld mit `#[admin(list_display)]`, gelten alle `list_display`-Felder in der Struct-Reihenfolge. `id` ist dabei, weil das Makro es immer als Listenspalte setzt.
 2. Sonst das erste sichtbare Textfeld, danach `id`.
@@ -38,13 +38,13 @@ Die JSON-API unter `/admin/api` bleibt. Sie nutzt dieselben Modelle, Rechte und 
 
 | Bereich | Datei |
 |---|---|
-| Routen und Formulare | `crates/ferrum-admin/src/html.rs` |
-| JSON-API und gemeinsame Prüfungen | `crates/ferrum-admin/src/http.rs` |
-| Vorlagen | `crates/ferrum-admin/src/rendering.rs`, `crates/ferrum-admin/templates/` |
-| Texte | `crates/ferrum-admin/src/localization.rs` |
-| CSS und Script | `crates/ferrum-admin/static/css/admin.css`, `crates/ferrum-admin/static/js/admin.js` |
-| Auslieferung | `crates/ferrum-admin/src/assets.rs` |
-| Modelle | `crates/ferrum-admin/src/registry.rs` |
+| Routen und Formulare | `crates/ferrioxid-admin/src/html.rs` |
+| JSON-API und gemeinsame Prüfungen | `crates/ferrioxid-admin/src/http.rs` |
+| Vorlagen | `crates/ferrioxid-admin/src/rendering.rs`, `crates/ferrioxid-admin/templates/` |
+| Texte | `crates/ferrioxid-admin/src/localization.rs` |
+| CSS und Script | `crates/ferrioxid-admin/static/css/admin.css`, `crates/ferrioxid-admin/static/js/admin.js` |
+| Auslieferung | `crates/ferrioxid-admin/src/assets.rs` |
+| Modelle | `crates/ferrioxid-admin/src/registry.rs` |
 
 `build.rs` ruft kein npm auf. CSS, Script und Vorlagen stecken über `include_str!` im Binary. Das Cargo-Feature `admin-ui` bleibt als leeres Kompatibilitätsflag erhalten. Es verlangt kein Frontend-Build mehr.
 
@@ -54,7 +54,7 @@ Die JSON-API unter `/admin/api` bleibt. Sie nutzt dieselben Modelle, Rechte und 
 
 ## Sprache und Darstellung
 
-`ferrum_locale` und `ferrum_theme` sind HttpOnly-Cookies. Sie entstehen über `POST /admin/preferences`. Erlaubte Sprachen sind `de` und `en`. Erlaubte Themes sind `light`, `dark` und `system`. `system` folgt `prefers-color-scheme`. Ohne Cookie gilt die Projektsprache und `system`. `next` muss mit `/admin` beginnen und darf kein Schema und keinen Host enthalten.
+`ferrioxid_locale` und `ferrioxid_theme` sind HttpOnly-Cookies. Sie entstehen über `POST /admin/preferences`. Erlaubte Sprachen sind `de` und `en`. Erlaubte Themes sind `light`, `dark` und `system`. `system` folgt `prefers-color-scheme`. Ohne Cookie gilt die Projektsprache und `system`. `next` muss mit `/admin` beginnen und darf kein Schema und keinen Host enthalten.
 
 ## Grenzen
 

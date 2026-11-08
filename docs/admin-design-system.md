@@ -4,7 +4,7 @@
 
 ## Aufgabe
 
-`crates/ferrum-admin/static/css/admin.css` ist das einzige Stylesheet. Es wird unter `/admin/assets/admin.css` ausgeliefert. Es gibt keine CDN-Adresse und kein Tailwind im nativen Admin. `.hierarchy` ist eine umbrechende Linkliste in den bestehenden Abständen. Die Browser-Tastaturautomatisierung bleibt unzuverlässig. Der Nachweis für Datumseingaben ist das HTML: Label, `for` und der native Input-Typ. Es gibt keinen JavaScript-Tastaturhandler.
+`crates/ferrioxid-admin/static/css/admin.css` ist das einzige Stylesheet. Es wird unter `/admin/assets/admin.css` ausgeliefert. Es gibt keine CDN-Adresse und kein Tailwind im nativen Admin. `.hierarchy` ist eine umbrechende Linkliste in den bestehenden Abständen. Die Browser-Tastaturautomatisierung bleibt unzuverlässig. Der Nachweis für Datumseingaben ist das HTML: Label, `for` und der native Input-Typ. Es gibt keinen JavaScript-Tastaturhandler.
 
 Die Fläche heißt in `DESIGN.md` „Die Nachtschicht“: hell und dunkel sind zwei Beleuchtungen desselben Tisches. Diese Seite beschreibt die Tokens, die der Code wirklich setzt.
 

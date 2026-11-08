@@ -1,27 +1,27 @@
-# ferrum – Öffentliche Framework-Fassade
+# ferrioxid – Öffentliche Framework-Fassade
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum/src/lib.rs`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid/src/lib.rs`.
 
 ## Aufgabe (IST)
 
-Die `ferrum`-Crate ist der öffentliche Einstiegspunkt. Sie exportiert `App`, `FerrumModel` (Derive-Makro) und Wrapper-Namensräume für die benutzten Libraries. Der `prelude`-Block exportiert `App`, `FerrumModel`, `Uuid`.
+Die `ferrioxid`-Crate ist der öffentliche Einstiegspunkt. Sie exportiert `App`, `FerrioxidModel` (Derive-Makro) und Wrapper-Namensräume für die benutzten Libraries. Der `prelude`-Block exportiert `App`, `FerrioxidModel`, `Uuid`.
 
 ### Aktuelle Exporte
 
-- `ferrum::App`, `ferrum::pages`, `ferrum::web`
-- `ferrum::forms`, `ferrum::static_files`, `ferrum::storage`, `ferrum::middleware`
-- `ferrum::core` (`ferrum-core`)
-- `ferrum::db` (`ferrum-db`)
-- `ferrum::FerrumModel` (Makro)
-- `ferrum::sea_orm`, `ferrum::serde`, `ferrum::serde_json`, `ferrum::uuid`, `ferrum::async_trait`
-- `ferrum::prelude::{App, FerrumModel, Uuid}`
+- `ferrioxid::App`, `ferrioxid::pages`, `ferrioxid::web`
+- `ferrioxid::forms`, `ferrioxid::static_files`, `ferrioxid::storage`, `ferrioxid::middleware`
+- `ferrioxid::core` (`ferrioxid-core`)
+- `ferrioxid::db` (`ferrioxid-db`)
+- `ferrioxid::FerrioxidModel` (Makro)
+- `ferrioxid::sea_orm`, `ferrioxid::serde`, `ferrioxid::serde_json`, `ferrioxid::uuid`, `ferrioxid::async_trait`
+- `ferrioxid::prelude::{App, FerrioxidModel, Uuid}`
 
 ### Developer-Usage
 
 ```rust
-use ferrum::prelude::*;
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(table = "products", api = "/api/v1/products", allow_anonymous = true)]
+use ferrioxid::prelude::*;
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(table = "products", api = "/api/v1/products", allow_anonymous = true)]
 pub struct Product {
     #[field(primary_key, auto)] pub id: Uuid,
     #[field(required)] pub name: String,
@@ -32,7 +32,7 @@ pub struct Product {
 
 ## Kompatibilitätsregeln
 
-1. Das Makro referenziert generierte Pfade wie `::ferrum::db::...`: Änderungen an Re-Exports wirken direkt auf jedes Nutzermodell.
+1. Das Makro referenziert generierte Pfade wie `::ferrioxid::db::...`: Änderungen an Re-Exports wirken direkt auf jedes Nutzermodell.
 2. Neuer Trait-Bound oder neue Pflichtfelder können Build-breaking sein.
 3. Öffentliches DTO-Namensschema `ProductCreate` ist bereits vom Makro erzeugt; nicht ohne Migrationsplan ändern.
 4. `prelude` nicht als Sammelstelle sämtlicher interner Implementierungsdetails nutzen.

@@ -25,7 +25,7 @@ Das ist keine garantierte Zustellung. Ein angenommener SMTP-Versand kann den Pos
 ## Weitere Grenzen
 
 - Das Rate-Limit ist prozesslokal und teilt sich nicht zwischen Instanzen.
-- `ferrum doctor` prüft die Form und das Vorhandensein von `FERRUM_SMTP_PASSWORD`, nicht die Erreichbarkeit des Servers.
+- `ferrioxid doctor` prüft die Form und das Vorhandensein von `FERRUM_SMTP_PASSWORD`, nicht die Erreichbarkeit des Servers.
 - Zertifikatsprüfung ist aktiv. Ein unsicherer TLS-Fallback existiert nicht.
 - Die Reset-Seiten laden keine Drittanbieterdatei und setzen keinen Analytics-Aufruf.
 - Ein manipuliertes, abgelaufenes oder fremdes Token sieht von außen wie ein ungültiger Link aus.

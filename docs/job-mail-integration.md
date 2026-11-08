@@ -6,22 +6,22 @@
 
 ## Was der Worker nicht wiederholt
 
-Der Reset-Token steht nicht in der Outbox und nicht in `_ferrum_jobs`. `enqueue_notice` lehnt `Notice::PasswordResetRequested` mit `job.mail.reset_refused` ab. Der eingebaute Handler `ferrum_mail_notice` versendet `password_reset` nicht, auch wenn eine Zeile diesen Kind-Namen trägt.
+Der Reset-Token steht nicht in der Outbox und nicht in `_ferrum_jobs`. `enqueue_notice` lehnt `Notice::PasswordResetRequested` mit `job.mail.reset_refused` ab. Der eingebaute Handler `ferrioxid_mail_notice` versendet `password_reset` nicht, auch wenn eine Zeile diesen Kind-Namen trägt.
 
-Bestehende Outbox-Zeilen liest der Worker nicht. `sweep` in `ferrum-auth` markiert veraltete Reset-Zeilen weiter als `mail.expired` und verbraucht den Token. Ein stiller Worker erzeugt daraus keine zweite E-Mail.
+Bestehende Outbox-Zeilen liest der Worker nicht. `sweep` in `ferrioxid-auth` markiert veraltete Reset-Zeilen weiter als `mail.expired` und verbraucht den Token. Ein stiller Worker erzeugt daraus keine zweite E-Mail.
 
 ## Gewöhnliche Hinweise
 
 `PasswordChanged`, `AccountDeactivated` und `SecurityNotice` können nach einem erfolgreichen Commit als Job eingetragen werden:
 
 ```rust
-ferrum::jobs::enqueue_notice(
+ferrioxid::jobs::enqueue_notice(
     &queue,
-    &ferrum::mail::Notice::PasswordChanged {
+    &ferrioxid::mail::Notice::PasswordChanged {
         to: "person@example.com".into(),
         locale: "de".into(),
     },
-    ferrum::jobs::When::now(),
+    ferrioxid::jobs::When::now(),
 ).await?;
 ```
 

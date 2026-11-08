@@ -7,7 +7,7 @@
 | Methode | Pfad | Wirkung |
 |---|---|---|
 | GET | `/admin`, `/admin/` | Übersicht. Ohne Sitzung Weiterleitung zur Anmeldung. |
-| GET | `/admin/login` | Formular. Setzt oder übernimmt `ferrum_login_csrf`. |
+| GET | `/admin/login` | Formular. Setzt oder übernimmt `ferrioxid_login_csrf`. |
 | POST | `/admin/login` | Prüft Login-CSRF, Origin und Zugangsdaten. Danach 303. |
 | POST | `/admin/logout` | Prüft das Sitzungs-CSRF und beendet die Sitzung. |
 | POST | `/admin/preferences` | Sprache und Theme. Verlangt Staff und Sitzungs-CSRF. |
@@ -41,7 +41,7 @@ GET verändert keine Daten. Schreibende Aktionen sind POST und antworten bei Erf
 
 ## Anmeldung ohne Sitzung
 
-Das Sitzungs-CSRF existiert erst nach dem Login. Das Anmeldeformular nutzt deshalb ein eigenes Cookie `ferrum_login_csrf`. Es ist 64 Hex-Zeichen, HttpOnly, Pfad `/`, SameSite aus der Auth-Konfiguration, `Secure` nur wenn das Session-Cookie `Secure` ist, und höchstens zehn Minuten gültig. Die HTML-Antwort setzt `Cache-Control: no-store`, damit Formular und Cookie zusammenbleiben. Mehrere Tabs übernehmen dasselbe gültige Cookie. Nach erfolgreicher Anmeldung wird es gelöscht. Die JSON-Route `POST /auth/login` bleibt ohne dieses Cookie, wie bisher.
+Das Sitzungs-CSRF existiert erst nach dem Login. Das Anmeldeformular nutzt deshalb ein eigenes Cookie `ferrioxid_login_csrf`. Es ist 64 Hex-Zeichen, HttpOnly, Pfad `/`, SameSite aus der Auth-Konfiguration, `Secure` nur wenn das Session-Cookie `Secure` ist, und höchstens zehn Minuten gültig. Die HTML-Antwort setzt `Cache-Control: no-store`, damit Formular und Cookie zusammenbleiben. Mehrere Tabs übernehmen dasselbe gültige Cookie. Nach erfolgreicher Anmeldung wird es gelöscht. Die JSON-Route `POST /auth/login` bleibt ohne dieses Cookie, wie bisher.
 
 `Origin` oder, falls kein Origin gesendet wird, `Referer` muss zur Allowlist passen. Fehlen beide, bleibt die Anfrage aus Sicht der Origin-Prüfung erlaubt; das Login-Cookie ist davon unabhängig Pflicht. Die Allowlist liest `AuthConfig::apply_bound_address` aus `BIND_ADDRESS` oder aus `server.host` und `server.port` in `ferrum.toml`. Ohne gesetztes `FERRUM_ALLOWED_ORIGINS` sind das `http://127.0.0.1:{port}` und `http://localhost:{port}`. Ein früher fest eingetragener Port 3000 gilt dann nicht mehr, wenn der Prozess an einem anderen Port lauscht. Öffentliche Hosts und der Host-Header der Anfrage werden nicht ergänzt. `Origin: null` ist ungültig, außer der Browser sendet gleichzeitig `Sec-Fetch-Site: same-origin`. Das passiert bei `Referrer-Policy: no-referrer` für ein Formular derselben Origin. Die sichtbare Fehlermeldung bleibt „Die Sicherheitsprüfung ist fehlgeschlagen.“ Das Log nennt den Grundcode und bei einer Origin-Ablehnung nur Quelle, Klasse und Port, nie das Cookie oder das Token.
 

@@ -1,6 +1,6 @@
 # App-Registry
 
-[Zur Übersicht](index.md) · Apps: [apps.md](apps.md) · **IST-Datei:** `crates/ferrum-api/src/apps.rs`.
+[Zur Übersicht](index.md) · Apps: [apps.md](apps.md) · **IST-Datei:** `crates/ferrioxid-api/src/apps.rs`.
 
 Die Registry liegt auf `App`. Es gibt kein globales veränderbares Singleton. Die Reihenfolge ist die Reihenfolge der `install`-Aufrufe.
 
@@ -8,7 +8,7 @@ Die Registry liegt auf `App`. Es gibt kein globales veränderbares Singleton. Di
 
 `AppConfig` trägt den technischen Namen, einen optionalen Anzeigenamen, ein optionales URL-Präfix und optionale Abhängigkeiten.
 
-`FerrumApplication` hat zwei Methoden: `config` und `contribute`. `contribute` erhält eine `Registration` mit der Lebensdauer des aktuellen `install`.
+`FerrioxidApplication` hat zwei Methoden: `config` und `contribute`. `contribute` erhält eine `Registration` mit der Lebensdauer des aktuellen `install`.
 
 `Registration` reicht nur an die vorhandenen Register weiter:
 
@@ -17,7 +17,7 @@ Die Registry liegt auf `App`. Es gibt kein globales veränderbares Singleton. Di
 - Admin an `AdminRegistry`.
 - Migrationen an `PackageMigration`.
 - Vorlagen an `Site`.
-- Staticfiles an `ferrum_static::mount`.
+- Staticfiles an `ferrioxid_static::mount`.
 
 `AppError.code` nennt die Ursache, zum Beispiel `app.duplicate`, `app.sealed`, `app.route.namespace`, `app.model.duplicate`, `app.template.conflict`, `app.static.path` und `app.migration`.
 
@@ -46,4 +46,4 @@ currency = "EUR"
 
 `[app]` ohne Namen ist ein Fehler. Der Pfad muss relativ sein und darf `..` nicht enthalten. Fehlt `migrations`, ist das ebenfalls ein Fehler.
 
-`seal` verlangt, dass beide Listen dieselben App-Namen, `depends_on` und Verzeichnisse enthalten, sobald eine Seite nicht leer ist. Fehlt `with_settings`, ist das `app.migration.undeclared` und gilt nicht als geprüft. Ein Unterschied ist `app.migration.mismatch`. `ferrum check`, `ferrum doctor` und `ferrum migrate status` lesen nur `ferrum.toml` und schreiben die Zeile `app.migration.runtime`. Sie bestätigen den Rust-Abgleich nicht.
+`seal` verlangt, dass beide Listen dieselben App-Namen, `depends_on` und Verzeichnisse enthalten, sobald eine Seite nicht leer ist. Fehlt `with_settings`, ist das `app.migration.undeclared` und gilt nicht als geprüft. Ein Unterschied ist `app.migration.mismatch`. `ferrioxid check`, `ferrioxid doctor` und `ferrioxid migrate status` lesen nur `ferrum.toml` und schreiben die Zeile `app.migration.runtime`. Sie bestätigen den Rust-Abgleich nicht.

@@ -59,13 +59,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: ferrum
-          POSTGRES_PASSWORD: ferrum_dev_only
-          POSTGRES_DB: ferrum
+          POSTGRES_USER: ferrioxid
+          POSTGRES_PASSWORD: ferrioxid_dev_only
+          POSTGRES_DB: ferrioxid
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U ferrum -d ferrum"
+          --health-cmd "pg_isready -U ferrioxid -d ferrioxid"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -84,7 +84,7 @@ jobs:
 
       - name: Run the ignored PostgreSQL tests
         env:
-          DATABASE_URL: postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum
+          DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid
         run: |
           cargo test -p myshop --test postgres_api -- --ignored postgres_http_roundtrip
-          cargo test -p ferrum-migrations --test engine -- --ignored postgres_migration_roundtrip
+          cargo test -p ferrioxid-migrations --test engine -- --ignored postgres_migration_roundtrip

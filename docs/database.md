@@ -1,10 +1,10 @@
-# ferrum-db – Eine Repository-Schicht für SQLite und PostgreSQL
+# ferrioxid-db – Eine Repository-Schicht für SQLite und PostgreSQL
 
-[Zur Übersicht](index.md) · **IST-Dateien:** `crates/ferrum-db/src/lib.rs`, `crates/ferrum-db/src/sql.rs`. Die Repository-Implementierung erzeugt `crates/ferrum-macros/src/lib.rs`.
+[Zur Übersicht](index.md) · **IST-Dateien:** `crates/ferrioxid-db/src/lib.rs`, `crates/ferrioxid-db/src/sql.rs`. Die Repository-Implementierung erzeugt `crates/ferrioxid-macros/src/lib.rs`.
 
 ## Auth-Tabellen (v0.7)
 
-`_ferrum_users`, `_ferrum_sessions`, `_ferrum_roles`, `_ferrum_permissions`, `_ferrum_user_roles` und `_ferrum_role_permissions` liegen in `ferrum-auth` und nutzen SeaQuery auf derselben Verbindung. Sie sind keine `FerrumModel`-CRUD-Modelle, damit `password_hash` nicht als REST-Ressource erscheint. Zeitstempel sind `i64`. UUID ist in SQLite Text und in PostgreSQL der UUID-Typ. Die Introspektion übergeht Tabellennamen mit Präfix `_ferrum_`.
+`_ferrum_users`, `_ferrum_sessions`, `_ferrum_roles`, `_ferrum_permissions`, `_ferrum_user_roles` und `_ferrum_role_permissions` liegen in `ferrioxid-auth` und nutzen SeaQuery auf derselben Verbindung. Sie sind keine `FerrioxidModel`-CRUD-Modelle, damit `password_hash` nicht als REST-Ressource erscheint. Zeitstempel sind `i64`. UUID ist in SQLite Text und in PostgreSQL der UUID-Typ. Die Introspektion übergeht Tabellennamen mit Präfix `_ferrum_`.
 
 SQLite nutzt `max_connections(1)`. Während einer Schreibtransaktion darf kein Aufruf eine zweite Verbindung aus demselben Pool verlangen. `conclude` und die `*_in`-Methoden stehen in [transactions.md](transactions.md).
 
@@ -17,18 +17,18 @@ SQLite nutzt `max_connections(1)`. Während einer Schreibtransaktion darf kein A
 
 ```rust
 #[async_trait::async_trait]
-pub trait ModelRepository: FerrumModel + Serialize + DeserializeOwned {
+pub trait ModelRepository: FerrioxidModel + Serialize + DeserializeOwned {
     type Create: DeserializeOwned + Send;
     type Update: DeserializeOwned + Send;
-    async fn list(db: &DatabaseConnection) -> Result<ListPage<Self>, FerrumError>;
-    async fn get(db: &DatabaseConnection, id: uuid::Uuid) -> Result<Option<Self>, FerrumError>;
-    async fn create(db: &DatabaseConnection, input: Self::Create) -> Result<Self, FerrumError>;
-    async fn update(db: &DatabaseConnection, id: uuid::Uuid, input: Self::Update) -> Result<Self, FerrumError>;
-    async fn delete(db: &DatabaseConnection, id: uuid::Uuid) -> Result<DeleteOutcome, FerrumError>;
+    async fn list(db: &DatabaseConnection) -> Result<ListPage<Self>, FerrioxidError>;
+    async fn get(db: &DatabaseConnection, id: uuid::Uuid) -> Result<Option<Self>, FerrioxidError>;
+    async fn create(db: &DatabaseConnection, input: Self::Create) -> Result<Self, FerrioxidError>;
+    async fn update(db: &DatabaseConnection, id: uuid::Uuid, input: Self::Update) -> Result<Self, FerrioxidError>;
+    async fn delete(db: &DatabaseConnection, id: uuid::Uuid) -> Result<DeleteOutcome, FerrioxidError>;
 }
 ```
 
-`ListPage<T>` enthält `data: Vec<T>`, `limit: usize`, `truncated: bool`. `DeleteOutcome` ist `Deleted` oder `Missing`. Öffentliche Methoden liefern das Model, kein `serde_json::Value`. Die JSON-Abbildung bleibt innerhalb von `ferrum-db`.
+`ListPage<T>` enthält `data: Vec<T>`, `limit: usize`, `truncated: bool`. `DeleteOutcome` ist `Deleted` oder `Missing`. Öffentliche Methoden liefern das Model, kein `serde_json::Value`. Die JSON-Abbildung bleibt innerhalb von `ferrioxid-db`.
 
 ## Dialekt und Typen (IST)
 
@@ -54,7 +54,7 @@ Parameter kommen von SeaQuery: PostgreSQL `$1`, `$2`, SQLite `?`. Bezeichner sta
 2. Generierte `required`-, Längen- und `min`-Prüfung.
 3. UUID mit `Uuid::new_v4()`.
 4. SeaQuery-`INSERT` mit gebundenen Werten und `RETURNING`.
-5. Interne Deserialisierung zum Model. Fehler werden `FerrumError::Database`.
+5. Interne Deserialisierung zum Model. Fehler werden `FerrioxidError::Database`.
 
 ### Update
 
@@ -75,14 +75,14 @@ SQLite ist der lokale Standard. Eine Installation und Docker sind dafür nicht n
 ```text
 sqlite://db.sqlite3?mode=rwc
 sqlite::memory:
-postgres://user:password@localhost:5432/ferrum
+postgres://user:password@localhost:5432/ferrioxid
 ```
 
-`sqlite::memory:` ist eine eigene Datenbank je Verbindung. Ferrum begrenzt SQLite-Pools auf eine Verbindung, damit Tests und die Anwendung dieselbe Datenbank sehen. Die Datei `db.sqlite3` entsteht im Arbeitsverzeichnis und ist in `.gitignore` enthalten. PostgreSQL bleibt ein unterstütztes Backend und wird über `DATABASE_URL` gewählt. `compose.yaml` kann den Server optional starten. Bootstrap führt nur `CREATE TABLE IF NOT EXISTS` aus, löscht vorhandene Zeilen nicht und ändert bestehende Tabellen nicht. Das ist keine Migrations-Engine.
+`sqlite::memory:` ist eine eigene Datenbank je Verbindung. Ferrioxid begrenzt SQLite-Pools auf eine Verbindung, damit Tests und die Anwendung dieselbe Datenbank sehen. Die Datei `db.sqlite3` entsteht im Arbeitsverzeichnis und ist in `.gitignore` enthalten. PostgreSQL bleibt ein unterstütztes Backend und wird über `DATABASE_URL` gewählt. `compose.yaml` kann den Server optional starten. Bootstrap führt nur `CREATE TABLE IF NOT EXISTS` aus, löscht vorhandene Zeilen nicht und ändert bestehende Tabellen nicht. Das ist keine Migrations-Engine.
 
 ## Fehler und Sicherheit (IST)
 
-Deserialisierungsfehler und unbekannte SQL-Fehler werden `FerrumError::Database`. Die HTTP-Schicht antwortet dann mit 500 und einem generischen Text. Das Datenbankdetail geht ins Tracing-Log, nicht in die Antwort. `DATABASE_URL` wird nicht protokolliert. `sqlx::ErrorKind::UniqueViolation` und `ForeignKeyViolation` werden `Validation` und damit 422. SQLite meldet `ON DELETE RESTRICT` als erweiterten Code `1811` mit der festen Meldung `FOREIGN KEY constraint failed`. Auch das wird 422. Fehlende Zeilen bleiben 404, nicht freigegebene Routen 403. SQLite-Fremdschlüssel sind eingeschaltet. Modelle können Unique Indexes, sekundäre Indexes und Foreign Keys erzeugen. Beziehungsmethoden stehen in [relations.md](relations.md). `find_by_column` lädt typisierte Kindzeilen. SQLite prüft Typen schwächer als PostgreSQL. Ferrum prüft die unterstützten Werte vor dem Schreiben in Rust.
+Deserialisierungsfehler und unbekannte SQL-Fehler werden `FerrioxidError::Database`. Die HTTP-Schicht antwortet dann mit 500 und einem generischen Text. Das Datenbankdetail geht ins Tracing-Log, nicht in die Antwort. `DATABASE_URL` wird nicht protokolliert. `sqlx::ErrorKind::UniqueViolation` und `ForeignKeyViolation` werden `Validation` und damit 422. SQLite meldet `ON DELETE RESTRICT` als erweiterten Code `1811` mit der festen Meldung `FOREIGN KEY constraint failed`. Auch das wird 422. Fehlende Zeilen bleiben 404, nicht freigegebene Routen 403. SQLite-Fremdschlüssel sind eingeschaltet. Modelle können Unique Indexes, sekundäre Indexes und Foreign Keys erzeugen. Beziehungsmethoden stehen in [relations.md](relations.md). `find_by_column` lädt typisierte Kindzeilen. SQLite prüft Typen schwächer als PostgreSQL. Ferrioxid prüft die unterstützten Werte vor dem Schreiben in Rust.
 
 ## Nicht implementiert (SOLL)
 
@@ -98,4 +98,4 @@ Deserialisierungsfehler und unbekannte SQL-Fehler werden `FerrumError::Database`
 
 ## Admin-Listen
 
-`query_admin_page` in `crates/ferrum-db/src/sql.rs` nutzt dieselbe SeaQuery-Schicht. Spaltennamen kommen aus dem Deskriptor, Werte sind Parameter. Die Suche ist `LIKE` mit `ESCAPE` und läuft unter SQLite. PostgreSQL erhält denselben Ausdruck, keine dialektspezifische Eingabe aus der Oberfläche. Das öffentliche Listenlimit 100 bleibt. Die Admin-Seite ist höchstens 100 Zeilen, plus eine Zeile zur Erkennung von `has_more`.
+`query_admin_page` in `crates/ferrioxid-db/src/sql.rs` nutzt dieselbe SeaQuery-Schicht. Spaltennamen kommen aus dem Deskriptor, Werte sind Parameter. Die Suche ist `LIKE` mit `ESCAPE` und läuft unter SQLite. PostgreSQL erhält denselben Ausdruck, keine dialektspezifische Eingabe aus der Oberfläche. Das öffentliche Listenlimit 100 bleibt. Die Admin-Seite ist höchstens 100 Zeilen, plus eine Zeile zur Erkennung von `has_more`.

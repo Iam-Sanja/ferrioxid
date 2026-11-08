@@ -1,8 +1,8 @@
 //! Typisierte Belongs-To- und Has-Many-Beziehungen auf einer temporären SQLite-Datei.
 
-use ferrum::core::FerrumModel;
-use ferrum::db::ModelRepository;
-use ferrum::migrations::{
+use ferrioxid::core::FerrioxidModel;
+use ferrioxid::db::ModelRepository;
+use ferrioxid::migrations::{
     apply_directory, make_migration, RegisteredModel, SchemaSnapshot, FORMAT_VERSION,
 };
 use myshop::models::category::{Category, CategoryCreate};
@@ -18,7 +18,7 @@ fn temp_dir() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let path = std::env::temp_dir().join(format!("ferrum-relations-{nanos}-{tick}"));
+    let path = std::env::temp_dir().join(format!("ferrioxid-relations-{nanos}-{tick}"));
     std::fs::create_dir_all(&path).unwrap();
     path
 }
@@ -49,7 +49,7 @@ async fn category_and_product_relations_are_typed() {
             .to_string_lossy()
             .replace('\\', "/")
     );
-    let db = ferrum::db::connect(&url).await.unwrap();
+    let db = ferrioxid::db::connect(&url).await.unwrap();
     apply_directory(&db, &migrations, false).await.unwrap();
 
     let books = Category::create(
@@ -69,7 +69,7 @@ async fn category_and_product_relations_are_typed() {
     .await;
     assert!(matches!(
         duplicate,
-        Err(ferrum::core::FerrumError::Validation(message)) if message.contains("unique")
+        Err(ferrioxid::core::FerrioxidError::Validation(message)) if message.contains("unique")
     ));
 
     let laptop = Product::create(
@@ -100,13 +100,13 @@ async fn category_and_product_relations_are_typed() {
             name: "Ghost".to_owned(),
             price_cents: 1,
             active: None,
-            category_id: Some(ferrum::uuid::Uuid::nil()),
+            category_id: Some(ferrioxid::uuid::Uuid::nil()),
         },
     )
     .await;
     assert!(matches!(
         invalid,
-        Err(ferrum::core::FerrumError::Validation(message)) if message.contains("foreign key")
+        Err(ferrioxid::core::FerrioxidError::Validation(message)) if message.contains("foreign key")
     ));
 
     let loaded = laptop.category(&db).await.unwrap().unwrap();
@@ -130,7 +130,7 @@ async fn category_and_product_relations_are_typed() {
     let blocked = Category::delete(&db, books.id).await;
     assert!(matches!(
         blocked,
-        Err(ferrum::core::FerrumError::Validation(message)) if message.contains("foreign key")
+        Err(ferrioxid::core::FerrioxidError::Validation(message)) if message.contains("foreign key")
     ));
 }
 
@@ -144,7 +144,7 @@ async fn checked_in_migrations_add_the_category_foreign_key() {
             .to_string_lossy()
             .replace('\\', "/")
     );
-    let db = ferrum::db::connect(&url).await.unwrap();
+    let db = ferrioxid::db::connect(&url).await.unwrap();
     let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
     let report = apply_directory(&db, &migrations, false).await.unwrap();
     assert_eq!(

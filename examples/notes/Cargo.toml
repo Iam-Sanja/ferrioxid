@@ -5,7 +5,7 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
-ferrum = { path = "../../crates/ferrum" }
+ferrioxid = { path = "../../crates/ferrioxid" }
 axum.workspace = true
 serde.workspace = true
 

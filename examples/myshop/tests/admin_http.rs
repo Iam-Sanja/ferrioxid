@@ -1,15 +1,15 @@
 //! Admin-HTTP gegen SQLite: Staff-Zugang, CRUD, Whitelist und CSRF-Bootstrap.
 
-use ferrum::admin::AdminRegistry;
-use ferrum::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
-use ferrum::core::{FerrumModel, QueryScope, ScopeValue};
-use ferrum::db::ModelRepository;
-use ferrum::prelude::*;
+use ferrioxid::admin::AdminRegistry;
+use ferrioxid::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
+use ferrioxid::core::{FerrioxidModel, QueryScope, ScopeValue};
+use ferrioxid::db::ModelRepository;
+use ferrioxid::prelude::*;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "admin_categories",
     api = "/api/v1/admin_categories",
     admin = true,
@@ -24,8 +24,8 @@ struct AdminCategory {
     name: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "admin_products",
     api = "/api/v1/admin_products",
     admin = true,
@@ -46,8 +46,8 @@ struct AdminProduct {
     category_id: Option<Uuid>,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "admin_secrets",
     api = "/api/v1/admin_secrets",
     permissions = "secrets",
@@ -65,8 +65,8 @@ struct AdminSecret {
     title: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "admin_payroll",
     api = "/api/v1/admin_payroll",
     admin = true,
@@ -256,8 +256,8 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
         .add::<AdminPayroll>();
     assert!(registry.find("missing").is_none());
 
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
     let staff = auth
         .create_user("staff@example.com", "correct-horse-battery", true, false)
@@ -296,7 +296,7 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
     auth.assign_role("staff@example.com", "catalog")
         .await
         .unwrap();
-    let app = ferrum::App::new(db.clone())
+    let app = ferrioxid::App::new(db.clone())
         .with_auth(auth.clone())
         .with_admin(registry)
         .register::<AdminCategory>()
@@ -681,7 +681,7 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
 
 #[tokio::test]
 async fn admin_assets_reject_traversal_and_keep_the_api() {
-    let dir = std::env::temp_dir().join(format!("ferrum-admin-assets-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("ferrioxid-admin-assets-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("assets")).unwrap();
     std::fs::write(
@@ -692,8 +692,8 @@ async fn admin_assets_reject_traversal_and_keep_the_api() {
     std::fs::write(dir.join("assets").join("app.js"), "console.log(1)").unwrap();
     std::env::set_var("FERRUM_ADMIN_DIST", &dir);
 
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    let app = ferrum::App::new(db).with_admin(AdminRegistry::new());
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    let app = ferrioxid::App::new(db).with_admin(AdminRegistry::new());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
@@ -744,8 +744,8 @@ async fn seed_file_database_when_requested() {
     let Ok(url) = std::env::var("FERRUM_E2E_DATABASE") else {
         return;
     };
-    let db = ferrum::db::connect(&url).await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect(&url).await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db, AuthConfig::development());
     if auth.list_users().await.unwrap().is_empty() {
         auth.create_user("staff@example.com", "correct-horse-battery", true, true)

@@ -2,13 +2,13 @@
 
 [Zur Übersicht](index.md) · Migrationen: [migrations.md](migrations.md) · CLI: [cli.md](cli.md)
 
-**IST:** `crates/ferrum-migrations/src/inspect.rs`. Die Cargo-Version bleibt `0.1.0`.
+**IST:** `crates/ferrioxid-migrations/src/inspect.rs`. Die Cargo-Version bleibt `0.1.0`.
 
 ## Aufgabe
 
-Dieselbe lesende Prüfung gilt für `ferrum migrate status`, `ferrum check`, `ferrum doctor`, `ferrum dev` und `ferrum upgrade --check` beziehungsweise `--dry-run`. Sie wendet keine Migration an, legt keine Historientabelle an und erzeugt keine SQLite-Datei.
+Dieselbe lesende Prüfung gilt für `ferrioxid migrate status`, `ferrioxid check`, `ferrioxid doctor`, `ferrioxid dev` und `ferrioxid upgrade --check` beziehungsweise `--dry-run`. Sie wendet keine Migration an, legt keine Historientabelle an und erzeugt keine SQLite-Datei.
 
-Auth-Dateien liegen in `crates/ferrum-auth/migrations`. Die Historie heißt `_ferrum_auth_migrations`. App-Dateien liegen im `migrations_dir` des Projekts. Die Historie heißt `_ferrum_migrations`. Deklarierte App-Pakete aus `[app.<name>]` stehen in derselben Historie unter `shop:0001_initial`. Die CLI liest diese Deklaration und nicht `registry.migrations`. Die Zeile `app.migration.runtime` sagt das. Der Prozessstart vergleicht beide Seiten.
+Auth-Dateien liegen in `crates/ferrioxid-auth/migrations`. Die Historie heißt `_ferrum_auth_migrations`. App-Dateien liegen im `migrations_dir` des Projekts. Die Historie heißt `_ferrum_migrations`. Deklarierte App-Pakete aus `[app.<name>]` stehen in derselben Historie unter `shop:0001_initial`. Die CLI liest diese Deklaration und nicht `registry.migrations`. Die Zeile `app.migration.runtime` sagt das. Der Prozessstart vergleicht beide Seiten.
 
 ## Bericht
 
@@ -39,15 +39,15 @@ Die URL ist `DATABASE_URL`, sonst `database.url` aus `ferrum.toml`. Dieselbe Auf
 
 ## Schema
 
-`ferrum migrate status` lädt das Modell über `--schema-file` oder `schema_command`. `ferrum check` tut dasselbe, nachdem die Datenbankdatei vorhanden ist. `FERRUM_SCHEMA_FILE` ersetzt den Befehl. `FERRUM_CHECK_SKIP_SCHEMA=1` überspringt ihn in `check`. `doctor`, `dev` und `upgrade` starten `schema_command` nicht. Ohne geladenes Schema meldet die Diagnose das ausdrücklich und behauptet keine Übereinstimmung.
+`ferrioxid migrate status` lädt das Modell über `--schema-file` oder `schema_command`. `ferrioxid check` tut dasselbe, nachdem die Datenbankdatei vorhanden ist. `FERRUM_SCHEMA_FILE` ersetzt den Befehl. `FERRUM_CHECK_SKIP_SCHEMA=1` überspringt ihn in `check`. `doctor`, `dev` und `upgrade` starten `schema_command` nicht. Ohne geladenes Schema meldet die Diagnose das ausdrücklich und behauptet keine Übereinstimmung.
 
 ## Befehle
 
-`migrate status` bleibt bei ausstehenden Migrationen erfolgreich und nennt `ferrum migrate up`. Konflikte, eine fehlende Datei und eine nicht lesbare Datenbank beenden ihn mit Exitcode 1.
+`migrate status` bleibt bei ausstehenden Migrationen erfolgreich und nennt `ferrioxid migrate up`. Konflikte, eine fehlende Datei und eine nicht lesbare Datenbank beenden ihn mit Exitcode 1.
 
 `check` beendet Warnungen nur mit `--strict` und Exitcode 2. Ohne `--strict` bleibt der Exitcode 0, solange kein Fehler vorliegt. `cargo check` läuft danach. `FERRUM_CHECK_SKIP_CARGO=1` lässt diesen Schritt aus und ist für Tests gedacht.
 
-`doctor` erklärt dieselbe Lage und schlägt `ferrum migrate up` vor. Warnungen ändern seinen Exitcode nicht. Eine nicht lesbare vorhandene Datenbank ist ein Fehler. Eine noch nicht angelegte SQLite-Datei ist eine Warnung. Storage-Routen werden nicht aus dem Quelltext erraten. Ein fehlendes Storage-Verzeichnis ist nur dann eine Warnung, wenn das Verzeichnis selbst fehlt.
+`doctor` erklärt dieselbe Lage und schlägt `ferrioxid migrate up` vor. Warnungen ändern seinen Exitcode nicht. Eine nicht lesbare vorhandene Datenbank ist ein Fehler. Eine noch nicht angelegte SQLite-Datei ist eine Warnung. Storage-Routen werden nicht aus dem Quelltext erraten. Ein fehlendes Storage-Verzeichnis ist nur dann eine Warnung, wenn das Verzeichnis selbst fehlt.
 
 `dev` druckt die Warnung vor dem Build. Ausstehende Migrationen brechen den Start nicht ab. Konnte der Status nicht gelesen werden, steht das so da. Es gibt keine Erfolgsmeldung über eine ungeprüfte Datenbank.
 
@@ -70,7 +70,7 @@ Ausstehende Migrationen: 2
   migration.auth.pending 0003_audit_operation ist ausstehend.
 
 Nächster Schritt:
-  ferrum migrate up
+  ferrioxid migrate up
 ```
 
 `FERRUM_LOCALE=en` schaltet die Überschriften auf Englisch. Die Codes bleiben Englisch.
@@ -79,8 +79,8 @@ Nächster Schritt:
 
 ```powershell
 $env:FERRUM_LOCALE = "de"
-ferrum migrate status
-ferrum check
-ferrum check --strict
-ferrum doctor
+ferrioxid migrate status
+ferrioxid check
+ferrioxid check --strict
+ferrioxid doctor
 ```

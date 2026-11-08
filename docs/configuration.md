@@ -1,8 +1,8 @@
 # Konfiguration und Laufzeitumgebung
 
-[Zur Übersicht](index.md) · **IST:** `examples/myshop/src/main.rs`, `crates/ferrum-db/src/lib.rs`, `.env.example`, `compose.yaml`.
+[Zur Übersicht](index.md) · **IST:** `examples/myshop/src/main.rs`, `crates/ferrioxid-db/src/lib.rs`, `.env.example`, `compose.yaml`.
 
-`FERRUM_LOCALE` darf `de` oder `en` sein und steuert die zentralen CLI-Texte. Die Admin-Sprache speichert der Browser unter `ferrum-locale`. Öffentliche Branding-Werte beschreibt [settings.md](settings.md). `[static]` und `[storage]` stehen in derselben Datei. `media/` enthält Uploads und gehört nicht in Git.
+`FERRUM_LOCALE` darf `de` oder `en` sein und steuert die zentralen CLI-Texte. Die Admin-Sprache speichert der Browser unter `ferrioxid-locale`. Öffentliche Branding-Werte beschreibt [settings.md](settings.md). `[static]` und `[storage]` stehen in derselben Datei. `media/` enthält Uploads und gehört nicht in Git.
 
 ## Tatsächliche Variablen (IST)
 
@@ -10,7 +10,7 @@
 |---|---|---|---|
 | `DATABASE_URL` | `myshop/src/main.rs` | `sqlite://db.sqlite3?mode=rwc` | Verbindung. Der Dateipfad ist relativ zum Arbeitsverzeichnis. |
 | `BIND_ADDRESS` | `myshop/src/main.rs` | `127.0.0.1:3000` | TCP-Listener |
-| `POSTGRES_PASSWORD` | Docker Compose | `ferrum_dev_only` | Nur der optionale Postgres-Container |
+| `POSTGRES_PASSWORD` | Docker Compose | `ferrioxid_dev_only` | Nur der optionale Postgres-Container |
 | `RUST_LOG` | Tracing-Subscriber über die Umgebungsfilter-Voreinstellung `info` | `info` in `.env.example` | Log-Niveau, wenn der Prozess es exportiert sieht |
 | `FERRUM_ENV` | `AuthConfig::from_env` | `development` | `production` setzt `Secure` als Default und leert erlaubte Origins, wenn keine Liste gesetzt ist |
 | `FERRUM_COOKIE_SECURE` | `AuthConfig::from_env` | nur in Produktion wahr | `1` oder `true` erzwingt `Secure`. Nicht von `BIND_ADDRESS` abgeleitet |
@@ -20,7 +20,7 @@
 `.env.example` wird nicht automatisch geladen. Werte müssen in der Shell gesetzt sein. Eine gesetzte `DATABASE_URL` ersetzt SQLite:
 
 ```text
-DATABASE_URL=postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum
+DATABASE_URL=postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid
 ```
 
 Tests können `sqlite::memory:` verwenden. Diese URL erzeugt eine private Speicherdatenbank. `connect` setzt für jede `sqlite:`-URL `max_connections(1)` und `PRAGMA foreign_keys=ON`. Dadurch bleiben Bootstrap, Repository und HTTP-Handler auf derselben Verbindung. Das Beispielpasswort gilt nur für lokale PostgreSQL-Entwicklung. `DATABASE_URL` niemals vollständig protokollieren.
@@ -33,7 +33,7 @@ Die vollständige Settings-Beschreibung steht in [settings.md](settings.md). `fe
 
 ## Nicht implementiert (SOLL)
 
-- Zentraler typisierter `FerrumConfig`.
+- Zentraler typisierter `FerrioxidConfig`.
 - Feste Quellenreihenfolge aus Defaults, Datei, Umgebung und CLI.
 - Produktionsstart, der fehlende Secrets ablehnt.
 - Profile `development` und `production`.
@@ -45,4 +45,4 @@ Der Localhost-Default bleibt `127.0.0.1:3000`. `0.0.0.0` ist keine produktionsre
 
 ## Admin
 
-`FERRUM_ADMIN_DIST` wird nicht mehr gelesen. CSS und Vorlagen kommen aus dem Binary. `FERRUM_CSRF_SECRET` ist optional und muss 64 Hex-Zeichen lang sein. Ohne die Variable verwendet Ferrum `.ferrum/csrf.key`. `FERRUM_COOKIE_SECURE` und `FERRUM_ENV=production` gelten für das Admin-Cookie genauso wie für die übrige Sitzung. Theme und Sprache liegen in den Cookies `ferrum_theme` und `ferrum_locale`.
+`FERRUM_ADMIN_DIST` wird nicht mehr gelesen. CSS und Vorlagen kommen aus dem Binary. `FERRUM_CSRF_SECRET` ist optional und muss 64 Hex-Zeichen lang sein. Ohne die Variable verwendet Ferrioxid `.ferrum/csrf.key`. `FERRUM_COOKIE_SECURE` und `FERRUM_ENV=production` gelten für das Admin-Cookie genauso wie für die übrige Sitzung. Theme und Sprache liegen in den Cookies `ferrioxid_theme` und `ferrioxid_locale`.

@@ -1,0 +1,10 @@
+[package]
+name = "ferrioxid-forms"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferrioxid-core = { path = "../ferrioxid-core" }
+uuid.workspace = true
+chrono.workspace = true
