@@ -25,7 +25,7 @@ pub fn generate_model(name: &str, timestamps: bool) -> Result<PathBuf, String> {
     .map_err(|error| error.to_string())?;
     insert_line(
         &project.root.join("src/models/mod.rs"),
-        "// ferrum:models:end",
+        "// ferrioxid:models:end",
         &format!("pub mod {module};"),
     )?;
     insert_line(
