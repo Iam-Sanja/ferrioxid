@@ -376,7 +376,7 @@ fn conflict_code(text: &str) -> &'static str {
     let normalized = text.to_ascii_lowercase();
     if normalized.contains("checksum") {
         "migration.checksum_mismatch"
-    } else if normalized.contains("no file") || normalized.contains("missing from the directory") {
+    } else if normalized.contains("no file") || normalized.contains("missing from the directory") || normalized.contains("no longer has a file") {
         "migration.unknown"
     } else {
         "migration.order"
