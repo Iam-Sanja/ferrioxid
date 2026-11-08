@@ -1,84 +1,84 @@
 # Admin-Gestaltung
 
-[Zur Übersicht](admin-native.md) · Vorlagen: [admin-templates.md](admin-templates.md) · North Star: [../DESIGN.md](../DESIGN.md)
+[For overview](admin-native.md) · Templates: [admin-templates.md](admin-templates.md)] North Star: [../DESIGN.md](../DESIGN.md)]
 
 ## Aufgabe
 
-`crates/ferrioxid-admin/static/css/admin.css` ist das einzige Stylesheet. Es wird unter `/admin/assets/admin.css` ausgeliefert. Es gibt keine CDN-Adresse und kein Tailwind im nativen Admin. `.hierarchy` ist eine umbrechende Linkliste in den bestehenden Abständen. Die Browser-Tastaturautomatisierung bleibt unzuverlässig. Der Nachweis für Datumseingaben ist das HTML: Label, `for` und der native Input-Typ. Es gibt keinen JavaScript-Tastaturhandler.
+`crates/ferrioxid-admin/static/css/admin.css` is the only style sheet. It is shipped under `/admin/assets/admin.css`. There is no CDN address and no tailwind in the native admin. `.hierarchy` is a breakthrough link list at the existing intervals. Browser keyboard automation remains unreliable. The proof of date input is the HTML: Label, `for` and the native input type. There is no JavaScript keyboard handler.
 
-Die Fläche heißt in `DESIGN.md` „Die Nachtschicht“: hell und dunkel sind zwei Beleuchtungen desselben Tisches. Diese Seite beschreibt die Tokens, die der Code wirklich setzt.
+In `DESIGN.md`, the surface is called “The Night Shift”: light and dark are two illuminations of the same table. This page describes the tokens that the code really sets.
 
-## Fläche
+## Area
 
-Die Seite ist ein Raster aus Tür und Inhalt. Die Tür ist `16rem` breit. Sie zeigt Marke, Übersicht, die registrierten Apps mit ihren Modellen, für Superuser Benutzer und Rollen, und unter System die Historie. Der aktuelle Eintrag trägt `aria-current="page"`, Schriftstärke 650 und eine violette Fläche. Modelle stehen unter dem App-Namen. Ein einzelner Link „Modelle“ auf die Übersicht gibt es nicht.
+The page is a grid of door and content. The door is `16rem` wide. It shows brand, overview, the registered apps with their models, for superuser users and roles, and under system history. The current entry is `aria-current="page"`, font size 650 and a violet area. Models are under the app name. There is no single link “Models” to the overview.
 
-Der Kopf zeigt den Seitentitel, die E-Mail, Sprache, Darstellung und Abmelden. Sprache und Darstellung sind ein POST auf `/admin/preferences`. Abmelden ist ein POST mit CSRF. Ein Sprunglink führt zu `#content`.
+The header shows the page title, the email, language, presentation and log-out. Language and presentation are a POST on `/admin/preferences`. Logging out is a POST with CSRF. A jump link leads to `#content`.
 
-Unter 800 Pixel wird das Raster eine Spalte. Die Tür bleibt eine senkrechte Liste unter dem Kopf. Sie bleibt ohne Script offen.
+Under 800 pixels, the grid becomes a column. The door remains a vertical list under the head. It remains open without a script.
 
 ## Tokens
 
-Grundstufe ist `0.25rem`.
+The basic level is `0.25rem`.
 
 | Token | Wert | Verwendung |
 |---|---|---|
-| `--space-1` | 0.25rem | Label zur Kontrolle, enge Gruppen |
+| `--space-1` | 0.25rem |Label for control, close groups|
 | `--space-2` | 0.5rem | Innenabstand, Flag |
-| `--space-3` | 0.75rem | Abstand zwischen Feldern und Werkzeugen |
-| `--space-4` | 1rem | Karteninnenraum, Kopfabstand |
-| `--space-5` | 1.25rem | Seitenrand oben, Werkzeugleiste |
-| `--space-6` | 1.75rem | Unabhängige Abschnitte |
-| `--radius-control` | 0.6rem | Feld, Auswahl, Button |
-| `--radius-notice` | 0.7rem | Hinweis und Fehlerfläche |
+| `--space-3` | 0.75rem |Distance between fields and tools|
+| `--space-4` | 1rem |Card interior, head pitch|
+| `--space-5` | 1.25rem |Side edge at the top, tool strip|
+| `--space-6` | 1.75rem |Independent sections|
+| `--radius-control` | 0.6rem |Field, selection, button|
+| `--radius-notice` | 0.7rem |Note and error area|
 | `--radius-table` | 0.8rem | Tabelle |
 | `--radius-card` | 1rem | Karte |
-| `--control` | 2rem | Höhe von Feld, Auswahl und Button |
-| `--form-max` | 40rem | Formular in der Karte |
+| `--control` | 2rem |Level of field, selection and button|
+| `--form-max` | 40rem |Form in the card|
 | `--headline` | 1.6rem | Seitentitel |
-| `--title` | 1.05rem | Kartenüberschrift |
+| `--title` | 1.05rem |Card heading|
 | `--label` | 0.92rem | Feldbeschriftung |
 
 Farben sind Rollen, nicht Einzelflächen. `--ink`, `--muted`, `--paper`, `--card`, `--focus`, `--danger`, `--ok` wechseln mit `data-theme`. `--line` ist die Kontrollkante (`#6d7b90` hell, `#8aa0bd` dunkel) und hält mindestens 3:1 zur Fläche. `--divider` trennt Zeilen und Karten und ist ruhiger. `--danger-ink` ist im Hellen weiß und im Dunkeln `#0f172a`, weil Weiß auf `#fb7185` unter 4,5:1 liegt.
 
-`--focus` und `--action` sind Violett: `#5b21b6` und `#6d28d9` im Hellen, `#ddd6fe` im Dunkeln. Die Schrift auf der dunklen Aktion ist `#1e1033`. `--brand` färbt die helle Tür, wenn weiße Schrift darauf mindestens 4,5:1 erreicht. Sonst bleibt `#0f172a`. Im Dunkeln färbt `--brand` die Tür nicht.
+`--focus` and `--action` are violet: `#5b21b6` and `#6d28d9` in the light, `#ddd6fe` in the dark. The font on the dark action is `#1e1033`. `--brand` colors the bright door when white writing on it reaches at least 4.5:1. Otherwise, `#0f172a` remains. In the dark, `--brand` does not color the door.
 
-Der Fokus ist ein 3px-Ring, 2px außerhalb der Kante, nur bei `:focus-visible`. Auf der Tür ist der Ring in der Türschrift. Die Checkbox bleibt 1.2rem. Türlinks sind 2rem hoch und unter 800 Pixel 2.75rem.
+The focus is a 3px ring, 2px outside the edge, only at `:focus-visible`. On the door is the ring in the door letter. The checkbox remains 1.2rem. Door links are 2rem high and under 800 pixels 2.75rem.
 
-Karten im Hellen haben den Ruhehauch `0 1px 2px rgba(15, 23, 42, .06)`. Im Dunkeln ist der Schatten aus.
+Cards in the bright have the resting touch `0 1px 2px rgba(15, 23, 42, .06)`. In the dark, the shadow is out.
 
 ## Komponenten
 
 | Klasse | Rolle |
 |---|---|
-| `button`, `.button` | Primäraktion, Fläche `--action` |
-| `.ghost` | Zweite Aktion, transparente Fläche |
+| `button`, `.button` |Primary action area `--action`|
+| `.ghost` |Second action, transparent area|
 | `.danger` | Zerstörende Hauptaktion |
-| `.ghost.danger` | Zerstörende Aktion in einer Zeile |
-| `.field` | Label, Hinweis, Kontrolle, Fehler |
+| `.ghost.danger` |Destructive action in one line|
+| `.field` |Label, note, control, error|
 | `.notice` | Erfolg, `role="status"` |
-| `.alert` | Fehlerfläche, `role="alert"` |
-| `.flag` | Statuswort mit Rand, die Farbe trägt die Bedeutung nicht allein |
-| `.uuid` | Gekürzte UUID, der volle Wert steht im `title` |
-| `.empty-state` | Leere Liste mit nächstem Schritt, wenn einer existiert |
+| `.alert` |Fault area, `role="alert"`|
+| `.flag` |Status word with border, the color does not carry the meaning alone|
+| `.uuid` |Abbreviated UUID, the full value is in the `title`|
+| `.empty-state` |Empty list with next step if one exists|
 
-`templates/partials/field.html` ist die gemeinsame Feldgruppe und wird als `field.html` eingebunden.
+`templates/partials/field.html` is the common field group and is integrated as `field.html`.
 
-## Tabellen und Formulare
+## Tables and forms
 
-Die erste lesbare Spalte, die keine UUID ist, ist fett. UUIDs sind gedämpft und gekürzt. Sortierte Spalten setzen `aria-sort`. Suche und Filter sind eine Zone, „Neuer Eintrag“ die andere. Filtern und Suchen sind ruhige Buttons. Zurücksetzen ist ein Link auf die Liste ohne Query. Seiten bleiben serverseitig bei 25 Zeilen.
+The first legible column, which is not a UUID, is bold. UUIDs are muted and shortened. Sorted columns set `aria-sort`. Search and filters are one zone, “New entry” the other. Filtering and searching are quiet buttons. Reset is a link to the list without query. Pages remain server-side at 25 lines.
 
-Pflicht und optional stehen im Label. Ein Fremdschlüssel hat den Hinweis, einen vorhandenen Eintrag zu wählen, und bei Pflicht kein leeres „Keine“. Der Link „Weiter suchen“ führt auf die Auswahlseite. Nur-lesen-Felder sind Text, kein Eingabefeld, und werden nicht gesendet. Fehler stehen unter dem Feld. Ein benannter Abschnitt ist ein `fieldset` ohne Kartenrand. Ein optionaler Abschnitt ist `details`. Die Legende ist der Abschnittsname, kein Zusatz über der Überschrift. Die drei Speicherknöpfe stehen in einer Zeile und werden unter 800 Pixel zur vollen Breite.
+Mandatory and optional are in the label. A foreign key has the indication to select an existing entry and, if required, no empty "None". The “Search Next” link leads to the selection page. Read-only fields are text, not an input field, and are not sent. Mistakes are under the field. A named section is a `fieldset` without card edge. An optional section is `details`. The legend is the section name, no addition above the heading. The three memory buttons are in a line and become under 800 pixels to the full width.
 
-## Verzeichnis
+## List
 
-Die Rollenzuweisung ist ein `<select>` der vorhandenen Rollen und ein `<select>` der E-Mail-Adressen. Beide beginnen mit „Bitte wählen“. Fehlt jede Rolle, gibt es kein Textfeld, sondern einen Verweis auf die Rollenseite. Der POST lehnt eine unbekannte Rolle ab, statt sie anzulegen. Anlegen bleibt das Formular auf der Rollenseite.
+The role assignment is a `<select>` of the existing roles and a `<select>` of the email addresses. Both start with “Please choose”. If every role is missing, there is no text field, but a reference to the role page. The POST rejects an unknown role instead of creating it. Create the form remains on the roll page.
 
-Deaktivieren, Staff ändern, Zuweisen, Entziehen, Rechte ändern, Benutzer anlegen, Profil speichern und Passwort setzen zeigen das Häkchen „Ich bestätige diese Änderung.“ Der Server akzeptiert nur `confirm=1`, nach Sitzung, Staff-Superuser und den bestehenden Sperren. Das Häkchen ist keine Berechtigung und kein CSRF-Ersatz.
+Deactivate, change staff, assign, revoke, change rights, create user, save profile and set password show the check mark “I confirm this change.” The server only accepts `confirm=1`, by session, staff superuser and the existing locks. The check mark is not an authorization and not a CSRF replacement.
 
 ## Barriere
 
-`lang` folgt der Katalogsprache. Jedes Feld hat ein Label. Die Tür, der Pfad und die Seitennavigation haben Namen. Tabellen haben `scope="col"`. Status sind Wörter. Kernaktionen sind Links oder Formulare und funktionieren ohne `admin.js`. `:focus-visible` zeichnet einen 3px-Ring 2px außerhalb. Das Script setzt nur den Fokus auf das erste ungültige Feld und enthält keinen Tastaturhandler. Eine Checkbox, deren Input im Label liegt, hat kein zusätzliches `for`. Der erste Speicherknopf ist ein visuell verstecktes `type="submit"` mit `tabindex="-1"`, damit Enter speichert, auch wenn die Auswahl `formaction` nutzt. Die HTML-Struktur prüft `admin_v018_drafts_inlines_bulk_and_audit`. Ein synthetischer Tab aus der Cursor-Browserautomatisierung hat den Fokus in v0.16 und v0.17 nicht bewegt. v0.18 hat dieselbe Struktur erneut geprüft und den Tastaturweg der Automatisierung nicht als bestanden gewertet.
+`lang` follows the catalogue language. Each field has a label. The door, the path and the side navigation have names. Tables have `scope="col"`. Status are words. Core actions are links or forms and work without `admin.js`. `:focus-visible` draws a 3px ring 2px outside. The script only focuses on the first invalid field and does not contain a keyboard handler. A checkbox whose input is in the label does not have an additional `for`. The first memory button is a visually hidden `type="submit"` with `tabindex="-1"` for Enter to store, even if the selection uses `formaction`. The HTML structure checks `admin_v018_drafts_inlines_bulk_and_audit`. A synthetic tab from cursor browser automation did not move the focus in v0.16 and v0.17. v0.18 rechecked the same structure and did not pass the automation keyboard path.
 
 ## Grenze
 
-Die Projektfarbe färbt die dunkle Tür und den dunklen Primärbutton nicht. Benutzerdetail, Benutzerformular, Passwort, Statusauswahl, Rollen, relationale Anzeige, Filterauswahl, Bestätigung, Inline-Liste, Sammelaktionsleiste und Historie nutzen dieselben Feldgruppen, Karten und Tabellen. Klassen: `.bulk-bar`, `.inline-block`, `.inline-head`, `.audit-detail`. Es gibt keine Bewegung, die `prefers-reduced-motion` abschalten müsste.
+The project color does not color the dark door and the dark primary button. User detail, user form, password, status selection, roles, relational display, filter selection, confirmation, inline list, collective action bar and history use the same field groups, maps and tables. Classes: `.bulk-bar`, `.inline-block`, `.inline-head`, `.audit-detail`. There is no movement that would have to turn `prefers-reduced-motion` off.

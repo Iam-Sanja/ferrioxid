@@ -1,16 +1,16 @@
-# ferrioxid-core – Verträge und Modellmetadaten
+# ferrioxide-core – contracts and model metadata
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-core/src/lib.rs`.
+[For overview](index.md) · **IST file:** `crates/ferrioxid-core/src/lib.rs`.]
 
-## Authentifizierung (v0.7)
+## Authentication (v0.7)
 
-`permission` ist `None`, `"authenticated"` oder ein Ressourcenname. `requires_object_policy` markiert Modelle, deren Einzelzugriff eine gebundene `ObjectPolicy` braucht. `FerrioxidError` hat zusätzlich `Denied(String)` und `Unauthorized(String)`. Die HTTP-Zuordnung steht in [api.md](api.md).
+`permission` is `None`, `"authenticated"` or a resource name. `requires_object_policy` marks models whose single access requires a bound `ObjectPolicy`. `FerrioxidError` also has `Denied(String)` and `Unauthorized(String)`. The HTTP assignment is in [api.md](api.md)].
 
 ## Verantwortung
 
-`ferrioxid-core` enthält die gemeinsamen, von HTTP und ORM unabhängigen Vertragstypen. Die Crate darf **keine** Abhängigkeit auf `ferrioxid-api`, Axum oder eine konkrete Datenbankanbindung annehmen. Seit v0.12 liegen die Formularfeldregeln in `validation.rs`. Das Modellmakro ruft sie noch nicht auf. Die Beschreibung steht in [forms-validation.md](forms-validation.md).
+`ferrioxid-core` contains the common contract types independent of HTTP and ORM. The Crate may **not** assume a dependency on `ferrioxid-api`, Axum or a specific database connection. Since v0.12, the form field rules are in `validation.rs`. The model macro does not call them yet. The description is in [forms-validation.md](forms-validation.md)].
 
-## Tatsächliche öffentliche Typen (IST)
+## Actual Public Types (IST)
 
 ```rust
 pub struct ModelDescriptor {
@@ -54,52 +54,52 @@ pub enum FerrioxidError {
 }
 ```
 
-Hinweis: Das obige `Error` ist zur Lesbarkeit abgekürzt; in der Quelldatei steht `std::error::Error` vollständig. Der Helfer `FerrioxidError::database(error)` konvertiert beliebige kompatible Fehler zu `Database`.
+Note: The above `Error` is abbreviated for legibility; in the source file `std::error::Error` is complete. The `FerrioxidError::database(error)` helper converts any compatible error to `Database`.
 
 ### Semantik
 
 - `name`: Rust-Typname (via `stringify!`).
-- `table`: bereits makroseitig validierter SQL-Tabellenname.
-- `api_path`: statischer Pfad, z. B. `/api/v1/products`.
-- `allow_anonymous`: explizite Freigabe für Demo-Routen; Standard `false`.
-- `columns`: dialektunabhängige Spaltenmetadaten aus dem Makro.
-- `schema_sql(kind)`: Bootstrap-DDL für SQLite oder PostgreSQL. Der Text kommt aus SeaQuery, nicht aus einem gespeicherten SQL-String.
+- `table`: already macro-side validated SQL table name.
+- `api_path`: static path, e.g. `/api/v1/products`.
+- `allow_anonymous`: explicit release for demo routes; Standard `false`.
+- `columns`: dialect-independent column metadata from the macro.
+- `schema_sql(kind)`: Bootstrap DDL for SQLite or PostgreSQL. The text comes from SeaQuery, not from a stored SQL string.
 
-`unique`, `indexed` und die Foreign-Key-Felder stehen in `ColumnSpec`. Zusammengesetzte Gruppen stehen in `TableConstraints`. `constraints()` liefert für alte Modelle leere Gruppen. `Date`, `Time` und `DateTime` sind `ColumnKind`. Policies sind nicht enthalten. Migrationen bauen den Snapshot aus diesen Metadaten. Die Namenshelfer `unique_index_name`, `secondary_index_name` und `foreign_key_name` liegen in derselben Crate. Details stehen in [constraints.md](constraints.md) und [relations.md](relations.md).
+`unique`, `indexed` and the foreign key fields are in `ColumnSpec`. Composite groups are in `TableConstraints`. `constraints()` provides empty groups for old models. `Date`, `Time` and `DateTime` are `ColumnKind`. Policies are not included. Migrations build the snapshot from this metadata. The name helpers `unique_index_name`, `secondary_index_name` and `foreign_key_name` are in the same crate. Details are available in [constraints.md](constraints.md) and [relations.md](relations.md)].
 
-## Fehlersemantik (IST)
+## Error Semantics (IST)
 
 | Fehler | Bedeutung | HTTP-Mapping |
 |---|---|---|
-| `Validation` | ungültige Eingaben, Unique- oder Foreign-Key-Verletzung | 422 |
-| `Forbidden` | Zugriff nicht freigegeben | 403 |
+| `Validation` |Invalid Entries, Unique or Foreign Key Violation| 422 |
+| `Forbidden` |Access not released| 403 |
 | `NotFound` | Zeile fehlt | 404 |
-| `Database` | Datenbank, Query oder Daten-Deserialisierung | 500, internes Detail nur im Log |
+| `Database` |Database, query or data deserialization|500, internal detail only in the log|
 
-Die Umwandlung zu HTTP findet **nicht** in `ferrioxid-core`, sondern ausschließlich in `ferrioxid-api` statt; siehe [api.md](api.md).
+The conversion to HTTP takes place **not** in `ferrioxid-core`, but exclusively in `ferrioxid-api`; see [api.md](api.md)].
 
-## Erweiterungsentwurf (SOLL)
+## Draft extension (reference)
 
-1. Reichere Feldmetadaten über `ColumnSpec` hinaus: Constraints, API-Sichtbarkeit und Defaults außer Bool.
-2. `RelationDescriptor` mit Relationstyp und FK-Referenz.
-3. `ModelSchema` mit Tabelle, PK, Feldern, Indizes und Constraints.
-4. `Registry` für **explizit registrierte** Modelle.
-5. Deskriptor-Schema-Version zur stabilen Weiterentwicklung des Formats.
+1. Richer field metadata beyond `ColumnSpec`: constraints, API visibility and defaults other than Bool.
+2. `RelationDescriptor` with relation type and LC reference.
+3. `ModelSchema` with table, PK, fields, indices and constraints.
+4. `Registry` for **explicitly registered** models.
+5. Descriptor Schema version for stable further development of the format.
 
-Designregeln: Spaltenmetadaten bleiben die kanonische Darstellung. SQL entsteht erst für einen konkreten `DatabaseKind`. MySQL ist nicht vorgesehen, solange es keine eigene Abbildung und Tests gibt.
+Design rules: Column metadata remain the canonical representation. SQL is only created for a specific `DatabaseKind`. MySQL is not provided as long as there is no own image and tests.
 
-## Tests und Abnahme
+## Testing and acceptance
 
-- IST: Typen kompilieren im Workspace (vor Ort prüfen).
-- SOLL: Unit-Tests für eindeutige Tabellen-/Feldnamen, stabile Registry-Reihenfolge und eindeutige Model-IDs.
-- Für neue öffentliche Typen: SemVer-Auswirkung und Migration von alten Descriptor-Aufrufen dokumentieren.
+- IST: compile types in the workspace (check on site).
+- REQUIREMENT: Unit tests for unique table/field names, stable registry order, and unique model IDs.
+- For new public types: document SemVer impact and migration of old descriptor calls.
 
-**Nicht hier implementieren:** SQL-Ausführung, Axum-Handler, CLI-Parsing oder HTML-Vorlagen.
+**Do not implement here:** SQL execution, Axum handler, CLI parsing or HTML templates.
 
 ## NotFound (IST)
 
-`FerrioxidError::NotFound` ist der Fehler für fehlende Ressourcen. Die Axum-Adapter liefern dafür `404` mit demselben JSON-Format wie für `Validation` und `Forbidden`.
+`FerrioxidError::NotFound` is the error for missing resources. The Axum adapters provide `404` with the same JSON format as for `Validation` and `Forbidden`.
 
 ## Admin-Metadaten
 
-`FerrioxidModel::admin_meta` liefert standardmäßig `None`. Das Makro überschreibt die Methode nur bei `admin = true`. `AdminModelMeta` und `AdminFieldMeta` stehen neben `ModelDescriptor` und ändern keine Spalte. Sensible Felder bleiben über den Namen erkennbar und werden von der Admin-API entfernt. Tests: `examples/myshop/tests/admin_http.rs`. Grenze: die Metadaten beschreiben die Oberfläche, nicht einen zweiten Schema-Snapshot.
+`FerrioxidModel::admin_meta` provides `None` as standard. The macro overrides the method only at `admin = true`. `AdminModelMeta` and `AdminFieldMeta` are next to `ModelDescriptor` and do not change a column. Sensitive fields remain recognizable by the name and are removed from the admin API. Tests: `examples/myshop/tests/admin_http.rs`. Limit: the metadata describes the interface, not a second schema snapshot.

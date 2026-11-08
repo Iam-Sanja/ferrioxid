@@ -2,42 +2,42 @@
 
 [Zur Übersicht](index.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · Diagnose: [migration-diagnostics.md](migration-diagnostics.md)
 
-Ein Projekt ohne `.ferrum/project.json` ist ein Legacy-Projekt. Das ist kein Fehler. `ferrioxid check` meldet `project.template.legacy` als Warnung. Ohne `--strict` bleibt der Exitcode 0.
+A project without `.ferrum/project.json` is a legacy project. That is not a mistake. `ferrioxid check` reports `project.template.legacy` as a warning. Without `--strict`, the exit code remains 0.
 
 ## Erkennen
 
 Ferrioxid liest `Cargo.toml` als Text.
 
-- `path = "…"` ist `project.dependency.path`. Relative Pfade, `D:/…` und `D:\…` bleiben stehen.
-- `git = "…"` ist `project.dependency.git`.
-- Eine Versionsangabe ohne Pfad ist `project.dependency.registry`.
-- `0.1.0` ist die Cargo-Version aller bisherigen Funktionsstände und sagt nicht, ob Auth-Migrationen `0002_admin_journal` und `0003_audit_operation` angewendet sind.
+- `path = "…"` is `project.dependency.path`. Relative paths, `D:/…` and `D:\…` remain.
+- `git = "…"` is `project.dependency.git`.
+- A version without a path is `project.dependency.registry`.
+- `0.1.0` is the cargo version of all previous functions and does not say whether authentic migrations `0002_admin_journal` and `0003_audit_operation` are applied.
 
 `admin-ui` darf bleiben.
 
 ## Datenbank
 
-Die Diagnose verwendet `DATABASE_URL` oder `database.url`. Sie öffnet SQLite nur lesend und nur, wenn die Datei schon existiert. Fehlende Auth-Migrationen erscheinen als `migration.auth.pending`. Die Reparatur bleibt:
+The diagnosis uses `DATABASE_URL` or `database.url`. It opens SQLite only when it reads and only when the file already exists. Missing Auth migrations appear as `migration.auth.pending`. The repair remains:
 
 ```powershell
 ferrioxid migrate up
 ```
 
-Dieser Schritt ist bewusst nicht Teil von `ferrioxid upgrade`.
+This step is deliberately not part of `ferrioxid upgrade`.
 
 ## Dateien
 
-Solange kein Manifest mit Hashes existiert, stuft Ferrioxid keine Datei als unverändert ein. `ferrioxid upgrade --yes` schreibt nur `.ferrum/project.json` mit `origin: legacy` und einer leeren Dateiliste. Modelle, Routen, Vorlagen, Staticfiles, Migrationen und eigene Dateien bleiben bytegleich.
+As long as no manifest with hashes exists, ferrioxide does not classify any file as unchanged. `ferrioxid upgrade --yes` only writes `.ferrum/project.json` with `origin: legacy` and an empty file list. Models, routes, templates, static files, migrations and own files remain byte-like.
 
-Ein zweiter `ferrioxid upgrade --yes` findet das Manifest und ändert es nicht.
+A second `ferrioxid upgrade --yes` finds the manifest and does not change it.
 
-## Nicht automatisch
+## Not automatically
 
-Diese Punkte bleiben manuell, auch nach dem Legacy-Manifest:
+These points remain manual, even after the Legacy Manifesto:
 
-- fehlende oder abweichende Projektdateien an eine neuere Vorlage angleichen
-- `schema_command`, Storage-Routen oder Admin-Registrierung im eigenen `main.rs` ändern
-- Benutzer, Rollen und Passwörter
-- bereits angewendete Migrationsdateien
+- Match missing or different project files to a newer template
+- Change `schema_command`, storage routes or admin registration in your own `main.rs`
+- Users, roles and passwords
+- already applied migration files
 
-`ferrioxid doctor` behauptet nicht, dass Storage-Routen fehlen, nur weil `[storage]` in `ferrum.toml` steht. Es meldet ein fehlendes Verzeichnis als `project.file.missing` und sagt, dass die Routen nicht aus dem Quelltext geschlossen werden.
+`ferrioxid doctor` does not claim that storage routes are missing just because `[storage]` is in `ferrum.toml`. It reports a missing directory as `project.file.missing` and says that the routes are not closed from the source code.

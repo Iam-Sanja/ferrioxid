@@ -1,63 +1,63 @@
 # Admin-Routen
 
-[Zur Übersicht](admin-native.md) · Sicherheit: [admin-security.md](admin-security.md) · CSRF: [csrf.md](csrf.md)
+[For overview](admin-native.md) · Security: [admin-security.md](admin-security.md) · CSRF: [csrf.md](csrf.md)]
 
 ## HTML
 
 | Methode | Pfad | Wirkung |
 |---|---|---|
-| GET | `/admin`, `/admin/` | Übersicht. Ohne Sitzung Weiterleitung zur Anmeldung. |
-| GET | `/admin/login` | Formular. Setzt oder übernimmt `ferrioxid_login_csrf`. |
-| POST | `/admin/login` | Prüft Login-CSRF, Origin und Zugangsdaten. Danach 303. |
-| POST | `/admin/logout` | Prüft das Sitzungs-CSRF und beendet die Sitzung. |
-| POST | `/admin/preferences` | Sprache und Theme. Verlangt Staff und Sitzungs-CSRF. |
+| GET | `/admin`, `/admin/` |Overview. Without session forwarding for registration.|
+| GET | `/admin/login` |Form. Sets or takes over `ferrioxid_login_csrf`.|
+| POST | `/admin/login` |Checks Login-CSRF, Origin and access data. Then 303.|
+| POST | `/admin/logout` |Check the session CSF and end the session.|
+| POST | `/admin/preferences` |Language and theme. Requires Staff and Session CSF.|
 | GET | `/admin/models` | Weiterleitung auf `/admin`. |
-| GET | `/admin/models/{model}` | Liste. Query: `q`, `sort`, `dir`, `page`, `filter.{feld}`. |
+| GET | `/admin/models/{model}` |Query: `q`, `sort`, `dir`, `page`, `filter.{feld}`.|
 | GET | `/admin/models/{model}/new` | Leeres Formular. |
-| POST | `/admin/models/{model}/new` | Anlegen, danach 303 auf das Detail. |
+| POST | `/admin/models/{model}/new` |Create, then 303 on the detail.|
 | GET | `/admin/models/{model}/{id}` | Detail. |
-| GET, POST | `/admin/models/{model}/{id}/edit` | Formular und Speichern. |
-| GET | `/admin/models/{model}/{id}/delete` | Bestätigung. Löscht nichts. |
-| POST | `/admin/models/{model}/{id}/delete` | Löschen, danach 303 auf die Liste. |
-| GET | `/admin/directory/users` | Benutzer. Nur Staff-Superuser. |
-| GET, POST | `/admin/directory/users/new` | Benutzer anlegen. Kein Superuser-Feld. |
-| GET | `/admin/directory/users/{id}` | Benutzerdetail ohne Hash. |
-| GET, POST | `/admin/directory/users/{id}/edit` | E-Mail, Aktiv und Staff. |
-| POST | `/admin/directory/users/{id}/password` | Passwort setzen und Sitzungen des Ziels widerrufen. |
-| POST | `/admin/directory/users/{id}/active` | Aktivieren oder deaktivieren. |
-| POST | `/admin/directory/users/{id}/staff` | Staff geben oder entziehen. |
-| GET, POST | `/admin/directory/roles` | Rollen anzeigen und anlegen. |
-| GET | `/admin/directory/permissions` | Berechtigungen, optional `?role=`. |
-| POST | `/admin/directory/roles/{role}/permissions` | `action=grant` oder `revoke`. |
-| POST | `/admin/directory/assignments` | Rolle zuweisen oder entziehen. |
+| GET, POST | `/admin/models/{model}/{id}/edit` |Form and storage.|
+| GET | `/admin/models/{model}/{id}/delete` |Confirmation. Don't delete anything.|
+| POST | `/admin/models/{model}/{id}/delete` |Delete, then add 303 to the list.|
+| GET | `/admin/directory/users` |User. Staff superusers only.|
+| GET, POST | `/admin/directory/users/new` |Create the user. No superuser field.|
+| GET | `/admin/directory/users/{id}` |User detail without hash.|
+| GET, POST | `/admin/directory/users/{id}/edit` |Email, Active and Staff.|
+| POST | `/admin/directory/users/{id}/password` |Password set and revoke sessions of the target.|
+| POST | `/admin/directory/users/{id}/active` |Activate or deactivate.|
+| POST | `/admin/directory/users/{id}/staff` |Give or withdraw staff.|
+| GET, POST | `/admin/directory/roles` |Display and create roles.|
+| GET | `/admin/directory/permissions` |Permissions, optional `?role=`.|
+| POST | `/admin/directory/roles/{role}/permissions` |`action=grant` or `revoke`.|
+| POST | `/admin/directory/assignments` |Assign or withdraw role.|
 | GET | `/admin/assets/admin.css` | Stylesheet. |
 | GET | `/admin/assets/admin.js` | Optionales Script. |
 
-GET verändert keine Daten. Schreibende Aktionen sind POST und antworten bei Erfolg mit 303. Query-Parameter legen, ändern oder löschen nichts.
+GET does not change data. Writing actions are POST and respond to success with 303. Query parameters do not set, change or delete anything.
 
 ## JSON
 
-`/admin/api` bleibt die bestehende JSON-API: Konfiguration, Sitzung, Modelle, Datensätze und Verzeichnis. Sie liest CSRF aus dem Header `x-csrf-token`. HTML-Formulare senden dasselbe Token als Feld `csrf_token`. Die beiden Wege teilen sich `authenticate_csrf`.
+`/admin/api` remains the existing JSON API: configuration, session, models, records and directory. It reads CSRF from the header `x-csrf-token`. HTML forms send the same token as the `csrf_token` field. The two paths are shared by `authenticate_csrf`.
 
-## Anmeldung ohne Sitzung
+## Registration without a meeting
 
-Das Sitzungs-CSRF existiert erst nach dem Login. Das Anmeldeformular nutzt deshalb ein eigenes Cookie `ferrioxid_login_csrf`. Es ist 64 Hex-Zeichen, HttpOnly, Pfad `/`, SameSite aus der Auth-Konfiguration, `Secure` nur wenn das Session-Cookie `Secure` ist, und höchstens zehn Minuten gültig. Die HTML-Antwort setzt `Cache-Control: no-store`, damit Formular und Cookie zusammenbleiben. Mehrere Tabs übernehmen dasselbe gültige Cookie. Nach erfolgreicher Anmeldung wird es gelöscht. Die JSON-Route `POST /auth/login` bleibt ohne dieses Cookie, wie bisher.
+The session CSF exists only after login. The registration form therefore uses its own cookie `ferrioxid_login_csrf`. It is 64 Hex characters, HttpOnly, path `/`, SameSite from the Auth configuration, `Secure` only if the session cookie is `Secure`, and is valid for a maximum of ten minutes. The HTML response sets `Cache-Control: no-store` to keep the form and cookie together. Multiple tabs accept the same valid cookie. After successful registration, it will be deleted. The JSON route `POST /auth/login` remains without this cookie, as before.
 
-`Origin` oder, falls kein Origin gesendet wird, `Referer` muss zur Allowlist passen. Fehlen beide, bleibt die Anfrage aus Sicht der Origin-Prüfung erlaubt; das Login-Cookie ist davon unabhängig Pflicht. Die Allowlist liest `AuthConfig::apply_bound_address` aus `BIND_ADDRESS` oder aus `server.host` und `server.port` in `ferrum.toml`. Ohne gesetztes `FERRUM_ALLOWED_ORIGINS` sind das `http://127.0.0.1:{port}` und `http://localhost:{port}`. Ein früher fest eingetragener Port 3000 gilt dann nicht mehr, wenn der Prozess an einem anderen Port lauscht. Öffentliche Hosts und der Host-Header der Anfrage werden nicht ergänzt. `Origin: null` ist ungültig, außer der Browser sendet gleichzeitig `Sec-Fetch-Site: same-origin`. Das passiert bei `Referrer-Policy: no-referrer` für ein Formular derselben Origin. Die sichtbare Fehlermeldung bleibt „Die Sicherheitsprüfung ist fehlgeschlagen.“ Das Log nennt den Grundcode und bei einer Origin-Ablehnung nur Quelle, Klasse und Port, nie das Cookie oder das Token.
+`Origin` or, if no origin is sent, `Referer` must fit the Allowlist. If both are missing, the request is allowed from the point of view of the origin verification; The login cookie is independent of this obligation. The Allowlist reads `AuthConfig::apply_bound_address` from `BIND_ADDRESS` or from `server.host` and `server.port` in `ferrum.toml`. Without set `FERRUM_ALLOWED_ORIGINS`, the `http://127.0.0.1:{port}` and `http://localhost:{port}` are. An earlier fixed port 3000 no longer applies if the process is listening at another port. Public hosts and the request’s host header are not supplemented. `Origin: null` is invalid unless the browser simultaneously sends `Sec-Fetch-Site: same-origin`. This happens with `Referrer-Policy: no-referrer` for a form of the same origin. The visible error message remains "The security check failed". The log mentions the basic code and in case of an origin rejection only source, class and port, never the cookie or the token.
 
-`next` wird nur akzeptiert, wenn der Wert mit `/admin` beginnt, höchstens 200 Zeichen hat und weder `//`, `\`, `://` noch Steuerzeichen enthält. Alles andere wird zu `/admin`.
+`next` is only accepted if the value begins with `/admin`, has a maximum of 200 characters and contains neither `//`, `\`, `://` nor control characters. Everything else becomes `/admin`.
 
 ## Fehler
 
 | Lage | HTML |
 |---|---|
-| Auth ist nicht konfiguriert | 403, Klartext |
+|Auth is not configured| 403, Klartext |
 | Keine Sitzung | 303 auf `/admin/login?next=` |
 | Kein Staff | 403, Klartext `staff access is required` |
-| Fehlendes Modellrecht | 403, Fehlerseite |
-| Datensatz nicht sichtbar | 404, derselbe Text wie bei einem fehlenden Datensatz |
-| Ungültige Sortierung oder ungültiger Filter | 422 |
-| Fehlendes oder falsches CSRF | 403 |
-| Falsche Zugangsdaten, unbekannte E-Mail oder inaktiver Benutzer | 401, derselbe Text |
+|Lack of model law| 403, Fehlerseite |
+|Data set not visible|404, same text as for a missing data set|
+|Invalid sorting or invalid filter| 422 |
+|Missing or incorrect CSRF| 403 |
+|Incorrect access data, unknown email or inactive user| 401, derselbe Text |
 
-Die JSON-API behält ihre bisherigen Statuscodes. Eine anonyme JSON-Anfrage bleibt 401.
+The JSON API retains its previous status codes. An anonymous JSON request remains 401.

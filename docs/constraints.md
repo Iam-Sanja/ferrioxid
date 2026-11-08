@@ -1,6 +1,6 @@
-# Constraints und Indizes
+# Constraints and Indices
 
-[Zur Übersicht](index.md) · **IST.** Unique Constraints, zusammengesetzte Unique Constraints, einzelne und zusammengesetzte Indizes sowie Foreign Keys werden aus dem Rust-Modell erzeugt und von der Datenbank durchgesetzt.
+[For overview](index.md) · **IST.** Unique constraints, composite unique constraints, individual and composite indices as well as foreign keys are generated from the Rust model and enforced by the database.]
 
 ## Quelle
 
@@ -36,97 +36,97 @@ pub struct Product {
 }
 ```
 
-`unique_together` und `index_together` stehen am Modell, nicht am Feld. Mehrere Gruppen sind mehrere Attribute. Eine Gruppe braucht mindestens zwei Spalten. Unbekannte Spalten, der Primärschlüssel und eine Wiederholung einer Unique-Gruppe als Index sind Compile-Fehler.
+`unique_together` and `index_together` are on the model, not on the field. Multiple groups are multiple attributes. A group needs at least two columns. Unknown columns, the primary key and a repetition of a unique group as an index are compile errors.
 
 ## Namen
 
-| Objekt | Muster | Beispiel |
+| Objekt | Muster |Example|
 |---|---|---|
 | Unique | `uq_{tabelle}_{spalten}` | `uq_categories_name` |
 | Index | `ix_{tabelle}_{spalten}` | `ix_products_name` |
 | Foreign Key | `fk_{tabelle}_{spalte}_{zieltabelle}_{zielspalte}` | `fk_products_category_id_categories_id` |
 
-Die Namen sind deterministisch. Bezeichner bleiben auf Buchstaben, Ziffern und Unterstriche beschränkt und werden in SQL mit `"` quotiert.
+The names are deterministic. Identifiers remain limited to letters, numbers and underscores and are quoted in SQL using `"`.
 
-Ein Primärschlüssel erzeugt bereits einen eindeutigen Index. `unique` oder `index` auf derselben Spalte ist ein Compile-Fehler. Ein Index mit derselben Spaltenliste wie ein Unique Constraint wird nicht ein zweites Mal angelegt.
+A primary key already generates a unique index. `unique` or `index` on the same column is a compile error. An index with the same column list as a Unique Constraint is not created a second time.
 
 ## NULL bei Unique Constraints
 
-Es gilt das SQL-Standardverhalten von SQLite und PostgreSQL: mehrere `NULL`-Werte sind in einem Unique Index erlaubt. `NULL` gilt nicht als gleich `NULL`. Ferrioxid setzt kein `NULLS NOT DISTINCT`. Ein zweiter konkreter Wert, der schon vorkommt, wird abgelehnt.
+The standard SQL behavior of SQLite and PostgreSQL applies: several `NULL` values are allowed in a unique index. `NULL` is not considered to be `NULL`. Ferrioxide does not set `NULLS NOT DISTINCT`. A second concrete value, which already occurs, is rejected.
 
 ## SQL
 
-Unique Constraints sind eindeutig benannte Unique Indexes, keine reine Rust-Prüfung.
+Unique Constraints are clearly named Unique Indexes, not a pure Rust test.
 
-Beim `CREATE TABLE` schreibt Ferrioxid die Spalten und die Foreign Keys in die Tabellenanweisung. Unique Indexes und sekundäre Indexes folgen als eigene `CREATE UNIQUE INDEX`- und `CREATE INDEX`-Anweisungen. Dadurch bleibt der Name in `sqlite_master` sichtbar und `DROP INDEX` entfernt ihn.
+In `CREATE TABLE`, ferrioxide writes the columns and the foreign keys into the table statement. Unique indexes and secondary indexes follow as separate `CREATE UNIQUE INDEX` and `CREATE INDEX` statements. This keeps the name visible in `sqlite_master` and `DROP INDEX` removes it.
 
-Eine neue nullable Spalte kann in derselben Migration einen Foreign Key tragen:
+A new nullable column can carry a foreign key in the same migration:
 
 ```sql
 ALTER TABLE "products" ADD COLUMN "category_id" text CONSTRAINT "fk_products_category_id_categories_id" REFERENCES "categories" ("id") ON DELETE RESTRICT ON UPDATE NO ACTION
 ```
 
-`ON UPDATE` ist immer `NO ACTION`. Es gibt kein Attribut dafür.
+`ON UPDATE` is always `NO ACTION`. There is no attribute for this.
 
-PostgreSQL verwendet dieselben `CREATE INDEX`-Anweisungen und `ALTER TABLE ... ADD COLUMN`. Ein Unique Index oder Foreign Key, der vorhandene Zeilen verletzt, lässt die Anweisung fehlschlagen. Die Migration wird zurückgerollt und die Historie speichert keinen Erfolg.
+PostgreSQL uses the same `CREATE INDEX` statements and `ALTER TABLE ... ADD COLUMN`. A Unique Index or Foreign Key that violates existing lines makes the statement fail. The migration is rolled back and the history does not store success.
 
 ## Foreign-Key-Regeln
 
 | `on_delete` | Wirkung |
 |---|---|
-| `restrict` | Löschen der Elternzeile schlägt fehl, solange Kinder existieren |
-| `cascade` | Kinder werden mitgelöscht |
-| `set_null` | Die Kindspalte wird `NULL` |
+| `restrict` |Deleting the parent line fails as long as children exist|
+| `cascade` |Children are also deleted|
+| `set_null` |The child column becomes `NULL`|
 
-`set_null` ist nur auf einer nullable Spalte gültig. Das Makro lehnt die Kombination mit `NOT NULL` ab. Die Snapshot-Validierung lehnt sie ebenfalls ab.
+`set_null` is valid only on a nullable column. The macro rejects the combination with `NOT NULL`. Snapshot validation also rejects it.
 
-Zusätzlich prüft `SchemaSnapshot::validate`:
+In addition, `SchemaSnapshot::validate` checks:
 
-- Die Zieltabelle ist im selben Snapshot registriert.
-- Die Zielspalte existiert.
-- Die logischen Typen stimmen überein.
-- Die Zielspalte ist Primärschlüssel oder ein einspaltiger Unique Constraint.
-- Foreign Keys haben genau eine Spalte.
-- Namen von Unique Constraints, Indizes und Foreign Keys sind in der Tabelle eindeutig.
-- `on_update` muss `no_action` sein.
+- The destination table is registered in the same snapshot.
+- The target column exists.
+- The logical types agree.
+- The target column is a primary key or a single-column unique constraint.
+- Foreign keys have exactly one column.
+- Names of Unique Constraints, Indices and Foreign Keys are unique in the table.
+- `on_update` must be `no_action`.
 
-Ein Foreign Key auf einer schon vorhandenen Spalte, das Entfernen eines Foreign Keys und eine geänderte `ON DELETE`-Regel erzeugen `add_foreign_key` oder `drop_foreign_key`. Diese Varianten werden nicht ausgeführt. SQLite kann sie nicht ohne Tabellenumbau ändern, und der Umbau bleibt bei Foreign Keys blockiert. `migrate make` schreibt dann keine Datei.
+A foreign key on an existing column, the removal of a foreign key and a changed `ON DELETE` rule create `add_foreign_key` or `drop_foreign_key`. These variants are not executed. SQLite cannot change it without a table conversion, and the conversion remains blocked on Foreign Keys. `migrate make` does not write a file.
 
-Eltern-Tabellen werden vor Kind-Tabellen erzeugt. Zyklen werden abgelehnt. Tabellen mit Kindern werden zuerst gelöscht.
+Parent tables are created before child tables. Cycles are rejected. Tables with children are deleted first.
 
 ## Snapshot
 
-Die Formatversion bleibt `1`. `unique_constraints`, `indexes` und `foreign_keys` fehlen im JSON, wenn sie leer sind. Dadurch behalten bereits angewendete Dateien wie `0001_initial.json` ihre Checksum. Alte Dateien ohne diese Felder werden mit leeren Listen gelesen.
+The format version remains `1`. `unique_constraints`, `indexes` and `foreign_keys` are missing in the JSON if they are empty. As a result, already applied files such as `0001_initial.json` keep their checksum. Old files without these fields are read with empty lists.
 
-Die Objekte stehen in deterministischer Namensreihenfolge. `semantically_eq` vergleicht sie unabhängig von der Listenposition.
+The objects are in deterministic name order. `semantically_eq` compares them regardless of the list position.
 
 ## Umbenennung
 
-`RenameColumn` und `RenameTable` schreiben die Spaltenlisten im Snapshot um und berechnen die deterministischen Namen neu. Verweist ein anderer Foreign Key auf die umbenannte Spalte, wird auch `referenced_columns` nachgezogen.
+`RenameColumn` and `RenameTable` rewrite the column lists in the snapshot and recalculate the deterministic names. If another foreign key refers to the renamed column, `referenced_columns` is also drawn.
 
-In der Datenbank folgt auf die Umbenennung `DROP INDEX` und `CREATE INDEX` für jeden betroffenen Unique Index und sekundären Index. Der Primärschlüssel-Autoindex bleibt unberührt. Foreign-Key-Namen existieren in SQLite nicht als eigenes Objekt. Die Definition in `CREATE TABLE` folgt der Spaltenumbenennung des Dialekts. Ein nachträgliches Ändern der Löschregel bleibt blockiert.
+In the database, the renaming of `DROP INDEX` and `CREATE INDEX` follows for each affected Unique Index and Secondary Index. The primary key auto index remains unaffected. Foreign key names do not exist in SQLite as their own object. The definition in `CREATE TABLE` follows the column renaming of the dialect. Subsequently changing the deletion rule remains blocked.
 
 ## Fehler
 
-`insert_record`, `update_record` und `delete_record` werten `sqlx::ErrorKind` aus.
+`insert_record`, `update_record` and `delete_record` evaluate `sqlx::ErrorKind`.
 
-| Verstoß | Abbildung |
+|Non-compliance| Abbildung |
 |---|---|
 | `UniqueViolation` | `FerrioxidError::Validation("unique constraint violated")` |
 | `ForeignKeyViolation` | `FerrioxidError::Validation("foreign key constraint violated")` |
-| SQLite-Code `1811` mit der festen Meldung `FOREIGN KEY constraint failed` | dieselbe Foreign-Key-Validierung |
+|SQLite code `1811` with fixed message `FOREIGN KEY constraint failed`|Same foreign key validation|
 
-SQLite setzt `ON DELETE RESTRICT` intern als `RAISE` um. Der erweiterte Code ist dann `1811` (`SQLITE_CONSTRAINT_TRIGGER`) und nicht `787`. Die Meldung ist der feste Text dieser Implementierung, kein freier Vergleich beliebiger Fehltexte. Andere Datenbankfehler bleiben `FerrioxidError::Database` und werden an der HTTP-Grenze zu 500 ohne SQL-Text.
+SQLite implements `ON DELETE RESTRICT` internally as `RAISE`. The extended code is then `1811` (`SQLITE_CONSTRAINT_TRIGGER`) and not `787`. The message is the fixed text of this implementation, not a free comparison of any mistexts. Other database errors remain `FerrioxidError::Database` and become at the HTTP border to 500 without SQL text.
 
 ## SQLite-Umbau
 
-Tabellen mit Nutzer-Index, Trigger, View, ausgehendem oder eingehendem Foreign Key werden nicht umgebaut. Der Primärschlüssel-Autoindex (`sql IS NULL`) zählt nicht als Nutzer-Index. Ein unterstützter Umbau prüft nur die geänderte Spalte und kopiert danach mit `INSERT INTO ... SELECT`. Eine Typänderung `string` ↔ `i64` verwendet `CAST`, aber erst nach der bisherigen Wertprüfung. Ungültige Werte rollen die Transaktion zurück.
+Tables with user index, trigger, view, outgoing or incoming foreign key are not rebuilt. The primary key auto index (`sql IS NULL`) does not count as a user index. A supported conversion only checks the changed column and then copies it with `INSERT INTO ... SELECT`. A type change `string` ↔ `i64` uses `CAST`, but only after the previous value check. Invalid values roll back the transaction.
 
-## Nicht implementiert
+## Not implemented
 
-- Mehrspaltige Foreign Keys
-- `ON UPDATE` außer `NO ACTION`
+- Multicolumn foreign keys
+- `ON UPDATE` except `NO ACTION`
 - `NULLS NOT DISTINCT`
-- Nachträgliches Anlegen, Entfernen oder Umschalten eines Foreign Keys auf einer bestehenden Spalte
-- Partieller Index, Ausdrucksindex, Sortierrichtung
-- Automatischer Index auf jedem Feld
+- Subsequent creation, removal or switching of a foreign key on an existing column
+- Partial index, expression index, sorting direction
+- Automatic index on each field

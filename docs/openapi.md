@@ -1,34 +1,34 @@
-# OpenAPI und API-Verträge – Entwurf (NICHT implementiert)
+# OpenAPI and API contracts – draft (NOT implemented)
 
-[Zur Übersicht](index.md) · **Status:** ausschließlich SOLL. v0.1 nutzt `utoipa` nicht und liefert keine OpenAPI-Spezifikation.
+[For overview](index.md) · **Status:** Only REQUIRED.] v0.1 does not use `utoipa` and does not provide an OpenAPI specification.
 
 ## Ziel
 
-Aus derselben Modelldefinition und den **tatsächlich** generierten HTTP-Routen eine korrekte OpenAPI-Beschreibung erstellen. Nicht bloß DB-Felder kopieren: Request, Response und Rechte können unterschiedliche Sichten besitzen.
+Create a correct OpenAPI description from the same model definition and the HTTP routes generated. Not just copy DB fields: request, response and rights can have different views.
 
 ## Geplanter Generator
 
-1. Makro erzeugt DTO-Metadaten (`Create`, `Update`, `Response`) und Validierungsregeln.
+1. Macro generates DTO metadata (`Create`, `Update`, `Response`) and validation rules.
 2. Route Registry verknüpft Methode, Pfad, Request-/Response-Typ, Statuscodes und Policy.
-3. OpenAPI-Schicht setzt diese Daten zu deterministischen Schemas zusammen.
-4. Ausgabe wird bei Build-/Integrationstests mit tatsächlich registrierten Routen verglichen.
+3. OpenAPI layer composes this data into deterministic schemes.
+4. Output is compared with actually registered routes during build/integration tests.
 
 ### Vertrag pro Endpoint
 
-- Methode, Pfad, tags, summary (wenn vorhanden).
-- Request-Body und Content Types.
-- Erfolg: 200/201 und JSON-Schema.
-- Fehler: 401/403/404/409/422/500 nach implementierter Semantik, keine erfundenen Statuscodes.
-- Pagination-Schema nur dokumentieren, wenn implementiert.
-- Security Schemes erst nach implementierter Auth definieren.
+- Method, path, tags, summary (if available).
+- Request Body and Content Types.
+- Success: 200/201 and JSON scheme.
+- Error: 401/403/404/409/422/500 after implemented semantics, no invented status codes.
+- Pagination scheme only document when implemented.
+- Define Security Schemes only after implemented Auth.
 
 ## Designregeln
 
-- `required`/Min-/Max-Länge nachvollziehbar aus Feldmetadaten übernehmen.
-- Hidden/Readonly-Felder im richtigen DTO ausblenden.
-- Kein API-Consumer darf aus einem DB-Schema eine Schreibberechtigung ableiten.
-- Versioniertes API-Schema, stabile Operation-IDs und deterministische Sortierung.
+- `required`/min/max length traceable from field metadata.
+- Hidden/Readonly fields in the correct DTO.
+- No API consumer may derive a write permission from a DB schema.
+- Versioned API schema, stable operation IDs and deterministic sorting.
 
 ## Abnahmetests
 
-OpenAPI-JSON lässt sich parsen/validieren; Beispielpayloads entsprechen Rust-DTOs; dokumentierte und registrierte Routen stimmen überein; verbotene Response-Felder erscheinen nicht. Quellen: [api.md](api.md), [validation.md](validation.md), [auth.md](auth.md).
+OpenAPI-JSON can be parsed/validated; Sample payloads correspond to Rust DTOs; documented and registered routes match; prohibited response fields do not appear. Sources: [api.md](api.md), [validation.md](validation.md), [auth.md](auth.md)].

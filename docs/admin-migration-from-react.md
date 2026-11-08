@@ -1,31 +1,31 @@
-# Wechsel vom React-Admin
+# Change from React-Admin
 
-[Zur Übersicht](admin-native.md) · Routen: [admin-routing.md](admin-routing.md)
+[For overview](admin-native.md) · Routes: [admin-routing.md](admin-routing.md)]
 
-## Was sich ändert
+## What is changing
 
-Bis v0.12 lag die Oberfläche in `apps/admin-ui` und wurde mit Vite gebaut. v0.13 rendert dieselben Aufgaben in Rust. `apps/admin-ui` ist entfernt. `npm run build` und `FERRUM_ADMIN_DIST` gehören nicht mehr zum Build.
+Until v0.12 the surface was in `apps/admin-ui` and was built with Vite. v0.13 renders the same tasks in Rust. `apps/admin-ui` is removed. `npm run build` and `FERRUM_ADMIN_DIST` are no longer part of the build.
 
-Der Browser spricht jetzt direkt mit HTML-Routen. Die JSON-API unter `/admin/api` bleibt für Programme und die bisherigen Tests. Sie ist keine Voraussetzung für die Oberfläche.
+The browser now speaks directly to HTML routes. The JSON API under `/admin/api` remains for programs and previous tests. It is not a requirement for the surface.
 
 ## Was gleich bleibt
 
-- `AdminRegistry`, `admin = true` und die Feldmetadaten
-- Sitzungen, Staff, RBAC, Objektregeln und Query-Scopes
-- HMAC-CSRF der Sitzung für schreibende Aktionen
+- `AdminRegistry`, `admin = true` and the field metadata
+- Meetings, Staff, RBAC, Object Rules and Query Scopes
+- HMAC-CSRF of the Writing Actions Session
 - `POST /auth/login` als JSON
-- Datenbank, Migrationen und die REST-API der Modelle
+- Database, migrations and the REST API of the models
 - Branding aus `ferrum.toml`
-- Deutsch und Englisch
-- Das Cargo-Feature `admin-ui` als leeres Flag, damit bestehende `Cargo.toml`-Dateien weiter bauen
+- German and English
+- The cargo feature `admin-ui` as an empty flag, so that existing `Cargo.toml` files continue to build
 
 ## Anmeldung
 
-Die HTML-Anmeldung kann noch kein Sitzungs-CSRF senden, weil die Sitzung erst im Erfolgsfall entsteht. Dafür gibt es das kurzlebige Cookie `ferrioxid_login_csrf`. Es ersetzt das HMAC der Sitzung nicht. Nach dem Login gelten wieder `ferrioxid_session` und das Feld `csrf_token`.
+The HTML login cannot yet send a session CSF, because the session only arises when successful. For this, there is the short-lived cookie `ferrioxid_login_csrf`. It does not replace the HMAC of the session. After login, `ferrioxid_session` and the field `csrf_token` apply again.
 
 ## Build
 
-Ein Fullstack-Projekt braucht nur Cargo:
+A fullstack project only needs Cargo:
 
 ```powershell
 ferrioxid new myproject --template fullstack --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
@@ -35,8 +35,8 @@ ferrioxid admin create-user --staff --superuser
 ferrioxid dev
 ```
 
-Die Startseite liegt unter `/`, der Admin unter `/admin/login`. Die API-Vorlage bindet den Admin nicht ein.
+The homepage is under `/`, the admin under `/admin/login`. The API template does not integrate the admin.
 
-## Nicht übernommen
+## Not accepted
 
-Die React-Komponenten, Vitest-Tests und Tailwind-Klassen gibt es nicht mehr. Die Prüfung der Oberfläche liegt in `examples/myshop/tests/admin_html.rs`. Sie spricht HTTP ohne JavaScript. Ein Browserlauf ist davon unabhängig und wird nur gezählt, wenn er tatsächlich stattgefunden hat.
+The React components, Vitest tests and Tailwind classes no longer exist. The test of the surface is in `examples/myshop/tests/admin_html.rs`. It speaks HTTP without JavaScript. A browser run is independent of this and is only counted if it has actually taken place.

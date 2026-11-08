@@ -1,22 +1,22 @@
 # Request-Lebenszyklus
 
-**Stand:** v0.12, IST. Die Cargo-Version bleibt `0.1.0`.
+**Stand:** v0.12, IST. The cargo version remains `0.1.0`.
 
 ## Verantwortlichkeit
 
-Dieses Dokument beschreibt die Reihenfolge einer HTTP-Anfrage, nachdem Formulare, Staticfiles, Uploads und Middleware ergänzt wurden.
+This document describes the order of an HTTP request after supplementing forms, static files, uploads and middleware.
 
-## Crates und Dateien
+## Crates and files
 
 - Routeraufbau: `crates/ferrioxid-api/src/lib.rs`, `App::merge`, `App::into_router`
-- Hülle: `crates/ferrioxid-api/src/web.rs`
+- Case: `crates/ferrioxid-api/src/web.rs`
 - Middleware: `crates/ferrioxid-middleware/src/lib.rs`
 - Seiten: `crates/ferrioxid-api/src/pages.rs`
 - Auth: `crates/ferrioxid-auth/src/service.rs`
 
-## Öffentliche API
+## Public API
 
-`App::merge` hängt zustandsbehaftete Routen an, bevor `into_router` den Zustand bindet. `ferrioxid::web::prepare` montiert danach Staticfiles, wenn `[static] enabled` ist, und die Standard-Middleware.
+`App::merge` attaches conditioned routes before `into_router` binds the state. `ferrioxid::web::prepare` then assembles static files if `[static] enabled` is, and the standard middleware.
 
 ## Datenfluss
 
@@ -35,32 +35,32 @@ Body-Limit
   → SQLite, PostgreSQL oder lokaler Speicher
 ```
 
-Auth und CSRF laufen im Handler. Eine Middleware kann sie nicht überspringen, weil sie die Handler-Prüfung nicht ersetzt.
+Auth and CSRF run in the trader. A middleware cannot skip it because it does not replace the trader check.
 
 ## Konfiguration
 
-Staticfiles und Storage stehen in `ferrum.toml`. Das Body-Limit folgt der Upload-Größe, wenn `prepare` verwendet wird. myshop montiert Staticfiles und Middleware ausdrücklich, weil die Workspace-Datei Staticfiles auslässt.
+Static files and storage are in `ferrum.toml`. The body limit follows the upload size when `prepare` is used. myshop mounts static files and middleware explicitly because the workspace file omits static files.
 
 ## Sicherheit
 
-Zuerst wird die Größe begrenzt, danach eine eigene Request-ID erzeugt. Logs sehen den Pfad ohne Query. Formulare prüfen Felder serverseitig. Uploads prüfen den Besitzer. Staticfiles bleiben im konfigurierten Root.
+First the size is limited, then a separate request ID is generated. Logs see the path without query. Forms check fields on the server side. Uploads check the owner. Staticfiles remain in the configured root.
 
-## Fehlerfälle
+## Error cases
 
-413 vom Body-Limit, 401 und 403 von Auth und CSRF, 404 von fremden Dateien und fehlenden Staticfiles, 415 von Typen, 422 von Formularen. Datenbanktexte bleiben generisch.
+413 from the body limit, 401 and 403 from Auth and CSRF, 404 from external files and missing static files, 415 from types, 422 from forms. Database texts remain generic.
 
-## Beispiel
+## Example
 
-Ein Fullstack-Projekt aus `ferrioxid new` ruft `mount_pages` und danach `ferrioxid::web::prepare` auf. `/contact` ist vor `into_router` gemerged.
+A fullstack project from `ferrioxid new` calls `mount_pages` and then `ferrioxid::web::prepare`. `/contact` is merged before `into_router`.
 
 ## Tests
 
-Die Middleware-Reihenfolge steht in `ferrioxid-middleware`. Auth-, CSRF- und CRUD-Tests bleiben die bestehenden SQLite-Tests.
+The middleware order is in `ferrioxid-middleware`. Auth, CSRF and CRUD tests remain the existing SQLite tests.
 
-## Einschränkungen
+## Limitations
 
-myshop und generierte Projekte unterscheiden sich im Einhängepunkt: myshop kennt die Workspace-Datei und montiert sein eigenes `static/`. `prepare` liest die entdeckte `ferrum.toml`.
+myshop and generated projects differ in the attachment point: myshop knows the workspace file and mounts its own `static/`. `prepare` reads the discovered `ferrum.toml`.
 
 ## Erweiterung
 
-Weitere äußere Schichten dürfen vor `prepare` liegen. Innere Auth-Middleware ist nicht geplant, solange die Handlerprüfung die Quelle der Entscheidung bleibt.
+Further outer layers may lie in front of `prepare`. Inner auth middleware is not planned as long as the trader verification remains the source of the decision.

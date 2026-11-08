@@ -1,45 +1,45 @@
 # Middleware
 
-**Stand:** v0.12, IST. Die Cargo-Version bleibt `0.1.0`.
+**Stand:** v0.12, IST. The cargo version remains `0.1.0`.
 
 ## Verantwortlichkeit
 
-`ferrioxid-middleware` hängt Tower-Schichten an einen Axum-Router. Es gibt keine zweite Middleware-Laufzeit. Authentifizierung, Sitzungen und CSRF bleiben in den Handlern.
+`ferrioxid-middleware` hangs tower layers on an Axum router. There is no second middleware runtime. Authentication, sessions and CSRF remain in the traders.
 
-## Crates und Dateien
+## Crates and files
 
 - `crates/ferrioxid-middleware/src/lib.rs`
-- Anwendung: `ferrioxid::web::prepare` und `examples/myshop/src/main.rs`
+- Application: `ferrioxid::web::prepare` and `examples/myshop/src/main.rs`
 
-## Öffentliche API
+## Public API
 
-`Standard` trägt `body_limit`, Standard 2 MiB. `apply(router, standard)` hängt die Schichten an. `RequestId` liegt in den Request-Extensions. `logged_path` gibt nur den Pfad zurück. Die eingehende Kopfzeile `x-request-id` wird ignoriert. Die Antwort setzt eine neue ID.
+`Standard` carries `body_limit`, standard 2 MiB. `apply(router, standard)` attaches the layers. `RequestId` is in the request extensions. `logged_path` returns only the path. The incoming header `x-request-id` is ignored. The answer sets a new ID.
 
 ## Datenfluss
 
-Tower führt die zuletzt hinzugefügte Schicht zuerst aus. `apply` hängt deshalb in dieser Reihenfolge an: Sicherheitsheader, Access-Log, Request-ID, Body-Limit. Von außen nach innen gilt:
+Tower runs the last layer added first. `apply` is therefore attached in this order: security header, access log, request ID, body limit. From the outside inwards:
 
 1. Body-Limit
 2. Request-ID
 3. Access-Log
 4. Sicherheitsheader
-5. Route, danach Auth, Sitzung und CSRF im Handler
+5. Route, then Auth, Session and CSRF in the trader
 
 ## Konfiguration
 
-`Standard { body_limit }` ist die einzige Option. `prepare` verwendet mindestens die konfigurierte Upload-Größe. Es gibt keinen TOML-Schalter, der die Sicherheitsheader abschaltet.
+`Standard { body_limit }` is the only option. `prepare` uses at least the configured upload size. There is no TOML switch that turns off the security headers.
 
 ## Sicherheit
 
-Das Log enthält Methode, Pfad, Status, Dauer und Request-ID. Query, Cookies, `Authorization`, CSRF, Passwörter und Multipart-Inhalte werden nicht geschrieben. Antwortheader sind `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` und `Referrer-Policy: no-referrer`. Eine Content-Security-Policy wird nicht gesetzt, damit der Admin nicht bricht. Die Middleware ersetzt keine Berechtigungsprüfung.
+The log contains method, path, status, duration and request ID. Query, cookies, `Authorization`, CSRF, passwords and multipart content are not written. Response headers are `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`. A content security policy is not set so that the admin does not break. The middleware does not replace an authorization check.
 
-Der Header `x-ferrioxid-trace-order` ist nur eine Testsonde. Er verändert die Route nicht.
+The header `x-ferrioxid-trace-order` is only a test probe. He does not change the route.
 
-## Fehlerfälle
+## Error cases
 
-Ein Body über dem Limit ergibt 413, bevor die Route läuft. Eine Request-ID, die nicht als Headerwert darstellbar wäre, wird nicht gesetzt. UUIDs sind darstellbar.
+A body above the limit is 413 before the route runs. A request ID that could not be represented as a header value is not set. UUIDs are displayable.
 
-## Beispiel
+## Example
 
 ```rust
 let router = ferrioxid::middleware::apply(router, ferrioxid::middleware::Standard::default());
@@ -47,12 +47,12 @@ let router = ferrioxid::middleware::apply(router, ferrioxid::middleware::Standar
 
 ## Tests
 
-`cargo test -p ferrioxid-middleware` prüft die Request-ID, die Sicherheitsheader, die Reihenfolge `request_id,access_log,security_headers`, das Body-Limit und dass Query und Cookie nicht im Antwortstrom des Log-Pfads stehen.
+`cargo test -p ferrioxid-middleware` checks the request ID, the security headers, the order `request_id,access_log,security_headers`, the body limit and that query and cookie are not in the response stream of the log path.
 
-## Einschränkungen
+## Limitations
 
-Eigene Middleware wird mit den normalen Axum- und Tower-Schichten ergänzt. Eine deklarative Liste in `ferrum.toml` gibt es nicht. Logging schreibt über `tracing` und prüft den Text nicht ein zweites Mal.
+Our own middleware is supplemented with the normal Axum and Tower layers. There is no declarative list in `ferrum.toml`. Logging writes about `tracing` and does not check the text a second time.
 
 ## Erweiterung
 
-Zusätzliche Schichten können vor oder nach `apply` gesetzt werden. Wer sie außen anlegt, sieht die Anfrage vor dem Body-Limit.
+Additional layers can be placed before or after `apply`. Who puts it on the outside, sees the request before the body limit.

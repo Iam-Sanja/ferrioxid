@@ -1,6 +1,6 @@
-# Eigene Admin-Aktionen
+# Own admin actions
 
-[Zur Übersicht](admin.md) · Sammelaktionen: [admin-bulk-actions.md](admin-bulk-actions.md)
+[For overview](admin.md) · Collective actions: [admin-bulk-actions.md](admin-bulk-actions.md)]
 
 ## Registrierung
 
@@ -17,20 +17,20 @@ registry.action(AdminAction {
 });
 ```
 
-`ferrioxid::admin` exportiert `AdminAction` und `ActionOperation`. `AdminRegistry::action` hängt den Eintrag an dieselbe Registry. Es gibt keine zweite Modellliste.
+`ferrioxid::admin` exports `AdminAction` and `ActionOperation`. `AdminRegistry::action` attaches the entry to the same registry. There is no second model list.
 
 ## Regeln
 
-- Der Name passt auf `[a-z][a-z0-9_]{0,39}`.
-- `delete`, `activate` und `deactivate` sind reserviert.
-- `confirm` muss wahr sein.
-- `max_ids` liegt zwischen 1 und 100.
-- `Delete` verlangt das Recht `delete`.
-- `SetBool` verlangt `update` und eine sichtbare, nicht schreibgeschützte, nicht sensible Bool-Spalte, die nicht der Primärschlüssel ist.
+- The name fits `[a-z][a-z0-9_]{0,39}`.
+- `delete`, `activate` and `deactivate` are reserved.
+- `confirm` must be true.
+- `max_ids` is between 1 and 100.
+- `Delete` requires the right `delete`.
+- `SetBool` requires `update` and a visible, non-write-protected, non-sensitive bool column that is not the primary key.
 
-Eingebaute Aktionen: `delete` immer, `activate` und `deactivate` nur wenn eine solche Spalte `active` existiert. Ein HTTP-Name, der weder eingebaut noch über `try_action` registriert ist, ist 422. Es wird kein SQL aus der Anfrage ausgeführt.
+Built-in actions: `delete` always, `activate` and `deactivate` only if such a column `active` exists. An HTTP name that is neither built-in nor registered through `try_action` is 422. No SQL is executed from the request.
 
-Beide Operationen laufen in der Transaktion aus [admin-bulk-actions.md](admin-bulk-actions.md) und schreiben `bulk_delete` oder `bulk_update`.
+Both operations run out in the transaction [admin-bulk-actions.md](admin-bulk-actions.md) and write `bulk_delete` or `bulk_update`].
 
 ## Eigener Handler
 
@@ -57,4 +57,4 @@ registry.try_action(
 )?;
 ```
 
-Der HTTP-Parameter wählt nur den registrierten Namen. Ferrioxid prüft vorher `update`, die Auswahlgrenze, den Query-Scope und die Objektregel. `set_text`, `set_integer` und `set_bool` akzeptieren nur eine ID aus dieser Auswahl und eine Spalte aus `writes`. Die Methode öffnet keine Verbindung. Nach dem Plan schreibt `update_in` in derselben Transaktion wie das Audit. Ein Fehler rollt alles zurück. `Delete` und `SetBool` bleiben die bisherigen Literale.
+The HTTP parameter selects only the registered name. Ferrioxide checks `update`, the selection limit, the query scope and the object rule beforehand. `set_text`, `set_integer` and `set_bool` only accept one ID from this selection and one column from `writes`. The method does not open a connection. According to the plan, `update_in` writes in the same transaction as the audit. One mistake rolls everything back. `Delete` and `SetBool` remain the previous literals.

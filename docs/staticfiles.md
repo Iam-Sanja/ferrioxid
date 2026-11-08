@@ -1,25 +1,25 @@
 # Statische Dateien
 
-**Stand:** v0.12, IST. Die Cargo-Version bleibt `0.1.0`.
+**Stand:** v0.12, IST. The cargo version remains `0.1.0`.
 
 ## Verantwortlichkeit
 
-`ferrioxid-static` liefert CSS, JavaScript, Bilder und Schriften aus einem ausdrücklich konfigurierten Verzeichnis. Eingebettete Admin-Assets unter `/admin` bleiben getrennt.
+`ferrioxid-static` provides CSS, JavaScript, images and fonts from an explicitly configured directory. Embedded admin assets under `/admin` remain separate.
 
-## Crates und Dateien
+## Crates and files
 
 - `crates/ferrioxid-static/src/lib.rs`
-- Einhängen: `ferrioxid::web::prepare` in `crates/ferrioxid-api/src/web.rs`
-- Beispiel: `examples/myshop/static/`
-- Generator: `static/css/app.css` und `static/js/app.js`
+- Install: `ferrioxid::web::prepare` in `crates/ferrioxid-api/src/web.rs`
+- Example: `examples/myshop/static/`
+- Generator: `static/css/app.css` and `static/js/app.js`
 
-## Öffentliche API
+## Public API
 
 `StaticOptions` und `mount`. Der Pfad ist `{url_prefix}/{*path}`. `serve` setzt `Content-Type`, `Content-Length`, `Cache-Control`, `ETag` und `X-Content-Type-Options: nosniff`. `If-None-Match` kann 304 liefern.
 
 ## Datenfluss
 
-Die Route entfernt das Präfix, prüft jedes Segment und kanonisiert Root und Datei. Nur Dateien, deren kanonischer Pfad im Root beginnt, werden gelesen. Die Antwort enthält die Bytes und den ETag aus SHA-256.
+The route removes the prefix, checks each segment, and canonizes root and file. Only files whose canonical path begins in the root are read. The answer contains the bytes and the ETag from SHA-256.
 
 ## Konfiguration
 
@@ -31,28 +31,28 @@ directory = "static"
 cache_seconds = 3600
 ```
 
-Neue Projekte setzen `enabled = true`. Die bestehende Workspace-Datei ohne Abschnitt lässt `enabled` auf `false`. `directory` ist relativ und darf `..` nicht enthalten. `url_prefix` darf `/admin`, `/api`, `/auth`, `/healthz` und `/uploads` nicht überdecken. `cache_seconds` ist höchstens 2592000. Die maximale Dateigröße ist 5 MiB.
+New projects set `enabled = true`. The existing workspace file without a section leaves `enabled` on `false`. `directory` is relative and must not contain `..`. `url_prefix` shall not overlap `/admin`, `/api`, `/auth`, `/healthz` and `/uploads`. `cache_seconds` is not more than 2592000. The maximum file size is 5 MiB.
 
 ## Sicherheit
 
-Verboten sind leere Segmente, `\`, NUL, `.`, `..`, Punkt-Dateien, `.env`, SQLite-Dateien und `.pem`. Ein Symlink, der nach der Kanonisierung außerhalb des Roots liegt, wird nicht ausgeliefert. Verzeichnisse werden nicht aufgelistet. HTML ist kein erlaubter Typ. SVG aus dem Static-Root ist erlaubt, Upload-SVG nicht. Der Root muss existieren, sonst ist die Datei nicht erreichbar.
+Forbidden are empty segments, `\`, NUL, `.`, `..`, point files, `.env`, SQLite files and `.pem`. A symlink that is outside the root after canonization will not be delivered. Lists are not listed. HTML is not an allowed type. SVG from the static root is allowed, upload-SVG is not. The root must exist, otherwise the file is not reachable.
 
-## Fehlerfälle
+## Error cases
 
-Fehlende, versteckte oder ausbrechende Pfade sind 404. Unbekannte Endungen sind 415. Zu große Dateien sind 413.
+Missing, hidden or erupting paths are 404. Unknown endings are 415. Too large files are 413.
 
-## Beispiel
+## Example
 
 `GET /static/css/app.css` nach `ferrioxid::static_files::mount(router, StaticOptions::new("static"))`.
 
 ## Tests
 
-`cargo test -p ferrioxid-static` prüft CSS, JavaScript, PNG, MIME, 404, Cache, ETag, Traversal, versteckte Dateien und, wenn Windows den Symlink anlegen darf, einen Symlink nach außen.
+`cargo test -p ferrioxid-static` checks CSS, JavaScript, PNG, MIME, 404, Cache, ETag, Traversal, hidden files and, if Windows is allowed to create the symlink, a symlink to the outside.
 
-## Einschränkungen
+## Limitations
 
-Es gibt keine Manifest-Fingerprints, kein Brotli und kein CDN. Der Entwicklungs- und der Produktionsmodus nutzen denselben Reader. Nur `cache_seconds` unterscheidet die Cache-Dauer.
+There are no manifest fingerprints, no Brotli and no CDN. The development and production modes use the same reader. Only `cache_seconds` distinguishes the cache duration.
 
 ## Erweiterung
 
-Ein späterer Build-Schritt kann gehashte Dateinamen erzeugen. Die Route bleibt am konfigurierten Präfix.
+A later build step can create hashed filenames. The route remains on the configured prefix.

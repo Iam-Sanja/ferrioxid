@@ -1,10 +1,10 @@
 # Admin-Assets
 
-[Zur Übersicht](admin.md) · Nativ: [admin-native.md](admin-native.md)
+[For overview](admin.md) · Native: [admin-native.md](admin-native.md)]
 
 ## Aufgabe
 
-CSS und das optionale Script werden mit dem Rust-Binary ausgeliefert. Node.js startet dafür weder beim Bauen noch zur Laufzeit.
+CSS and the optional script are shipped with the Rust binary. Node.js does not start for construction or running time.
 
 ## Dateien
 
@@ -13,12 +13,12 @@ CSS und das optionale Script werden mit dem Rust-Binary ausgeliefert. Node.js st
 - `crates/ferrioxid-admin/src/assets.rs`
 - `crates/ferrioxid-admin/build.rs`
 
-`assets.rs` bindet die beiden Dateien mit `include_str!` ein und liefert nur `admin.css` und `admin.js`. Jeder andere Pfad, auch mit `..`, ist 404. Es gibt kein Verzeichnis-Override und kein `FERRUM_ADMIN_DIST`.
+`assets.rs` integrates the two files with `include_str!` and delivers only `admin.css` and `admin.js`. Every other path, even with `..`, is 404. There is no directory override and no `FERRUM_ADMIN_DIST`.
 
 ## Feature
 
-`admin-ui` auf `ferrioxid` schaltet `ferrioxid-admin/embedded-admin` ein. Dieses Feature ist leer. Bestehende Fullstack-Projekte, die es in der `Cargo.toml` nennen, kompilieren weiter. Ein API-Projekt ohne das Feature kompiliert ebenfalls. Der Admin wird in beiden Fällen nicht aus einem Frontend-Build gelesen. Ob die Routen existieren, entscheidet `App::with_admin`.
+`admin-ui` to `ferrioxid` switches `ferrioxid-admin/embedded-admin` on. This feature is empty. Existing fullstack projects, which call it `Cargo.toml`, continue to compile. An API project without the feature also compiles. The admin is not read from a frontend build in either case. Whether the routes exist, decides `App::with_admin`.
 
 ## Test
 
-`admin_assets_reject_traversal_and_keep_the_api` prüft, dass ein gesetztes `FERRUM_ADMIN_DIST` die Antworten nicht verändert, dass CSS und Script aus dem Binary kommen, unbekannte Pfade 404 sind und `/admin/api/models` JSON bleibt.
+`admin_assets_reject_traversal_and_keep_the_api` checks that a set `FERRUM_ADMIN_DIST` does not change the answers, that CSS and script come from the binary, unknown paths are 404 and `/admin/api/models` JSON remains.

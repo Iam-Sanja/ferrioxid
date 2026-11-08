@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Komponenten: [model-components.md](model-components.md)
 
-`ferrioxid::with_timestamps!` hängt `created_at` und `updated_at` als `DateTime<Utc>` an ein konkretes Model.
+`ferrioxid::with_timestamps!` attaches `created_at` and `updated_at` as `DateTime<Utc>` to a concrete model.
 
 ```rust
 use ferrioxid::prelude::*;
@@ -19,14 +19,14 @@ ferrioxid::with_timestamps! {
 }
 ```
 
-Beide Felder tragen `#[field(managed = "created")]` beziehungsweise `"updated"`. Das Repository setzt sie mit `ferrioxid::core::utc_now()`. `created_at` bleibt bei einem Update unverändert. `updated_at` wird bei jedem erfolgreichen Update gesetzt, auch wenn die übrigen Felder gleich bleiben.
+Both fields are `#[field(managed = "created")]` and `"updated"`. The repository sets it with `ferrioxid::core::utc_now()`. `created_at` remains unchanged during an update. `updated_at` is set for every successful update, even if the remaining fields remain the same.
 
-Die Felder fehlen in `CategoryCreate` und `CategoryUpdate`. Ein JSON-Körper mit `created_at` ist `deny_unknown_fields`. Im Admin sind sie readonly, weil `managed` das Admin-Feld schreibgeschützt macht. `reject_locked` lehnt sie im Formular ab.
+The fields are missing in `CategoryCreate` and `CategoryUpdate`. A JSON body with `created_at` is `deny_unknown_fields`. In the admin, they are readonly because `managed` makes the admin field read-protected. `reject_locked` rejects them in the form.
 
-Die Uhr ist `Utc::now()`, außer ein Test setzt `ferrioxid::core::set_test_clock` für den aktuellen Thread. Das ist keine Model-Registry.
+The watch is `Utc::now()`, unless a test sets `ferrioxid::core::set_test_clock` for the current thread. This is not a model registry.
 
-`HasTimestamps` stellt `created_at()` und `updated_at()` bereit, wenn beide Rollen vorhanden sind.
+`HasTimestamps` provides `created_at()` and `updated_at()` if both roles are present.
 
-`ferrioxid generate model Product --timestamps` umschließt das neue Model mit `with_timestamps!`. Ohne das Flag bleibt der bisherige Rumpf. Vorhandene Dateien werden nicht überschrieben.
+`ferrioxid generate model Product --timestamps` includes the new model with `with_timestamps!`. Without the flag, the previous hull remains. Existing files are not overwritten.
 
-JSON bleibt flach: `created_at` und `updated_at` stehen neben `title`.
+JSON remains flat: `created_at` and `updated_at` stand alongside `title`.

@@ -2,13 +2,13 @@
 
 [Zur Übersicht](index.md) · Worker: [workers.md](workers.md) · Retries: [job-retries.md](job-retries.md) · Mail: [job-mail-integration.md](job-mail-integration.md)
 
-**IST.** Funktionsstand v0.27.1. Cargo-Version `0.1.0`. Die Queue liegt in `crates/ferrioxid-jobs`. Es gibt kein Redis und keine zweite Datenbank-Engine.
+**IST.** Functional status v0.27.1. Cargo version `0.1.0`. The queue is in `crates/ferrioxid-jobs`. There is no redis and no second database engine.
 
 ## Zustellung
 
-Ferrioxid garantiert **at least once**. Ein Handler kann denselben Job mehr als einmal sehen. Exactly once gibt es nicht. SMTP und andere externe Effekte lassen sich nicht in derselben Transaktion wie der Jobabschluss festschreiben. Eine angenommene SMTP-Antwort ist keine Zustellbestätigung.
+Ferrioxide guarantees **at least once**. A trader can see the same job more than once. Exactly once does not exist. SMTP and other external effects cannot be fixed in the same transaction as the job. An accepted SMTP response is not a delivery confirmation.
 
-## Öffentliche API
+## Public API
 
 ```rust
 use ferrioxid::jobs::{JobContext, JobError, JobHandler, JobRegistry, Queue, When};
@@ -41,40 +41,40 @@ queue.enqueue::<PulseHandler>(&Pulse { label: "spaeter".into() }, When::at(1_800
 queue.enqueue::<PulseHandler>(&Pulse { label: "wieder".into() }, When::every("notes-pulse", 60)).await?;
 ```
 
-`JobRegistry` gehört dem Prozess, der den Worker baut. Es gibt keine globale Registry und kein Nachladen von Programmen. `NAME` besteht aus Kleinbuchstaben, Ziffern und Unterstrichen. `VERSION` beginnt bei 1. Der Payload ist ein JSON-Objekt, höchstens 16 KiB. Schlüssel wie `password`, `token`, `secret` und `reset_url` werden abgelehnt.
+`JobRegistry` belongs to the process that builds the worker. There is no global registry and no reloading of programs. `NAME` consists of lower case, numerals and underscores. `VERSION` starts at 1. The payload is a JSON object, maximum 16 KiB. Keys such as `password`, `token`, `secret` and `reset_url` are rejected.
 
-`When::now` ist sofort fällig. `When::at` setzt `available_at` als Unix-Sekunde in UTC. `When::every` trägt ein Intervall von 1 bis 2_592_000 Sekunden und einen `schedule_key`. Cron-Syntax gibt es nicht.
+`When::now` is due immediately. `When::at` sets `available_at` as a Unix second in UTC. `When::every` carries an interval of 1 to 2 592 000 seconds and a `schedule_key`. There is no cron syntax.
 
 ## Zustand
 
 | Zustand | Bedeutung |
 |---|---|
 | `pending` | wartet auf `available_at` |
-| `running` | ein Worker hält die Lease |
-| `retry` | temporärer Fehler, `next_attempt_at` liegt in der Zukunft |
+| `running` |A worker keeps the lease|
+| `retry` |temporary error, `next_attempt_at` lies in the future|
 | `succeeded` | abgeschlossen |
-| `failed` | endgültig oder Versuche aufgebraucht |
-| `cancelled` | vom Operator abgebrochen |
+| `failed` |Final or trials exhausted|
+| `cancelled` |Aborted by the operator|
 
-`pending` und `retry` werden beansprucht. `running` mit abgelaufener Lease ebenfalls. Erfolg, dauerhafter Fehler und Abbruch sind für den automatischen Worker zu Ende. `retry` und `cancel` über die CLI setzen die erlaubten Übergänge zurück. Details stehen in [job-retries.md](job-retries.md) und [workers.md](workers.md).
+`pending` and `retry` are claimed. `running` with expired lease also. Success, permanent error and termination are over for the automatic worker. `retry` and `cancel` via the CLI reset the allowed transitions. Details are available in [job-retries.md](job-retries.md) and [workers.md](workers.md)].
 
 ## Schema
 
-Die Migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` legt `_ferrum_jobs` an. Die Historie heißt `_ferrum_job_migrations`. Auth-Migrationen `0001` bis `0004` bleiben unverändert. `ferrioxid migrate up` wendet die Job-Migration an. Der Worker und `ferrioxid dev` tun das nicht.
+The migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` creates `_ferrum_jobs`. The story is called `_ferrum_job_migrations`. Auth migrations `0001` to `0004` remain unchanged. `ferrioxid migrate up` applies the job migration. The Worker and `ferrioxid dev` do not do this.
 
-Zeiten sind UTC-Unix-Sekunden. Ein eindeutiger `idempotency_key` liefert beim zweiten Eintrag denselben Job. Ein `schedule_key` darf gleichzeitig nur an einer Zeile hängen. Nach Erfolg wird er auf die nächste Fälligkeit weitergereicht. Verpasste Intervalle werden übersprungen, damit ein stiller Worker keine Lawine erzeugt.
+Times are UTC-Unix seconds. A unique `idempotency_key` delivers the same job on the second entry. A `schedule_key` may hang on only one line at a time. After success, it is passed on to the next maturity. Missed intervals are skipped so that a silent worker does not create an avalanche.
 
-Abgeschlossene Jobs, die älter als `jobs.retention_hours` sind, löscht der Worker in Blöcken von 100 Zeilen. Laufende Jobs bleiben.
+Completed jobs older than `jobs.retention_hours` are deleted by the worker in blocks of 100 lines. Continuing jobs.
 
-Das Beispiel mit Sofort-, Verzögerungs-, Intervall- und Mail-Job liegt in `examples/notes`. `examples/notes/src/bin/worker.rs` führt dieselben Handler in einem eigenen Prozess aus. myshop bleibt unverändert.
+The example with Instant, Delay, Interval and Mail Job is in `examples/notes`. `examples/notes/src/bin/worker.rs` executes the same traders in its own process. Myshop remains unchanged.
 
-## Ablauf in einem Projekt
+## Procedure in a project
 
-1. Job definieren. Ein Typ implementiert `JobHandler` mit `NAME`, `VERSION` und einem JSON-Objekt als Payload.
-2. Handler registrieren. Die App implementiert `FerrioxidApplication::register_jobs`. `App::install` ruft diese Methode nicht auf.
-3. Job einreihen. Der Webprozess nutzt `queue.enqueue::<Handler>(...)`. Dafür muss `_ferrum_jobs` bereits durch `ferrioxid migrate up` existieren.
-4. Worker starten. `ferrioxid generate worker` legt `src/bin/worker.rs` an, wenn die Datei fehlt. Der Prozess lädt `ferrum.toml`, verbindet die konfigurierte Datenbank und ruft `WorkerHost::run_until_ctrl_c` auf. `ferrioxid dev` startet ihn nicht.
-5. Jobstatus prüfen. `ferrioxid jobs list` und `ferrioxid jobs inspect <id>` zeigen Status, Handler, Version, Versuche, Zeiten und Fehlercode. Die Payload bleibt verborgen, bis `--show-payload` gesetzt ist.
-6. Fehler behandeln. `JobError::retry` plant einen neuen Versuch. `JobError::permanent` beendet den Job. `ferrioxid jobs retry <id> --yes` und `ferrioxid jobs cancel <id> --yes` gelten für die erlaubten Zustände.
+1. Defining the job. One type implements `JobHandler` with `NAME`, `VERSION` and a JSON object as a payload.
+2. Register traders. The app implements `FerrioxidApplication::register_jobs`. `App::install` does not call this method.
+3. A job line. The web process uses `queue.enqueue::<Handler>(...)`. For this, `_ferrum_jobs` must already exist through `ferrioxid migrate up`.
+4. Starting the worker. `ferrioxid generate worker` creates `src/bin/worker.rs` if the file is missing. The process loads `ferrum.toml`, connects the configured database and calls `WorkerHost::run_until_ctrl_c`. `ferrioxid dev` does not start it.
+5. Check job status. `ferrioxid jobs list` and `ferrioxid jobs inspect <id>` show status, handler, version, trials, times and error code. The payload remains hidden until `--show-payload` is set.
+6. Treat errors. `JobError::retry` is planning a new attempt. `JobError::permanent` terminates the job. `ferrioxid jobs retry <id> --yes` and `ferrioxid jobs cancel <id> --yes` apply to the permitted states.
 
-Ein unbekannter Handler bleibt `pending` und erhöht `attempts` nicht. Fehlt die Migration, endet der Worker mit `job.migration.missing` und Exitcode 2.
+An unknown trader remains `pending` and does not increase `attempts`. If the migration is missing, the worker ends with `job.migration.missing` and Exitcode 2.

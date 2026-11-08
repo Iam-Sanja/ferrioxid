@@ -1,14 +1,14 @@
 # Views
 
-[Zur Übersicht](index.md) · Routen: [urls.md](urls.md) · **IST-Datei:** `crates/ferrioxid-api/src/views.rs`.
+[For overview](index.md) · Routes: [urls.md](urls.md) · **actual file:** `crates/ferrioxid-api/src/views.rs`].
 
 ## Aufgabe
 
-`ferrioxid::views` liefert die Antworten, die eine Anwendung häufig braucht: HTML, JSON, einen lokalen Redirect und stabile Fehler. Die Typen bleiben Axum-`Response` und `HeaderMap`. Tera bleibt die Vorlagen-Engine.
+`ferrioxid::views` provides the answers that an application often needs: HTML, JSON, a local redirect and stable errors. The types remain Axum-`Response` and `HeaderMap`. Tera remains the template engine.
 
-`require_mutation(auth, headers, token)` prüft eine POST-Anfrage über `AuthService::authenticate_csrf`. Fehlt der Auth-Dienst, ist die Antwort `401` und `auth.not_configured`. Es gibt keinen zweiten CSRF-Mechanismus. `require_user` bleibt eine GET-Prüfung. Die App-Registrierung vergibt dadurch keine Berechtigung.
+`require_mutation(auth, headers, token)` checks a POST request via `AuthService::authenticate_csrf`. If the Auth service is missing, the answer is `401` and `auth.not_configured`. There is no second CSRF mechanism. `require_user` remains a GET test. The app registration does not grant any permission.
 
-## Django und Ferrioxid
+## Django and ferrioxide
 
 | Django | Ferrioxid |
 |---|---|
@@ -16,13 +16,13 @@
 | `JsonResponse({"ok": True})` | `views::json(&ferrioxid::serde_json::json!({"ok": true}))` |
 | `redirect("/home")` | `views::redirect_to("/home")` |
 | `Http404` | `views::fail(..., StatusCode::NOT_FOUND, code, detail, debug)` |
-| `PermissionDenied` | `views::fail(..., StatusCode::FORBIDDEN, ...)` oder `require_staff` |
-| `login_required` | `require_user` für eine vorhandene Sitzung |
+| `PermissionDenied` |`views::fail(..., StatusCode::FORBIDDEN, ...)` or `require_staff`|
+| `login_required` |`require_user` for an existing session|
 | `staff_member_required` | `require_staff` |
 | `permission_required("app.view")` | `require_permission(..., "app.view")` |
-| `get_object_or_404` plus Policy | vorhandenes Repository und `require_object_read::<T, P>` |
+| `get_object_or_404` plus Policy |Existing repository and `require_object_read::<T, P>`|
 
-Die Entsprechung ist die Aufgabe, nicht die Syntax. Eine Ferrioxid-View ist eine Axum-Funktion. Sie erhält den Zustand als Argument und gibt `Response` zurück.
+The correspondence is the task, not the syntax. A ferrioxide view is an axum function. It gets the state as an argument and returns `Response`.
 
 ## HTML
 
@@ -53,7 +53,7 @@ pub async fn home(
 }
 ```
 
-Schlägt das Rendern fehl, antwortet `render` mit `view.template`. In Produktion und bei `debug = false` lautet der Text `Internal server error`. Die Vorlage selbst wird nicht in die Antwort kopiert, wenn der Fehler ein Secret, ein Token oder einen Stacktrace nennt.
+If the rendering fails, `render` responds with `view.template`. In production and at `debug = false` the text is `Internal server error`. The template itself is not copied into the response if the error calls a secret, a token or a stacktrace.
 
 ## JSON, Redirect, Formular
 
@@ -66,13 +66,13 @@ fn answers() -> Result<axum::response::Response, ferrioxid::views::ViewError> {
 }
 ```
 
-`json` nimmt `&serde_json::Value`. `redirect_to` erlaubt einen einzelnen lokalen Pfad: er beginnt mit `/`, nicht mit `//`, und enthält kein Schema, `\`, `..` oder Steuerzeichen. `https://…` ist `view.redirect` mit Status 400. `form_fields` liest `application/x-www-form-urlencoded` bis 8 KiB. Ein größeres oder fehlerhaftes Paar ist `request.rejected`.
+`json` takes `&serde_json::Value`. `redirect_to` allows a single local path: it starts with `/`, not `//`, and does not contain any schema, `\`, `..` or control characters. `https://…` is `view.redirect` with status 400. `form_fields` reads `application/x-www-form-urlencoded` up to 8 KiB. A larger or faulty pair is `request.rejected`.
 
 ## Fehler
 
-`fail` und `ViewError` nutzen dieselben Kategorien:
+`fail` and `ViewError` use the same categories:
 
-| Status | Schlüssel der HTML-Überschrift |
+| Status |Key of the HTML heading|
 |---|---|
 | 400 | `bad_request` |
 | 401 | `unauthorized` |
@@ -86,7 +86,7 @@ Enthält `Accept` den Text `text/html` und nicht `application/json`, ist die Ant
 
 `Accept-Language`, das mit `en` beginnt, wählt die englische Überschrift. Sonst Deutsch. Ein Status 500 zeigt ohne Debug keinen inneren Text. Details mit `password`, `secret`, `token` oder `stack backtrace` werden `Request rejected`. Das Log enthält Request-ID, Code und Status, nicht das Detail.
 
-Eigene Seiten können `fail` mit einem eigenen `code` aufrufen. Die Projektvorlagen `templates/errors/404.html` und `500.html` bleiben die Antworten von `mount_pages`, nicht von `fail`.
+Own pages can access `fail` with their own `code`. The project templates `templates/errors/404.html` and `500.html` remain the answers of `mount_pages`, not `fail`.
 
 ## Zugriff
 
@@ -103,10 +103,10 @@ async fn account(
 }
 ```
 
-`require_user` ruft `AuthService::authenticate` mit GET auf. CSRF wird dabei nicht geprüft. `require_staff` verlangt zusätzlich aktives Staff. `require_permission` nutzt `holds`. `require_object_read::<T, P>` nutzt `ObjectPolicy::can_read`. Keine dieser Funktionen setzt Staff oder Superuser.
+`require_user` calls `AuthService::authenticate` with GET. CSRF is not checked. `require_staff` requires additional active staff. `require_permission` uses `holds`. `require_object_read::<T, P>` uses `ObjectPolicy::can_read`. None of these functions sets Staff or Superuser.
 
-Eine Änderung sendet CSRF weiter über `authenticate_csrf`. Die View-Helfer ersetzen diese Prüfung nicht.
+A change is sent to CSRF via `authenticate_csrf`. View helpers do not replace this exam.
 
 ## Tests
 
-`redirect_rejects_external_targets`, `responses_keep_problem_json_and_escape_html` und `staff_route_and_request_id_stay_closed` in `views.rs`. HTML wird escaped. Ein 422 ohne `text/html` bleibt Problem-JSON. Ohne Sitzung bleibt Staff geschlossen. Die Request-ID steht im Antwort-Header, wenn die Standard-Middleware davor liegt.
+`redirect_rejects_external_targets`, `responses_keep_problem_json_and_escape_html` and `staff_route_and_request_id_stay_closed` in `views.rs`. HTML is escaped. A 422 without `text/html` remains problem JSON. Staff will be closed without meeting. The request ID is in the response header if the standard middleware is in front of it.

@@ -1,51 +1,51 @@
 # Entwicklungsserver
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-cli/src/develop.rs`.
+[For overview](index.md) · **IST file:** `crates/ferrioxid-cli/src/develop.rs`.]
 
 ## Aufgabe
 
-`ferrioxid dev` übersetzt das Projekt, startet die Binary und startet sie nach relevanten Dateiänderungen neu. `ferrioxid build` erzeugt einen Release-Build.
+`ferrioxid dev` translates the project, starts the binary and restarts it after relevant file changes. `ferrioxid build` creates a release build.
 
-## Zuständige Dateien
+## Responsible files
 
 - `crates/ferrioxid-cli/src/develop.rs`
 - `crates/ferrioxid-cli/src/main.rs`
 
-## Öffentliche Schnittstelle
+## Public interface
 
 ```powershell
 ferrioxid dev
 ferrioxid build
 ```
 
-Beide Befehle lesen `ferrum.toml` im Arbeitsverzeichnis oder einem Elternverzeichnis.
+Both commands read `ferrum.toml` in the working directory or a parent directory.
 
 ## Konfiguration
 
-`BIND_ADDRESS` und `DATABASE_URL` gelten für den gestarteten Prozess. Vor dem Build prüft `ferrioxid dev` die Migrationslage nur lesend. Ausstehende Migrationen oder eine nicht prüfbare Datenbank ergeben eine Warnung und keinen Abbruch. Es wird nichts migriert. `ferrioxid build` und `ferrioxid dev` starten kein Node.js. Der Admin ist im Rust-Binary enthalten. Die Warnung beschreibt [migration-diagnostics.md](migration-diagnostics.md).
+`BIND_ADDRESS` and `DATABASE_URL` apply to the started process. Before the build, `ferrioxid dev` checks the migration situation only by reading. Pending migrations or a non-auditable database result in a warning and not an abort. Nothing is migrated. `ferrioxid build` and `ferrioxid dev` do not start Node.js. The admin is included in the rust binary. The warning describes [migration-diagnostics.md](migration-diagnostics.md)].
 
 ## Datenfluss
 
-Ein Neustart lädt auch die Tera-Vorlagen neu. `dev` startet die Binary aus `target/debug` oder aus `CARGO_TARGET_DIR/debug`, wenn diese Variable gesetzt ist. Der Wächter beobachtet das Projekt rekursiv. `target`, `node_modules`, `.git`, `dist` und `embedded-admin` werden ignoriert. Nur `.rs`, `.toml` und `.json` lösen einen Neustart aus. Zwischen zwei Starts liegen mindestens 400 Millisekunden. Die CLI startet `cargo build --bin <paket>` und danach die Binary. Ein Absturz startet den Server nicht erneut, bis sich eine Datei ändert. Strg+C beendet den Kindprozess. Es läuft höchstens eine Serverinstanz.
+A restart also reloads the Tera templates. `dev` starts the binary from `target/debug` or from `CARGO_TARGET_DIR/debug` when this variable is set. The guardian observes the project recursively. `target`, `node_modules`, `.git`, `dist` and `embedded-admin` are ignored. Only `.rs`, `.toml` and `.json` will trigger a restart. Between two starts are at least 400 milliseconds. The CLI starts `cargo build --bin <paket>` and then the Binary. A crash does not restart the server until a file changes. Ctrl+C ends the child process. At most, one server instance is running.
 
-`build` prüft bei eingebetteten Assets das Frontend und führt danach `cargo build --release` aus. Das Ergebnisverzeichnis wird ausgegeben. Liegt `CARGO_TARGET_DIR` in der Umgebung, ist das der Release-Ordner dort.
+`build` checks the frontend for embedded assets and then executes `cargo build --release`. The list of results is output. If `CARGO_TARGET_DIR` is in the environment, this is the release folder there.
 
-## Fehlerfälle
+## Error cases
 
 | Fall | Verhalten |
 |---|---|
-| Keine `ferrum.toml` | Abbruch mit Hinweis |
-| Übersetzungsfehler | Meldung, der alte Prozess ist beendet, kein Neustart bis zur nächsten Änderung |
-| Der Admin fehlt im Binary | Das passiert nicht durch ein fehlendes Frontend. Ein Compile-Fehler von Rust bleibt ein Compile-Fehler. |
-| Adresse beginnt mit `0.0.0.0` | Die generierte Anwendung beendet sich |
+| Keine `ferrum.toml` |Termination with notice|
+|Translation errors|Message that the old process has ended, no restart until the next change|
+|The admin is missing in the binary|This is not due to a lack of frontend. A compile error of Rust remains a compile error.|
+|Address starts with `0.0.0.0`|The generated application ends|
 
 ## Sicherheitsregeln
 
-Der Wächter startet keine Shell mit dem Dateinamen. Kindprozesse werden beim Beenden der CLI beendet. Der Admin ist bereits im Binary.
+The guard does not start a shell with the filename. Child processes are terminated upon termination of the CLI. The admin is already in the binary.
 
 ## Beispiele
 
-Windows und Linux:
+Windows and Linux:
 
 ```powershell
 ferrioxid dev
@@ -55,12 +55,12 @@ ferrioxid dev
 ferrioxid dev
 ```
 
-Beenden in beiden Fällen mit Strg+C.
+Finish in both cases with Ctrl+C.
 
 ## Tests
 
-Die Integration in `crates/ferrioxid-cli/tests/generator.rs` setzt `FERRUM_DEV_EXIT_MS` und prüft, dass der Server lauscht und der Prozess danach endet. Ein Unit-Test prüft, dass Pfade unter `target` und `node_modules` nicht relevant sind. Ein weiterer Unit-Test beendet einen Kindprozess.
+The integration into `crates/ferrioxid-cli/tests/generator.rs` sets `FERRUM_DEV_EXIT_MS` and checks that the server is listening and the process ends afterwards. A unit test checks that paths under `target` and `node_modules` are not relevant. Another unit test ends a child process.
 
-## Einschränkungen
+## Limitations
 
-Vorlagen und CSS ändern sich mit dem nächsten Rust-Build. `FERRUM_DEV_EXIT_MS` ist nur eine Testhilfe und kein Benutzerbefehl.
+Templates and CSS change with the next Rust build. `FERRUM_DEV_EXIT_MS` is only a test aid and not a user command.

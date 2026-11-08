@@ -6,17 +6,17 @@
 #[ferrioxid(admin = true, admin_date_hierarchy = "event_date")]
 ```
 
-Das Feld muss ein sichtbares `NaiveDate` oder `DateTime<Utc>` sein. `NaiveTime` ist nicht erlaubt.
+The field must be a visible `NaiveDate` or `DateTime<Utc>`. `NaiveTime` is not allowed.
 
-Die Liste zeigt Jahr, dann Monat, dann Tag als Links. Die Parameter heißen `year`, `month` und `day`. Ein Monat ohne Jahr oder ein Tag ohne Monat ist 422 und schreibt nichts.
+The list shows year, then month, then day as links. The parameters are `year`, `month` and `day`. A month without a year or a day without a month is 422 and does not write anything.
 
-Der Filter ist ein parametrisierter Bereich:
+The filter is a parameterized area:
 
-- `Date`: inklusive Anfangstag, exklusiv der folgende Tag, Monat oder das Folgejahr.
-- `DateTime`: dieselben Grenzen als UTC-Mitternacht.
+- `Date`: Includes starting day, excluding the following day, month or year.
+- `DateTime`: same limits as UTC midnight.
 
-Die Gruppierung zählt höchstens 100 Werte und verwendet denselben Query-Scope, dieselbe Suche und dieselben Filter wie die Liste. Ein Datensatz außerhalb des Scopes erscheint nicht in der Zählung.
+The group counts a maximum of 100 values and uses the same query scope, the same search and the same filters as the list. A record outside the scope does not appear in the count.
 
-Für `DateTime` ist der Kalender der UTC-Tag der kanonischen Zeichenkette, nicht die lokale Zone des Browsers.
+For `DateTime`, the calendar is the UTC tag of the canonical string, not the local zone of the browser.
 
-Die Navigation ist HTML. Sie braucht kein JavaScript.
+The navigation is HTML. It does not need JavaScript.

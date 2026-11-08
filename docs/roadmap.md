@@ -1,138 +1,138 @@
-# Ferrioxid Roadmap – Status und nächste Phasen
+# Ferrioxide Roadmap – Status and Next Phases
 
-[Zur Übersicht](index.md) · Admin-Vergleich: [admin-django-parity.md](admin-django-parity.md) · UX-Backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
+[For overview](index.md) · Admin comparison: [admin-django-parity.md](admin-django-parity.md) · UX backlog: [admin-ux-backlog.md](admin-ux-backlog.md)]
 
-**Stand:** Funktionsstand v0.27.1 ergänzt Anwendungs-Worker. Funktionsstand v0.27 ergänzt persistente Jobs. Funktionsstand v0.26 ergänzt Modellfelder und den geprüften App-Start. Funktionsstand v0.25 bleibt gültig. Funktionsstand v0.24 bleibt gültig. Funktionsstand v0.23 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Dieser Text trennt umgesetzte Meilensteine von geplanten Phasen. Eine geplante Phase ist keine Freigabe und kein fertiges Feature.
+** Status:** Function status v0.27.1 supplements Application Worker. Functional status v0.27 complements persistent jobs. Functional status v0.26 complements model fields and the tested app launch. Function status v0.25 remains valid. Function status v0.24 remains valid. Function status v0.23 remains valid. The cargo version remains `0.1.0`. This text separates implemented milestones from planned phases. A planned phase is not a release and not a finished feature.
 
 ## Produktentscheidung
 
-Der Standard-Admin bleibt serverseitiges HTML mit Rust, Axum und Tera. React, Vite und Node.js gehören nicht zum Standard-Admin. Kernaktionen, also Listen, Formulare, Löschen, Anmeldung, Abmeldung und Verzeichnis, müssen ohne JavaScript funktionieren. Das optionale `admin.js` darf nur Komfort bieten, zum Beispiel Fokus.
+The default admin remains server-side HTML with Rust, Axum and Tera. React, Vite and Node.js are not standard admins. Core actions, i.e. lists, forms, deletion, login, log-out and directory, must work without JavaScript. The optional `admin.js` must only offer comfort, for example focus.
 
-Langfristig soll der Admin die relevanten Funktionen des Django-Admins funktionsgleichwertig abdecken. Die interne API muss nicht djangokompatibel sein. Die Oberfläche soll eine dichte Arbeitsumgebung werden, keine dekorative Neugestaltung.
+In the long term, the admin should cover the relevant functions of the Django admin in a functionally equivalent manner. The internal API does not have to be django compatible. The surface should become a dense working environment, not a decorative redesign.
 
-## Umgesetzte Meilensteine
+## Implemented milestones
 
 | Meilenstein | Status | Ziel | Grenze |
 |---|---|---|---|
-| v0.1 | Implementiert, SQLite im Workspace getestet | Typed Model, Liste, GET, POST, PATCH, DELETE, sichere Migrationen | PostgreSQL-HTTP-Test bleibt ignoriert, solange kein Server läuft |
-| v0.6 | Implementiert | Unique, Indizes, Foreign Keys, Belongs-To, Has-Many, Snapshot und Diff | Many-to-Many, Eager Loading, `down` und PostgreSQL-Baseline fehlen |
-| v0.7 | Implementiert | Argon2id, Sitzungen, Cookies, CSRF, RBAC, Modellrechte | OAuth, MFA und JWT fehlen. Passwort-Reset folgt in v0.23 |
-| v0.8 bis v0.12 | Implementiert | Admin-Metadaten, JSON-API, Query-Scopes, Generator, Settings, Formulare, Staticfiles, Uploads, Middleware | Historische React-Oberfläche ist seit v0.13 entfernt |
-| v0.13 | Implementiert | Nativer Admin unter `/admin`, Tera, CSS im Binary, JSON-API bleibt | Cargo-Version bleibt `0.1.0` |
-| v0.13.1 | Implementiert | Login-Origins aus der Bind-Adresse, `Origin: null` nur mit `Sec-Fetch-Site: same-origin` | Host-Header wird nicht als Allowlist gelesen |
-| v0.14 | Implementiert | Abmelden auf authentifizierten 403-Seiten, Flag-Hinweise, Standardspalten | Benutzer anlegen bleibt v0.16 |
-| v0.15 | Implementiert | Design-Tokens, Feldgruppen, Tabellenrhythmus, Rollenauswahl, Kontrasttor | Cargo-Version bleibt `0.1.0` |
-| v0.16 | Implementiert | Benutzerpflege, serverseitige Bestätigung, lesbare Fremdschlüssel, Filterauswahl, isolierte Generator-Datenbanken | Superuser bleibt CLI. Kein Benutzer-Hard-Delete. JSON-API ohne `confirm` |
-| v0.17 | Implementiert | Listenkonfiguration, Fieldsets, drei Speicherziele, Formularzustand, Fremdschlüssel-Auswahlseite | Kein Datumstyp. Cargo-Version bleibt `0.1.0` |
-| v0.18 | Implementiert | Formularentwürfe, Has-Many-Inlines, Sammelaktionen, Audit, registrierte Aktionen | Kein gemeinsames Parent-Kind-Speichern. Verzeichnis-Audit ist nicht dieselbe Transaktion |
-| v0.19 | Abgeschlossen | `Date`, `Time`, `DateTime<Utc>`, Migration `0004_events`, Admin-Felder, UTC-Datumshierarchie | PostgreSQL-Laufzeit ungetestet. Keine stillschweigende Text-zu-Datum-Umwandlung |
-| v0.20 | Abgeschlossen | Gemeinsame Transaktion für Modell, Auth und Audit. Verzeichnis-Audit. Opt-in Eltern-Kind-Formular | Kein Many-to-Many. Kein frameworkweites Optimistic Locking. PostgreSQL-Laufzeit ungetestet |
-| v0.21 | Abgeschlossen | Lesende Auth- und App-Diagnose. `check --strict`. Upgrade legt nur ein fehlendes Legacy-Manifest an | Keine automatische Vorlagenersetzung. Keine stillen Migrationen. PostgreSQL-Laufzeit ungetestet |
-| v0.21.1 | Abgeschlossen | Generator-Test begrenzt verschachtelte Release-Builds auf zwei Jobs. Uneingeschränkter Workspace-Test danach grün | rustc-Absturz `0xc0000005` und `0xc0000409` ist nicht ursächlich geklärt |
-| v0.22 | Abgeschlossen | Öffentliche Admin-Erweiterung: Seiten, Aktionen, Filter, Widgets, Vorlagen | Keine zweite Admin-Engine. PostgreSQL-Laufzeit ungetestet. Der rustc-Absturz bleibt ungeklärt |
-| v0.23 | Abgeschlossen | E-Mail-Dienst, Self-Service-Passwort-Reset, typisierte Hinweise | Keine Zustellgarantie. Kein Admin-Benachrichtigungscenter. PostgreSQL-Laufzeit ungetestet |
-| v0.24 | Abgeschlossen | Typisierte Settings, `[custom.*]`, `UrlSet`, View-Helfer, Generatorstruktur | `require_user` prüft kein CSRF. API-Vorlagen behalten HTML-Startseiten. PostgreSQL-Laufzeit ungetestet |
-| v0.25 | Abgeschlossen | `App::install`, App-Migrationen, Tera-`url`, App-Vorlagen und Staticfiles, `ferrioxid generate app` | `merge` eines rohen Routers sieht keine Namen. PostgreSQL-Laufzeit ungetestet |
-| v0.27 | Abgeschlossen | Persistente Queue, Lease, begrenzte Retries, Worker, gewöhnliche Mail-Jobs | Cron fehlt. Reset-Tokens bleiben außerhalb der Queue. PostgreSQL-Laufzeit ungetestet |
-| v0.27.1 | Abgeschlossen | `WorkerHost`, `ferrioxid generate worker`, App-Handler, verdeckte Job-Payload | CLI-Worker lädt keinen Anwendungscode. Exactly once fehlt. PostgreSQL-Laufzeit ungetestet |
-| v0.26 | Abgeschlossen | Geprüfter App-Start, Abgleich von Rust- und TOML-Migrationen, flache Feldgruppen, verwaltete Zeitstempel | Soft Delete fehlt. PostgreSQL-Laufzeit ungetestet |
+| v0.1 |Implemented, SQLite tested in the workspace| Typed Model, Liste, GET, POST, PATCH, DELETE, sichere Migrationen | PostgreSQL-HTTP-Test bleibt ignoriert, solange kein Server läuft |
+| v0.6 | Implementiert | Unique, Indizes, Foreign Keys, Belongs-To, Has-Many, Snapshot und Diff |Many-to-Many, Eager Loading, `down` and PostgreSQL baseline missing|
+| v0.7 | Implementiert |Argon2id, sessions, cookies, CSRF, RBAC, model rights|OAuth, MFA and JWT are missing. Password reset follows in v0.23|
+| v0.8 bis v0.12 | Implementiert | Admin-Metadaten, JSON-API, Query-Scopes, Generator, Settings, Formulare, Staticfiles, Uploads, Middleware |Historic React surface has been removed since v0.13|
+| v0.13 | Implementiert |Native Admin under `/admin`, Tera, CSS in Binary, JSON API remains|Cargo version remains `0.1.0`|
+| v0.13.1 | Implementiert |Login originals from the bind address, `Origin: null` only with `Sec-Fetch-Site: same-origin`|Host header is not read as Allowlist|
+| v0.14 | Implementiert |Logging out on authenticated 403 pages, flag notices, standard columns|Users are still created v0.16|
+| v0.15 | Implementiert |Design tokens, field groups, table rhythm, role selection, contrast gate|Cargo version remains `0.1.0`|
+| v0.16 | Implementiert |User maintenance, server-side confirmation, readable foreign keys, filter selection, isolated generator databases|Superuser remains CLI. No user hard delete. JSON API without `confirm`|
+| v0.17 | Implementiert |List configuration, fieldsets, three storage destinations, form state, foreign key selection page|No date type. Cargo version remains `0.1.0`|
+| v0.18 | Implementiert |Draft forms, has-many inlines, collection actions, audit, registered actions|No common parent-child storage. Directory audit is not the same transaction|
+| v0.19 | Abgeschlossen |`Date`, `Time`, `DateTime<Utc>`, Migration `0004_events`, admin fields, UTC date hierarchy|PostgreSQL runtime untested. No tacit text-to-date conversion|
+| v0.20 | Abgeschlossen |Shared transaction for model, authentic and audit. Directory audit. Opt-in parent-child form|Not many-to-many. No framework-wide optimistic locking. PostgreSQL runtime untested|
+| v0.21 | Abgeschlossen |Reading Auth and App Diagnosis. `check --strict`. Upgrading only creates a missing legacy manifesto|No automatic template replacement. No silent migrations. PostgreSQL runtime untested|
+| v0.21.1 | Abgeschlossen |Generator Test limits nested release builds to two jobs. Unrestricted workspace test after green|rustc crash `0xc0000005` and `0xc0000409` is not solved causally|
+| v0.22 | Abgeschlossen |Public admin extension: Pages, actions, filters, widgets, templates|No second admin engine. PostgreSQL runtime untested. The rustc crash remains unexplained|
+| v0.23 | Abgeschlossen |Email service, self-service password reset, typed notes|No delivery guarantee. No admin notification center. PostgreSQL runtime untested|
+| v0.24 | Abgeschlossen | Typisierte Settings, `[custom.*]`, `UrlSet`, View-Helfer, Generatorstruktur |`require_user` does not check CSRF. API templates retain HTML homepages. PostgreSQL runtime untested|
+| v0.25 | Abgeschlossen |`App::install`, App Migrations, Tera-`url`, App Templates and Static Files, `ferrioxid generate app`|`merge` of a raw router does not see names. PostgreSQL runtime untested|
+| v0.27 | Abgeschlossen |Persistent queue, lease, limited retries, worker, ordinary mail jobs|Cron is missing. Reset tokens remain outside the queue. PostgreSQL runtime untested|
+| v0.27.1 | Abgeschlossen | `WorkerHost`, `ferrioxid generate worker`, App-Handler, verdeckte Job-Payload |CLI-Worker does not load application code. Exactly once is missing. PostgreSQL runtime untested|
+| v0.26 | Abgeschlossen |Tested app launch, comparison of rust and TOML migrations, flat field groups, managed timestamps|Soft Delete is missing. PostgreSQL runtime untested|
 
 ## Offen nach v0.27.1
 
 - Cron-Syntax.
 - Soft Delete.
-- PostgreSQL-Laufzeit gegen einen laufenden Server.
-- Der CLI-Worker führt nur den Mail-Handler aus. Anwendungs-Handler bleiben im Projekt-Binary.
+- PostgreSQL runtime against a running server.
+- The CLI worker only executes the mail handler. Application handlers remain in the project binary.
 
 ## Offen nach v0.26
 
-- Soft Delete, einschließlich Abfragen, Restore, Audit und Fremdschlüsseln.
-- `merge` eines rohen Routers sieht keine Routennamen.
-- Die CLI führt App-Code nicht aus. Den Abgleich macht der Prozessstart.
+- Soft Delete, including queries, restores, audits and foreign keys.
+- `merge` of a raw router does not see route names.
+- The CLI does not execute app code. The adjustment is made by the process start.
 
 ## Offen nach v0.25
 
-- `views::fail` nutzt eine eigene HTML-Seite und nicht `templates/errors/`.
-- `require_user` authentifiziert weiterhin mit GET. Mutationen nutzen `require_mutation`.
-- Seit v0.26 vergleicht der Prozessstart beide Listen. Die CLI bleibt bei `ferrum.toml`.
-- `ferrioxid new` erzeugt noch kein `src/apps/`.
+- `views::fail` uses its own HTML page and not `templates/errors/`.
+- `require_user` continues to authenticate with GET. Mutations use `require_mutation`.
+- Since v0.26, the process start compares both lists. The CLI remains with `ferrum.toml`.
+- `ferrioxid new` does not yet generate `src/apps/`.
 
 ## Offen nach v0.24
 
-- `views::fail` nutzt eine eigene HTML-Seite und nicht `templates/errors/`.
-- `require_user` authentifiziert mit GET und prüft dabei kein CSRF.
-- Die API-Vorlage schreibt weiterhin `templates/index.html`, weil die Startseite aktiv bleibt.
+- `views::fail` uses its own HTML page and not `templates/errors/`.
+- `require_user` authenticates with GET and does not check CSRF.
+- The API template continues to write `templates/index.html` because the start page remains active.
 
 ## Offen nach v0.23
 
-- Eine angenommene SMTP-Antwort beweist den Posteingang nicht. Ein Prozessabbruch kann einen bereits angenommenen Token beim Aufräumen entwerten.
-- `AccountDeactivated` und `SecurityNotice` hängen nicht an der Benutzerpflege.
-- Das Reset-Rate-Limit bleibt prozesslokal.
-- Die JSON-Verzeichnis-API verlangt `confirm` nicht.
-- Ein Nicht-Superuser kann eine fehlende Fremdschlüsselzeile nicht von einer unsichtbaren unterscheiden.
-- Filterauswahlen und das Formular-Select zeigen höchstens 100 berechtigte Ziele. Die Auswahlseite blättert darüber hinaus.
-- Abbrechen löscht einen Formularentwurf nicht sofort. Er läuft nach 30 Minuten ab.
-- Der Formular-Fingerabdruck ist kein versionsstabiler Datenbankwert.
-- Weitere Kind-Fremdschlüssel werden in der Inline-Transaktion nicht aufgelöst.
+- An assumed SMTP response does not prove the inbox. A process termination can devalue an already accepted token when cleaning up.
+- `AccountDeactivated` and `SecurityNotice` do not depend on user care.
+- The reset rate limit remains process-local.
+- The JSON directory API does not require `confirm`.
+- A non-superuser cannot distinguish a missing foreign key line from an invisible one.
+- Filter selections and the form select show a maximum of 100 eligible targets. The selection page also scrolls.
+- Cancel does not immediately delete a draft form. It expires after 30 minutes.
+- The form fingerprint is not a version stable database value.
+- Further child foreign keys are not resolved in the inline transaction.
 
 ## Geplante Phasen
 
-Die Reihenfolge ist verbindlich für die nächste Arbeit. Eine spätere Phase beginnt nicht, bevor die vorherige P0-Abnahme erfüllt ist.
+The order is binding for the next work. A later phase does not begin until the previous P0 removal is fulfilled.
 
-| Phase | Priorität | Inhalt | Hängt ab von |
+| Phase |Priority| Inhalt |Depends on|
 |---|---|---|---|
-| v0.15 | umgesetzt | Design-Tokens, Abstände, Formulargruppen, Auswahl statt Freitext für Rollen | v0.14 |
-| v0.16 | umgesetzt | Benutzer anlegen, E-Mail und Passwort ändern, Sitzungen widerrufen, Bestätigung und lesbare Relationen | v0.15 |
-| v0.17 | umgesetzt | Listenlinks, Standardsortierung, Seitengröße, Fieldsets, Speicherziele, Formularzustand, Auswahlseite | [admin-django-parity.md](admin-django-parity.md) |
-| v0.18 | umgesetzt | Entwürfe, Has-Many-Inlines, atomare Sammelaktionen, Audit, `AdminAction` | [admin-bulk-actions.md](admin-bulk-actions.md) |
-| v0.19 | abgeschlossen | Datum, Uhrzeit, UTC-Zeitpunkt, Datumshierarchie | [date-time-types.md](date-time-types.md) |
-| v0.20 | abgeschlossen | Transaktionen, Verzeichnis-Audit, Eltern-Kind-Formulare | [transactions.md](transactions.md) |
-| v0.21 | abgeschlossen | Migrationsdiagnose und sicheres Projektmanifest | [migration-diagnostics.md](migration-diagnostics.md) |
-| v0.22 | abgeschlossen | Registrierte Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen | [admin-extension-api.md](admin-extension-api.md) |
-| v0.23 | abgeschlossen | E-Mail, Passwort-Reset und typisierte Hinweise | [password-reset.md](password-reset.md) |
-| v0.24 | abgeschlossen | Settings, benannte URLs, Views und Projektstruktur | [settings.md](settings.md) |
+| v0.15 | umgesetzt |Design tokens, distances, form groups, selection instead of free text for roles| v0.14 |
+| v0.16 | umgesetzt |Create users, change email and password, revoke sessions, confirmation and readable relations| v0.15 |
+| v0.17 | umgesetzt |List links, standard sorting, page size, fieldsets, storage destinations, form state, selection page| [admin-django-parity.md](admin-django-parity.md) |
+| v0.18 | umgesetzt |Drafts, Has-Many-Inlines, Nuclear Collective Actions, Audit, `AdminAction`| [admin-bulk-actions.md](admin-bulk-actions.md) |
+| v0.19 | abgeschlossen |Date, time, UTC time, date hierarchy| [date-time-types.md](date-time-types.md) |
+| v0.20 | abgeschlossen |Transactions, directory audit, parent-child forms| [transactions.md](transactions.md) |
+| v0.21 | abgeschlossen |Migration Diagnosis and Secure Project Manifesto| [migration-diagnostics.md](migration-diagnostics.md) |
+| v0.22 | abgeschlossen |Registered admin pages, actions, filters, widgets and templates| [admin-extension-api.md](admin-extension-api.md) |
+| v0.23 | abgeschlossen |Email, Password Reset and Typed Notes| [password-reset.md](password-reset.md) |
+| v0.24 | abgeschlossen |Settings, named URLs, views and project structure| [settings.md](settings.md) |
 
-Nicht in diesen Phasen: React-Rückkehr, OAuth, MFA, JWT, S3, Virenscanner, Many-to-Many, `migrate down`, PostgreSQL-Baseline, OpenAPI, automatische Superuser-Semantik.
+Not in these phases: React Return, OAuth, MFA, JWT, S3, Virus Scanner, Many-to-Many, `migrate down`, PostgreSQL Baseline, OpenAPI, automatic superuser semantics.
 
-## Grenzen, die bleiben
+## Boundaries that remain
 
-- Cargo-Version `0.1.0`. Funktionsstände stehen nur im Changelog und in dieser Roadmap.
-- SQLite ist der lokale Standard. PostgreSQL-Tests bleiben ignoriert, bis ein Server erreichbar ist.
-- `0001_initial.json` und die Auth-Migration `0001_auth_schema` werden nicht umgeschrieben.
-- GET ändert keine Daten. Schreibzugriffe sind POST mit CSRF, außer die bestehende JSON-API, die den Header `x-csrf-token` nutzt.
-- Passwort-Hashes, Session-Tokens und CSRF-Tokens erscheinen nicht in HTML, URLs oder Logs.
-- Skills werden vor der Nutzung gelesen. Impeccable ist für v0.15, v0.16 und die Formularabschnitte in v0.17 gelesen worden. Kein Skill, Hook oder Agent committet oder pusht von sich aus.
+- Cargo version `0.1.0`. Functional statuses are only in the changelog and in this roadmap.
+- SQLite is the local standard. PostgreSQL tests remain ignored until a server is reachable.
+- `0001_initial.json` and the auth migration `0001_auth_schema` are not rewritten.
+- GET does not change data. Write accesses are POST with CSRF, except for the existing JSON API, which uses the header `x-csrf-token`.
+- Password hashes, session tokens and CSRF tokens do not appear in HTML, URLs or logs.
+- Skills are read before use. Impeccable has been read for v0.15, v0.16 and the form sections in v0.17. No skill, hook or agent commits or pushes on its own.
 
-## Skills für spätere Phasen
+## Skills for later phases
 
-Geprüft am 2026-11-07: Impeccable liegt unter `.cursor/skills/impeccable/` und wurde für v0.15 gelesen. Ausgeführt wurden Kontext, Critique (zwei getrennte Assessments), Audit, Layout und der Feinschliff am bestehenden System „Die Nachtschicht“. Es wurde nichts nachinstalliert und nichts committet.
+Tested on 2026-11-07: Impeccable is below `.cursor/skills/impeccable/` and has been read for v0.15. Context, Critique (two separate assessments), audit, layout and the polishing of the existing system “The Night Shift” were carried out. Nothing was reinstalled and nothing committed.
 
-| Skill | Einsatz, erst nach Prüfung | Nicht tun |
+| Skill |Used only after testing|Do not do|
 |---|---|---|
-| Impeccable | Designkritik, Audit, Layout und Feinschliff des nativen Admins in v0.15 | Externe Installation ohne Zustimmung, dekorative Umbauten ohne Funktionsgewinn |
-| Cloudflare Security Audit | Gezielte Prüfung von CSRF, XSS, Sessions und Dateizugriff vor v0.16 und v0.18 | Blindes Übernehmen von Befunden ohne Abgleich mit dem Ferrioxid-Code |
-| ub-mode | Architekturgrenzen und Tests für Verzeichnis und Audit | Neue Frameworks oder eine zweite CRUD-Engine |
-| Ponytail | Komplexität in `html.rs` und den Metadaten senken, wenn eine Phase sonst wächst | Verhalten streichen, das die Abnahme verlangt |
+| Impeccable |Design criticism, audit, layout and fine-tuning of the native admin in v0.15|External installation without consent, decorative alterations without functional gain|
+| Cloudflare Security Audit |Targeted testing of CSRF, XSS, sessions and file access before v0.16 and v0.18|Blind adoption of findings without comparison with the ferrioxide code|
+| ub-mode |Architectural boundaries and tests for directory and audit|New frameworks or a second CRUD engine|
+| Ponytail |Complexity in `html.rs` and lower the metadata if a phase grows otherwise|Remove behaviour requiring removal|
 
 ## Umgesetzt in v0.16
 
-1. Benutzer anlegen, anzeigen, bearbeiten und Passwort setzen über eigene HTML-Routen und `AuthService`.
-2. `confirm=1` wird serverseitig geprüft. Superuser und die eigene Sperre bleiben geschützt.
-3. Fremdschlüssel zeigen einen Metadaten-Namen. Bool- und Fremdschlüssel-Filter sind Auswahlen.
-4. Generator-Kindprozesse überschreiben `DATABASE_URL` lokal und räumen die Testdatei auf.
+1. Users create, display, edit and password via their own HTML routes and `AuthService`.
+2. `confirm=1` is checked on the server side. Superusers and their own lock remain protected.
+3. Foreign keys show a metadata name. Bool and foreign key filters are choices.
+4. Generator child processes overwrite `DATABASE_URL` locally and clean up the test file.
 
 ## Umgesetzt in v0.17
 
-1. `list_link`, `admin_ordering` und `admin_per_page` steuern Link, Standardsortierung und HTML-Seitengröße.
-2. `admin_fieldset` gruppiert Formularfelder. Drei Speicherknöpfe unterscheiden `save=detail`, `save=edit` und `save=new`.
-3. Validierungsfehler behalten Text, Auswahl und Häkchen. Passwörter werden nicht zurückgeschrieben.
-4. Die Fremdschlüssel-Auswahlseite sucht und blättert im Leserecht des Ziels. Eine unlesbare UUID wird nicht gespeichert.
+1. `list_link`, `admin_ordering` and `admin_per_page` control link, standard sorting and HTML page size.
+2. `admin_fieldset` groups form fields. Three memory buttons distinguish `save=detail`, `save=edit` and `save=new`.
+3. Validation errors retain text, selection, and ticks. Passwords are not written back.
+4. The foreign key selection page searches and scrolls in the reader right of the destination. An unreadable UUID is not stored.
 
 ## Umgesetzt in v0.18
 
-1. Ein Sitzungsentwurf hält Text, Zahl, Häkchen und Auswahl, während die Fremdschlüssel-Seite offen ist.
-2. `admin_inline` zeigt verknüpfte Zeilen und legt einen Kinddatensatz mit festem Parent-Schlüssel an.
-3. Sammelaktionen sind POST, Bestätigung und eine Transaktion. Eine verweigerte Zeile ändert keine Zeile.
-4. Modelländerungen und ihr Audit-Eintrag teilen sich eine Transaktion. Die Historie ist für Staff auf eigene Ereignisse begrenzt.
+1. A session draft holds text, number, ticks, and selection while the foreign key page is open.
+2. `admin_inline` shows linked lines and creates a child record with a fixed parent key.
+3. Collective actions are POST, confirmation and a transaction. A denied line does not change a line.
+4. Model changes and their audit entry share a transaction. The history for Staff is limited to own events.
 
-Abnahme und Grenzen stehen in [admin-ux-backlog.md](admin-ux-backlog.md).
+Acceptance and limits are in [admin-ux-backlog.md](admin-ux-backlog.md)].

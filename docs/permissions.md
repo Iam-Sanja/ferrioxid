@@ -1,25 +1,25 @@
-# Rollen und Berechtigungen
+# Roles and authorisations
 
-[Zur Übersicht](index.md) · [auth.md](auth.md) · [policies.md](policies.md)
+[For overview](index.md) · [auth.md](auth.md)] · [policies.md](policies.md)]
 
 ## Zweck
 
-Rechte gelten serverseitig. Eine Änderung an Rolle oder Berechtigung wirkt bei der nächsten Anfrage. Ferrioxid cached diese Rechte nicht in der Sitzung.
+Rights apply on the server side. A change in role or authorization takes effect at the next request. Ferrioxide does not cached these rights in session.
 
 ## Architektur
 
-Ein Benutzer kann mehrere Rollen haben. Eine Rolle kann mehrere Berechtigungen haben. Der Code hat die Form `ressource.aktion`. Die Aktion ist `read`, `create`, `update` oder `delete`.
+A user can have multiple roles. A role can have multiple permissions. The code has the form `ressource.aktion`. The promotion is `read`, `create`, `update` or `delete`.
 
-`authorize` prüft bei jedem Aufruf die Tabellen `_ferrum_user_roles`, `_ferrum_role_permissions` und `_ferrum_permissions`.
+`authorize` checks the tables `_ferrum_user_roles`, `_ferrum_role_permissions` and `_ferrum_permissions` on each call.
 
-## Zuständige Dateien
+## Responsible files
 
 - `crates/ferrioxid-auth/src/service.rs`
 - `crates/ferrioxid-auth/src/store.rs`
 - `crates/ferrioxid-macros/src/lib.rs` für `permissions`
-- `crates/ferrioxid-api/src/lib.rs` für die Zuordnung von HTTP-Methode zu Aktion
+- `crates/ferrioxid-api/src/lib.rs` for assigning HTTP method to action
 
-## Öffentliche API
+## Public API
 
 ```rust
 auth.ensure_role("editor").await?;
@@ -29,7 +29,7 @@ auth.revoke_permission("editor", "notes.read").await?;
 auth.revoke_role("editor@example.com", "editor").await?;
 ```
 
-Dieselben Schritte stellt die CLI bereit: `auth create-role`, `auth grant-permission`, `auth revoke-permission`, `auth assign-role`, `auth revoke-role`.
+The CLI provides the same steps: `auth create-role`, `auth grant-permission`, `auth revoke-permission`, `auth assign-role`, `auth revoke-role`.
 
 ## Datenmodell
 
@@ -37,10 +37,10 @@ Dieselben Schritte stellt die CLI bereit: `auth create-role`, `auth grant-permis
 |---|---|
 | `_ferrum_roles` | `id`, eindeutiger `name` |
 | `_ferrum_permissions` | `id`, eindeutiger `code` |
-| `_ferrum_user_roles` | eigene UUID, `user_id`, `role_id`, eindeutig als Paar |
-| `_ferrum_role_permissions` | eigene UUID, `role_id`, `permission_id`, eindeutig als Paar |
+| `_ferrum_user_roles` |own UUID, `user_id`, `role_id`, uniquely as a pair|
+| `_ferrum_role_permissions` |own UUID, `role_id`, `permission_id`, uniquely as a pair|
 
-Foreign Keys löschen Zuordnungen per `CASCADE`.
+Foreign Keys delete assignments via `CASCADE`.
 
 ## Modellattribut
 
@@ -51,25 +51,25 @@ Foreign Keys löschen Zuordnungen per `CASCADE`.
 | Attribut | Wirkung |
 |---|---|
 | keines, `allow_anonymous = false` | jede Methode 403 |
-| `allow_anonymous = true` | öffentlich, ohne Cookie-Prüfung |
+| `allow_anonymous = true` |Public, without cookie check|
 | `permissions = "authenticated"` | jede aktive Sitzung |
 | `permissions = "notes"` | `notes.read`, `notes.create`, `notes.update`, `notes.delete` je nach Methode |
 
-`allow_anonymous` zusammen mit `permissions` oder `object_policy` ist ein Compile-Fehler. Der Standard bleibt Verweigerung.
+`allow_anonymous` together with `permissions` or `object_policy` is a compile error. The standard remains refusal.
 
-GET-Liste und GET-Detail prüfen `read`. POST prüft `create`. PATCH prüft `update`. DELETE prüft `delete`.
+GET list and GET detail check `read`. POST checks `create`. PATCH checks `update`. DELETE checks `delete`.
 
-Ein aktiver Superuser besteht die Rollenprüfung. `is_staff` tut das nicht.
+An active superuser passes the role test. `is_staff` does not.
 
-## Sicherheitsmechanismen
+## Security mechanisms
 
-Es gibt keine Berechtigung ohne Eintrag. `grant_permission` legt Rolle und Code an, wenn sie fehlen. `revoke_permission` legt nichts an und ist ohne Treffer folgenlos.
+There is no authorization without entry. `grant_permission` creates role and code if they are missing. `revoke_permission` does not create anything and is without hits.
 
-## Fehlerfälle
+## Error cases
 
-Fehlende Rechte sind HTTP 403 `Access denied`. Eine fehlende Sitzung ist HTTP 401 und wird vor der Rechteprüfung zurückgegeben.
+Missing rights are HTTP 403 `Access denied`. A missing session is HTTP 401 and is returned before the rights check.
 
-## Beispiel
+## Example
 
 ```powershell
 cargo run -p ferrioxid-cli -- auth create-role editor
@@ -77,20 +77,20 @@ cargo run -p ferrioxid-cli -- auth grant-permission notes.read --role editor
 cargo run -p ferrioxid-cli -- auth assign-role --email editor@example.com --role editor
 ```
 
-myshop schützt `InternalNote` mit `permissions = "notes"`. `Product` und `Category` bleiben `allow_anonymous = true` und sind Demo-Endpunkte.
+myshop protects `InternalNote` with `permissions = "notes"`. `Product` and `Category` remain `allow_anonymous = true` and are demo endpoints.
 
 ## Tests
 
-`sqlite_tests` vergibt und entzieht `notes.*` und prüft den Superuser. `examples/myshop/tests/auth.rs` prüft die geschützten HTTP-Methoden und die anonyme Demo-Route.
+`sqlite_tests` forgives and withdraws `notes.*` and checks the superuser. `examples/myshop/tests/auth.rs` checks the protected HTTP methods and the anonymous demo route.
 
-## Einschränkungen
+## Limitations
 
-Feldrechte gibt es nicht. Berechtigungen sind globale Codes, keine Zeilenfilter. Dafür sind Objektregeln zuständig. Listen verwenden denselben `QueryScope` wie die REST-API. Siehe [policies.md](policies.md) und [query-scopes.md](query-scopes.md).
+There are no field rights. Permissions are global codes, not line filters. Object rules are responsible for this. Lists use the same `QueryScope` as the REST API. See [policies.md](policies.md) and [query-scopes.md](query-scopes.md)].
 
-## Geplante Erweiterungen
+## Planned extensions
 
-Feldrechte, Gruppen jenseits von Rollen und ein Zwischenspeicher mit gezielter Invalidierung sind nicht umgesetzt.
+Field rights, groups beyond roles and a cache with targeted disability are not implemented.
 
 ## Admin
 
-Staff allein vergibt kein Modellrecht. Ein Superuser überspringt die Rollenprüfung, braucht für den Admin aber `is_staff`. Eine leere Admin-Berechtigung bedeutet Superuser-only. `permissions = "authenticated"` lässt nach der Staff-Prüfung jeden Staff-Benutzer zu. Das Verzeichnis prüft Superuser getrennt von den Modellrechten.
+Staff alone does not grant model rights. A superuser skips the role test, but needs `is_staff` for the admin. An empty admin permission means superuser-only. `permissions = "authenticated"` allows any Staff user after the Staff exam. The directory checks superusers separately from the model rights.

@@ -1,23 +1,23 @@
-# Projekt-Upgrade
+# Project upgrade
 
 [Zur Übersicht](index.md) · Manifest: [project-manifest.md](project-manifest.md) · Diagnose: [migration-diagnostics.md](migration-diagnostics.md)
 
-**IST:** `crates/ferrioxid-migrations/src/upgrade.rs` und `ferrioxid upgrade`. Die Cargo-Version bleibt `0.1.0`. v0.21.1 ändert die Schreibregeln nicht: `--yes` legt weiterhin nur ein fehlendes Legacy-Manifest an.
+**IST:** `crates/ferrioxid-migrations/src/upgrade.rs` and `ferrioxid upgrade`. The cargo version remains `0.1.0`. v0.21.1 does not change the writing rules: `--yes` continues to create only a missing legacy manifesto.
 
-## Was der Befehl tut
+## What the Order Does
 
-Er prüft ein vorhandenes Projekt und kann eine einzige sichere Datei anlegen: das fehlende Legacy-Manifest `.ferrum/project.json`. Er erzeugt das Projekt nicht neu.
+It checks an existing project and can create a single secure file: the missing legacy manifesto `.ferrum/project.json`. He does not recreate the project.
 
-Er tut ohne ausdrückliche spätere Erweiterung nicht:
+It does not do without express later extension:
 
-- Migrationen anwenden oder die Datenbank zurücksetzen
-- Passwörter, Rollen oder Daten ändern
-- Modelle, Routen, Vorlagen, Styles oder Migrationen überschreiben
-- unbekannte Dateien löschen
-- Git-Befehle ausführen
-- einen vorhandenen Dependency-Pfad ändern
+- Apply migrations or reset the database
+- Change passwords, roles or data
+- Overwrite models, routes, templates, styles or migrations
+- Delete unknown files
+- Executing git commands
+- Change an existing dependency path
 
-`admin-ui` bleibt ein gültiges Kompatibilitäts-Feature. Der Code `project.dependency.admin_ui` ist eine Information, keine Aufforderung zum Entfernen. Die interne Template-Version wird nicht aus der Cargo-Version `0.1.0` abgeleitet.
+`admin-ui` remains a valid compatibility feature. The code `project.dependency.admin_ui` is information, not a request for removal. The internal template version is not derived from the cargo version `0.1.0`.
 
 ## Aufruf
 
@@ -27,46 +27,46 @@ ferrioxid upgrade --dry-run
 ferrioxid upgrade --yes
 ```
 
-`--check` analysiert Abhängigkeit, Manifest und Migrationslage. `--dry-run` zeigt dieselben Codes und die geplanten Dateiänderungen unter der Überschrift `Geplante Dateiänderungen`. Beide schreiben nicht. `--yes` zusammen mit `--check` oder `--dry-run` schreibt ebenfalls nicht.
+`--check` analyses dependency, manifesto and migration situation. `--dry-run` shows the same codes and the planned file changes under the heading `Geplante Dateiänderungen`. Both do not write. `--yes` together with `--check` or `--dry-run` also does not write.
 
-Ohne `--yes` wird nichts geschrieben. Die Zustimmung ist dieses Flag, keine Rückfrage.
+Without `--yes` nothing is written. The consent is this flag, not a question.
 
 ## Plan
 
 | Aktion | Bedeutung |
 |---|---|
-| `upgrade.plan.add .ferrum/project.json` | Das Legacy-Manifest fehlt und darf angelegt werden |
-| `upgrade.unchanged` | Die Datei entspricht dem aufgezeichneten Hash oder das Legacy-Manifest liegt schon |
-| `project.template.legacy` | Herkunft unbekannt. Vorhandene Dateien bleiben |
-| `project.template.outdated` | Die Template-Version ist nicht `0.24`. Es wird nichts ersetzt |
-| `project.file.modified` | Konflikt. Die Datei bleibt |
-| `project.file.missing` | Konflikt. Die Datei wird nicht neu angelegt |
-| `project.file.unknown` | Eine zusätzliche Datei wird nicht angefasst |
-| `project.dependency.path` | Lokaler Pfad, auch `D:\…` und `D:/…` |
-| `project.dependency.git` | Git-Abhängigkeit |
-| `project.dependency.registry` | Registry-Abhängigkeit |
-| `project.dependency.unavailable` | Keine Ferrioxid-Abhängigkeit in `Cargo.toml` |
-| `upgrade.conflict` | Abbruch, keine Ersetzung |
-| `upgrade.unsafe_path` | Der Pfad verlässt das Projekt |
+| `upgrade.plan.add .ferrum/project.json` |The Legacy Manifesto is missing and may be put on|
+| `upgrade.unchanged` |The file corresponds to the recorded hash or the legacy manifesto already lies|
+| `project.template.legacy` |Unknown origin. Existing files remain|
+| `project.template.outdated` |The template version is not `0.24`. Nothing is replaced|
+| `project.file.modified` |conflict. The file remains|
+| `project.file.missing` |conflict. The file is not recreated|
+| `project.file.unknown` |An additional file is not touched|
+| `project.dependency.path` |Local path, also `D:\…` and `D:/…`|
+| `project.dependency.git` |Git dependency|
+| `project.dependency.registry` |Registry dependency|
+| `project.dependency.unavailable` |No ferrioxide dependence in `Cargo.toml`|
+| `upgrade.conflict` |Abortion, not replacement|
+| `upgrade.unsafe_path` |The path leaves the project|
 
 ## Dateisicherheit
 
-Pfade müssen relativ sein und dürfen nur normale Komponenten enthalten. `..`, absolute Pfade und Laufwerkspräfixe werden `upgrade.unsafe_path`. Existiert das Ziel oder ein Vorfahre, wird der kanonische Pfad mit der kanonischen Projektwurzel verglichen. Eine Junction oder ein Symlink nach außen, auch für `.ferrioxid`, wird abgelehnt, bevor etwas geschrieben wird.
+Paths must be relative and must contain only normal components. `..`, absolute paths and drive prefixes become `upgrade.unsafe_path`. If the goal or an ancestor exists, the canonical path is compared with the canonical project root. A junction or a symlink to the outside, also for `.ferrioxid`, is rejected before something is written.
 
-Die neue Datei entsteht als `.ferrum/project.json.partial` und wird erst danach umbenannt. Liegt schon eine Partial-Datei, wandert sie nach `.ferrum/backup/<zeit>/`. Entsteht die Zieldatei zwischen Plan und Schreiben, bricht der Lauf ab und lässt die vorhandene Datei stehen. Ein Abbruch vor dem Umbenennen hinterlässt keine halbe `project.json`.
+The new file is created as `.ferrum/project.json.partial` and will only be renamed afterwards. If there is already a partial file, it migrates to `.ferrum/backup/<zeit>/`. If the target file is created between plan and writing, the run breaks and leaves the existing file. A termination before renaming does not leave half `project.json`.
 
-Konflikte verhindern auch das Anlegen des Manifests. Der Lauf endet dann mit Exitcode 1.
+Conflicts also prevent the creation of the manifesto. The run ends with exit code 1.
 
 ## Exitcodes
 
 | Code | Bedeutung |
 |---|---|
-| 0 | Plan ohne Dateikonflikt. Mit `--yes` wurde das Manifest angelegt oder es gab nichts zu tun |
-| 1 | Ungültiges Projekt, Konflikt, unsicherer Pfad oder Abbruch |
-| 2 | clap meldet eine ungültige Befehlszeile, bevor Ferrioxid den Plan baut |
+| 0 |Plan without file conflict. With `--yes` the manifesto was created or there was nothing to do|
+| 1 |Invalid project, conflict, uncertain path or demolition|
+| 2 |clap reports an invalid command line before ferrioxide builds the plan|
 
-Ausstehende Migrationen sind im Upgrade eine Empfehlung `ferrioxid migrate up`, kein Schreibfehler und kein angewendeter Schritt.
+Pending migrations in the upgrade are a recommendation `ferrioxid migrate up`, not a spelling error and not an applied step.
 
 ## Grenze
 
-v0.24 migriert Vorlagen nicht automatisch auf den Generatorstand. Ein Projekt mit Template-Version `0.21` erhält `project.template.outdated` und behält seine Dateien. `src/settings.rs` und `src/urls.rs` legt das Upgrade nicht an. Eine geänderte oder fremde Datei bleibt eine manuelle Aufgabe. Der Befehl zeigt den Code und den Pfad. Er schreibt daneben keine zweite Fassung und ersetzt die Datei nicht.
+v0.24 does not automatically migrate templates to the generator level. A project with template version `0.21` gets `project.template.outdated` and keeps its files. `src/settings.rs` and `src/urls.rs` do not apply the upgrade. A modified or foreign file remains a manual task. The command shows the code and the path. He does not write a second version and does not replace the file.

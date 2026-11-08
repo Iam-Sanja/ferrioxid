@@ -1,6 +1,6 @@
 # Eigene Admin-Seiten
 
-[Zur Übersicht](admin-extension-api.md)
+[For an overview](admin-extension-api.md)]
 
 ## Route
 
@@ -27,8 +27,8 @@ impl ferrioxid::admin::ViewHandler for OrderReport {
 }
 ```
 
-Ferrioxid prüft vor `handle` die Sitzung, `is_staff` und `AuthService::holds` für den registrierten Code. Ein Superuser besteht `holds`, bleibt aber an `is_staff` gebunden. POST ohne gültiges CSRF ist 403 und ruft den Handler nicht auf. Fehlt `on_post`, ist POST 405.
+Ferrioxide checks the session before `handle`, `is_staff` and `AuthService::holds` for the registered code. A superuser exists `holds`, but remains bound to `is_staff`. POST without valid CSRF is 403 and does not call the trader. If `on_post` is missing, POST 405 is.
 
-`ViewPage` liefert Daten für die registrierte Vorlage. `notice` und `alert` werden gekürzt und von Tera escaped. Die Vorlage wählt der Entwickler bei der Registrierung, nicht die Anfrage.
+`ViewPage` provides data for the registered template. `notice` and `alert` are shortened and escaped by Tera. The template is chosen by the developer during registration, not the request.
 
-Die Seitenleiste zeigt `navigation(true)` nur für Codes, die der aktuelle Benutzer hält. Das gilt auf der Übersicht, in Listen, Formularen und auf der eigenen Seite.
+The sidebar shows `navigation(true)` only for codes that the current user holds. This applies on the overview, in lists, forms and on the own page.

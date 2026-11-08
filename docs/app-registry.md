@@ -1,39 +1,39 @@
 # App-Registry
 
-[Zur Übersicht](index.md) · Apps: [apps.md](apps.md) · **IST-Datei:** `crates/ferrioxid-api/src/apps.rs`.
+[For overview](index.md) · Apps: [apps.md](apps.md) · **IST file:** `crates/ferrioxid-api/src/apps.rs`].
 
-Die Registry liegt auf `App`. Es gibt kein globales veränderbares Singleton. Die Reihenfolge ist die Reihenfolge der `install`-Aufrufe.
+The registry is on `App`. There is no global changeable singleton. The order is the order of the `install` calls.
 
 ## Typen
 
-`AppConfig` trägt den technischen Namen, einen optionalen Anzeigenamen, ein optionales URL-Präfix und optionale Abhängigkeiten.
+`AppConfig` has the technical name, an optional display name, an optional URL prefix and optional dependencies.
 
-`FerrioxidApplication` hat zwei Methoden: `config` und `contribute`. `contribute` erhält eine `Registration` mit der Lebensdauer des aktuellen `install`.
+`FerrioxidApplication` has two methods: `config` and `contribute`. `contribute` receives a `Registration` with the lifetime of the current `install`.
 
-`Registration` reicht nur an die vorhandenen Register weiter:
+`Registration` only passes on to the existing registers:
 
-- Routen an `UrlSet` und die Pfadliste von `App`.
+- Routes to `UrlSet` and the path list of `App`.
 - Modelle an `register`.
 - Admin an `AdminRegistry`.
-- Migrationen an `PackageMigration`.
+- Migrations to `PackageMigration`.
 - Vorlagen an `Site`.
 - Staticfiles an `ferrioxid_static::mount`.
 
-`AppError.code` nennt die Ursache, zum Beispiel `app.duplicate`, `app.sealed`, `app.route.namespace`, `app.model.duplicate`, `app.template.conflict`, `app.static.path` und `app.migration`.
+`AppError.code` names the cause, for example `app.duplicate`, `app.sealed`, `app.route.namespace`, `app.model.duplicate`, `app.template.conflict`, `app.static.path` and `app.migration`.
 
 ## Versiegeln
 
-`seal` ist der Punkt, ab dem die Registry unveränderlich ist. Ein zweites `seal` ist erfolgreich und ändert nichts. `install` danach ist `app.sealed`.
+`seal` is the point from which the registry is unchangeable. A second `seal` is successful and changes nothing. `install` after that is `app.sealed`.
 
-Der Migrationsgraph wird erst hier geprüft, weil eine später installierte App eine Abhängigkeit erfüllen kann. Ein Zyklus, eine fehlende Abhängigkeit und ein doppelter App-Name im Graphen sind `app.migration` und schreiben nichts.
+The migration graph is only checked here because a later installed app can fulfill a dependency. A cycle, a missing dependency and a duplicate app name in the graph are `app.migration` and do not write anything.
 
-`try_into_router` und `into_router` holen `seal` nach, wenn Apps installiert sind oder `[app.<name>]` deklariert ist. Ein Fehler verhindert den Start. Ein explizites `seal` bleibt gültig und wird nicht doppelt ausgeführt. Ohne Apps und ohne Deklaration bleibt der bisherige Startweg.
+`try_into_router` and `into_router` pick up `seal` when apps are installed or `[app.<name>]` is declared. An error prevents the start. An explicit `seal` remains valid and is not executed twice. Without apps and without declaration, the previous starting path remains.
 
 ## ferrum.toml
 
-Es gibt keinen Abschnitt `[apps] enabled = ["shop"]`. Ein String würde eine unbekannte App nicht laden, und ein stilles Ignorieren wäre irreführend.
+There is no `[apps] enabled = ["shop"]` section. A string would not load an unknown app, and a silent ignoring would be misleading.
 
-`[app.shop]` deklariert nur das Migrationsverzeichnis und `depends_on` für die CLI. Die CLI liest kein Rust. Das Verhalten der App kommt ausschließlich aus `install`.
+`[app.shop]` declares only the migration directory and `depends_on` for the CLI. The CLI does not read Rust. The behavior of the app comes exclusively from `install`.
 
 ```toml
 [app.shop]
@@ -44,6 +44,6 @@ depends_on = "accounts"
 currency = "EUR"
 ```
 
-`[app]` ohne Namen ist ein Fehler. Der Pfad muss relativ sein und darf `..` nicht enthalten. Fehlt `migrations`, ist das ebenfalls ein Fehler.
+`[app]` without a name is an error. The path must be relative and must not contain `..`. If `migrations` is missing, this is also an error.
 
-`seal` verlangt, dass beide Listen dieselben App-Namen, `depends_on` und Verzeichnisse enthalten, sobald eine Seite nicht leer ist. Fehlt `with_settings`, ist das `app.migration.undeclared` und gilt nicht als geprüft. Ein Unterschied ist `app.migration.mismatch`. `ferrioxid check`, `ferrioxid doctor` und `ferrioxid migrate status` lesen nur `ferrum.toml` und schreiben die Zeile `app.migration.runtime`. Sie bestätigen den Rust-Abgleich nicht.
+`seal` requires that both lists contain the same app name, `depends_on` and directories as soon as a page is not empty. If `with_settings` is missing, the `app.migration.undeclared` is not considered tested. One difference is `app.migration.mismatch`. `ferrioxid check`, `ferrioxid doctor` and `ferrioxid migrate status` only read `ferrum.toml` and write the line `app.migration.runtime`. They do not confirm the Rust comparison.

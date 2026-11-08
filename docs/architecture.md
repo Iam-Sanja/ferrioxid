@@ -1,21 +1,21 @@
-# Architektur – Modulgrenzen und Laufzeit
+# Architecture – Module Boundaries and Duration
 
-[Zur Übersicht](index.md) · **Status:** Modulgrenzen bleiben gültig. v0.27.1 startet Anwendungs-Handler über `WorkerHost` auf derselben Queue. v0.27 legt die Queue in `ferrioxid-jobs` auf dieselbe SeaORM-Verbindung. Der Webserver startet den Worker nicht. v0.26 prüft diese Registry vor `into_router`, wenn Apps installiert oder in `ferrum.toml` deklariert sind. Feldgruppen bleiben dieselbe `FerrioxidModel`-Struct. v0.25 legt die App-Registry auf dieselbe `App` in `ferrioxid-api`. App-Migrationen bleiben in `_ferrum_migrations`. v0.24 legt Settings in `ferrioxid-migrations` und benannte Routen sowie View-Helfer in `ferrioxid-api`. `AppState` bleibt unverändert. Es gibt keinen zweiten Router und kein Settings-Singleton. v0.23 legt den Versand in `ferrioxid-mail` und den Reset in `ferrioxid-auth`. Es gibt keinen zweiten Passwort- oder Sitzungsdienst. v0.22 hängt Seiten, Aktionen, Filter, Widgets und Vorlagen an dieselbe `AdminRegistry`. Es gibt keine zweite Admin-Engine. v0.21 hängt die lesende Migrationsdiagnose und das Upgrade-Manifest an dieselbe Migrations-Engine. Es gibt keine zweite Historie und keinen schreibenden Diagnoseweg. v0.19 ergänzt `Date`, `Time` und `DateTime<Utc>` in denselben Metadaten, derselben Migrations-Engine und demselben Repository. v0.20 legt Modell-, Auth- und Audit-Schreibvorgänge auf dieselbe `DatabaseTransaction`. Es gibt keine zweite Transaktions-Engine. Siehe [transactions.md](transactions.md).
+[For overview](index.md) · **Status:** Module boundaries remain valid.] v0.27.1 launches application handler via `WorkerHost` on the same queue. v0.27 places the queue in `ferrioxid-jobs` on the same SeaORM connection. The web server does not start the worker. v0.26 checks this registry before `into_router` if apps are installed or declared in `ferrum.toml`. Field groups remain the same `FerrioxidModel` structure. v0.25 sets the app registry to the same `App` in `ferrioxid-api`. App migrations remain in `_ferrum_migrations`. v0.24 sets settings in `ferrioxid-migrations` and named routes and view helpers in `ferrioxid-api`. `AppState` remains unchanged. There is no second router and no settings singleton. v0.23 places the shipment in `ferrioxid-mail` and the reset in `ferrioxid-auth`. There is no second password or session service. v0.22 hangs pages, actions, filters, widgets and templates to the same `AdminRegistry`. There is no second admin engine. v0.21 attaches the reading migration diagnosis and the upgrade manifest to the same migration engine. There is no second history and no writing diagnostic path. v0.19 adds `Date`, `Time` and `DateTime<Utc>` to the same metadata, migration engine and repository. v0.20 sets model, authentic and audit write operations to the same `DatabaseTransaction`. There is no second transaction engine. See [transactions.md](transactions.md)].
 
-## 1. Architekturprinzipien
+## 1. Architecture principles
 
-1. **Rust ist die Modellquelle.** Kein paralleles YAML-Modellschema.
-2. **Statische Generierung:** Makros generieren Implementierungen; kein dynamisches Python-artiges Reflection-System.
-3. **Explizite Modellregistrierung:** Kein automatisches Scannen aller Crates.
-4. **Deny by default:** Ohne Demo-Freigabe antwortet die generierte Route 403.
-5. **Typen an Modulgrenzen:** `ModelRepository::create` erhält einen Create-Typ und liefert ein Model; `list` liefert `ListPage<Model>`.
-6. **Datenbankzugriffe parameterisieren:** SQL-Identifier stammen nur aus geprüften Makroattributen. SeaQuery wählt den Dialekt.
-7. **Eine Repository-Implementierung:** Handler und Modelle unterscheiden SQLite und PostgreSQL nicht.
-8. **Schemaänderungen laufen über Migrationen.** `myshop --bootstrap` ist Legacy und schreibt weder Tabellen noch Historie.
-9. **Create-Policies gelten vor dem INSERT.** REST und Admin rufen dieselbe `can_create`-Regel auf. Der Standard ist Ablehnung.
-10. **Eine Settings-Datei.** `ferrum.toml` ist die Projektkonfiguration. HTML-Seiten außerhalb des Admins rendert Tera.
+1. **Rust is the model source.** No parallel YAML model scheme.
+2. **Static generation:** Macros generate implementations; not a dynamic Python-like reflection system.
+3. **Explicit model registration:** No automatic scanning of all Crates.
+4. **Deny by default:** Without demo release, the generated route 403 answers.
+5. **Types at module boundaries:** `ModelRepository::create` receives a Create type and delivers a model; `list` provides `ListPage<Model>`.
+6. **parameterize database accesses:** SQL identifiers come only from checked macro attributes. SeaQuery chooses the dialect.
+7. **A repository implementation:** Traders and models do not distinguish SQLite and PostgreSQL.
+8. **Schema changes run through migrations. *** `myshop --bootstrap` is legacy and does not write tables or history.
+9. **Create policies apply before the INSERT.** REST and Admin call the same `can_create` rule. The standard is rejection.
+10. **A settings file.** `ferrum.toml` is the project configuration. HTML pages outside the admin renders Tera.
 
-## 2. Tatsächlicher Workspace (IST)
+## 2. Actual Workspace (IST)
 
 ```text
 examples/myshop → ferrioxid (Fassade)
@@ -35,7 +35,7 @@ ferrioxid-admin → Tera-HTML und CSS unter `/admin`, JSON unter `/admin/api`
 
 Physische Crates: `crates/ferrioxid/`, `crates/ferrioxid-core/`, `crates/ferrioxid-macros/`, `crates/ferrioxid-db/`, `crates/ferrioxid-migrations/`, `crates/ferrioxid-auth/`, `crates/ferrioxid-api/`, `crates/ferrioxid-cli/`, `crates/ferrioxid-forms/`, `crates/ferrioxid-static/`, `crates/ferrioxid-storage/`, `crates/ferrioxid-middleware/`. `ferrioxid-forms` hängt nicht von Axum ab. `ferrioxid-storage` hängt nicht von `ferrioxid-api` ab. `ferrioxid-auth` hängt nicht von `ferrioxid-api` ab. `Cargo.toml` legt Workspace Edition 2021 fest. Versionsangaben und Features stehen dort, nicht in dieser Dokumentation.
 
-## 3. Compile-time-Verarbeitung (IST)
+## 3. Compile-time processing (IST)
 
 ```text
 Product Rust-Struct + #[field(...)] + #[ferrioxid(...)]
@@ -45,9 +45,9 @@ Product Rust-Struct + #[field(...)] + #[ferrioxid(...)]
   → Rust-Compiler prüft generierten Code
 ```
 
-Makrocode: `crates/ferrioxid-macros/src/lib.rs`. Die Modell-Struct muss zusätzlich `Serialize` + `Deserialize` ableiten. Das Derive-Makro erstellt die dafür nötigen Serde-Derives für den ursprünglichen Model-Typ **nicht** selbst.
+Macrocode: `crates/ferrioxid-macros/src/lib.rs`. The model structure must additionally derive `Serialize` + `Deserialize`. The Derive macro creates the necessary Serde Derives for the original model type **not** itself.
 
-## 4. Start- und Request-Datenfluss (IST)
+## 4. Start and request data flow (IST)
 
 ```text
 myshop::main
@@ -90,20 +90,20 @@ GET /api/v1/products
   → höchstens 100 Modelle, truncated als Boolean
 ```
 
-Die Prüfung `allow_anonymous` geschieht **beim Registrieren der Route**. Ohne Freigabe werden ausschließlich 403-Handler registriert.
+The check `allow_anonymous` takes place **when registering the route**. Without release, only 403 traders are registered.
 
 v0.24 hängt benannte Anwendungsrouten über `App::urls` an denselben Router. `UrlSet` lehnt `/admin`, `/auth` und die festen Auth-Pfade ab. Settings und `RouteMap` verlassen `into_router` als `Extension`, nicht als neue Felder von `AppState`. `merge` bleibt für unbenannte Router gültig.
 
-## 5. Verträge zwischen Modulen (IST)
+## 5. Contracts between modules (IST)
 
-| Producer | Consumer | Vertrag | Datei |
+| Producer | Consumer | Vertrag |File|
 |---|---|---|---|
 | `ferrioxid-macros` | `ferrioxid-core` | `FerrioxidModel::descriptor/columns/constraints/schema_sql(DatabaseKind)` | `crates/ferrioxid-core/src/lib.rs` |
-| `ferrioxid-macros` | `ferrioxid-db` | `ModelRepository` und SeaQuery-CRUD | `crates/ferrioxid-db/src/lib.rs`, `crates/ferrioxid-db/src/sql.rs` |
+| `ferrioxid-macros` | `ferrioxid-db` |`ModelRepository` and SeaQuery-CRUD| `crates/ferrioxid-db/src/lib.rs`, `crates/ferrioxid-db/src/sql.rs` |
 | `ferrioxid-api` | `ferrioxid-db` | generische `M: ModelRepository` | `crates/ferrioxid-api/src/lib.rs` |
 | `myshop` | `ferrioxid` | `prelude`, `db::connect`, `App` | `crates/ferrioxid/src/lib.rs` |
 
-## 6. Architektur für spätere Module (SOLL, nicht implementiert)
+## 6. Architecture for later modules (reference, not implemented)
 
 ```text
 Rust-Modelle + Makros
@@ -114,23 +114,23 @@ Rust-Modelle + Makros
  → CLI / Docker-Deployment / Plugins
 ```
 
-`ModelDescriptor` enthält weiterhin keinen Feldkatalog. Spalten, Unique-Gruppen, Index-Gruppen und Foreign Keys stehen in `ColumnSpec` und `TableConstraints`. Daraus entstehen Snapshot, SQL und die Lazy-Loading-Methoden. Policies, Eager Loading und eine automatische Entdeckung aller Rust-Structs sind nicht implementiert. Schema-Snapshots bleiben serialisierbar und deterministisch. Eine Laufzeit-Registry führt nur explizit registrierte Modelle.
+`ModelDescriptor` still does not contain a field catalog. Columns, unique groups, index groups and foreign keys are in `ColumnSpec` and `TableConstraints`. This results in snapshot, SQL and the lazy loading methods. Policies, eager loading and an automatic discovery of all rust structures are not implemented. Schema snapshots remain serializable and deterministic. A runtime registry only has explicitly registered models.
 
-## 7. Sicherheitsgrenzen und offene Risiken
+## 7. Security borders and open risks
 
-- `allow_anonymous=true` ist ausschließlich für das lokal gebundene Demo gedacht.
-- `BIND_ADDRESS` kann den Dienst über localhost hinaus verfügbar machen.
-- API-JSON-Rejections von Axum verwenden nicht den Ferrioxid-Fehlerkörper.
-- Die HTTP-Listenabfrage beschränkt die Antwort auf maximal 100 Datensätze; keine Pagination.
-- `CREATE TABLE IF NOT EXISTS` meldet keinen Schema-Drift.
-- OpenAPI und ein allgemeines Plugin-System sind nicht implementiert. Auth, Migrationen und der native Admin sind vorhanden.
+- `allow_anonymous=true` is intended exclusively for the locally bound demo.
+- `BIND_ADDRESS` can make the service available beyond localhost.
+- API-JSON rejections of Axum do not use the ferrioxide fault body.
+- The HTTP list query limits the response to a maximum of 100 records; No pagination.
+- `CREATE TABLE IF NOT EXISTS` does not report schema drift.
+- OpenAPI and a general plugin system are not implemented. Auth, migrations and the native admin are available.
 
-## 8. Admin-Schreiben in v0.18
+## 8. Admin writing in v0.18
 
-`ModelRepository` hat `get_tx`, `create_tx`, `update_tx` und `delete_tx` auf `&DatabaseTransaction`. Die SQL-Helfer nehmen `&impl ConnectionTrait`. `ManagedModel::update` und `remove` erhalten den `AuthUser`. Ein erfolgreiches Anlegen, Ändern oder Löschen im Admin öffnet eine Transaktion, schreibt die Zeile, schreibt `_ferrum_admin_audit` und committet. Ein Abbruch verwirft beides. `ModelRepository::create` ohne den Admin-Pfad schreibt keine Historie.
+`ModelRepository` has `get_tx`, `create_tx`, `update_tx` and `delete_tx` on `&DatabaseTransaction`. The SQL helpers take `&impl ConnectionTrait`. `ManagedModel::update` and `remove` get the `AuthUser`. A successful creation, modification or deletion in the admin opens a transaction, writes the line, writes `_ferrum_admin_audit` and commits. An abandonment rejects both. `ModelRepository::create` without the admin path does not write a history.
 
-Verzeichnisereignisse (`user_create`, `user_update`, `password_reset`, `role_assign`, `role_revoke`) entstehen nach dem `AuthService`-Aufruf. Sie teilen sich keine Transaktion mit der Auth-Änderung. Der Self-Service unter `/auth/password-reset` ist davon getrennt: Token-Verbrauch, Passwort, Sitzungswiderruf und Audit sind eine Transaktion. Die E-Mail folgt nach dem Commit. Siehe [password-reset.md](password-reset.md).
+Directory events (`user_create`, `user_update`, `password_reset`, `role_assign`, `role_revoke`) occur after the `AuthService` call. You do not share a transaction with the Auth Change. The self-service under `/auth/password-reset` is separate from this: token consumption, password, session revocation and audit are one transaction. The email follows after the commit. See [password-reset.md](password-reset.md)].
 
-Entwürfe liegen in `_ferrum_admin_drafts` und verweisen als Text-UUID auf `_ferrum_sessions.id`. Auth speichert Sitzungs-IDs als Text. Dieselbe Textbindung gilt für Audit-IDs. Die Migration ist `crates/ferrioxid-auth/migrations/0002_admin_journal.json`. `0001_auth_schema` bleibt unverändert.
+Drafts are in `_ferrum_admin_drafts` and refer as text UUID to `_ferrum_sessions.id`. Auth stores session IDs as text. The same text binding applies to audit IDs. The migration is `crates/ferrioxid-auth/migrations/0002_admin_journal.json`. `0001_auth_schema` remains unchanged.
 
 Weiterlesen: [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [security.md](security.md), [admin-audit-log.md](admin-audit-log.md).

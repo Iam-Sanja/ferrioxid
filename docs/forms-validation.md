@@ -1,20 +1,20 @@
 # Formularvalidierung
 
-**Stand:** v0.19, IST. Die Cargo-Version bleibt `0.1.0`. Zusätzliche Codes: `validation.date`, `validation.time`, `validation.datetime`, `validation.datetime_offset`.
+**Stand:** v0.19, IST. The cargo version remains `0.1.0`. Additional codes: `validation.date`, `validation.time`, `validation.datetime`, `validation.datetime_offset`.
 
 ## Verantwortlichkeit
 
-`ferrioxid-core::validation` ist der gemeinsame Regelkern für Formularfelder. `FerrioxidModel` behält die bisher generierten Prüfungen, damit bestehende CRUD-Antworten unverändert bleiben.
+`ferrioxid-core::validation` is the common rule kernel for form fields. `FerrioxidModel` retains the previously generated checks so that existing CRUD responses remain unchanged.
 
-## Crates und Dateien
+## Crates and files
 
 - `crates/ferrioxid-core/src/validation.rs`
 - Aufrufer: `crates/ferrioxid-forms/src/lib.rs`
 - Modellmakro, unverändert: `crates/ferrioxid-macros/src/lib.rs`
 
-## Öffentliche API
+## Public API
 
-`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` und `is_http_url`. Rückgaben sind stabile Codes, keine übersetzten Sätze. Übersetzung macht `ferrioxid::forms::message`.
+`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` and `is_http_url`. Returns are stable codes, not translated sentences. Translation makes `ferrioxid::forms::message`.
 
 ## Datenfluss
 
@@ -23,17 +23,17 @@ FerrioxidModel-Makro → eigene Meldungen (unverändert)
 ferrioxid-forms → text_code / parse_* → Feldcode → message(locale, code)
 ```
 
-Optionale Textfelder behandeln einen leeren Wert als `None`, bevor die Pflichtregel greift. Zahlen und UUIDs ohne Wert bleiben `validation.required`, wenn die Required-Hilfe verwendet wird.
+Optional text fields treat an empty value as `None` before the mandatory rule takes effect. Numbers and UUIDs without value remain `validation.required` if the Required help is used.
 
 ## Konfiguration
 
-Keine. Grenzen stehen an der Aufrufstelle, zum Beispiel `TextSpec.min_length`.
+None. Boundaries are at the call point, for example `TextSpec.min_length`.
 
 ## Sicherheit
 
-Regeln sehen nur den bereits dekodierten Feldwert. Sie führen keine SQL- oder Shell-Befehle aus. E-Mail- und URL-Prüfungen sind bewusst eng: ASCII, ein `@`, eine Domain mit Punkt, `http` oder `https`.
+Rules only see the already decoded field value. They do not run SQL or shell commands. Email and URL checks are deliberately narrow: ASCII, a `@`, a domain with point, `http` or `https`.
 
-## Fehlerfälle
+## Error cases
 
 | Code | Bedeutung |
 |---|---|
@@ -41,13 +41,13 @@ Regeln sehen nur den bereits dekodierten Feldwert. Sie führen keine SQL- oder S
 | `validation.min_length` | zu kurz |
 | `validation.max_length` | zu lang |
 | `validation.min_value` | Zahl zu klein |
-| `validation.max_value` | Zahl zu groß |
-| `validation.email` | keine einfache E-Mail |
-| `validation.url` | kein `http`- oder `https`-URL |
-| `validation.invalid_type` | keine Zahl oder kein Bool |
+| `validation.max_value` |Number too large|
+| `validation.email` |Not a simple email|
+| `validation.url` |No `http` or `https` URL|
+| `validation.invalid_type` |No number or bool|
 | `validation.uuid` | keine UUID |
 
-## Beispiel
+## Example
 
 ```rust
 ferrioxid::core::text_code("a@b", true, None, Some(254), true, false);
@@ -55,12 +55,12 @@ ferrioxid::core::text_code("a@b", true, None, Some(254), true, false);
 
 ## Tests
 
-`ferrioxid-core` prüft die Codes. `ferrioxid-forms` prüft die Zuordnung zu Feldern.
+`ferrioxid-core` checks the codes. `ferrioxid-forms` checks the assignment to fields.
 
-## Einschränkungen
+## Limitations
 
-Das Modellmakro dupliziert die Regeln noch. Internationale E-Mail-Adressen und freie URL-Schemata werden abgelehnt.
+The model macro still duplicates the rules. International email addresses and free URL schemes are rejected.
 
 ## Erweiterung
 
-Das Makro kann später `text_code` aufrufen, ohne die öffentlichen Fehlertexte der REST-API zu ändern.
+The macro can later call `text_code` without changing the public error texts of the REST API.

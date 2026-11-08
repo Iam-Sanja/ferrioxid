@@ -4,11 +4,11 @@
 
 ## IST
 
-Die öffentliche API liegt in `ferrioxid::admin`. Sie hängt an derselben `AdminRegistry` wie die Modelle. Es gibt keine zweite Admin-Engine und keine globale Registrierung. myshop zeigt sie in `examples/myshop/src/admin.rs`.
+The public API is in `ferrioxid::admin`. It is attached to the same `AdminRegistry` as the models. There is no second admin engine and no global registration. myshop shows them in `examples/myshop/src/admin.rs`.
 
-`seal` prüft Seiten, Filter, Widgets und eigene Aktionen gegen die schon registrierten Modelle. Ohne `seal` beantwortet Ferrioxid eine eigene Seite mit einem Fehler und wendet die Erweiterung nicht als Erfolg an.
+`seal` checks pages, filters, widgets and own actions against the already registered models. Without `seal`, ferrioxide answers its own page with an error and does not apply the extension as a success.
 
-## Beispiel
+## Example
 
 ```rust
 use ferrioxid::admin::{AdminFilter, AdminRegistry, AdminView, AdminWidget, FilterOption};
@@ -51,13 +51,13 @@ let registry = AdminRegistry::new()
     .seal()?;
 ```
 
-`OrderReport` und `MarkProcessed` stehen in [admin-custom-views.md](admin-custom-views.md) und [admin-custom-actions.md](admin-custom-actions.md). Der Modellschlüssel ist der Tabellenname.
+`OrderReport` and `MarkProcessed` are available in [admin-custom-views.md](admin-custom-views.md) and [admin-custom-actions.md](admin-custom-actions.md)]. The model key is the table name.
 
 ## Grenzen
 
-- Der Namespace ist `ferrioxid::admin`, nicht `ferrioxid::prelude`.
-- Eine eigene Aktion nutzt das Modellverb `update`. Eine Seite nutzt einen vollständigen Code wie `orders.read`.
-- Vorlagen können `base.html` nicht ersetzen.
-- Ein Widget öffnet kein verstecktes oder sensibles Feld und ersetzt kein Fremdschlüssel-Select.
-- Der Handler einer Seite erhält die Verbindung erst nach Staff- und Rechteprüfung. Er darf das Verzeichnis nicht nachbauen. Die Verzeichnisrouten prüfen Superuser weiterhin selbst.
-- Die Navigation der eigenen Seiten erscheint auf der Übersicht, in Modelllisten, Formularen und auf der eigenen Seite, nur wenn `holds` den Code bestätigt.
+- The namespace is `ferrioxid::admin`, not `ferrioxid::prelude`.
+- An own action uses the model verb `update`. A page uses a full code such as `orders.read`.
+- Templates cannot replace `base.html`.
+- A widget does not open a hidden or sensitive field and does not replace a foreign key select.
+- The trader of one side receives the connection only after staff and rights check. He may not reproduce the list. The directory routes continue to check superusers themselves.
+- The navigation of the own pages appears on the overview, in model lists, forms and on the own page, only if `holds` confirms the code.

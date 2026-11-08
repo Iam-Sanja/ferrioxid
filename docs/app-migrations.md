@@ -1,27 +1,27 @@
-# App-Migrationen
+# App migrations
 
-[Zur Übersicht](index.md) · Engine: [migrations.md](migrations.md) · **IST-Dateien:** `crates/ferrioxid-migrations/src/packages.rs`, `runner.rs`, `inspect.rs`.
+[For overview](index.md) · Engine: [migrations.md](migrations.md) · **IST files:** `crates/ferrioxid-migrations/src/packages.rs`, `runner.rs`, `inspect.rs`].
 
-Alle App-Migrationen bleiben in `_ferrum_migrations`. Auth bleibt in `_ferrum_auth_migrations`. Es gibt keine zweite Historientabelle.
+All app migrations remain in `_ferrum_migrations`. Auth remains in `_ferrum_auth_migrations`. There is no second history table.
 
 ## Kennung
 
-Die Datei behält die ID `0001_initial`. Das Feld `name` bleibt `initial`. Die Prüfsumme wird über den Dateiinhalt mit dieser unqualifizierten ID gebildet.
+The file retains the ID `0001_initial`. The `name` field remains `initial`. The checksum is formed over the file content with this unqualified ID.
 
-Die Historienzeile einer neuen App lautet `shop:0001_initial`. Der Leser für die App entfernt das Präfix `shop:` und vergleicht den Rest mit der Datei-ID. Der bisherige Leser ignoriert Zeilen, die `:` enthalten. Eine alte Zeile `0001_initial` wird deshalb nicht einer App zugeordnet und nicht erneut ausgeführt.
+The history line of a new app is `shop:0001_initial`. The reader for the app removes the prefix `shop:` and compares the rest with the file ID. The previous reader ignores lines containing `:`. An old line `0001_initial` is therefore not assigned to an app and is not executed again.
 
-Zwei Apps dürfen beide eine Datei `0001_initial.json` haben. Die Historien-IDs `shop:0001_initial` und `blog:0001_initial` sind verschieden.
+Two apps can both have a file `0001_initial.json`. The history IDs `shop:0001_initial` and `blog:0001_initial` are different.
 
 ## Reihenfolge
 
-`depends_on` nennt andere App-Namen. `package_order` sortiert topologisch. Bereite Apps kommen nach Namen. Ein Zyklus, eine fehlende Abhängigkeit, ein Eigenverweis und ein doppelter Name scheitern, bevor eine Datei angewendet wird.
+`depends_on` calls other app names. `package_order` sorted topologically. Ready apps come by name. A cycle, missing dependency, self-reference, and duplicate name fail before a file is applied.
 
-`ferrioxid migrate up` wendet zuerst Auth an, dann das bisherige Projektverzeichnis, dann die Pakete aus `[app.<name>]`. Ein zweiter Lauf wendet nichts erneut an. Eine geänderte Prüfsumme ist ein Konflikt und wird nicht angewendet. Der Server startet nur, wenn `registry.migrations` dieselbe Menge beschreibt. Die CLI kann die Rust-Seite nicht lesen, ohne die Anwendung auszuführen, und behauptet die Übereinstimmung deshalb nicht.
+`ferrioxid migrate up` first applies Auth, then the previous project directory, then the packages from `[app.<name>]`. A second run does not apply anything again. An amended checksum is a conflict and is not applied. The server only starts when `registry.migrations` describes the same set. The CLI cannot read the Rust page without running the application and therefore does not claim the match.
 
-`migrate status`, `check` und `doctor` zählen ausstehende Paketmigrationen mit. Eine fehlende `ferrum.toml` bei einem reinen `--migrations-dir` bleibt der bisherige leere Paketfall. Eine vorhandene, ungültige `ferrum.toml` ist ein Fehler. Die Diagnose legt keine Historientabelle und keine SQLite-Datei an.
+`migrate status`, `check` and `doctor` include pending packet migrations. A missing `ferrum.toml` with a pure `--migrations-dir` remains the previous empty packet case. An existing, invalid `ferrum.toml` is an error. The diagnosis does not create a history table and a SQLite file.
 
 ## Bestehende Projekte
 
-Projekte ohne `[app.<name>]` behalten ihre unqualifizierten IDs. Angewendete Zeilen und ihre Prüfsummen werden nicht umgeschrieben. Tabellen werden nicht umbenannt. Das Installieren einer App erzeugt keine Migration.
+Projects without `[app.<name>]` retain their unqualified IDs. Applied rows and their checksums are not rewritten. Tables are not renamed. Installing an app does not create a migration.
 
-myshop `0001` bis `0005` bleiben die Projekthistorie. Sie sind kein App-Paket.
+myshop `0001` to `0005` remain the project history. They are not an app package.

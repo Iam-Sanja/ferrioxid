@@ -1,34 +1,34 @@
 # Authentifizierung
 
-[Zur Übersicht](index.md) · Sitzungen: [sessions.md](sessions.md) · Rechte: [permissions.md](permissions.md) · Objektregeln: [policies.md](policies.md)
+[For overview](index.md) · Sessions: [sessions.md](sessions.md) · Rights: [permissions.md](permissions.md)] Object rules: [policies.md](policies.md)]
 
 ## Zweck
 
-Ferrioxid prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferrioxid-auth` hängt nicht an der HTML-Oberfläche. Der Admin ruft dieselben Methoden auf. Generierte CRUD-Routen nutzen dieselbe Prüfung. Auth-Fehler laufen über `problem_json`. `Invalid email or password` bleibt für unbekannte Benutzer und falsche Passwörter gleich und trägt `auth.invalid_credentials`. Das Verzeichnis hängt Rollennamen an, ohne `PublicUser` von `/auth/me` zu verändern.
+Ferrioxid checks users, passwords and sessions on the server side. The Crate `ferrioxid-auth` is not attached to the HTML interface. The admin calls the same methods. Generated CRUD routes use the same test. Auth errors run through `problem_json`. `Invalid email or password` remains the same for unknown users and incorrect passwords and carries `auth.invalid_credentials`. The directory attaches role names without changing `PublicUser` from `/auth/me`.
 
-Admin-Änderungen an Benutzern, Rollen und Rechten laufen über `*_on` in einer Transaktion mit dem Audit. Sitzungswiderruf bei Passwort und Deaktivierung gehört dazu. Die CLI-Methoden bleiben ohne dieses Audit. Siehe [admin-directory-audit.md](admin-directory-audit.md). Ein vergessenes Passwort setzt der Benutzer selbst zurück: [password-reset.md](password-reset.md). Der Versand liegt in [mail.md](mail.md).
+Admin changes to users, roles and rights are made through `*_on` in a transaction with the audit. Session revocation for password and deactivation is part of this. The CLI methods remain without this audit. See [admin-directory-audit.md](admin-directory-audit.md)]. The user himself resets a forgotten password: [password-reset.md](password-reset.md)]. The shipment is in [mail.md](mail.md)].
 
 ## Architektur
 
-`ferrioxid-auth` hängt von `ferrioxid-core`, `ferrioxid-db` und `ferrioxid-migrations` ab, nicht von `ferrioxid-api`. `ferrioxid-api` hängt von `ferrioxid-auth` und registriert die Auth-Routen zusammen mit den Modellrouten. Die CLI ruft dieselben Service-Methoden auf.
+`ferrioxid-auth` depends on `ferrioxid-core`, `ferrioxid-db` and `ferrioxid-migrations`, not `ferrioxid-api`. `ferrioxid-api` depends on `ferrioxid-auth` and registers the Auth routes along with the model routes. The CLI calls the same service methods.
 
-Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Die CLI liest sie verdeckt oder aus `FERRUM_PASSWORD`. Sitzungstoken werden nur als SHA-256-Hex gespeichert. Objektregeln prüfen Create-Eingaben über `can_create`, bevor eine Zeile entsteht. Das Setzen der Besitzer-ID aus der Sitzung ist geplant. Das CSRF-Token wird bei Bedarf aus dem Schlüssel und der Sitzung berechnet; gespeichert wird ebenfalls nur der Hash. HTML-Formulare übergeben dasselbe Token als Feld `csrf_token` an `authenticate_csrf`. Ein zweiter CSRF-Mechanismus existiert nicht. Rollen und Berechtigungen liest jede Prüfung erneut aus der Datenbank.
+Passwords are hashed with Argon2id and must have 12 to 128 characters. The CLI reads them covertly or from `FERRUM_PASSWORD`. Session tokens are stored only as SHA-256-hex. Object rules check Create input via `can_create` before a row is created. Setting the owner ID from the session is planned. The CSRF token is calculated from the key and session as needed; Only the hash is stored. HTML forms pass the same token as `csrf_token` field to `authenticate_csrf`. A second CSRF mechanism does not exist. Roles and permissions read each check again from the database.
 
-## Zuständige Dateien
+## Responsible files
 
-| Datei | Aufgabe |
+|File| Aufgabe |
 |---|---|
-| `crates/ferrioxid-auth/src/password.rs` | Argon2id, PHC-String, Prüfung |
-| `crates/ferrioxid-auth/src/service.rs` | Benutzer, Login, Rechte, Rate-Limit |
-| `crates/ferrioxid-auth/src/store.rs` | SeaQuery gegen die Auth-Tabellen |
-| `crates/ferrioxid-auth/src/schema.rs` | Snapshot und Migration |
+| `crates/ferrioxid-auth/src/password.rs` |Argon2id, PHC string, test|
+| `crates/ferrioxid-auth/src/service.rs` |User, login, rights, rate limit|
+| `crates/ferrioxid-auth/src/store.rs` |SeaQuery against the Auth tables|
+| `crates/ferrioxid-auth/src/schema.rs` |Snapshot and Migration|
 | `crates/ferrioxid-auth/src/routes.rs` | `/auth/*` |
-| `crates/ferrioxid-auth/src/recovery.rs` | Reset-Anforderung, Austausch und Abschluss |
-| `crates/ferrioxid-auth/migrations/0004_password_reset.json` | Token-Hash, Austausch-Hash, Outbox |
+| `crates/ferrioxid-auth/src/recovery.rs` |Reset request, exchange and closure|
+| `crates/ferrioxid-auth/migrations/0004_password_reset.json` |Token hash, exchange hash, outbox|
 | `crates/ferrioxid-auth/migrations/0001_auth_schema.json` | Versiegeltes Schema |
 | `crates/ferrioxid-api/src/lib.rs` | Guard vor generierten Routen |
 
-## Öffentliche API
+## Public API
 
 - `AuthConfig`, `AuthConfig::development`, `AuthConfig::from_env`, `AuthConfig::apply_bound_address`
 - `AuthService::create_user`, `list_users`, `set_user_active`
@@ -38,39 +38,39 @@ Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Di
 - `apply_migrations`
 - `App::with_auth`, `App::register`, `App::register_policy`
 
-`PublicUser` enthält `id`, `email`, `is_active`, `is_staff` und `is_superuser`. Kein Hash und kein Token.
+`PublicUser` contains `id`, `email`, `is_active`, `is_staff` and `is_superuser`. No hash and no token.
 
 ## Datenmodell
 
-Siehe [sessions.md](sessions.md) und [permissions.md](permissions.md). Zeitstempel sind Unix-Sekunden (`i64`), weil Ferrioxid keinen eigenen Datumstyp hat.
+See [sessions.md](sessions.md) and [permissions.md](permissions.md)]. Timestamps are Unix seconds (`i64`) because ferrioxide does not have its own date type.
 
-E-Mail wird getrimmt und in Kleinbuchstaben gespeichert. Sie ist eindeutig, höchstens 254 Zeichen lang und braucht genau ein `@` sowie einen Punkt in der Domain.
+Email is trimmed and stored in lower case. It is unique, a maximum of 254 characters long and needs exactly one `@` and one point in the domain.
 
-Ein neues Passwort hat 12 bis 128 Zeichen. Der Hash nutzt Argon2id, Version `0x13`, 19 456 KiB, zwei Iterationen und einen Thread. Salt und Parameter stehen im PHC-String.
+A new password has 12 to 128 characters. The hash uses Argon2id, version `0x13`, 19 456 KiB, two iterations and one thread. Salt and parameters are in the PHC string.
 
-## Sicherheitsmechanismen
+## Security mechanisms
 
-- Unbekannte E-Mail, falsches Passwort und deaktivierter Benutzer liefern dieselbe Meldung `Invalid email or password`.
-- Fehlt der Benutzer, wird ein festes Dummy-Hash geprüft, damit die Argon2-Arbeit nicht entfällt.
-- Deaktivierte Benutzer können sich nicht anmelden. Deaktivierung über CLI oder Admin widerruft die gespeicherten Sitzungen sofort.
-- Eine Passwortänderung über CLI oder Admin widerruft alle Sitzungen des Benutzers. Der Admin-Passwortweg nutzt `validate_new_password` und `hash_password`, zeigt den Hash nicht und legt das Passwort nicht in die Weiterleitung.
-- Staff- und Rollenänderungen schreibt der Admin in dieselbe Benutzerzeile. Die nächste `authenticate_token`-Prüfung liest die Flags neu. Dafür wird die Sitzung nicht zusätzlich gelöscht.
-- Login ist pro Prozess auf fünf Fehlversuche in 15 Minuten begrenzt. Der Schlüssel ist Peer plus normalisierte E-Mail.
-- `X-Forwarded-For` gilt nur, wenn `FERRUM_TRUST_PROXY` ausdrücklich `1` oder `true` ist. Gewertet wird der erste Hop.
-- Sicherheitslogs nennen keine Passwörter, Session-Tokens, Login-CSRF-Cookies oder Formular-Tokens.
-- Liegt `FERRUM_ALLOWED_ORIGINS` nicht vor, ersetzt `AuthConfig::apply_bound_address` die Entwicklungsliste durch die Loopback-Origins der Adresse, an die der Prozess bindet. Öffentliche Hosts und der Host-Header einer Anfrage werden nicht in diese Liste übernommen. `Origin: null` bleibt ungültig. Eine Anfrage ohne Origin und ohne Referer bleibt erlaubt, das Login-CSRF-Cookie aber nicht.
+- Unknown email, incorrect password and deactivated user deliver the same message `Invalid email or password`.
+- If the user is missing, a fixed dummy hash is checked so that the Argon2 work is not eliminated.
+- Deactivated users cannot log in. Deactivation via CLI or Admin immediately revokes the saved sessions.
+- A password change via CLI or Admin revokes all user sessions. The admin password path uses `validate_new_password` and `hash_password`, does not show the hash and does not place the password in the forwarding.
+- Staff and role changes write the admin in the same user line. The next `authenticate_token` exam reads the flags again. The sitting will not be deleted.
+- Login is limited to five failed attempts per process in 15 minutes. The key is peer plus normalized email.
+- `X-Forwarded-For` applies only if `FERRUM_TRUST_PROXY` is expressly `1` or `true`. The first hop is evaluated.
+- Security logs do not name passwords, session tokens, login CSF cookies or form tokens.
+- If `FERRUM_ALLOWED_ORIGINS` is not available, `AuthConfig::apply_bound_address` replaces the development list with the loopback originals of the address to which the process binds. Public hosts and the host header of a request are not included in this list. `Origin: null` remains invalid. A request without origin and without referer remains allowed, but the login CSF cookie is not.
 
-## Fehlerfälle
+## Error cases
 
 | Situation | HTTP |
 |---|---|
-| Falsche Zugangsdaten oder deaktivierter Benutzer | 401, `Invalid email or password` |
-| Fehlende oder ungültige Sitzung | 401, `Authentication required` |
-| Fehlende Berechtigung | 403, `Access denied` |
-| Zu viele Login-Versuche | 429, `Too many login attempts` |
-| Ungültige E-Mail oder zu kurzes neues Passwort | 422 |
+|Incorrect access data or deactivated user| 401, `Invalid email or password` |
+|Missing or invalid session| 401, `Authentication required` |
+|Missing eligibility| 403, `Access denied` |
+|Too many login attempts| 429, `Too many login attempts` |
+|Invalid e-mail or too short a new password| 422 |
 
-## Beispiel
+## Example
 
 ```powershell
 cargo run -p ferrioxid-cli -- migrate up
@@ -78,32 +78,32 @@ cargo run -p ferrioxid-cli -- admin create-user --email admin@example.com --supe
 cargo run -p ferrioxid-cli -- auth list-users
 ```
 
-`create-user` fragt das Passwort verdeckt ab und bestätigt es. Es gibt kein `--password` und kein voreingestelltes Admin-Passwort.
+`create-user` asks for the password hidden and confirms it. There is no `--password` and no preset admin password.
 
 ```http
 POST /auth/login
 {"email":"admin@example.com","password":"example-password"}
 ```
 
-Die Antwort setzt `Set-Cookie: ferrioxid_session=...` und liefert `user` plus `csrf_token`. Das Session-Token steht nicht im JSON.
+The answer sets `Set-Cookie: ferrioxid_session=...` and provides `user` plus `csrf_token`. The session token is not in the JSON.
 
 ## Tests
 
-`crates/ferrioxid-auth/src/password.rs`, `crates/ferrioxid-auth/src/sqlite_tests.rs` und `examples/myshop/tests/auth.rs` laufen mit SQLite. PostgreSQL ist dafür nicht erforderlich.
+`crates/ferrioxid-auth/src/password.rs`, `crates/ferrioxid-auth/src/sqlite_tests.rs` and `examples/myshop/tests/auth.rs` run with SQLite. PostgreSQL is not required for this.
 
-## Einschränkungen
+## Limitations
 
-- Das Rate-Limit liegt im Prozess. Mehrere Prozesse teilen es nicht. Die Map kann später ersetzt werden. Der Reset nutzt eigene Schlüssel und dasselbe Fenster.
-- Es gibt kein MFA, kein OAuth und kein JWT für externe APIs. Der E-Mail-Reset ist in v0.23 vorhanden und garantiert die Zustellung nicht.
-- `is_active` ist nötig für eine Sitzung. Ein inaktives Konto wird bei der Anmeldung abgelehnt.
-- `is_staff` öffnet die Verwaltung und umgeht keine Modellrechte.
-- `is_superuser` umgeht Rollen und Objektregeln, ersetzt `is_staff` aber nicht. Ein Superuser ohne Staff erhält im Admin 403 und kann sich dort abmelden.
-- `ferrioxid admin create-user` setzt nur die übergebenen Flags und druckt Aktiv, Staff und Superuser. `--superuser` ohne `--staff` weist auf den geschlossenen Admin hin.
+- The rate limit is in the process. Several processes do not share it. The map can be replaced later. The reset uses its own key and the same window.
+- There is no MFA, no OAuth and no JWT for external APIs. The e-mail reset is present in v0.23 and does not guarantee delivery.
+- `is_active` is required for one session. An inactive account will be rejected upon registration.
+- `is_staff` opens the administration and does not bypass model rights.
+- `is_superuser` bypasses roles and object rules, but does not replace `is_staff`. A superuser without staff receives 403 in the admin and can log out there.
+- `ferrioxid admin create-user` only sets the transferred flags and prints Active, Staff and Superuser. `--superuser` without `--staff` indicates the closed admin.
 
-## Geplante Erweiterungen
+## Planned extensions
 
-Mehrprozess-Rate-Limit, MFA und OAuth bleiben späteren Versionen vorbehalten. Der Passwort-Reset ist umgesetzt.
+Multi-process rate limit, MFA and OAuth are reserved for later versions. The password reset is implemented.
 
-## Admin und CSRF-Bootstrap
+## Admin and CSRF Bootstrap
 
-`GET /auth/csrf` liefert das zur Sitzung gehörende Token erneut. Die Sitzung selbst bleibt, und andere Tabs bleiben gültig. Details stehen in [csrf.md](csrf.md). Der Admin verlangt zusätzlich `is_staff`. Das Verzeichnis unter `/admin/api/directory` und die HTML-Seiten unter `/admin/directory/users` sind Staff-Superusern vorbehalten und können `is_superuser` nicht setzen. Siehe [admin-directory.md](admin-directory.md) und [admin-security.md](admin-security.md). Der SQLite-Test `sqlite_admin_security_crud_and_csrf_bootstrap` prüft den Bootstrap.
+`GET /auth/csrf` delivers the session token again. The session itself remains, and other tabs remain valid. Details are available in [csrf.md](csrf.md)]. The admin also requires `is_staff`. The directory under `/admin/api/directory` and the HTML pages under `/admin/directory/users` are reserved for staff superusers and cannot set `is_superuser`. See [admin-directory.md](admin-directory.md) and [admin-security.md](admin-security.md)]. The SQLite test `sqlite_admin_security_crud_and_csrf_bootstrap` checks the bootstrap.

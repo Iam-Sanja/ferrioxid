@@ -1,35 +1,35 @@
 # Ferrioxid Admin
 
-[Zur Übersicht](index.md) · Backend: [admin-backend.md](admin-backend.md) · Oberfläche: [admin-frontend.md](admin-frontend.md) · Sicherheit: [admin-security.md](admin-security.md)
+[For overview](index.md) · Backend: [admin-baking.md](admin-backend.md) · Surface: [admin-frontend.md](admin-frontend.md)] Security: [admin-security.md](admin-security.md)]
 
-**Stand:** v0.22. Die Cargo-Version bleibt `0.1.0`. Erweiterung: [admin-extension-api.md](admin-extension-api.md). Transaktionen: [transactions.md](transactions.md). Datumshierarchie: [admin-date-hierarchy.md](admin-date-hierarchy.md). Typen: [date-time-types.md](date-time-types.md). Admin-Metadaten ändern das Datenbankschema nicht. Die Auth-Migration `0002_admin_journal` legt Entwürfe und Audit an. Anlegen verwendet dieselbe `can_create`-Regel wie REST. Listen filtern in SQL. Das Verzeichnis bleibt Staff-Superusern vorbehalten. Branding kommt aus `ferrum.toml`. Details stehen in [admin-native.md](admin-native.md). Listen: [admin-list-configuration.md](admin-list-configuration.md). Abschnitte: [admin-fieldsets.md](admin-fieldsets.md). Auswahl: [admin-relational-widgets.md](admin-relational-widgets.md). Entwürfe: [admin-form-drafts.md](admin-form-drafts.md). Inlines: [admin-inlines.md](admin-inlines.md). Sammelaktionen: [admin-bulk-actions.md](admin-bulk-actions.md). Historie: [admin-audit-log.md](admin-audit-log.md). Eigene Aktionen: [admin-custom-actions.md](admin-custom-actions.md).
+**Stand:** v0.22. The cargo version remains `0.1.0`. Extension: [admin-extension-api.md](admin-extension-api.md). Transactions: [transactions.md](transactions.md)]. Date hierarchy: [admin-date-hierarchy.md](admin-date-hierarchy.md). Types: [date-time-types.md](date-time-types.md).] Admin metadata does not change the database schema. The `0002_admin_journal` authentic migration creates drafts and audits. Create uses the same `can_create` rule as REST. Filter lists in SQL. The directory is reserved for staff superusers. Branding comes from `ferrum.toml`. Details are available in [admin-native.md](admin-native.md). Lists: [admin-list-configuration.md](admin-list-configuration.md).] Sections: [admin-fieldsets.md](admin-fieldsets.md)]. Selection: [admin-relational-widgets.md](admin-relational-widgets.md). Drafts: [admin-form-drafts.md](admin-form-drafts.md). Inlines: [admin-inlines.md](admin-inlines.md). Collective actions: [admin-bulk-actions.md](admin-bulk-actions.md). History: [admin-audit-log.md](admin-audit-log.md).] Own actions: [admin-custom-actions.md](admin-custom-actions.md)].
 
-Eine angemeldete 403-Seite enthält ein Abmeldeformular. Listen ohne weiteres `list_display` wählen ein sichtbares Feld und die ID. Die Fläche und die Rollenauswahl sind in v0.15 umgesetzt. Die Phasen v0.16 bis v0.18 stehen in [roadmap.md](roadmap.md).
+A registered 403 page contains a deregistration form. Lists without further ado `list_display` select a visible field and the ID. The area and the role selection are implemented in v0.15. The phases v0.16 to v0.18 are in [roadmap.md](roadmap.md)].
 
 ## Zweck
 
-Ein Modell mit `admin = true` liefert Navigation, Tabelle, Formular, Detail und Löschen. Tera rendert diese Angaben. Autorisierung bleibt auf dem Server.
+A model with `admin = true` provides navigation, table, form, detail and deletion. Tera renders this information. Authorization remains on the server.
 
-## Zuständige Dateien
+## Responsible files
 
 | Bereich | Dateien |
 |---|---|
 | Metadaten | `crates/ferrioxid-core/src/lib.rs`, `crates/ferrioxid-macros/src/lib.rs` |
 | Admin-API | `crates/ferrioxid-admin/src/` |
 | Listenabfrage | `crates/ferrioxid-db/src/sql.rs` (`query_admin_page`) |
-| Oberfläche | `crates/ferrioxid-admin/templates/`, `crates/ferrioxid-admin/static/` |
-| Beispiel | `examples/myshop/src/models/`, `examples/myshop/src/main.rs` |
+|Surface surface| `crates/ferrioxid-admin/templates/`, `crates/ferrioxid-admin/static/` |
+|Example| `examples/myshop/src/models/`, `examples/myshop/src/main.rs` |
 | Test | `examples/myshop/tests/admin_http.rs`, `examples/myshop/tests/admin_html.rs`, `examples/myshop/tests/admin_extensions.rs` |
 
 ## Datenfluss
 
-Rust-Struct → `FerrioxidModel` erzeugt `AdminModelMeta` neben dem bestehenden `ModelDescriptor` → `AdminRegistry::add` → HTML unter `/admin/models/{modell}` und JSON unter `/admin/api`. Schreibende Aufrufe laufen durch Session, Staff-Prüfung, Modellrecht, CSRF und die vorhandene Repository-Validierung.
+Rust-Struct → `FerrioxidModel` generates `AdminModelMeta` alongside the existing `ModelDescriptor` → `AdminRegistry::add` → HTML under `/admin/models/{modell}` and JSON under `/admin/api`. Writing calls run through session, staff exam, model law, CSRF and existing repository validation.
 
 ## Konfiguration
 
-`App::with_admin(registry)` hängt HTML und JSON an. Vorlagen und CSS sind im Binary. Ohne konfigurierte Authentifizierung antwortet `GET /admin` mit 403. Der Ablauf steht in [admin-routing.md](admin-routing.md).
+`App::with_admin(registry)` attaches HTML and JSON. Templates and CSS are in the binary. Without configured authentication, `GET /admin` responds with 403. The sequence is in [admin-routing.md](admin-routing.md)].
 
-## Öffentliche Nutzung
+## Public use
 
 ```rust
 let admin = ferrioxid::admin::AdminRegistry::new()
@@ -39,11 +39,11 @@ let admin = ferrioxid::admin::AdminRegistry::new()
 App::new(db).with_auth(auth).with_admin(admin)
 ```
 
-Die Oberfläche liegt unter `http://127.0.0.1:3000/admin`. Die API liegt unter `/admin/api`.
+The surface is below `http://127.0.0.1:3000/admin`. The API is under `/admin/api`.
 
 ## Sicherheit
 
-Jede Admin-Anfrage braucht eine gültige Sitzung und `is_staff = true`. `allow_anonymous` öffnet den Admin nicht. Ein Superuser ohne Staff-Flag kommt nicht hinein. Modellrechte bleiben nötig, außer die Admin-Berechtigung ist leer: dann darf nur ein Superuser das Modell bedienen. Objekt-Policy-Listen bleiben blockiert.
+Each admin request needs a valid session and `is_staff = true`. `allow_anonymous` does not open the admin. A superuser without a staff flag does not come in. Model rights remain necessary, unless the admin authorization is empty: then only one superuser may operate the model. Object policy lists remain blocked.
 
 ## Fehler
 
@@ -51,18 +51,18 @@ Jede Admin-Anfrage braucht eine gültige Sitzung und `is_staff = true`. `allow_a
 |---|---|
 | Keine Sitzung, HTML | 303 zur Anmeldung |
 | Keine Sitzung, JSON | 401 |
-| Kein Staff oder fehlendes Modellrecht | 403 |
-| Unbekanntes Modell, falsche Sortierung, gesperrtes Feld | 404 oder 422 |
-| Objektregel lehnt einen Datensatz ab | 404 |
+|No staff or lack of model rights| 403 |
+|Unknown model, wrong sorting, blocked field|404 or 422|
+|Object rule rejects a record| 404 |
 
 ## Tests
 
-`examples/myshop/tests/admin_http.rs` prüft die JSON-API. `examples/myshop/tests/admin_html.rs` prüft Login, Liste, Suche, Filter, Sortierung, Blättern, Anlegen, Ändern, Löschen, Verzeichnis, Benutzerpflege, Bestätigung, relationale Namen, CSRF und Escaping über HTML-Formulare.
+`examples/myshop/tests/admin_http.rs` checks the JSON API. `examples/myshop/tests/admin_html.rs` checks login, list, search, filter, sort, scroll, create, modify, delete, directory, user care, confirmation, relational name, CSRF and escaping via HTML forms.
 
 ## Grenzen
 
-Kein Plugin-System, kein OAuth, kein MFA, kein Mandantensystem. Sprachen sind Deutsch und Englisch. Superuser-Flags lassen sich im Admin nicht setzen. Die Benutzerverwaltung ist Superusern vorbehalten und kein generisches Modell-CRUD. Anlegen, Bearbeiten und Passwort sind eigene Verzeichnisrouten. Löschen eines Benutzers ist Deaktivieren.
+No plugin system, no OAuth, no MFA, no client system. Languages are German and English. Superuser flags cannot be set in the admin. User management is reserved for superusers and not a generic model CRUD. Creating, editing and password are their own directory routes. Deleting a user is deactivating.
 
-## Später
+## Later
 
-SQL-Scopes für Objektregeln, eingebettete Assets, eigene Feld-Widgets und feiner steuerbare Verzeichnisrechte.
+SQL scopes for object rules, embedded assets, own field widgets and finer controllable directory rights.

@@ -1,10 +1,10 @@
 # Projektstruktur
 
-[Zur Übersicht](index.md) · Vorlagen: [project-templates.md](project-templates.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · **IST-Datei:** `crates/ferrioxid-cli/src/scaffold.rs`.
+[For overview](index.md) · Templates: [project-templates.md](project-templates.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · **IST file:** `crates/ferrioxid-cli/src/scaffold.rs`].
 
 ## Aufgabe
 
-`ferrioxid new` legt ein Projekt außerhalb des Ferrioxid-Repositories an. Die Cargo-Version der Abhängigkeit bleibt die des Workspaces. Die Template-Version im Manifest ist `0.24`. `ferrioxid generate app` ergänzt danach `src/apps/<name>/`, beschrieben in [create-app.md](create-app.md). Der Generator neuer Projekte schreibt dieses Verzeichnis nicht mit.
+`ferrioxid new` creates a project outside the ferrioxide repository. The cargo version of dependency remains that of the workspace. The template version in the manifest is `0.24`. `ferrioxid generate app` then supplements `src/apps/<name>/`, described in [create-app.md](create-app.md)]. The generator of new projects does not write this directory.
 
 ## Fullstack
 
@@ -36,22 +36,22 @@ meinprojekt/
 └── tests/api.rs
 ```
 
-`main.rs` lädt `settings::load`, bindet `bind_address` und hängt `.with_settings` sowie `.urls(urls::routes()?)?` an die bestehende Admin-, Auth- und Kontaktfolge. `/` bleibt die eingebaute Startseite. Die benannte Route `site.home` liegt auf `/home` und rendert `templates/home.html`.
+`main.rs` loads `settings::load`, binds `bind_address` and attaches `.with_settings` and `.urls(urls::routes()?)?` to the existing administrator, authentic and contact sequence. `/` remains the built-in homepage. The named route `site.home` is located on `/home` and renders `templates/home.html`.
 
 ## API
 
-Die API-Vorlage hat dieselben Modelle, Migrationen, Staticfiles und HTML-Startvorlagen. Sie hat keinen Admin, keine Auth-Registrierung und kein `src/views/`. `src/urls.rs` registriert `api.ping` auf `/api/v1/ping` und antwortet mit JSON `{"ok": true}`.
+The API template has the same models, migrations, static files and HTML startup templates. It has no admin, no authentic registration and no `src/views/`. `src/urls.rs` registers `api.ping` on `/api/v1/ping` and responds with JSON `{"ok": true}`.
 
-Die HTML-Dateien bleiben, weil `templates.enabled` in beiden Vorlagen wahr ist und die bestehende Startseite sie erwartet. Eine API-Vorlage ohne jede HTML-Datei ist nicht der generierte Stand.
+The HTML files remain because `templates.enabled` is true in both templates and the existing homepage expects them. An API template without any HTML file is not the generated state.
 
 ## Was bewusst fehlt
 
-Es gibt kein zweites Settings-Modul neben `settings.rs`. Dieses Modul ruft nur `Settings::discover` auf. Es gibt keine zusätzliche Beispieltabelle neben `products`. Kontakt bleibt eine Funktion in `main.rs`, keine eigene View-Datei.
+There is no second settings module besides `settings.rs`. This module only calls `Settings::discover`. There is no additional example table besides `products`. Contact remains a function in `main.rs`, not its own view file.
 
 ## Legacy
 
-Ein Projekt, dessen `main.rs` `discover_project`, `App::new`, `register` und `merge` nutzt, muss diese Datei nicht umschreiben. `ferrum.toml` ohne `[custom]` bleibt gültig. Vorhandene Migrationen werden nicht verändert. `admin-ui` bleibt ein akzeptiertes Feature.
+A project whose `main.rs` uses `discover_project`, `App::new`, `register` and `merge` does not need to rewrite this file. `ferrum.toml` without `[custom]` remains valid. Existing migrations are not changed. `admin-ui` remains an accepted feature.
 
-`ferrioxid upgrade` ersetzt keine benutzerdefinierte Datei. Liegt die Template-Version nicht auf `0.24`, meldet der Plan `project.template.outdated` und lässt die Dateien stehen. Eine geänderte, im Manifest geführte Datei bleibt `project.file.modified`. Die Anpassung auf `src/settings.rs` und `src/urls.rs` ist manuell, wenn ein altes Projekt sie übernehmen will.
+`ferrioxid upgrade` does not replace a custom file. If the template version is not on `0.24`, the plan reports `project.template.outdated` and leaves the files. A modified file kept in the manifest remains `project.file.modified`. The adjustment to `src/settings.rs` and `src/urls.rs` is manual if an old project wants to adopt it.
 
-Das Verzeichnis `D:\04_Projekte_Arbeit\Projekte\testprojekt` wird von dieser Vorlage nicht neu erzeugt und nicht verändert. Tests legen eigene temporäre Kopien an.
+The `D:\04_Projekte_Arbeit\Projekte\testprojekt` directory is not newly created and not changed by this template. Tests create their own temporary copies.

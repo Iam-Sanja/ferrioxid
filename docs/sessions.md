@@ -1,29 +1,29 @@
-# Sitzungen und Cookies
+# Sessions and Cookies
 
-[Zur Übersicht](index.md) · [auth.md](auth.md)
+[For overview](index.md) · [auth.md](auth.md)]
 
 ## Zweck
 
-Das Admin- und Browser-Login nutzt serverseitige Sitzungen. JSON Web Tokens sind nicht der Standard.
+The admin and browser login uses server-side sessions. JSON Web Tokens are not the standard.
 
 ## Architektur
 
-Der Login erzeugt 32 Byte aus `OsRng` für das Session-Token. Das CSRF-Token ist ein HMAC über Sitzungs-ID und Token-Hash, siehe [csrf.md](csrf.md). Die Datenbank speichert SHA-256 als Hex. `last_seen_at` wird bei jeder erfolgreichen Prüfung gesetzt. `expires_at` wird dabei nicht verlängert.
+The login generates 32 bytes from `OsRng` for the session token. The CSRF token is an HMAC via session ID and token hash, see [csrf.md](csrf.md)]. The database stores SHA-256 as a hex. `last_seen_at` is set at every successful exam. `expires_at` will not be renewed.
 
-`rotate_session` widerruft die aktuelle Zeile und legt eine neue mit demselben `expires_at` an. Eine bereits abgelaufene Sitzung wird nicht erneuert. Der Login legt immer eine neue Sitzung an. Eine automatische Rotation bei jedem Request ist ausgeschaltet, weil dabei das CSRF-Token ohne zuverlässigen Kanal wechseln würde.
+`rotate_session` revokes the current line and creates a new one with the same `expires_at`. A meeting that has already expired will not be renewed. The login always creates a new session. An automatic rotation at each request is switched off because the CSRF token would change without a reliable channel.
 
-## Zuständige Dateien
+## Responsible files
 
 - `crates/ferrioxid-auth/src/service.rs`
 - `crates/ferrioxid-auth/src/cookie.rs`
 - `crates/ferrioxid-auth/src/config.rs`
 - `crates/ferrioxid-auth/migrations/0001_auth_schema.json`
 
-## Öffentliche API
+## Public API
 
-`AuthService::login` liefert `IssuedSession` mit Cookie-Zeile, rohem Token, CSRF-Token und `PublicUser`. HTTP-Handler setzen nur das Cookie und geben Token plus Benutzer im Login-JSON als `csrf_token` und `user` zurück. Folgeantworten enthalten kein Session-Token.
+`AuthService::login` delivers `IssuedSession` with cookie line, raw token, CSRF token and `PublicUser`. HTTP handlers only set the cookie and return tokens plus users in login JSON as `csrf_token` and `user`. Subsequent replies do not contain session tokens.
 
-`logout` widerruft die Sitzung, wenn das Token noch bekannt ist, und löscht das Cookie. Ohne Cookie bleibt der Aufruf HTTP 204. Mit gültigem Cookie verlangt Logout das CSRF-Token.
+`logout` revokes the session if the token is still known and deletes the cookie. Without a cookie, the HTTP 204 call remains. With a valid cookie, Logout requires the CSRF token.
 
 ## Datenmodell `_ferrum_sessions`
 
@@ -31,26 +31,26 @@ Der Login erzeugt 32 Byte aus `OsRng` für das Session-Token. Das CSRF-Token ist
 |---|---|
 | `id` | UUID |
 | `user_id` | Foreign Key auf `_ferrum_users`, `ON DELETE CASCADE` |
-| `token_hash` | SHA-256-Hex, eindeutig |
+| `token_hash` |SHA-256-hex, unique|
 | `csrf_token_hash` | SHA-256-Hex des CSRF-Tokens |
 | `created_at`, `expires_at`, `last_seen_at` | Unix-Sekunden |
-| `revoked_at` | gesetzt beim Logout, bei Rotation und beim Widerruf aller Sitzungen |
+| `revoked_at` |set at logout, rotation and revocation of all sessions|
 
-Standardlebensdauer: 12 Stunden absolut, 30 Minuten ohne Nutzung.
+Standard life: 12 hours absolute, 30 minutes without use.
 
-## Sicherheitsmechanismen
+## Security mechanisms
 
-Das Cookie heißt `ferrioxid_session`. Es ist `HttpOnly`, `Path=/`, `SameSite=Lax` und ohne `Domain`. `Secure` steht nur, wenn `cookie_secure` gesetzt ist. Das entscheidet `FERRUM_COOKIE_SECURE` oder, wenn die Variable fehlt, `FERRUM_ENV=production`. `BIND_ADDRESS` spielt keine Rolle. Lokales HTTP bleibt in der Entwicklung ohne `Secure` nutzbar. Produktion ohne `Secure` schreibt eine Warnung.
+The cookie is called `ferrioxid_session`. It is `HttpOnly`, `Path=/`, `SameSite=Lax` and without `Domain`. `Secure` stands only if `cookie_secure` is set. This is decided by `FERRUM_COOKIE_SECURE` or, if the variable is missing, `FERRUM_ENV=production`. `BIND_ADDRESS` does not matter. Local HTTP remains usable in development without `Secure`. Production without `Secure` writes a warning.
 
-Logout verwendet dieselben Cookie-Attribute und `Max-Age=0`.
+Logout uses the same cookie attributes and `Max-Age=0`.
 
-Tokens stehen nicht in URLs. Die Datenbankzeile enthält nicht das rohe Token.
+Tokens are not in URLs. The database row does not contain the raw token.
 
-## Fehlerfälle
+## Error cases
 
-Abgelaufene, widerrufene, unbekannte und zu lange ungenutzte Tokens ergeben `Unauthenticated`. Ein deaktivierter Benutzer ebenfalls, auch wenn die Zeile noch gültig wäre.
+Expired, revoked, unknown and too long unused tokens result in `Unauthenticated`. A disabled user as well, even if the line were still valid.
 
-## Beispiel
+## Example
 
 ```http
 POST /auth/logout
@@ -58,16 +58,16 @@ Cookie: ferrioxid_session=...
 x-csrf-token: ...
 ```
 
-Antwort 204 und `Set-Cookie` mit leerem Wert.
+Answer 204 and `Set-Cookie` with empty value.
 
 ## Tests
 
-`sqlite_tests` prüft Anlage, Hash, Ablauf, Idle-Timeout, Widerruf, Rotation, inaktive Benutzer und das Secure-Cookie. `examples/myshop/tests/auth.rs` prüft fehlenden, manipulierten und abgelaufenen Cookie sowie Logout.
+`sqlite_tests` checks attachment, hash, expiration, idle timeout, revocation, rotation, inactive users and the secure cookie. `examples/myshop/tests/auth.rs` checks missing, manipulated and expired cookie and logout.
 
-## Einschränkungen
+## Limitations
 
-Idle-Timeout und absolute Laufzeit werden beim nächsten Request geprüft, nicht durch einen Hintergrundjob. Eine erneuerte Sitzung übernimmt das ursprüngliche `expires_at`.
+Idle timeout and absolute runtime are checked on the next request, not by a background job. A renewed session takes over the original `expires_at`.
 
-## Geplante Erweiterungen
+## Planned extensions
 
-Geräteverwaltung und eine Sitzungsliste sind nicht umgesetzt. `GET /auth/csrf` berechnet dasselbe Token erneut und schreibt die Sitzung nicht um. Mehrere Tabs bleiben gültig. Logout, Passwortwechsel und Ablauf machen das Token unbrauchbar, weil die Sitzung selbst endet. Die automatische Rotation je Request bleibt aus.
+Device management and a session list are not implemented. `GET /auth/csrf` recalculates the same token and does not rewrite the session. Multiple tabs remain valid. Logout, password change and expiration make the token unusable because the session itself ends. The automatic rotation per request does not occur.

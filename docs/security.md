@@ -1,53 +1,53 @@
-# Sicherheit – Bedrohungsmodell und Sicherheitsgrenzen
+# Security – Threat Model and Security Borders
 
-[Zur Übersicht](index.md) · **IST + SOLL.** **Ferrioxid v0.1 ist nicht produktionsreif.**
+[For overview](index.md) · **IST + REQUIRED.** **Ferrioxide v0.1 is not ready for production.] ***
 
-## IST-Schutzmechanismen
+## ACTual protection mechanisms
 
-- Ohne `allow_anonymous = true` werden GET, POST, PATCH und DELETE als 403 registriert. Der JSON-Körper ist derselbe `ApiError`-Vertrag.
-- Create- und Update-Validierung prüft bekannte Felder gemäß Makroregeln. `deny_unknown_fields` verhindert, dass `id` oder `readonly`-Felder im JSON ankommen.
-- INSERT, UPDATE und DELETE binden Werte über SeaORM. Die DELETE- und UPDATE-Anweisungen enthalten immer `WHERE "id" = $1`. Tabellen- und Spaltennamen stammen nur aus geprüften Makroattributen.
-- `ApiError` loggt DB-Details intern und liefert bei 500 nur generische Informationen nach außen. Seit v0.11 trägt dieselbe Antwort einen stabilen `code`. SQL und Hashes werden auch dann ersetzt, wenn ein Freitext sie enthielte.
-- Axums JSON-Extractor verwendet standardmäßig Serde-DTOs mit `deny_unknown_fields` auf dem Create-Typ.
-- Demo-Bind ist `127.0.0.1:3000`; Docker-Postgres-Port ist auf `127.0.0.1` publiziert.
-- `can_create` prüft die Create-Eingabe vor dem INSERT. Eine fremde Besitzer-ID wird abgelehnt, wenn die Regel das verlangt. Der Standard der Methode ist `false`. Generierte Projekte binden nicht an `0.0.0.0` und enthalten kein Standardpasswort.
-- Seit v0.12 bleiben Staticfiles im konfigurierten Root. Uploads verwenden UUID-Namen, prüfen den Dateiinhalt und gehören dem angemeldeten Benutzer. Die Request-ID kommt vom Server. Logs enthalten keinen Query-String. Details stehen in [staticfiles.md](staticfiles.md), [uploads.md](uploads.md) und [middleware.md](middleware.md).
+- Without `allow_anonymous = true`, GET, POST, PATCH and DELETE are registered as 403. The JSON body is the same `ApiError` contract.
+- Create and update validation checks known fields according to macro rules. `deny_unknown_fields` prevents `id` or `readonly` fields from arriving in JSON.
+- INSERT, UPDATE and DELETE bind values via SeaORM. The DELETE and UPDATE statements always contain `WHERE "id" = $1`. Table and column names come only from checked macro attributes.
+- `ApiError` logs DB details internally and delivers only generic information to the outside world at 500. Since v0.11, the same answer has a stable `code`. SQL and hashes are also replaced if a free text contained them.
+- Axum’s JSON-Extractor uses Serde DTOs with `deny_unknown_fields` on the Create type as standard.
+- Demo bind is `127.0.0.1:3000`; Docker Postgres port is published on `127.0.0.1`.
+- `can_create` checks the Create input before the INSERT. A foreign owner ID is rejected if the rule requires it. The standard of the method is `false`. Generated projects do not bind to `0.0.0.0` and do not contain a standard password.
+- Since v0.12, static files remain in the configured root. Uploads use UUID names, check the file contents and belong to the logged-in user. The request ID comes from the server. Logs do not contain a query string. Details are available in [staticfiles.md](staticfiles.md), [uploads.md](uploads.md) and [middleware.md](middleware.md)].
 
-## Authentifizierung (IST, v0.7)
+## Authentication (actual, v0.7)
 
-Benutzer, Argon2id, serverseitige Sitzungen, HttpOnly-Cookies, CSRF für Cookie-Schreibzugriffe, Rollen und Modellrechte sind implementiert. Details stehen in [auth.md](auth.md), [sessions.md](sessions.md), [permissions.md](permissions.md) und [policies.md](policies.md).
+Users, Argon2id, server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model rights are implemented. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [permissions.md](permissions.md) and [policies.md](policies.md)].
 
-`allow_anonymous = true` bleibt eine ausdrückliche öffentliche Freigabe. Produkt und Kategorie in myshop sind solche Demo-Endpunkte. Geschützte Routen verweigern ohne Sitzung und Recht.
+`allow_anonymous = true` remains an explicit public release. Product and category in myshop are such demo endpoints. Protected routes refuse without session and right.
 
-## Verbleibende Lücken (IST)
+## Remaining gaps (actual)
 
-Kein OAuth, kein MFA, kein Passwort-Reset und kein JWT für externe APIs. Das Login-Rate-Limit gilt pro Prozess. Objektregeln filtern über [query-scopes.md](query-scopes.md). Ohne ausdrücklichen Scope liefert die Liste keine Zeile. `allow_anonymous` prüft kein CSRF, weil der Zugriff nicht am Cookie hängt. Parallele PATCH-Anweisungen haben kein Versionsfeld. Ferrioxid ist damit nicht als öffentlicher Internetdienst ohne zusätzlichen Proxy und Betriebsgrenzen beschrieben.
+No OAuth, no MFA, no password reset and no JWT for external APIs. The login rate limit is per process. Filter object rules via [query-scopes.md](query-scopes.md)]. Without an explicit scope, the list does not provide a line. `allow_anonymous` does not check CSRF because the access does not depend on the cookie. Parallel PATCH statements do not have a version field. Ferrioxide is thus not described as a public Internet service without additional proxy and operational limits.
 
 ## SOLL-Bedrohungsmodell
 
-| Bedrohung | Zielmaßnahme | Nachweis |
+| Bedrohung |Target action| Nachweis |
 |---|---|---|
-| Unberechtigte Reads/Writes | Deny by default + serverseitige Policies | 401/403-Tests |
-| IDOR | Objekt-Policy **nach** Identitätsprüfung für jede einzelne ID | Querzugriffstests |
-| Mass Assignment | geteilte DB-Models nie blind als Writable DTO verwenden | Felder-Ausblendtests |
-| CSRF | Schutz bei Cookie-basierten Zustandsänderungen | Cross-Origin-Tests |
-| SQL Injection | gebundene Werte, Identifier-Allowlist | fuzzer-/negativ-Tests |
-| Brute Force | Ratelimit, Lockout nach Risiko, Auditing | Login-Stresstests |
+|Unauthorized Reads/Writes| Deny by default + serverseitige Policies | 401/403-Tests |
+| IDOR |Object policy **after** Identity verification for each individual ID| Querzugriffstests |
+| Mass Assignment | geteilte DB-Models nie blind als Writable DTO verwenden |Field masking tests|
+| CSRF |Protection for cookie-based state changes| Cross-Origin-Tests |
+| SQL Injection |bound values, identifier-allowlist| fuzzer-/negativ-Tests |
+| Brute Force |Rate limit, lockout by risk, auditing| Login-Stresstests |
 | Session-Diebstahl | HttpOnly/Secure/SameSite, Rotation, Ablauf | Session-Tests |
-| Secrets in Logs | Redaction, generische API-Fehler | Log-Audit |
-| Öffentliches Demo | Bind- und Konfigurationschecks, kein Prod-Default | Deployment-Test |
+| Secrets in Logs |Redaction, generic API error| Log-Audit |
+|Public Demo|Bind and configuration checks, no Prod default| Deployment-Test |
 
-## Umsetzungsvorgaben (SOLL)
+## Implementation targets (reference)
 
-- `auth` und Policies sind getrennte Konzepte: Authentifizierung stellt Identität fest, Autorisierung entscheidet Zugriff.
-- RBAC allein genügt nicht für Object-Level/Field-Level-Policies.
-- Standardmäßig kein anonymes CRUD und keine automatisch exportierten sensiblen Felder.
-- Die Oberfläche darf Berechtigungen nur anzeigen. Die Serverprüfung bleibt maßgeblich.
-- Auth-Kontext darf nicht über Clientfelder oder Header mit ungeprüfter Vertrauenskette entstehen.
-- Vor jedem produktiven Release Security-Review, Dependency-Audit und dokumentierte Threat-Model-Annahmen.
+- `auth` and policies are separate concepts: authentication determines identity, authorization decides access.
+- RBAC alone is not sufficient for object-level/field-level policies.
+- By default, no anonymous CRUD and no automatically exported sensitive fields.
+- The interface may only display permissions. The server verification remains relevant.
+- Auth context must not be created via client fields or headers with an unchecked trust chain.
+- Before each productive release security review, dependency audit and documented threat model assumptions.
 
-**Meldeweg:** `SECURITY.md` im Repository enthält derzeit nur eine knappe Projektinformation, keinen etablierten Vulnerability-Disclosure-Prozess. Für öffentliche Releases muss der gepflegt werden.
+**Note:** `SECURITY.md` in the repository currently contains only a brief project information, not an established vulnerability disclosure process. It must be maintained for public releases.
 
 ## Admin
 
-Der Admin prüft Sitzung, aktiven Benutzer, Staff, Modellrecht, Objektregel und bei Schreibzugriff CSRF. Pfadparameter werden nicht ungeprüft zu SQL-Bezeichnern. Sortierung, Suche und Filter sind Whitelists. Details und die bekannten Grenzen stehen in [admin-security.md](admin-security.md).
+The admin checks session, active user, staff, model right, object rule and write access CSRF. Path parameters are not unchecked to SQL identifiers. Sorting, searching and filtering are whitelists. Details and known limits are given in [admin-security.md](admin-security.md)].

@@ -1,14 +1,14 @@
-# Query-Scopes für Objektregeln
+# Query scopes for object rules
 
-[Zur Übersicht](index.md) · [policies.md](policies.md) · [database.md](database.md)
+[For overview](index.md) · [policies.md](policies.md)] · [database.md](database.md)]
 
 ## Zweck
 
-Eine Objektregel soll Listen in der Datenbank einschränken. Ferrioxid lädt nicht alle Zeilen, um sie danach im Prozess zu filtern.
+An object rule is designed to restrict lists in the database. Ferrioxide does not load all lines to filter them in the process.
 
 ## Architektur
 
-`QueryScope` liegt in `ferrioxid-core`, damit Datenbank, API und Admin dieselbe Darstellung nutzen.
+`QueryScope` is located in `ferrioxid-core` so that database, API and admin use the same representation.
 
 ```rust
 pub enum QueryScope {
@@ -18,9 +18,9 @@ pub enum QueryScope {
 }
 ```
 
-`ScopeValue` ist `Text`, `Uuid`, `BigInt` oder `Bool`. Die Standardmethode `ObjectPolicy::read_scope` liefert `None`. `write_scope` übernimmt `read_scope`, solange die Regel nichts anderes sagt. Ein aktiver Superuser erhält `All`.
+`ScopeValue` is `Text`, `Uuid`, `BigInt` or `Bool`. The standard method `ObjectPolicy::read_scope` provides `None`. `write_scope` takes over `read_scope` as long as the rule says otherwise. An active superuser receives `All`.
 
-## Verantwortliche Dateien
+## Responsible file
 
 - `crates/ferrioxid-core/src/lib.rs`
 - `crates/ferrioxid-auth/src/policy.rs`
@@ -30,38 +30,38 @@ pub enum QueryScope {
 - `crates/ferrioxid-admin/src/registry.rs`
 - `crates/ferrioxid-admin/src/http.rs`
 
-## Öffentliche APIs
+## Public APIs
 
 - `ObjectPolicy::read_scope` und `write_scope`
 - `ModelRepository::list_scoped`, `get_scoped`, `update_scoped`, `delete_scoped`
-- `list`, `get`, `update` und `delete` bleiben und verwenden `QueryScope::All`
-- Admin-Listen antworten zusätzlich mit `total`
+- `list`, `get`, `update` and `delete` remain and use `QueryScope::All`
+- Admin lists respond additionally with `total`
 
 ## Datenfluss
 
-REST und Admin rufen dieselben SeaQuery-Helfer auf. Der Scope wird vor Suche, Sortierung, Offset und Limit als parametrisierte Bedingung angehängt. `None` wird zu `0 = 1`. `Equals` prüft den Spaltennamen gegen die Modellmetadaten und bindet den Wert als Parameter. `total` zählt mit denselben Filtern und demselben Scope, ohne Limit.
+REST and Admin call the same SeaQuery helpers. The scope is attached as a parameterized condition before search, sorting, offset and limit. `None` becomes `0 = 1`. `Equals` checks the column name against the model metadata and binds the value as a parameter. `total` counts with the same filters and the same scope, without limit.
 
-PATCH und DELETE tragen den Scope in der `WHERE`-Klausel. Ein vorheriger SELECT bleibt als zweite Prüfung über `can_update` und `can_delete`.
+PATCH and DELETE carry the scope in the `WHERE` clause. A previous SELECT remains as a second check on `can_update` and `can_delete`.
 
 ## Sicherheitsregeln
 
-- Spaltennamen kommen nur aus vertrauenswürdigen Modellmetadaten.
-- Werte aus der HTTP-Anfrage werden nie als Scope-Ausdruck übernommen.
-- Eine fehlende Implementierung von `read_scope` ergibt `None` und damit keine Zeile.
-- `All` entsteht nur durch eine ausdrückliche Policy oder durch die Superuser-Regel.
-- Eine ungebundene Objektregel bleibt 403 mit `object policy is not bound`.
-- Sortier- und Filterfelder bleiben eine Whitelist. Ein unbekannter Name ist 422.
+- Column names come only from trusted model metadata.
+- Values from the HTTP request are never adopted as scope expression.
+- A missing implementation of `read_scope` results in `None` and thus no row.
+- `All` is created only by an explicit policy or by the superuser rule.
+- An unbound object rule remains 403 with `object policy is not bound`.
+- Sorting and filter fields remain a whitelist. An unknown name is 422.
 
-## Fehlerfälle
+## Error cases
 
 | Fall | Antwort |
 |---|---|
-| Regel nicht gebunden | 403 |
-| Zeile liegt außerhalb des Scopes | 404 |
-| Spalte des Scopes gehört nicht zum Modell | 422 |
-| Superuser | voller Zugriff, weiterhin Staff-Pflicht im Admin |
+|Rule not bound| 403 |
+|The line is outside the scope| 404 |
+|Column of the scope does not belong to the model| 422 |
+| Superuser |Full access, still staff duty in the admin|
 
-## Beispiel
+## Example
 
 ```rust
 fn read_scope(user: &AuthUser) -> QueryScope {
@@ -74,8 +74,8 @@ fn read_scope(user: &AuthUser) -> QueryScope {
 
 ## Tests
 
-`examples/myshop/tests/auth.rs` prüft, dass ein Benutzer nur die eigene Zeile in der REST-Liste sieht und der Superuser beide sieht. `examples/myshop/tests/admin_http.rs` prüft dieselbe Liste im Admin, `total`, einen fremden GET, PATCH und DELETE.
+`examples/myshop/tests/auth.rs` checks that a user sees only their own row in the REST list and the superuser sees both. `examples/myshop/tests/admin_http.rs` checks the same list in the admin, `total`, a foreign GET, PATCH and DELETE.
 
-## Einschränkungen
+## Limitations
 
-Es gibt kein `OR`, keine Joins und keine Ausdrücke aus mehreren Spalten. Eine `can_*`-Methode, die strenger ist als `write_scope`, bleibt eine zweite Prüfung nach dem SELECT. `write_scope` muss deshalb mindestens so eng sein wie `can_update` und `can_delete`. Create prüft den neuen Inhalt nicht gegen den Scope.
+There is no `OR`, no joins and no expressions from multiple columns. A `can_*` method that is more stringent than `write_scope` remains a second test after the SELECT. `write_scope` must therefore be at least as close as `can_update` and `can_delete`. Create does not check the new content against the scope.

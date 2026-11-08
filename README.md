@@ -15,9 +15,9 @@ SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js
 
 The following paragraph is the German milestone record.
 
-Funktionsstand v0.27.1 startet Anwendungsjobs über `WorkerHost` und `src/bin/worker.rs`. `ferrioxid jobs inspect` verbirgt die Payload, bis `--show-payload` gesetzt ist. Beschreibung: `docs/workers.md` und `docs/job-security.md`. Funktionsstand v0.27 ergänzt persistente Hintergrundjobs ohne Redis. Beschreibung: `docs/jobs.md` und `docs/workers.md`. Funktionsstand v0.26 ergänzt wiederverwendbare Modellfelder und prüft installierte Apps vor dem Start. Beschreibung: `docs/models.md`, `docs/model-components.md`, `docs/model-timestamps.md` und `docs/app-lifecycle.md`. Soft Delete ist nicht enthalten. Funktionsstand v0.25 ergänzt typisierte Apps über `App::install`. Beschreibung: `docs/apps.md`, `docs/app-registry.md`, `docs/app-migrations.md`, `docs/reusable-apps.md` und `docs/create-app.md`. Eine bestehende `main.rs` muss dafür nicht umgeschrieben werden. `ferrum.toml` lädt keine App-Crate. Funktionsstand v0.24 ergänzt typisierte Settings, benannte Axum-Routen und View-Helfer. Die Beschreibung steht in `docs/settings.md`, `docs/urls.md` und `docs/views.md`. Bestehende `main.rs`-Dateien müssen dafür nicht umgeschrieben werden. Funktionsstand v0.23 bleibt gültig. E-Mail und Passwort-Reset beschreibt `docs/mail.md` und `docs/password-reset.md`. Der öffentliche Reset liegt unter `/auth/password-reset` und verlangt kein Staff. Ohne aktives Mail-Backend wird keine E-Mail versendet. Funktionsstand v0.22 bleibt gültig. Eigene Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen registriert `AdminRegistry` in `ferrioxid::admin`. Die Beschreibung steht in `docs/admin-extension-api.md`. `ferrioxid migrate status`, `check`, `doctor` und `dev` zeigen ausstehende Auth- und App-Migrationen, ohne sie anzuwenden. `ferrioxid upgrade` legt höchstens ein fehlendes Legacy-Manifest an und überschreibt keine Projektdatei. Details: `docs/migration-diagnostics.md` und `docs/project-upgrade.md`. v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Verzeichnisänderungen und ihr Audit sind eine Transaktion. Ein `admin_inline` mit `|form` speichert Elternobjekt und Kinder gemeinsam. Details: `docs/transactions.md`. Der Admin ist serverseitiges HTML mit Axum und Tera. React, Vite und Node.js sind dafür nicht nötig. Die Beschreibung steht in `docs/admin-native.md`. Die Fläche folgt `DESIGN.md` und `docs/admin-design-system.md`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware bleiben aus v0.12. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
+Functional status v0.27.1 starts application jobs via `WorkerHost` and `src/bin/worker.rs`. `ferrioxid jobs inspect` hides the payload until `--show-payload` is set. Description: `docs/workers.md` and `docs/job-security.md`. Functional status v0.27 complements persistent background jobs without Redis. Description: `docs/jobs.md` and `docs/workers.md`. Functional status v0.26 complements reusable model fields and checks installed apps before launch. Description: `docs/models.md`, `docs/model-components.md`, `docs/model-timestamps.md` and `docs/app-lifecycle.md`. Soft Delete is not included. Functional status v0.25 supplements typed apps via `App::install`. Description: `docs/apps.md`, `docs/app-registry.md`, `docs/app-migrations.md`, `docs/reusable-apps.md` and `docs/create-app.md`. An existing `main.rs` does not have to be rewritten for this. `ferrum.toml` does not load an app crate. Functional status v0.24 complements typed settings, named Axum routes and view helpers. The description is given in `docs/settings.md`, `docs/urls.md` and `docs/views.md`. Existing `main.rs` files do not have to be rewritten for this. Function status v0.23 remains valid. Email and password reset describes `docs/mail.md` and `docs/password-reset.md`. The public reset is under `/auth/password-reset` and does not require a staff. Without an active mail backend, no e-mail is sent. Function status v0.22 remains valid. Own admin pages, actions, filters, widgets and templates register `AdminRegistry` in `ferrioxid::admin`. The description is in `docs/admin-extension-api.md`. `ferrioxid migrate status`, `check`, `doctor` and `dev` show pending authentic and app migrations without applying them. `ferrioxid upgrade` creates at most one missing legacy manifesto and does not overwrite a project file. Details: `docs/migration-diagnostics.md` and `docs/project-upgrade.md`. v0.20 remains valid. The cargo version remains `0.1.0`. Directory changes and their audit are a transaction. A `admin_inline` with `|form` stores parent objects and children together. Details: `docs/transactions.md`. The admin is server-side HTML with Axum and Tera. React, Vite and Node.js are not necessary for this. The description is in `docs/admin-native.md`. The area follows `DESIGN.md` and `docs/admin-design-system.md`. Forms, static files, local upload storage and request middleware remain out of v0.12. The admin speaks German and English. `GET /admin/api/config` provides title, color, languages and currency from `ferrum.toml`. Error responses carry a stable `code`. Settings are in `ferrum.toml`, described in `docs/settings.md`. The developer documentation is German. The admin is under `/admin`. `FERRUM_CSRF_SECRET` is in production 64 hex characters.
 
-Ein neues Projekt außerhalb dieses Workspaces:
+A new project outside of this workspace:
 
 ```powershell
 cargo run -p ferrioxid-cli -- new demo --template fullstack --ferrioxid-path .
@@ -27,9 +27,9 @@ cargo run --manifest-path ..\Cargo.toml -p ferrioxid-cli -- admin create-user --
 cargo run --manifest-path ..\Cargo.toml -p ferrioxid-cli -- dev
 ```
 
-Nach `cargo install --path crates/ferrioxid-cli` heißen dieselben Schritte `ferrioxid migrate up`, `ferrioxid admin create-user` und `ferrioxid dev`. Das Passwort wird abgefragt. `FERRUM_PASSWORD` ist nur für Automationen und hat keinen Standardwert.
+After `cargo install --path crates/ferrioxid-cli`, the same steps are called `ferrioxid migrate up`, `ferrioxid admin create-user` and `ferrioxid dev`. The password is requested. `FERRUM_PASSWORD` is for automation only and has no default value.
 
-Authentifizierung, Sitzungen und Rollen beschreibt `docs/auth.md`. Geschützte myshop-Ressource ist `/api/v1/internal_notes`. Produkte und Kategorien bleiben ausdrücklich öffentliche Demo-Routen.
+Authentication, sessions and roles describes `docs/auth.md`. Protected myshop resource is `/api/v1/internal_notes`. Products and categories remain expressly public demo routes.
 
 > This is **not** a complete Django replacement. The current milestone covers a Rust derive macro, shared model metadata, one SeaORM/SeaQuery repository for SQLite and PostgreSQL, and generated list, detail, create, patch and delete routes.
 
@@ -83,7 +83,7 @@ curl http://127.0.0.1:3000/api/v1/products
 - `crates/ferrioxid-api/src/lib.rs` — route registration, handler adapters and bootstrap
 - `crates/ferrioxid/src/lib.rs` — public framework API
 - `crates/ferrioxid-cli/src/main.rs` — experimental informational `ferrioxid doctor` CLI
-- `crates/ferrioxid-admin/` — Admin-API, HTML-Oberfläche, Vorlagen und CSS
+- `crates/ferrioxid-admin/` — Admin API, HTML interface, templates and CSS
 
 ## Model example
 
@@ -148,13 +148,13 @@ cargo build --workspace
 
 Contributor workflow, branch names, and migration rules are in [CONTRIBUTING.md](CONTRIBUTING.md). A warm local cache may add `--offline`. GitHub Actions must be allowed to download dependencies.
 
-## Ausführliche Entwicklerdokumentation (Deutsch)
+## Detailed developer documentation (German)
 
-**[Dokumentationsportal: docs/index.md](docs/index.md)** – Architektur, Modulgrenzen, Datenflüsse, Codegenerierung, Datenbank, API, CLI, Konfiguration, Validierung, Sicherheit, Tests und Beispielanwendung. Constraints stehen in [docs/constraints.md](docs/constraints.md), Beziehungen in [docs/relations.md](docs/relations.md), Migrationen in [docs/migrations.md](docs/migrations.md). Authentifizierung, Admin, OpenAPI, Plugins und Deployment bleiben Entwürfe, soweit die jeweilige Seite das so ausweist.
+**[Documentation portal: docs/index.md](docs/index.md)** - Architecture, module boundaries, data flows, code generation, database, API, CLI, configuration, validation, security, testing and example application.] Constraints are in [docs/constraints.md](docs/constraints.md), relationships in [docs/relations.md](docs/relations.md), migrations in [docs/migrations.md](docs/migrations.md)]. Authentication, admin, OpenAPI, plugins and deployment remain drafts, as far as the respective page indicates this.
 
-Jede Seite trennt **IST** von **SOLL (nur geplant)**. Der Funktionsstand dieser Constraints und Beziehungen ist v0.6. Die Cargo-Version bleibt `0.1.0`. Änderungen am Framework müssen auch in der passenden Moduldokumentation nachgetragen werden. Der [Implementierungsleitfaden](docs/implementation-guide.md) definiert dafür einen verbindlichen Änderungs- und Testprozess.
+Each page separates **IST** from **SOLL (planned only)**. The functional status of these constraints and relationships is v0.6. The cargo version remains `0.1.0`. Changes to the framework must also be added to the appropriate module documentation. The [Implementation Guide ](docs/implementation-guide.md)] defines a binding change and test process.
 
-Siehe außerdem [Architektur](docs/architecture.md), [Roadmap](docs/roadmap.md) und [Tests](docs/testing.md).
+See also [Architecture](docs/architecture.md), [Roadmap](docs/roadmap.md) and [Tests](docs/testing.md)].
 
 ## API list response
 

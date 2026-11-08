@@ -2,10 +2,10 @@
 
 [Zur Übersicht](index.md) · Registry: [app-registry.md](app-registry.md) · Migrationen: [app-migrations.md](app-migrations.md)
 
-`install` prüft Namen, Duplikate und die Beiträge der App. `seal` prüft danach den Migrationsgraphen, die Übereinstimmung mit `[app.<name>]` und die Admin-Registry. `seal` schreibt keine Migration.
+`install` checks the name, duplicates and contributions of the app. `seal` then checks the migration graph, the match with `[app.<name>]` and the admin registry. `seal` does not write a migration.
 
-`try_into_router` ruft `seal` auf, wenn Apps installiert sind oder `with_settings` mindestens eine `[app.<name>]`-Deklaration sieht und noch nicht versiegelt wurde. Ein zweiter Aufruf nach einem erfolgreichen `seal` prüft nicht noch einmal. `into_router` bleibt für bestehende Projekte ohne `Result`. Sind Apps oder Deklarationen vorhanden und die Prüfung scheitert, startet der Server nicht.
+`try_into_router` calls `seal` when apps are installed or `with_settings` sees at least one `[app.<name>]` declaration and has not yet been sealed. A second call for a successful `seal` does not re-check. `into_router` remains for existing projects without `Result`. If there are apps or declarations and the check fails, the server does not start.
 
-Ohne installierte Apps und ohne `[app.<name>]` bleibt `into_router` der bisherige Weg. myshop nutzt ihn unverändert.
+Without installed apps and without `[app.<name>]`, `into_router` remains the previous way. myshop uses it unchanged.
 
-Die CLI liest nur `ferrum.toml`. Sie führt den Rust-Code der App nicht aus. `check`, `doctor` und `migrate status` sagen das ausdrücklich und melden die TOML-Migrationen nicht als bestätigt gegen `registry.migrations`. Der Prozessstart ist die Stelle, die beide Seiten vergleicht. Diagnosebefehle legen keine Datenbankdatei und keine Historientabelle an.
+The CLI only reads `ferrum.toml`. It does not run the Rust code of the app. `check`, `doctor` and `migrate status` say this explicitly and do not report the TOML migrations as confirmed against `registry.migrations`. The process start is the place that compares both sides. Diagnostic commands do not create a database file and a history table.

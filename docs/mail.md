@@ -2,22 +2,22 @@
 
 [Zur Übersicht](index.md) · SMTP: [mail-smtp.md](mail-smtp.md) · Sicherheit: [mail-security.md](mail-security.md) · Hinweise: [notifications.md](notifications.md) · Passwort: [password-reset.md](password-reset.md)
 
-**Stand:** v0.23. Die Cargo-Version bleibt `0.1.0`. Die Crate ist `ferrioxid-mail`. Die Fassade ist `ferrioxid::mail`.
+**Stand:** v0.23. The cargo version remains `0.1.0`. The crate is `ferrioxid-mail`. The facade is `ferrioxid::mail`.
 
 ## Zweck
 
-`MailService` versendet eine typisierte Nachricht. Absender, Empfänger, Betreff, Text, optionales HTML und optionales Reply-To werden vor dem Transport geprüft. Der Dienst öffnet im Test keine Verbindung zu einem externen Postfach.
+`MailService` sends a typed message. Sender, recipient, subject, text, optional HTML and optional Reply-To are checked before transport. The service does not open a connection to an external mailbox in the test.
 
 ## Backends
 
 | Backend | Verhalten |
 |---|---|
-| `disabled` | `send` liefert `mail.disabled`. Das ist der Standard ohne `[mail]`. |
-| `console` | Schreibt die Nachricht nach stderr und protokolliert nur `mail accepted by the console transport`. |
-| `memory` | Hält die Nachricht im Prozess. `MemoryInbox::messages` gibt sie zurück. |
-| `smtp` | Ein Versuch über STARTTLS oder implizites TLS. Details in [mail-smtp.md](mail-smtp.md). |
+| `disabled` |`send` provides `mail.disabled`. This is the standard without `[mail]`.|
+| `console` |Writes the message to stderr and logs only `mail accepted by the console transport`.|
+| `memory` |Holds the message in the process. `MemoryInbox::messages` returns them.|
+| `smtp` |An attempt via STARTTLS or implicit TLS. Details in [mail-smtp.md](mail-smtp.md)].|
 
-`FERRUM_ENV=production` lehnt `console` und `memory` ab und fällt auf `disabled` zurück. Das Passwort steht nie in `ferrum.toml`. SMTP liest `FERRUM_SMTP_USERNAME` und `FERRUM_SMTP_PASSWORD`.
+`FERRUM_ENV=production` rejects `console` and `memory` and falls back to `disabled`. The password is never in `ferrum.toml`. SMTP reads `FERRUM_SMTP_USERNAME` and `FERRUM_SMTP_PASSWORD`.
 
 ## Konfiguration
 
@@ -28,11 +28,11 @@ public_origin = "http://127.0.0.1:3000"
 reset_ttl_minutes = 30
 ```
 
-Für SMTP zusätzlich `host`, `port`, `security = "starttls"` oder `"tls"`, `from` und `timeout_secs` zwischen 1 und 30. `reset_ttl_minutes` liegt zwischen 5 und 1440. Ein aktives Backend braucht eine plausible Absenderadresse und einen vertrauenswürdigen `public_origin`: `http://127.0.0.1`, `http://localhost` oder `https` ohne Benutzerinfo, Pfad, Query und Fragment. Schlüssel `mail.password`, `mail.secret` und `mail.smtp_password` sind ein Fehler.
+For SMTP additionally `host`, `port`, `security = "starttls"` or `"tls"`, `from` and `timeout_secs` between 1 and 30. `reset_ttl_minutes` is between 5 and 1440. An active backend needs a plausible sender address and a trusted `public_origin`: `http://127.0.0.1`, `http://localhost` or `https` without user info, path, query and fragment. Keys `mail.password`, `mail.secret` and `mail.smtp_password` are an error.
 
 Umgebungsvariablen überschreiben die Datei: `FERRUM_MAIL_BACKEND`, `FERRUM_MAIL_FROM`, `FERRUM_MAIL_REPLY_TO`, `FERRUM_PUBLIC_ORIGIN`, `FERRUM_RESET_TTL_MINUTES`, `FERRUM_SMTP_HOST`, `FERRUM_SMTP_PORT`, `FERRUM_SMTP_SECURITY`, `FERRUM_SMTP_TIMEOUT_SECS`, `FERRUM_SMTP_USERNAME`, `FERRUM_SMTP_PASSWORD`.
 
-`ferrioxid check` und `ferrioxid doctor` öffnen keinen Socket. Bei `smtp` ohne `FERRUM_SMTP_PASSWORD` entsteht die Warnung `mail.credentials`. `check --strict` beendet diese Warnung mit Exitcode 2. `ferrioxid upgrade` schreibt keine vorhandene `ferrum.toml` um. Die Template-Version bleibt `0.21`.
+`ferrioxid check` and `ferrioxid doctor` do not open a socket. With `smtp` without `FERRUM_SMTP_PASSWORD`, the warning `mail.credentials` arises. `check --strict` ends this warning with Exitcode 2. `ferrioxid upgrade` does not rewrite an existing `ferrum.toml`. The template version remains `0.21`.
 
 ## API
 
@@ -71,8 +71,8 @@ mail.notify(Notice::PasswordChanged {
 let _ = Duration::from_secs(mail.reset_ttl_secs() as u64);
 ```
 
-`App::with_mail` und `ferrioxid::mail_for(&project)` hängen denselben Dienst an die Anwendung. Die generierten Vorlagen rufen `mail_for` auf. Ein neues Projekt kompiliert mit `backend = "disabled"` und versendet beim Start keine E-Mail.
+`App::with_mail` and `ferrioxid::mail_for(&project)` are connected to the same service. The generated templates call `mail_for`. A new project compiles with `backend = "disabled"` and does not send an email at start.
 
-Fehler sind `mail.disabled`, `mail.invalid`, `mail.unavailable`, `mail.timeout` und `mail.rejected`. Der Anzeigetext ist der Code. SMTP-Antworten und Zugangsdaten stehen nicht darin. `Debug` für `SmtpSettings` ersetzt Benutzername und Passwort durch `[redacted]`.
+Errors are `mail.disabled`, `mail.invalid`, `mail.unavailable`, `mail.timeout` and `mail.rejected`. The display text is the code. SMTP responses and access data are not included. `Debug` for `SmtpSettings` replaces username and password with `[redacted]`.
 
-UTF-8 bleibt erhalten. Betreff und Adressen dürfen keine Steuerzeichen enthalten. Ein Betreff ist höchstens 120 Zeichen, eine Adresse 254, der Text 20000 und HTML 40000.
+UTF-8 remains. Subject and addresses must not contain control characters. A subject is at most 120 characters, an address 254, the text 20000 and HTML 40000.

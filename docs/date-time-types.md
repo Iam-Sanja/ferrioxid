@@ -1,16 +1,16 @@
-# Datum und Uhrzeit
+# Date and time
 
-**Stand:** v0.19. Die Cargo-Version bleibt `0.1.0`.
+**Stand:** v0.19. The cargo version remains `0.1.0`.
 
-Ferrioxid unterscheidet drei Typen. Sie werden nicht ineinander umgerechnet.
+Ferrioxide distinguishes three types. They are not converted into each other.
 
-| Rust | `ColumnKind` | Bedeutung | Kanonische Zeichenkette |
+| Rust | `ColumnKind` | Bedeutung |Canon character string|
 |---|---|---|---|
-| `chrono::NaiveDate` | `Date` | Kalendertag ohne Uhrzeit und ohne Zone | `2026-11-07` |
-| `chrono::NaiveTime` | `Time` | Tageszeit ohne Datum | `14:30:00` |
+| `chrono::NaiveDate` | `Date` |Calendar day without time and zone| `2026-11-07` |
+| `chrono::NaiveTime` | `Time` |Time of day without date| `14:30:00` |
 | `chrono::DateTime<Utc>` | `DateTime` | Absoluter Zeitpunkt | `2026-11-07T13:30:00Z` |
 
-`Option<T>` bleibt nullable. Ein `NaiveDate` springt nicht auf den Nachbartag. `DateTime` muss `DateTime<Utc>` sein. Andere Zeitzonenparameter lehnt das Makro ab.
+`Option<T>` remains nullable. A `NaiveDate` does not jump to the neighbor’s day. `DateTime` must be `DateTime<Utc>`. Other time zone parameters reject the macro.
 
 ## JSON
 
@@ -22,7 +22,7 @@ Ferrioxid unterscheidet drei Typen. Sie werden nicht ineinander umgerechnet.
 }
 ```
 
-`+00:00` ist beim Lesen erlaubt und wird als `Z` ausgegeben. Jeder andere Offset ist `validation.datetime_offset`. Ein ungültiges Datum, einschließlich `2023-02-29`, ist `validation.date`. Eine ungültige Uhrzeit ist `validation.time`. Ein unlesbarer Zeitpunkt ist `validation.datetime`.
+`+00:00` is allowed for reading and is output as `Z`. Every other offset is `validation.datetime_offset`. An invalid date, including `2023-02-29`, is `validation.date`. An invalid time is `validation.time`. An unreadable time is `validation.datetime`.
 
 ## HTML
 
@@ -32,7 +32,7 @@ Ferrioxid unterscheidet drei Typen. Sie werden nicht ineinander umgerechnet.
 | Time | `<input type="time">` |
 | DateTime | `<input type="datetime-local">` |
 
-`datetime-local` enthält keine Zone. Ferrioxid behandelt den Wert als UTC und sagt das im Hinweis. `2026-11-07T13:30` wird `2026-11-07T13:30:00Z`. Es gibt keine Umrechnung in die Zeitzone des Browsers und damit keine Sommerzeit-Lücke.
+`datetime-local` does not contain a zone. Ferrioxide treats the value as UTC and says so in the Note. `2026-11-07T13:30` becomes `2026-11-07T13:30:00Z`. There is no conversion to the time zone of the browser and therefore no summer time gap.
 
 ## Modell
 
@@ -45,10 +45,10 @@ pub struct Event {
 }
 ```
 
-Die Typen liegen in `ferrioxid::prelude`. Bestehende Modelle müssen sie nicht verwenden.
+The types are in `ferrioxid::prelude`. Existing models do not have to be used.
 
 ## Grenzen
 
-- Keine Dauer und kein `DateTime<Local>`.
-- Kein stilles Ändern einer Textspalte in ein Datum.
-- PostgreSQL-Spaltentypen sind implementiert. Ein Lauf gegen einen PostgreSQL-Server ist in dieser Version nicht ausgeführt.
+- No duration and no `DateTime<Local>`.
+- No silently changing a column of text to a date.
+- PostgreSQL column types are implemented. A run against a PostgreSQL server is not executed in this version.

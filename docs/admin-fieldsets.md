@@ -1,12 +1,12 @@
 # Formularabschnitte
 
-[Zur Übersicht](admin.md) · Vorlagen: [admin-templates.md](admin-templates.md)
+[For overview](admin.md) · Templates: [admin-templates.md](admin-templates.md)]
 
-**Stand:** v0.17. Die Cargo-Version bleibt `0.1.0`.
+**Stand:** v0.17. The cargo version remains `0.1.0`.
 
-Ohne `admin_fieldset` bleibt das Formular eine einzelne unbenannte Gruppe.
+Without `admin_fieldset`, the form remains a single unnamed group.
 
-Ein Modell deklariert die Abschnitte. Jedes sichtbare Feld nennt genau einen davon.
+A model declares the sections. Each visible field names exactly one of them.
 
 ```rust
 #[ferrioxid(
@@ -23,8 +23,8 @@ struct Offer {
 }
 ```
 
-Die drei Teile sind Name, optionale Beschreibung und das Wort `optional`. Der Name hat 1 bis 80 Zeichen, die Beschreibung höchstens 160. Namen sind eindeutig. Ein leerer Abschnitt und ein Feld ohne Abschnitt sind Übersetzungsfehler, sobald das Modell Abschnitte hat. Verborgene Felder brauchen keinen Abschnitt. Ein Feld darf nur einmal vorkommen.
+The three parts are name, optional description and the word `optional`. The name has 1 to 80 characters, the description a maximum of 160. Names are clear. An empty section and a field without a section are translation errors once the model has sections. Hidden fields do not need a section. A field may occur only once.
 
-Die Vorlage zeichnet einen benannten Abschnitt als `fieldset` mit `legend`. `optional` ist `details` und `summary` und bleibt ohne JavaScript zu. Leere Abschnitte, zum Beispiel die ID beim Anlegen, werden nicht gezeichnet. Die Feldreihenfolge ist die Struct-Reihenfolge innerhalb des Abschnitts.
+The template draws a named section as `fieldset` with `legend`. `optional` is `details` and `summary` and remains without JavaScript. Empty sections, for example the ID when creating, are not drawn. The field order is the Struct order within the section.
 
-`readonly` und `id` bleiben Text. `hidden` wird nicht gesendet. Rechte, CSRF und `reject_locked` gelten unverändert.
+`readonly` and `id` remain text. `hidden` is not sent. Rights, CSRF and `reject_locked` apply unchanged.

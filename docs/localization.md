@@ -1,26 +1,26 @@
-# Lokalisierung im Admin
+# Localization in the admin
 
-[Zur Übersicht](index.md) · Architektur: [i18n.md](i18n.md)
+[For overview](index.md) · Architecture: [i18n.md](i18n.md)]
 
 ## Formate
 
-Der HTML-Admin formatiert Zahlen in `display_cell`. Deutsch gruppiert mit Punkt, Englisch mit Komma. Felder auf `_cents` werden mit der Projektwährung und zwei Nachkommastellen gezeigt. Der gespeicherte Wert bleibt die ganze Cent-Zahl. Datumswerte aus der Datenbank bleiben der ausgegebene Text. Es gibt keinen `Intl`-Aufruf im Server.
+The HTML admin formats numbers in `display_cell`. German grouped with point, English with comma. Fields on `_cents` are shown with the project currency and two decimal places. The stored value remains the whole cent number. Date values from the database remain the output text. There is no `Intl` call in the server.
 
-## Sprache der Startseite
+## Language of the homepage
 
-`negotiate_locale` in `crates/ferrioxid-api/src/pages.rs` prüft in dieser Reihenfolge:
+`negotiate_locale` in `crates/ferrioxid-api/src/pages.rs` checks in this order:
 
-1. `?lang=` nur wenn der Wert `de` oder `en` ist, optional mit Region wie `de-DE`.
-2. Den ersten unterstützten Eintrag von `Accept-Language`, gewichtet mit `q`.
+1. `?lang=` only if the value is `de` or `en`, optionally with region such as `de-DE`.
+2. The first supported entry of `Accept-Language`, weighted with `q`.
 3. `project.default_locale`.
 4. `project.fallback_locale`, sonst `en`.
 
-Der Wert wird in den Tera-Kontext als `locale` geschrieben. Er wird nicht an einen Dateipfad gehängt. Tera escaped die eingesetzten Texte. Generierte Projekte verlinken `/ ?lang=de` und `/?lang=en` fest.
+The value is written in the Tera context as `locale`. It is not attached to a file path. Tera escaped the texts used. Generated projects link `/ ?lang=de` and `/?lang=en`.
 
 ## CLI
 
-`FERRUM_LOCALE=en` oder `de` überschreibt `default_locale`. Übersetzt sind die Meldungen für erzeugtes Projekt, erzeugtes Modell und Start und Stopp des Entwicklungsservers. `ferrioxid dev` gibt die Zeile `Ferrioxid lauscht` des generierten Programms unverändert aus. Migrationsstatus, `Angewendet` und `Keine Schemaänderung` bleiben unverändert.
+`FERRUM_LOCALE=en` or `de` overwrites `default_locale`. Translated are the messages for generated project, generated model and start and stop of the development server. `ferrioxid dev` outputs the line `Ferrioxid lauscht` of the generated program unchanged. Migration status, `Angewendet` and `Keine Schemaänderung` remain unchanged.
 
 ## Tests
 
-`examples/myshop/tests/admin_html.rs` prüft die deutsche Anmeldung, `Accept-Language: en` und den Sprachwechsel auf Englisch. `crates/ferrioxid-api/src/pages.rs` prüft den englischen Fallback und eine ungültige Locale. Abgelehnte Branding-Farben prüft die Registry in `ferrioxid-admin`.
+`examples/myshop/tests/admin_html.rs` checks the German registration, `Accept-Language: en` and the language change in English. `crates/ferrioxid-api/src/pages.rs` checks the English fallback and an invalid locale. Rejected branding colors are checked by the registry in `ferrioxid-admin`.

@@ -1,12 +1,12 @@
 # App erzeugen
 
-[Zur Übersicht](index.md) · CLI: [cli.md](cli.md) · **IST-Datei:** `crates/ferrioxid-cli/src/apps.rs`.
+[For overview](index.md) · CLI: [cli.md](cli.md) · **actual file:** `crates/ferrioxid-cli/src/apps.rs`].
 
 ```powershell
 ferrioxid generate app shop
 ```
 
-Der Befehl legt diese Dateien an und überschreibt nichts:
+The command creates these files and does not overwrite anything:
 
 ```text
 src/apps/mod.rs
@@ -20,19 +20,19 @@ src/apps/shop/templates/shop/index.html
 src/apps/shop/static/shop/shop.css
 ```
 
-`src/apps/mod.rs` erhält nur die Zeile `pub mod shop;`, wenn sie fehlt. `main.rs` wird nur geändert, wenn sie die Markierung `// ferrioxid:apps:end` enthält. Sonst nennt die Ausgabe die Zeile `.install(shop::ShopApp)?`.
+`src/apps/mod.rs` only gets the line `pub mod shop;` if it is missing. `main.rs` is only changed if it contains the mark `// ferrioxid:apps:end`. Otherwise, the output calls the line `.install(shop::ShopApp)?`.
 
-Der erzeugte Typ implementiert `FerrioxidApplication`. Die Route `shop.index` liegt auf `/` und wird unter dem Präfix `/shop` eingehängt. Die Antwort ist JSON `{"app":"shop"}`. Vorlagen und Staticfiles werden im isolierten Modus angemeldet. `admin::attach` ist absichtlich leer.
+The generated type implements `FerrioxidApplication`. The route `shop.index` is located on `/` and is attached under the prefix `/shop`. The answer is JSON `{"app":"shop"}`. Templates and static files are logged into isolated mode. `admin::attach` is intentionally empty.
 
-Der Name folgt denselben Regeln wie `AppConfig`: Kleinbuchstaben, Ziffern, `_`, höchstens 32 Zeichen, kein Pfad und keiner der reservierten Namen.
+The name follows the same rules as `AppConfig`: lower case, numerals, `_`, maximum 32 characters, no path and none of the reserved names.
 
-`ferrioxid new` bleibt unverändert. Die Template-Version bleibt `0.24`. Eine separate Crate erzeugt der Befehl nicht. Dafür steht [reusable-apps.md](reusable-apps.md).
+`ferrioxid new` remains unchanged. The template version remains `0.24`. A separate crate does not generate the command. This is what [reusable-apps.md](reusable-apps.md)] stands for.
 
-Die Migrationen trägt das Projekt selbst ein:
+The project itself records the migrations:
 
 ```toml
 [app.shop]
 migrations = "src/apps/shop/migrations"
 ```
 
-Dieser Abschnitt lädt die Rust-App nicht. `install` bleibt erforderlich. `ferrioxid migrate up` wendet die Dateien an, `install` nicht.
+This section does not load the Rust app. `install` remains necessary. `ferrioxid migrate up` applies the files, `install` does not.

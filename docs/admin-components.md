@@ -1,43 +1,43 @@
 # Admin-Bausteine
 
-[Zur Übersicht](admin.md) · Vorlagen: [admin-templates.md](admin-templates.md) · Gestaltung: [admin-design-system.md](admin-design-system.md)
+[For overview](admin.md) · Templates: [admin-templates.md](admin-templates.md) · Design: [admin-design-system.md](admin-design-system.md)]
 
-Die Bausteine sind Tera-Blöcke, keine React-Komponenten. Datumsfelder sind native Eingaben. Die Datumshierarchie ist eine Linkliste mit der Klasse `hierarchy`. Ein transaktionales Inline ist ein `fieldset.form-section` in der bestehenden Formularkarte, keine zweite Karte je Kind. Die Zeile ist `.inline-row`.
+The building blocks are Tera blocks, not React components. Date fields are native inputs. The date hierarchy is a link list with the class `hierarchy`. A transactional inline is a `fieldset.form-section` in the existing form card, not a second card per child. The line is `.inline-row`.
 
 | Baustein | Ort |
 |---|---|
-| Rahmen, Seitenleiste, Kopf | `templates/base.html` |
+|Frame, sidebar, head| `templates/base.html` |
 | Feldgruppe | `templates/partials/field.html`, eingebunden als `field.html` |
-| Tabelle, Suche, Blättern | `templates/models/list.html` |
-| Hinweis und Warnung | `base.html`, Rollen `status` und `alert` |
+|Table, search, sheets| `templates/models/list.html` |
+|Notice and warning|`base.html`, roles `status` and `alert`|
 | Fehlerseite | `templates/errors/error.html` |
-| Benutzer, Rollen, Rechte | `templates/directory/` |
+|Users, roles, rights| `templates/directory/` |
 
-Felder entstehen in `html.rs` aus den Modellmetadaten. Unbekannte, verborgene und nur lesbare Felder werden nicht als schreibbare Eingabe ausgegeben. Die gemeinsame Prüfung `reject_locked` lehnt sie auch dann ab, wenn sie im POST auftauchen. Ein boolesches Feld ohne Wert im Formular übernimmt `default_bool`. Ein vorhandener Datensatzwert hat Vorrang.
+Fields are created in `html.rs` from the model metadata. Unknown, hidden and readable fields are not output as writeable input. The joint examination `reject_locked` rejects them even if they appear in the POST. A Boolean field with no value in the form takes over `default_bool`. An existing data record value has priority.
 
-## Geplant, nicht umgesetzt
+## Planned, not implemented
 
-Die offenen Zeilen dieser Tabelle sind noch nicht umgesetzt. Umgesetzte Zeilen nennen ihre Phase.
+The open lines of this table have not yet been implemented. Reacted lines call their phase.
 
-| Baustein | Phase | Verhalten ohne Script |
+| Baustein | Phase |Behavior without script|
 |---|---|---|
-| Abmeldeformular auf Fehlerseiten | umgesetzt, v0.14 | POST mit CSRF, auch ohne Staff |
-| Statusspalten Staff, Superuser, Aktiv | umgesetzt, v0.14 | Drei eigene Spalten |
-| Listenspalte mit Bezeichner | umgesetzt, v0.14 | Metadaten, kein festes Feld `name` |
-| Formulargruppe | umgesetzt, v0.15 | Label, Hinweis, Kontrolle, Fehler untereinander |
-| Button primär, ruhig, Gefahr | umgesetzt, v0.15 | Dieselben Klassen überall |
-| Rollenauswahl | umgesetzt, v0.15 | `<select>` vorhandener Rollen, kein Anlegen über die Zuweisung |
-| Benutzerformular | umgesetzt, v0.16 | Anlegen, Bearbeiten und Passwort. Kein Hash, kein Superuser-Feld |
-| Relationale Anzeige | umgesetzt, v0.16 | Name aus den Modellmetadaten, UUID als `title` |
-| Filterauswahl | umgesetzt, v0.16 | Bool und Fremdschlüssel als `select`, Zahl als `number` |
-| Bestätigung | umgesetzt, v0.16 | Checkbox `confirm=1`, serverseitig geprüft |
-| Listenkonfiguration | umgesetzt, v0.17 | Link, Sortierung, Seitengröße aus den Metadaten |
-| Formularabschnitte | umgesetzt, v0.17 | `fieldset` oder `details`, ohne Script |
-| Speicherziele | umgesetzt, v0.17 | Drei Submit-Knöpfe, serverseitige Adresse |
-| Auswahlseite | umgesetzt, v0.17 | GET, Suche, Seiten, Leserecht |
-| Formularentwurf | umgesetzt, v0.18 | Verstecktes `_draft`, Sitzung, kein Passwort |
-| Inline-Liste | umgesetzt, v0.18 | Kindzeilen und eigenes Anlegeformular |
-| Sammelaktionsleiste | umgesetzt, v0.18 | Checkboxen, Aktionsauswahl, Bestätigungsseite |
-| Historie | umgesetzt, v0.18 | Tabelle, Seiten, HTML-escaped |
+|Deregistration form on error pages| umgesetzt, v0.14 |POST with CSRF, even without staff|
+|Status columns Staff, Superuser, Active| umgesetzt, v0.14 | Drei eigene Spalten |
+|List column with identifier| umgesetzt, v0.14 |Metadata, not a fixed field `name`|
+| Formulargruppe | umgesetzt, v0.15 |Label, note, control, errors among themselves|
+| Button primär, ruhig, Gefahr | umgesetzt, v0.15 |Same classes everywhere|
+| Rollenauswahl | umgesetzt, v0.15 |`<select>` of existing roles, no creation via assignment|
+| Benutzerformular | umgesetzt, v0.16 |Create, edit and password. No hash, no superuser field|
+| Relationale Anzeige | umgesetzt, v0.16 |Name from the model metadata, UUID as `title`|
+| Filterauswahl | umgesetzt, v0.16 |Bool and foreign key as `select`, number as `number`|
+|Confirmation| umgesetzt, v0.16 |Checkbox `confirm=1`, checked on the server side|
+| Listenkonfiguration | umgesetzt, v0.17 |Link, sorting, page size from the metadata|
+| Formularabschnitte | umgesetzt, v0.17 |`fieldset` or `details`, without script|
+| Speicherziele | umgesetzt, v0.17 |Three Submit buttons, server-side address|
+| Auswahlseite | umgesetzt, v0.17 |GET, Search, Pages, Reading Rights|
+| Formularentwurf | umgesetzt, v0.18 |Hidden `_draft`, session, no password|
+| Inline-Liste | umgesetzt, v0.18 |Child lines and own creation form|
+| Sammelaktionsleiste | umgesetzt, v0.18 |Checkboxes, action selection, confirmation page|
+| Historie | umgesetzt, v0.18 |Table, Pages, HTML-escaped|
 
-Details und Tests: [admin-ux-backlog.md](admin-ux-backlog.md).
+Details and tests: [admin-ux-backlog.md](admin-ux-backlog.md)].

@@ -1,38 +1,38 @@
-# Passwort zurücksetzen
+# Reset the password
 
-[Zur Übersicht](index.md) · Auth: [auth.md](auth.md) · E-Mail: [mail.md](mail.md) · Sicherheit: [mail-security.md](mail-security.md)
+[For overview](index.md) · Auth: [auth.md](auth.md) · Email: [mail.md](mail.md) · Security: [mail-security.md](mail-security.md)]
 
-**Stand:** v0.23. Die Cargo-Version bleibt `0.1.0`. Die Migration ist `crates/ferrioxid-auth/migrations/0004_password_reset.json`. `0001`, `0002` und `0003` bleiben unverändert.
+**Stand:** v0.23. The cargo version remains `0.1.0`. The migration is `crates/ferrioxid-auth/migrations/0004_password_reset.json`. `0001`, `0002` and `0003` remain unchanged.
 
 ## Routen
 
-`App::with_auth` hängt die Seiten an. Sie verlangen keinen Staff-Status.
+`App::with_auth` attaches the pages. They do not require Staff status.
 
 | Methode | Pfad | Ergebnis |
 |---|---|---|
 | `GET` | `/auth/password-reset` | Formular, Cookie `ferrioxid_reset_csrf` |
-| `POST` | `/auth/password-reset` | Dieselbe Annahme für bekannte und unbekannte Adressen |
-| `GET` | `/auth/password-reset/confirm?token=` | Tauscht einen gültigen Token gegen Cookie `ferrioxid_reset` und antwortet 303 auf `/auth/password-reset/choose` |
-| `GET` | `/auth/password-reset/choose` | Passwort und Wiederholung |
-| `POST` | `/auth/password-reset/choose` | Setzt das Passwort oder zeigt einen sichtbaren Fehler |
+| `POST` | `/auth/password-reset` |Same assumption for known and unknown addresses|
+| `GET` | `/auth/password-reset/confirm?token=` |Exchanges a valid token for cookie `ferrioxid_reset` and responds 303 to `/auth/password-reset/choose`|
+| `GET` | `/auth/password-reset/choose` |Password and repetition|
+| `POST` | `/auth/password-reset/choose` |Sets the password or shows a visible error|
 
-Die öffentliche Annahme lautet: „Wenn ein Konto mit dieser Adresse existiert, wurde eine E-Mail mit weiteren Schritten angefordert.“ Englisch: „If an account with this address exists, an email with further steps was requested.“ Unbekannte Adresse, deaktiviertes Konto, ungültige Adresse, Rate-Limit, fehlendes Mail-Backend, ungeeigneter Origin und Versandfehler liefern dieselbe Seite. Ferrioxid kennt kein separates „nicht verifiziert“. `is_active = false` wird wie eine unbekannte Adresse behandelt und erhält keine E-Mail. CSRF- oder Origin-Fehler sind 403 und nennen die Adresse nicht. Ohne Auth-Dienst antwortet POST mit 404. Ein Körper über 8 KiB ist 403.
+The public assumption is: “If an account with this address exists, an email with further steps has been requested.” If an account with this address exists, an email with further steps was requested. Unknown address, deactivated account, invalid address, rate limit, missing mail backend, inappropriate origin and shipping errors deliver the same page. Ferrioxide does not have a separate “not verified”. `is_active = false` is treated like an unknown address and does not receive an email. CSRF or Origin errors are 403 and do not name the address. Without Auth service, POST responds with 404. A body above 8 KiB is 403.
 
-Die Seiten sind serverseitiges HTML ohne externe Datei und ohne JavaScript. `Referrer-Policy` ist `no-referrer`. Die Content-Security-Policy erlaubt kein externes Asset. Der Admin-Login bleibt unverändert und enthält keinen zusätzlichen Link.
+The pages are server-side HTML without external file and without JavaScript. `Referrer-Policy` is `no-referrer`. The content security policy does not allow an external asset. The admin login remains unchanged and does not contain an additional link.
 
 ## Token
 
-32 Byte aus `getrandom`, kodiert als Base64-URL ohne Padding. Das sind 256 Bit. Gespeichert wird nur SHA-256-Hex in `_ferrum_password_resets`. Der Rohwert steht im Prozessspeicher und in der E-Mail. Audit, Session-Log und die Outbox speichern ihn nicht.
+32 bytes from `getrandom`, encoded as Base64 URL without padding. That's 256 bits. Only SHA-256-Hex is stored in `_ferrum_password_resets`. The raw value is in the process memory and in the e-mail. Audit, session log and the outbox do not save it.
 
-Der Token ist an `user_id` gebunden, einmal verwendbar und läuft nach `reset_ttl_secs` ab. Ein GET verbraucht ihn nicht, damit ein Mailscanner den Link nicht entwertet. Er legt `_ferrum_password_reset_exchanges` an. Das Austauschgeheimnis ist ebenfalls 32 Byte, nur als Hash gespeichert, und lebt höchstens zehn Minuten, nie länger als der Reset. Das Formular sendet danach das Cookie, nicht den Mail-Token.
+The token is bound to `user_id`, can be used once and expires after `reset_ttl_secs`. A GET does not consume it so that a mail scanner does not devalue the link. He creates `_ferrum_password_reset_exchanges`. The exchange secret is also 32 bytes, stored only as a hash, and lives at most ten minutes, never longer than the reset. The form then sends the cookie, not the mail token.
 
-Höchstens drei unbenutzte, nicht abgelaufene Tokens bleiben je Benutzer. Eine neue Anfrage verbraucht ältere überzählige Tokens in derselben Transaktion. Das Rate-Limit liegt im Prozess, getrennt vom Login: `reset-ip:{adresse}` mit dem Vierfachen von `login_max_attempts`, `reset-mail:{adresse}` mit `login_max_attempts`, Fenster `login_window_secs`. Jede Anfrage zählt, auch eine unbekannte Adresse.
+A maximum of three unused, unexpired tokens remain per user. A new request consumes older excess tokens in the same transaction. The rate limit is in the process, separate from the login: `reset-ip:{adresse}` with four times `login_max_attempts`, `reset-mail:{adresse}` with `login_max_attempts`, window `login_window_secs`. Every request counts, even an unknown address.
 
 ## Abschluss
 
-`complete_reset` prüft Gleichheit, `validate_new_password` und dass das neue Passwort nicht dem aktuellen Argon2id-Hash entspricht. Der neue Hash entsteht vor `begin`. Danach gilt ein bedingtes `UPDATE` auf `used_at IS NULL AND expires_at > now`. Nur `rows_affected = 1` setzt das Passwort, widerruft alle Sitzungen, verbraucht die übrigen Reset-Tokens, löscht die Austauschzeilen und schreibt das Audit. Sonst wird zurückgerollt. Zwei parallele Abschlüsse können höchstens einmal erfolgreich sein. Das Audit nutzt Modell `_ferrum_users`, Aktion `password_reset`, Ergebnis `ok` und die Zusammenfassung `password reset completed`.
+`complete_reset` checks equality, `validate_new_password` and that the new password does not correspond to the current Argon2id hash. The new hash is created before `begin`. After that, a conditional `UPDATE` applies to `used_at IS NULL AND expires_at > now`. Only `rows_affected = 1` sets the password, revokes all sessions, consumes the remaining reset tokens, deletes the exchange lines and writes the audit. Otherwise it will roll back. Two parallel trades may be successful at most once. The audit uses model `_ferrum_users`, action `password_reset`, result `ok` and the summary `password reset completed`.
 
-Die Reset-URL entsteht aus `public_origin`, nie aus dem Host-Header.
+The reset URL is created from `public_origin`, never from the host header.
 
 ```rust
 use ferrioxid::auth::{complete_reset, exchange_token, request_reset};
@@ -45,4 +45,4 @@ let opened = exchange_token(&auth, token).await?;
 complete_reset(&auth, Some(&mail), &opened.secret, "replacement-horse-1", "replacement-horse-1", "de").await?;
 ```
 
-Die Anwendung registriert denselben Ablauf über `with_mail` und `with_auth`. Ein separates Mount ist nicht nötig.
+The application registers the same process through `with_mail` and `with_auth`. A separate mount is not necessary.

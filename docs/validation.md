@@ -1,38 +1,38 @@
-# Validierung – Regeln, Typen und Fehler
+# Validation – Rules, Types and Errors
 
-[Zur Übersicht](index.md) · **IST:** Regel-Generierung in `crates/ferrioxid-macros/src/lib.rs`; Fehler in `crates/ferrioxid-core/src/lib.rs`.
+[For overview](index.md) · **IST:** Rule generation in `crates/ferrioxid-macros/src/lib.rs`; error in `crates/ferrioxid-core/src/lib.rs`.]
 
-## Aktuelle Regeln (IST)
+## Current Rules (IST)
 
-| Attribut | Typ | Prüfung |
+| Attribut | Typ |Test|
 |---|---|---|
-| `required` | `String` | `trim().is_empty()` wird abgelehnt |
+| `required` | `String` |`trim().is_empty()` is rejected|
 | `min_length` | `String` | Mindestzahl von `trim().chars().count()` |
-| `max_length` | `String` | Höchstzahl von `trim().chars().count()` |
-| `min` | `i64` | Feldwert muss ≥ Integer-Literal sein |
-| `default = true/false` | `bool` | Fehlendes Feld und JSON-`null` im Create-DTO werden zum Default, zusätzlich SQL `DEFAULT` |
-| `readonly` | jedes unterstützte Feld | Create setzt den Wert; PATCH kann ihn nicht senden |
-| `unique` | jedes unterstützte Feld außer dem Primärschlüssel | Datenbank-Unique-Index; Duplikat wird 422 |
-| `unique_together` | mindestens zwei Felder am Modell | zusammengesetzter Unique Index |
-| `index`, `index_together` | Feld oder Feldgruppe | sekundärer Index, keine Wertprüfung |
-| `foreign_key`, `on_delete` | eine Spalte | Datenbank-Foreign-Key; ungültige Referenz und `restrict` werden 422 |
-| `Option<T>` | `String`, `i64`, `bool`, `Uuid` | Create: fehlend oder `null` speichert SQL `NULL`. PATCH: siehe `PatchField` |
+| `max_length` | `String` |Maximum number of `trim().chars().count()`|
+| `min` | `i64` |Cell value must be ≥ integer literal|
+| `default = true/false` | `bool` |Missing field and JSON-`null` in the Create-DTO become the default, plus SQL `DEFAULT`|
+| `readonly` |Each supported field|Create sets the value; PATCH cannot send it|
+| `unique` |Each supported field except the primary key|database unique index; Duplicate becomes 422|
+| `unique_together` |at least two fields on the model|Composite Unique Index|
+| `index`, `index_together` |Field or field group|Secondary index, not value check|
+| `foreign_key`, `on_delete` |one column|Database foreign key; invalid reference and `restrict` become 422|
+| `Option<T>` | `String`, `i64`, `bool`, `Uuid` |Create: missing or `null` stores SQL `NULL`. PATCH: see `PatchField`|
 
-Keine allgemeine Validator-Registry, keine Regex- und keine E-Mail-Prüfung. Rust prüft Länge, Pflicht und `min` in `create` und `update`. Unique und Foreign Key prüft die Datenbank. Die Repository-Schicht übersetzt die sqlx-Fehlerart in `Validation`. Mehrere `NULL` bleiben in einem Unique Index erlaubt. Details stehen in [constraints.md](constraints.md).
+No general validator registry, no regex and no email check. Rust checks length, duty and `min` in `create` and `update`. Unique and Foreign Key checks the database. The repository layer translates the sqlx error type into `Validation`. Multiple `NULL` remain allowed in a unique index. Details are available in [constraints.md](constraints.md)].
 
 ### PATCH-Null-Semantik
 
-`ferrioxid::db::PatchField<T>` steht auf jedem änderbaren Update-Feld, mit `#[serde(default)]`.
+`ferrioxid::db::PatchField<T>` stands on any changeable update field, with `#[serde(default)]`.
 
 | JSON | Zustand | `NOT NULL`-Spalte | nullable Spalte (`Option<T>`) |
 |---|---|---|---|
-| Schlüssel fehlt | `Missing` | bisheriger Wert bleibt | bisheriger Wert bleibt |
+|Key missing| `Missing` |Previous value remains|Previous value remains|
 | `null` | `Null` | HTTP 422, Detail `{feld} cannot be null` | SQL `NULL` |
-| Wert | `Value` | Validierung, dann Originalwert speichern | Validierung, dann Originalwert speichern |
+| Wert | `Value` |Validate, then store original value|Validate, then store original value|
 
-`{}` ist der Fall, in dem jedes Feld `Missing` ist. Die Antwort ist HTTP 200 mit dem unveränderten Datensatz, sofern die UUID existiert. Strings werden nicht getrimmt gespeichert. `required` lehnt im `Value`-Arm leere und reine Whitespace-Texte ab.
+`{}` is the case where each field is `Missing`. The answer is HTTP 200 with the unchanged record, if the UUID exists. Strings are not stored trimmed. `required` rejects empty and pure whitespace texts in the `Value` arm.
 
-## Beispiel-Testfälle (IST)
+## Example test cases (IST)
 
 ```json
 {"name":"   ","price_cents":10}
@@ -40,18 +40,18 @@ Keine allgemeine Validator-Registry, keine Regex- und keine E-Mail-Prüfung. Rus
 {"name":"Laptop","price_cents":-1}
 ```
 
-Für das aktuelle `Product` sind die drei Create-Körper 422, weil Blank, Name kürzer als 3 beziehungsweise negativer Preis. Im Create darf `active` fehlen; `active: null` wird dort ebenfalls zu `true`. Im PATCH ist `{"active": null}` dagegen 422, weil die Spalte `NOT NULL` ist. Ein String mit führenden oder folgenden Leerzeichen wird geprüft, aber nicht getrimmt gespeichert.
+For the current `Product`, the three Create bodies are 422, because Blank, name shorter than 3 or negative price. `active` may be missing in the Create; `active: null` also becomes `true`. In PATCH, however, `{"active": null}` is 422 because the column is `NOT NULL`. A string with leading or following spaces is checked but not stored trimmed.
 
-## SOLL: Gemeinsame Validator-Schnittstelle
+## Common Validator Interface
 
 1. Deklarative Feldregeln vom Makro in neutralen Metadaten ablegen.
-2. Compile-Time-Typprüfungen (z. B. `min` nur auf Zahlen).
-3. Laufzeitprüfungen für create/update mit **klarer PATCH-Semantik**: nicht vorhanden vs. explizit `null` vs. Wert.
-4. Einheitliche strukturierte Fehler mit Feldpfaden und Maschinen-Codes.
-5. Datenbank-Unique-Constraints als endgültige Autorität: Prechecks sind kein Schutz gegen Race Conditions.
-6. Cross-Field-Validatoren erst nach Festlegung der Reihenfolge und Transaktionsstrategie.
-7. Serde-Parsingfehler sauber von Domain-Validierungsfehlern unterscheiden.
+2. Compile-time type checks (e.g. `min` on numbers only).
+3. Runtime checks for create/update with **clear PATCH semantics**: not available vs. explicit `null` vs. Value.
+4. Uniform structured errors with field paths and machine codes.
+5. Database Unique Constraints as Final Authority: Prechecks are no protection against Race Conditions.
+6. Cross-field validators only after determining the order and transaction strategy.
+7. Serde parsing errors are cleanly distinguished from domain validation errors.
 
 ## Testmatrix
 
-`required` ohne `min_length`; Unicode, Leerzeichen, leere Strings; bool-Default DDL/DTO; Typkombinationen Compile-Fail; SQL-Constraints. Zu `422` siehe [api.md](api.md).
+`required` without `min_length`; Unicode, spaces, empty strings; bool-default DDL/DTO; Compile-fail type combinations; SQL constraints. For `422` see [api.md](api.md)].

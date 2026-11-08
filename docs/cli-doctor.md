@@ -1,51 +1,51 @@
-# Diagnose und Projektprüfung
+# Diagnosis and project review
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-cli/src/diagnose.rs`.
+[For overview](index.md) · **IST file:** `crates/ferrioxid-cli/src/diagnose.rs`.]
 
 ## Aufgabe
 
-`ferrioxid doctor` prüft die Werkzeugkette und das Projekt. `ferrioxid check` prüft Konfiguration, Migrationen und die Übersetzung, ohne Daten zu ändern.
+`ferrioxid doctor` checks the tool chain and the project. `ferrioxid check` checks configuration, migrations and translation without changing data.
 
-## Zuständige Dateien
+## Responsible files
 
 - `crates/ferrioxid-cli/src/diagnose.rs`
 - `crates/ferrioxid-migrations/src/project.rs`
 
-## Öffentliche Schnittstelle
+## Public interface
 
 ```powershell
 ferrioxid doctor
 ferrioxid check
 ```
 
-Statuszeilen sind `[OK]`, `[WARN]` und `[ERROR]`. Ein Fehler ergibt Exitcode 1. `check --strict` ergibt Exitcode 2, wenn nur Warnungen bleiben. Ohne `--strict` bleiben Warnungen bei Exitcode 0.
+Status lines are `[OK]`, `[WARN]` and `[ERROR]`. An error gives exit code 1. `check --strict` gives exit code 2 if only warnings remain. Without `--strict`, warnings remain with Exitcode 0.
 
 ## Konfiguration
 
-Gelesen wird `ferrum.toml`. `DATABASE_URL` darf den Datenbankeintrag ersetzen. `check` lehnt eine leere `DATABASE_URL` ab. Ist `FERRUM_CSRF_SECRET` gesetzt, muss es 64 Hex-Zeichen haben. Ein fehlender Wert ist hier kein Fehler, weil die Laufzeit einen Entwicklungsschlüssel erzeugen kann.
+It reads `ferrum.toml`. `DATABASE_URL` may replace the database entry. `check` rejects an empty `DATABASE_URL`. If `FERRUM_CSRF_SECRET` is set, it must have 64 hex characters. A missing value is not an error here, because the runtime can generate a development key.
 
 ## Datenfluss
 
-`doctor` ruft `rustc` und `cargo` mit `--version` auf. Danach sucht es `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` und das Migrationsverzeichnis. Eine vorhandene Datenbank wird nur gelesen. Eine noch nicht vorhandene SQLite-Datei ist eine Warnung und wird nicht angelegt. PostgreSQL wird lesend verbunden, wenn die URL darauf zeigt. Ein Fehlschlag ist ein Fehler. Bei einem Fullstack-Projekt meldet `doctor`, dass der Admin im Rust-Binary liegt. Node.js wird nicht verlangt. Storage-Routen werden nicht aus `main.rs` geschlossen.
+`doctor` calls `rustc` and `cargo` with `--version`. After that it searches `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` and the migration directory. An existing database is only read. A non-existent SQLite file is a warning and is not created. PostgreSQL is readably connected when the URL points to it. A failure is a mistake. For a fullstack project, `doctor` reports that the admin is in the rust binary. Node.js is not required. Storage routes are not closed from `main.rs`.
 
-`check` prüft die Umgebung, beide Migrationshistorien und führt `cargo check` aus. Liegt die Datenbankdatei vor und ist `schema_command` gesetzt, vergleicht es das Modell. `FERRUM_CHECK_SKIP_SCHEMA=1` und `FERRUM_CHECK_SKIP_CARGO=1` überspringen diese Schritte in Tests. Es ruft `migrate up` nicht auf und löscht nichts.
+`check` checks the environment, both migration histories and executes `cargo check`. If the database file is available and `schema_command` is set, it compares the model. `FERRUM_CHECK_SKIP_SCHEMA=1` and `FERRUM_CHECK_SKIP_CARGO=1` skip these steps in tests. It does not call `migrate up` and does not delete anything.
 
-## Fehlerfälle
+## Error cases
 
 | Fall | Status |
 |---|---|
-| `rustc` oder `cargo` fehlt | Fehler |
-| `ferrum.toml` oder `src/lib.rs` fehlt | Fehler |
+|`rustc` or `cargo` is missing| Fehler |
+|`ferrum.toml` or `src/lib.rs` is missing| Fehler |
 | `server.host` ist `0.0.0.0` | Fehler |
-| SQLite-Datei fehlt noch | Warnung |
-| Docker fehlt | kein Fehler; Docker ist optional und wird nicht geprüft |
-| Prüfsummenkonflikt | Fehler in `check` |
+|SQLite file is missing| Warnung |
+| Docker fehlt |no error; Docker is optional and not tested|
+|Checksum conflict| Fehler in `check` |
 
-`doctor` im Ferrioxid-Workspace selbst meldet fehlende `src/main.rs` und `src/lib.rs`, weil das Workspace-Root keine Anwendung ist. Der Befehl gilt für generierte Projekte und für `examples/myshop` nur, wenn dort eine eigene `ferrum.toml` liegt. Die Workspace-Datei bleibt gültig für `migrate`.
+`doctor` in the ferrioxide workspace itself reports missing `src/main.rs` and `src/lib.rs` because the workspace root is not an application. The command applies to generated projects and to `examples/myshop` only if there is a separate `ferrum.toml` there. The workspace file remains valid for `migrate`.
 
 ## Sicherheitsregeln
 
-Verbindungszeichenketten werden nicht ausgegeben. `doctor` und `check` legen keine SQLite-Datei und keine Historientabelle an. `check` schreibt keine Migration.
+Connection character strings are not output. `doctor` and `check` do not create an SQLite file or a history table. `check` does not write a migration.
 
 ## Beispiele
 
@@ -56,12 +56,12 @@ ferrioxid check
 ferrioxid check --strict
 ```
 
-Dieselbe Aufrufform gilt unter Linux in der jeweiligen Shell.
+The same call form applies under Linux in the respective shell.
 
 ## Tests
 
-`generator.rs` erwartet Erfolg in einem frischen API-Projekt und einen Fehler, nachdem `src/lib.rs` entfernt wurde. Dieselbe Datei vergleicht die Migrationsbytes vor und nach `ferrioxid check`.
+`generator.rs` expects success in a fresh API project and an error after `src/lib.rs` is removed. The same file compares the migration bytes before and after `ferrioxid check`.
 
-## Einschränkungen
+## Limitations
 
-Eine fehlende SQLite-Datei wird nicht angelegt. Existiert sie, wird sie mit `mode=ro` gelesen. `doctor` startet `schema_command` nicht. `check` und `migrate status` vergleichen das Modell, wenn die Datei vorhanden ist und ein Schema geladen werden kann. Der gemeinsame Bericht steht in [migration-diagnostics.md](migration-diagnostics.md).
+A missing SQLite file is not created. If it exists, it is read with `mode=ro`. `doctor` does not start `schema_command`. `check` and `migrate status` compare the model if the file exists and a schema can be loaded. The joint report is published in [migration-diagnostics.md](migration-diagnostics.md)].
