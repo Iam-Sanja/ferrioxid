@@ -668,7 +668,7 @@ mod tests {
             .validate()
             .unwrap_err()
             .0
-            .contains("Doppelter Spaltenname"));
+            .contains("Duplicate column name"));
 
         let mut version = sample();
         version.format_version = 99;
@@ -676,7 +676,7 @@ mod tests {
             .validate()
             .unwrap_err()
             .0
-            .contains("Unbekannte Snapshot-Version"));
+            .contains("Unknown snapshot version"));
 
         let mut ident = sample();
         ident.tables[0].name = "bad-name".to_owned();
