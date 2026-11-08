@@ -739,17 +739,32 @@ async fn admin_assets_reject_traversal_and_keep_the_api() {
     let _ = std::fs::remove_dir_all(&dir);
 }
 
-#[tokio::test]
-async fn seed_file_database_when_requested() {
-    let Ok(url) = std::env::var("FERRUM_E2E_DATABASE") else {
-        return;
-    };
-    let db = ferrioxid::db::connect(&url).await.unwrap();
-    ferrioxid::auth::apply_migrations(&db).await.unwrap();
-    let auth = AuthService::new(db, AuthConfig::development());
-    if auth.list_users().await.unwrap().is_empty() {
-        auth.create_user("staff@example.com", "correct-horse-battery", true, true)
-            .await
-            .unwrap();
+#[test]
+fn tests_ignore_external_seed_database() {
+    let database =
+        std::env::temp_dir().join(format!("ferrioxid-no-seed-{}.sqlite", Uuid::new_v4()));
+    let url = format!(
+        "sqlite://{}?mode=rwc",
+        database.to_string_lossy().replace('\\', "/")
+    );
+    let output = std::process::Command::new(std::env::current_exe().unwrap())
+        .args(["--skip", "tests_ignore_external_seed_database"])
+        .env("FERRUM_E2E_DATABASE", &url)
+        .env("FERRIOXID_E2E_DATABASE", &url)
+        .output()
+        .unwrap();
+    let touched_database = database.exists();
+    if touched_database {
+        std::fs::remove_file(&database).unwrap();
     }
+    assert!(
+        output.status.success(),
+        "child tests failed: {}\n{}",
+        String::from_utf8_lossy(&output.stdout),
+        String::from_utf8_lossy(&output.stderr)
+    );
+    assert!(
+        !touched_database,
+        "running tests must not seed an external database from the environment"
+    );
 }
