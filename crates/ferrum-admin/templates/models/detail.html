@@ -10,6 +10,7 @@
 <div class="actions section">
 <a class="button ghost" href="{{ list_path }}">{{ i18n.back }}</a>
 {% if can_update %}<a class="button" href="{{ list_path }}/{{ id }}/edit">{{ i18n.edit }}</a>{% endif %}
+{% if history_href %}<a class="button ghost" href="{{ history_href }}">{{ i18n.history }}</a>{% endif %}
 {% if can_delete %}<a class="button danger" href="{{ list_path }}/{{ id }}/delete">{{ i18n.delete }}</a>{% endif %}
 </div>
 {% for inline in inlines %}

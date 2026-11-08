@@ -361,7 +361,7 @@ async fn dashboard(
         Ok(user) => user,
         Err(response) => return response,
     };
-    let Some(auth) = state.auth.as_ref() else {
+    let Some(_auth) = state.auth.as_ref() else {
         return error_page(
             &state,
             &headers,
@@ -374,16 +374,10 @@ async fn dashboard(
         )
         .await;
     };
-    let mut models = Vec::new();
-    for model in registry.models() {
-        if permit(auth, &user, model.meta(), "read").await.is_ok() && !list_blocked(model.as_ref())
-        {
-            models.push(json!({ "key": model.meta().key, "label": model.meta().label }));
-        }
-    }
-    let csrf = session_csrf(auth, &headers).await;
-    let nav = crate::pages::visible_nav(&state, &user, &registry, &locale, "/admin").await;
-    page(
+    let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
+    page_as(
+        &state,
+        &user,
         &registry,
         "dashboard.html",
         &locale,
@@ -401,8 +395,9 @@ async fn dashboard(
             query.get("notice").map(String::as_str).unwrap_or(""),
         ),
         "",
-        json!({ "models": models, "user_email": user.email, "nav_custom": nav }),
+        json!({ "user_email": user.email }),
     )
+    .await
 }
 
 async fn model_index(
@@ -410,9 +405,47 @@ async fn model_index(
     headers: HeaderMap,
     Extension(registry): Extension<AdminRegistry>,
 ) -> Response {
-    require_get(&state, &headers, &registry, "/admin/models")
-        .await
-        .map_or_else(|response| response, |_| redirect("/admin"))
+    let locale = locale_of(
+        &headers,
+        &registry.branding().default_locale,
+        &registry.branding().fallback_locale,
+    );
+    let user = match require_get(&state, &headers, &registry, "/admin/models").await {
+        Ok(user) => user,
+        Err(response) => return response,
+    };
+    let Some(auth) = state.auth.as_ref() else {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::FORBIDDEN,
+            "forbidden",
+            true,
+            &user.email,
+        )
+        .await;
+    };
+    let csrf = session_csrf(auth, &headers).await;
+    page_as(
+        &state,
+        &user,
+        &registry,
+        "dashboard.html",
+        &locale,
+        theme_of(&headers),
+        catalog(&locale)["models"].as_str().unwrap_or("Models"),
+        true,
+        user.is_superuser,
+        &user.email,
+        &csrf,
+        "/admin/models",
+        "",
+        "",
+        json!({ "user_email": user.email }),
+    )
+    .await
 }
 
 async fn model_list(
@@ -473,18 +506,18 @@ async fn model_list(
     let (sort, descending) = match resolved_sort(model.meta(), &params) {
         Ok(value) => value,
         Err(()) => {
-        return error_page(
-            &state,
-            &headers,
-            &registry,
-            &locale,
-            StatusCode::UNPROCESSABLE_ENTITY,
-            "forbidden",
-            true,
-            &user.email,
-        )
-        .await;
-    }
+            return error_page(
+                &state,
+                &headers,
+                &registry,
+                &locale,
+                StatusCode::UNPROCESSABLE_ENTITY,
+                "forbidden",
+                true,
+                &user.email,
+            )
+            .await;
+        }
     };
     let filters = match filters_from(
         raw.as_deref().unwrap_or(""),
@@ -645,9 +678,9 @@ async fn model_list(
                 })
                 .collect();
             json!({
-        "id": row.get("id").and_then(Value::as_str).unwrap_or(""),
-                "cells": cells
-            })
+            "id": row.get("id").and_then(Value::as_str).unwrap_or(""),
+                    "cells": cells
+                })
         })
         .collect();
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
@@ -706,8 +739,9 @@ async fn model_list(
             params.get("notice").map(String::as_str).unwrap_or(""),
         )
     };
-    let nav = crate::pages::visible_nav(&state, &user, &registry, &locale, &list_path).await;
-    page(
+    page_as(
+        &state,
+        &user,
         &registry,
         "list.html",
         &locale,
@@ -721,6 +755,7 @@ async fn model_list(
         &notice,
         "",
         json!({
+            "model_key": model.meta().key,
             "model_label": model.meta().label,
             "actions": actions,
             "list_path": list_path,
@@ -739,10 +774,10 @@ async fn model_list(
             "shown": rows.len(),
             "page": page_number,
             "previous": (page_number > 1).then(|| format!("{list_path}?{preserved}&page={}", page_number - 1)),
-            "next_page": has_more.then(|| format!("{list_path}?{preserved}&page={}", page_number + 1)),
-            "nav_custom": nav
+            "next_page": has_more.then(|| format!("{list_path}?{preserved}&page={}", page_number + 1))
         }),
     )
+    .await
 }
 
 async fn model_new(
@@ -874,7 +909,9 @@ async fn model_detail(
     );
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
     let list_path = format!("/admin/models/{model_key}");
-    page(
+    page_as(
+        &state,
+        &user,
         &registry,
         "detail.html",
         &locale,
@@ -894,12 +931,14 @@ async fn model_detail(
             "model_label": model.meta().label,
             "list_path": list_path,
             "id": id.to_string(),
+            "history_href": history_href(model.meta().key, &id.to_string()),
             "fields": fields,
             "can_update": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "update").await.is_ok(),
             "can_delete": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "delete").await.is_ok(),
             "inlines": inline_sections(&state, &registry, &user, model.as_ref(), id, &query).await
         }),
     )
+    .await
 }
 
 async fn model_edit(
@@ -1053,7 +1092,9 @@ async fn model_delete(
         .unwrap_or("")
         .to_owned();
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
-    page(
+    page_as(
+        &state,
+        &user,
         &registry,
         "delete.html",
         &locale,
@@ -1075,6 +1116,7 @@ async fn model_delete(
             "list_path": format!("/admin/models/{model_key}")
         }),
     )
+    .await
 }
 
 async fn model_remove(
@@ -1237,7 +1279,9 @@ async fn users(
         .collect();
     let shown = users.len();
     let csrf = session_csrf(auth, &headers).await;
-    page(
+    page_as(
+        &state,
+        &user,
         &registry,
         "users.html",
         &locale,
@@ -1273,6 +1317,7 @@ async fn users(
             "next_page": (start + 25 < total).then(|| format!("/admin/directory/users?q={}&dir={}&page={}", url_encode(&query), if descending { "desc" } else { "asc" }, page_number + 1))
         }),
     )
+    .await
 }
 
 async fn user_active(
@@ -1319,10 +1364,17 @@ async fn roles(
         .unwrap_or_default();
     let roles: Vec<Value> = listed
         .into_iter()
-        .map(|(_, name)| json!({ "name": name }))
+        .map(|(_, name)| {
+            json!({
+                "name": name,
+                "history": history_href("_ferrum_users", &name)
+            })
+        })
         .collect();
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
-    page(
+    page_as(
+        &state,
+        &user,
         &registry,
         "roles.html",
         &locale,
@@ -1337,6 +1389,7 @@ async fn roles(
         "",
         json!({ "roles": roles }),
     )
+    .await
 }
 
 async fn role_create(
@@ -1421,7 +1474,9 @@ async fn permissions_page(
         roles.push(json!({ "name": name, "permissions": permissions }));
     }
     let csrf = session_csrf(auth, &headers).await;
-    page(
+    page_as(
+        &state,
+        &user,
         &registry,
         "permissions.html",
         &locale,
@@ -1438,6 +1493,7 @@ async fn permissions_page(
         "",
         json!({ "roles": roles }),
     )
+    .await
 }
 
 async fn permission_change(
@@ -1864,7 +1920,9 @@ async fn pick_page(
         .collect();
     let join = if preserved.is_empty() { "" } else { "&" };
     let csrf = session_csrf(state.auth.as_ref().unwrap(), headers).await;
-    page(
+    page_as(
+        state,
+        &user,
         registry,
         "pick.html",
         &locale,
@@ -1891,6 +1949,7 @@ async fn pick_page(
             "next_page": has_more.then(|| format!("{picker}?{preserved}{join}page={}", page_number + 1))
         }),
     )
+    .await
 }
 
 struct FormFeedback<'a> {
@@ -1993,7 +2052,6 @@ async fn form_page(
         None => format!("/admin/models/{model_key}/new"),
     });
     let list_path = back.clone();
-    let nav = crate::pages::visible_nav(state, &user, registry, &locale, &back).await;
     let cancel = values
         .get("_cancel")
         .and_then(Value::as_str)
@@ -2002,7 +2060,9 @@ async fn form_page(
             id.map(|value| format!("/admin/models/{model_key}/{value}"))
                 .unwrap_or_else(|| back.clone())
         });
-    page(
+    page_as(
+        state,
+        &user,
         registry,
         "form.html",
         &locale,
@@ -2016,6 +2076,9 @@ async fn form_page(
         feedback.notice,
         feedback.alert,
         json!({
+            "model_key": model_key,
+            "existing": id.is_some(),
+            "history_href": id.map(|value| history_href(model_key, &value.to_string())).unwrap_or_default(),
             "model_label": model.meta().label,
             "list_path": list_path,
             "action": action,
@@ -2023,10 +2086,10 @@ async fn form_page(
             "draft": draft_id,
             "sections": sections,
             "inline_groups": inline_groups,
-            "basis": basis,
-            "nav_custom": nav
+            "basis": basis
         }),
     )
+    .await
 }
 
 async fn save_form(
@@ -2603,7 +2666,7 @@ async fn relation_options(
     let mut options: Vec<Value> = rows
         .into_iter()
         .filter_map(|row| {
-        let id = row.get("id")?.as_str()?;
+            let id = row.get("id")?.as_str()?;
             Some(json!({
                 "id": id,
                 "label": row.get(label)?.as_str().unwrap_or(""),
@@ -2816,13 +2879,13 @@ fn visible_fields(
                 &mut lead,
             );
             json!({
-        "label": field.label,
-        "readonly": field.readonly || field.name == "id",
-                "value": cell["text"].as_str().unwrap_or(""),
-                "relation": cell["relation"].as_bool().unwrap_or(false),
-                "ref": cell["ref"].as_str().unwrap_or(""),
-                "short": cell["short"].as_str().unwrap_or("")
-            })
+            "label": field.label,
+            "readonly": field.readonly || field.name == "id",
+                    "value": cell["text"].as_str().unwrap_or(""),
+                    "relation": cell["relation"].as_bool().unwrap_or(false),
+                    "ref": cell["ref"].as_str().unwrap_or(""),
+                    "short": cell["short"].as_str().unwrap_or("")
+                })
         })
         .collect()
 }
@@ -3454,7 +3517,9 @@ async fn user_detail(
         .collect::<Vec<_>>();
     let permissions = auth.list_user_permissions(id).await.unwrap_or_default();
     let csrf = session_csrf(auth, &headers).await;
-    page(
+    page_as(
+        &state,
+        &actor,
         &registry,
         "user_detail.html",
         &locale,
@@ -3481,6 +3546,7 @@ async fn user_detail(
             "can_edit": !target.is_superuser
         }),
     )
+    .await
 }
 
 async fn user_edit(
@@ -3943,7 +4009,9 @@ async fn user_form(
         Some(id) => format!("/admin/directory/users/{id}/edit"),
         None => "/admin/directory/users/new".to_owned(),
     };
-    let mut response = page(
+    let mut response = page_as(
+        state,
+        &actor,
         registry,
         "user_form.html",
         &locale,
@@ -3972,7 +4040,8 @@ async fn user_form(
             "role_checks": role_checks,
             "assigned": assigned
         }),
-    );
+    )
+    .await;
     if !alert.is_empty() {
         *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
     }
@@ -4066,7 +4135,7 @@ async fn mutate_user(
             id,
             form_flag(&form, "active").unwrap_or(false),
         )
-            .await
+        .await
     } else {
         crate::directory::set_staff(
             auth,
@@ -4074,7 +4143,7 @@ async fn mutate_user(
             id,
             form_flag(&form, "staff").unwrap_or(false),
         )
-            .await
+        .await
     };
     if result.is_err() {
         return error_page(
@@ -4785,12 +4854,25 @@ async fn audit_page(
         .unwrap_or(1)
         .max(1);
     let actor = (!user.is_superuser).then_some(user.id);
-    let listed = audit::page(
-        &state.db,
-        actor,
-        u64::from(page_number - 1) * audit::PAGE_SIZE,
-    )
-    .await;
+    let model_filter = params.get("model").and_then(|value| audit_key(value));
+    let record_filter = params.get("record").and_then(|value| audit_key(value));
+    let listed = if model_filter.is_none() && record_filter.is_none() {
+        audit::page(
+            &state.db,
+            actor,
+            u64::from(page_number - 1) * audit::PAGE_SIZE,
+        )
+        .await
+    } else {
+        audit::matching(
+            &state.db,
+            actor,
+            model_filter.as_deref(),
+            record_filter.as_deref(),
+            u64::from(page_number - 1) * audit::PAGE_SIZE,
+        )
+        .await
+    };
     let (events, has_more) = match listed {
         Ok(value) => value,
         Err(_) => {
@@ -4815,12 +4897,18 @@ async fn audit_page(
             } else {
                 event.actor_id.to_string()
             };
+            let formatted = audit::format_unix_utc(event.created_at);
+            let record_href = (registry.find(&event.model_key).is_some()
+                && Uuid::parse_str(&event.record_id).is_ok())
+            .then(|| format!("/admin/models/{}/{}", event.model_key, event.record_id));
             json!({
-                "when": event.created_at.to_string(),
+                "when": formatted.as_ref().map(|(label, _)| label.clone()).unwrap_or_default(),
+                "when_iso": formatted.as_ref().map(|(_, iso)| iso.clone()).unwrap_or_default(),
                 "actor": actor_label,
                 "action": event.action,
                 "record": event.record_id,
                 "record_short": event.record_id.chars().take(8).collect::<String>(),
+                "record_href": record_href,
                 "ok": event.outcome == "ok",
                 "operation": event
                     .operation_id
@@ -4831,7 +4919,9 @@ async fn audit_page(
         })
         .collect();
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
-    page(
+    page_as(
+        &state,
+        &user,
         &registry,
         "audit.html",
         &locale,
@@ -4849,10 +4939,18 @@ async fn audit_page(
         "",
         json!({
             "rows": rows,
-            "previous": (page_number > 1).then(|| format!("/admin/audit?page={}", page_number - 1)),
-            "next_page": has_more.then(|| format!("/admin/audit?page={}", page_number + 1))
+            "filtered": model_filter.is_some() || record_filter.is_some(),
+            "filter_label": match (&model_filter, &record_filter) {
+                (Some(model), Some(record)) => format!("{model} · {record}"),
+                (Some(model), None) => model.clone(),
+                (None, Some(record)) => record.clone(),
+                (None, None) => String::new(),
+            },
+            "previous": (page_number > 1).then(|| audit_page_href(page_number - 1, model_filter.as_deref(), record_filter.as_deref())),
+            "next_page": has_more.then(|| audit_page_href(page_number + 1, model_filter.as_deref(), record_filter.as_deref()))
         }),
     )
+    .await
 }
 
 fn child_inline<'a>(
@@ -5459,7 +5557,9 @@ async fn show_bulk(
         .map(|ids| ids.len())
         .unwrap_or(0);
     let csrf = session_csrf(state.auth.as_ref().unwrap(), headers).await;
-    page(
+    page_as(
+        state,
+        &user,
         registry,
         "bulk.html",
         &locale,
@@ -5483,6 +5583,7 @@ async fn show_bulk(
             "count": count
         }),
     )
+    .await
 }
 
 async fn apply_bulk(
@@ -5829,6 +5930,46 @@ async fn apply_bulk(
 }
 
 #[allow(clippy::too_many_arguments)]
+pub(crate) async fn page_as(
+    state: &AppState,
+    user: &AuthUser,
+    registry: &AdminRegistry,
+    template: &str,
+    locale: &str,
+    theme: impl AsRef<str>,
+    title: &str,
+    signed_in: bool,
+    superuser: bool,
+    email: &str,
+    csrf: &str,
+    path: &str,
+    notice_text: &str,
+    alert: &str,
+    mut extra: Value,
+) -> Response {
+    let navigation = crate::nav::navigation(state, user, registry, locale, path).await;
+    if let Some(object) = extra.as_object_mut() {
+        object.insert("nav_sections".to_owned(), navigation.sections);
+        object.insert("model_groups".to_owned(), navigation.groups);
+    }
+    page(
+        registry,
+        template,
+        locale,
+        theme,
+        title,
+        signed_in,
+        superuser,
+        email,
+        csrf,
+        path,
+        notice_text,
+        alert,
+        extra,
+    )
+}
+
+#[allow(clippy::too_many_arguments)]
 pub(crate) fn page(
     registry: &AdminRegistry,
     template: &str,
@@ -5880,6 +6021,16 @@ pub(crate) fn page(
             target.insert("nav_custom".to_owned(), Value::Array(Vec::new()));
         }
     }
+    if value.get("nav_sections").is_none() {
+        if let Some(target) = value.as_object_mut() {
+            target.insert("nav_sections".to_owned(), Value::Array(Vec::new()));
+        }
+    }
+    if value.get("model_groups").is_none() {
+        if let Some(target) = value.as_object_mut() {
+            target.insert("model_groups".to_owned(), Value::Array(Vec::new()));
+        }
+    }
     match render(template, value, registry.templates()) {
         Ok(body) => Html(body).into_response(),
         Err(error) => {
@@ -5919,30 +6070,48 @@ pub(crate) async fn error_page(
         String::new()
     };
     let signed_in = signed_in && !csrf.is_empty();
-    let show_nav = signed_in && key != "staff_required";
-    let superuser = match state.auth.as_ref() {
-        Some(auth) => auth
-            .authenticate(headers, &Method::GET)
-            .await
-            .ok()
-            .is_some_and(|user| user.is_superuser),
-        None => false,
+    let actor = match state.auth.as_ref() {
+        Some(auth) if signed_in => auth.authenticate(headers, &Method::GET).await.ok(),
+        _ => None,
     };
-    let mut response = page(
-        registry,
-        "error.html",
-        locale,
-        theme_of(headers),
-        &title,
-        signed_in,
-        superuser,
-        email,
-        &csrf,
-        "/admin",
-        "",
-        "",
-        json!({ "message": message, "nav": show_nav }),
-    );
+    let show_nav = actor.is_some() && key != "staff_required";
+    let superuser = actor.as_ref().is_some_and(|user| user.is_superuser);
+    let mut response = if let Some(user) = actor.as_ref() {
+        page_as(
+            state,
+            user,
+            registry,
+            "error.html",
+            locale,
+            theme_of(headers),
+            &title,
+            true,
+            superuser,
+            email,
+            &csrf,
+            "/admin",
+            "",
+            "",
+            json!({ "message": message, "nav": show_nav }),
+        )
+        .await
+    } else {
+        page(
+            registry,
+            "error.html",
+            locale,
+            theme_of(headers),
+            &title,
+            false,
+            false,
+            email,
+            &csrf,
+            "/admin",
+            "",
+            "",
+            json!({ "message": message, "nav": false }),
+        )
+    };
     *response.status_mut() = status;
     response
 }
@@ -6319,6 +6488,36 @@ fn channel_lin(channel: u8) -> f64 {
     } else {
         ((value + 0.055) / 1.055).powf(2.4)
     }
+}
+
+fn history_href(model: &str, record: &str) -> String {
+    format!(
+        "/admin/audit?model={}&record={}",
+        url_encode(model),
+        url_encode(record)
+    )
+}
+
+fn audit_key(value: &str) -> Option<String> {
+    let ok = !value.is_empty()
+        && value.len() <= 80
+        && value
+            .chars()
+            .all(|char| char.is_ascii_alphanumeric() || matches!(char, '_' | '-' | '.'));
+    ok.then(|| value.to_owned())
+}
+
+fn audit_page_href(page: u32, model: Option<&str>, record: Option<&str>) -> String {
+    let mut href = format!("/admin/audit?page={page}");
+    if let Some(model) = model {
+        href.push_str("&model=");
+        href.push_str(&url_encode(model));
+    }
+    if let Some(record) = record {
+        href.push_str("&record=");
+        href.push_str(&url_encode(record));
+    }
+    href
 }
 
 fn url_encode(value: &str) -> String {

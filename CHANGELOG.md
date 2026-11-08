@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Admin 2.0 (v0.28)
+
+- Die Seitenleiste gruppiert Modelle und eigene Admin-Seiten unter der App, die sie registriert hat. Modelle ohne App stehen unter dem Projektnamen. Übersicht, Benutzer, Rollen und Historie sind keine Modelle.
+- `/admin/models` zeigt die erlaubten Modelle und leitet nicht mehr auf die Übersicht um. Ein Benutzer sieht nur Einträge, die er lesen darf.
+- Audit-Zeitpunkte werden als UTC-Datum mit `<time>` angezeigt. Gespeicherte Unix-Sekunden bleiben unverändert. Ein Eintrag kann über Modell und Datensatz gefiltert werden, wenn die vorhandene Historie diese Zuordnung speichert.
+- Formulare bestehender Datensätze und die Sprachauswahl starten sauber. Das Script sperrt Speichern und Übernehmen, bis sich ein Feld ändert, und warnt beim Verlassen. Ohne Script bleiben die Aktionen benutzbar.
+- Zeilenaktionen sitzen in einem aufklappbaren Menü. Rollen werden auf der Rollenseite angelegt. Physisches Löschen von Benutzern gibt es weiterhin nicht.
+- Die Cargo-Version bleibt `0.1.0`.
+
 ## Unreleased — Anwendungs-Worker (v0.27.1)
 
 - `WorkerHost` startet den vorhandenen Worker mit den Projekt-Einstellungen, den registrierten App-Handlern und auf Wunsch dem Mail-Handler. Der Prozess startet keinen Webserver und wendet keine Migration an.

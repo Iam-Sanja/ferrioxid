@@ -11,6 +11,9 @@ colors:
   card: "#ffffff"
   sidebar-ink: "#ffffff"
   signal-teal: "#0f766e"
+  violet: "#6d28d9"
+  violet-ink: "#5b21b6"
+  night-violet: "#ddd6fe"
   crimson: "#9f1239"
   forest: "#166534"
   night-paper: "#0b1220"
@@ -45,10 +48,10 @@ typography:
     fontSize: "0.92rem"
     lineHeight: 1.5
 rounded:
-  control: "0.6rem"
-  notice: "0.7rem"
-  table: "0.8rem"
-  card: "1rem"
+  control: "0.45rem"
+  notice: "0.55rem"
+  table: "0.6rem"
+  card: "0.75rem"
 spacing:
   tight: "0.25rem"
   control: "0.6rem"
@@ -62,25 +65,25 @@ components:
     textColor: "{colors.sidebar-ink}"
     rounded: "{rounded.control}"
     padding: "0.35rem 0.7rem"
-    height: "2.5rem"
+    height: "2rem"
   button-ghost:
     backgroundColor: "transparent"
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
     padding: "0.35rem 0.7rem"
-    height: "2.5rem"
+    height: "2rem"
   button-danger:
     backgroundColor: "{colors.crimson}"
     textColor: "{colors.sidebar-ink}"
     rounded: "{rounded.control}"
     padding: "0.35rem 0.7rem"
-    height: "2.5rem"
+    height: "2rem"
   input:
     backgroundColor: "{colors.card}"
     textColor: "{colors.ink}"
     rounded: "{rounded.control}"
     padding: "0.35rem 0.7rem"
-    height: "2.5rem"
+    height: "2rem"
   card:
     backgroundColor: "{colors.card}"
     textColor: "{colors.ink}"
@@ -101,7 +104,7 @@ components:
 
 Der Admin ist die Schicht, nicht die Bühne. Hell und Dunkel sind zwei gleichwertige Arbeitsmodi. Wer umschaltet, wechselt die Beleuchtung des gleichen Tisches, nicht das Möbel. Die Fläche bleibt zurückhaltend und bestimmt: Listen, Formulare und eine klare Hauptaktion, ohne Werbegeste und ohne die graue Feldkasten-Haut eines klassischen Django-Admins.
 
-Die Dichte ist die einer Verwaltung, nicht die eines Dashboards mit Kacheln um ihrer selbst willen. Die Marke sitzt an der Tür. Im Hellen ist das die Projektfarbe, mit Schiefertür als eingebautem Standard. Im Dunkeln bleiben Seitenleiste und Primärbutton auf festen Nachtflächen, bis ein Kontrastnachweis die Projektfarbe auch dort trägt. Diese Erweiterung ist beschlossen und nicht gebaut.
+Die Dichte ist die einer Verwaltung. Die Marke sitzt an der Schiefertür. Die Arbeitsaktion ist Violett, im Hellen `#6d28d9` mit weißer Schrift, im Dunkeln `#ddd6fe` mit dunkler Schrift. Die Projektfarbe setzt weiterhin `--brand` und färbt nur die Tür im Hellen, wenn der Kontrast hält. Die Nacht-Tür bleibt fest.
 
 **Key Characteristics:**
 
@@ -113,15 +116,15 @@ Die Dichte ist die einer Verwaltung, nicht die eines Dashboards mit Kacheln um i
 
 ## Colors
 
-Die Palette ist Schiefer und Teal. Schiefer trägt die Tür und die Hauptaktion. Teal trägt Fokus und Links. Gefahr und Erfolg sind Zustände, keine zweite Marke.
+Die Palette ist Schiefer und Violett. Schiefer trägt die Tür. Violett trägt die Hauptaktion, Links und den Fokusring. Gefahr und Erfolg sind Zustände, keine zweite Marke.
 
 ### Primary
 
-- **Schiefertür** (`slate-door`): Standard für Seitenleiste und gefüllten Primärbutton im Hellen. Die Projektfarbe aus der Konfiguration ersetzt genau diese Rolle im Hellen, indem sie `--brand` setzt. Seitenleiste und Aktion folgen dort dieser Variable.
+- **Schiefertür** (`slate-door`): Seitenleiste im Hellen. Die Projektfarbe ersetzt genau diese Rolle im Hellen über `--brand`. Die Nacht-Tür folgt der Projektfarbe nicht.
 
 ### Secondary
 
-- **Signal-Teal** (`signal-teal`): Links, Fokusring der Arbeitsfläche und der einzige chromatische Akzent neben der Tür. Im Dunkeln wird daraus **Nacht-Teal** (`night-teal`), heller, damit der Ring auf Nachtpapier steht.
+- **Violett** (`violet`): Gefüllte Hauptaktion im Hellen, weiße Schrift. **Violett-Tinte** (`violet-ink`) trägt Links und den Fokusring. Im Dunkeln wird die Aktion **Nachtviolett** (`night-violet`) mit dunkler Schrift. Der Fokusring ist dieselbe helle Fläche.
 
 ### Neutral
 
@@ -158,7 +161,7 @@ Die Seite ist ein Raster aus Tür und Tisch: Seitenleiste 16rem, Inhalt nimmt de
 
 Der Tisch hat 1.25rem Abstand oben und seitlich 1.5rem, unten 3rem. Eine Werkzeugleiste sitzt 1.25rem über der Tabelle. Suche und Filter bleiben beisammen, der Neueintrag steht am anderen Ende. Unabhängige Abschnitte beginnen 1.75rem unter dem Vorherigen. Formulare in einer Karte sind höchstens 40rem breit und stapeln Felder mit 0.8rem Abstand.
 
-Unter 800px wird das Raster eine Spalte. Die Seitenleiste wird eine umbrechende Linkliste unter dem Kopf, kein Menü, das ein Script öffnen müsste. Werkzeugleiste und ihre Kontrollen nehmen die volle Breite. Definitionslisten und die Kopfzeile stapeln.
+Unter 800px wird das Raster eine Spalte. Die Seitenleiste bleibt offen und wird eine senkrechte Liste. Sie braucht kein Script. Werkzeugleiste und ihre Kontrollen nehmen die volle Breite. Definitionslisten und die Kopfzeile stapeln.
 
 **The Open Stair Rule.** Was auf dem großen Schirm nebeneinander steht, stapelt unter 800px. Es verschwindet nicht hinter einem Schalter.
 
@@ -175,17 +178,17 @@ Die Schicht ist im Ruhezustand flach. Im Hellen hebt eine Karte sich mit einem e
 
 ## Shapes
 
-Ecken sind durchgehend gerundet, in vier Stufen und ohne scharfe Abschlüsse. Kontrollen, also Feld, Auswahl und Button, nutzen 0.6rem. Ein Hinweis nutzt 0.7rem, die Tabellenfläche 0.8rem, die Karte 1rem. Linien sind 1px und durchgehend, nicht gestrichelt. Kontrollen sind mindestens 2.5rem hoch. Die Checkbox ist die Ausnahme: 1.2rem im Quadrat.
+Ecken sind durchgehend gerundet. Kontrollen nutzen 0.45rem, ein Hinweis 0.55rem, die Tabelle 0.6rem, die Karte 0.75rem. Linien sind 1px. Kontrollen sind 2rem hoch. Die Checkbox bleibt 1.2rem. Unter 800px sind die Türlinks 2.75rem hoch.
 
 ## Components
 
 ### Buttons
 
-- **Shape:** Kontrollrundung (0.6rem), Mindesthöhe 2.5rem, Innenabstand 0.35rem 0.7rem.
-- **Primary:** Im Hellen Schiefertür beziehungsweise die Projektfarbe, Schrift weiß. Im Dunkeln Nachtaktion mit Nachtaktion-Tinte. Es gibt keinen eigenen Hover-Ton.
-- **Hover / Focus:** Fokus ist ein 3px Ring in Signal-Teal, 2px außerhalb der Kante. Die Seitenleiste nutzt dafür Weiß, weil der Teal auf der Tür untergeht.
-- **Ghost:** Transparente Fläche, Text in Tinte. Zweite Aktion, nicht die Hauptaktion.
-- **Danger:** Karmesin mit Gefahren-Tinte (`danger-ink`) im Hellen. Im Dunkeln Nachtgefahr mit Nacht-Gefahren-Tinte (`night-danger-ink`), weil Weiß auf Nachtgefahr unter 4,5:1 liegt.
+- **Shape:** Kontrollrundung (0.45rem), Höhe 2rem, Innenabstand 0.2rem 0.65rem, Schrift 0.84rem.
+- **Primary:** Im Hellen Violett mit weißer Schrift. Im Dunkeln Nachtviolett mit dunkler Schrift.
+- **Hover / Focus:** Fokus ist ein 3px Ring in Violett-Tinte, 2px außerhalb der Kante. Auf der Tür ist der Ring weiß.
+- **Ghost:** Transparente Fläche, Text in Tinte. Zweite Aktion.
+- **Danger:** Karmesin mit Gefahren-Tinte im Hellen. Im Dunkeln Nachtgefahr mit Nacht-Gefahren-Tinte.
 
 ### Cards / Containers
 
@@ -198,12 +201,12 @@ Ecken sind durchgehend gerundet, in vier Stufen und ohne scharfe Abschlüsse. Ko
 ### Inputs / Fields
 
 - **Style:** Wie der Ghost-Button in der Form, aber mit Kartenfläche und Tintenschrift. Label sitzt im Raster darüber.
-- **Focus:** Derselbe 3px Teal-Ring wie bei Buttons.
-- **Error / Disabled:** Der Fehlertext ist Karmesin unter dem Feld. Ein eigener Disabled-Ton ist nicht definiert.
+- **Focus:** Derselbe 3px Violett-Ring wie bei Buttons.
+- **Error / Disabled:** Der Fehlertext ist Karmesin unter dem Feld. Deaktivierte Kontrollen bleiben sichtbar und sinken auf 45 Prozent Deckkraft.
 
 ### Navigation
 
-Die Tür ist eine Spalte mit dem Anwendungsnamen in fetter Schrift. Der Anwendungskopf sitzt darunter, nicht über der Seitenüberschrift. Links sind mindestens 2,75rem hoch. Der aktuelle Eintrag ist unterstrichen und in Schriftstärke 650, ohne eigene Farbfläche. Unter 800px werden die Links eine Zeile, die umbricht. Auf der Sperrseite und bei der Anmeldung fehlt die Tür.
+Die Tür zeigt den Anwendungsnamen, dann Übersicht, die registrierten Apps mit ihren Modellen, für Superuser Benutzer und Rollen, und unter System die Historie. Der aktuelle Eintrag hat Schriftstärke 650 und eine violette Fläche, keine Unterstreichung. Modelle stehen eingerückt unter dem App-Namen. Unter 800px bleibt die Liste senkrecht und offen. Anmeldung und Staff-Sperre haben keine Tür.
 
 ### Hinweis
 
@@ -213,7 +216,7 @@ Erfolg sitzt über dem Inhalt: Waldgrün zu etwa 18 Prozent in die Karte gemisch
 
 ### Do
 
-- **Do** Hell und Dunkel als dieselben Rollen behandeln: Papier, Karte, Tinte, Linie, Tür, Aktion, Teal, Gefahr, Erfolg.
+- **Do** Hell und Dunkel als dieselben Rollen behandeln: Papier, Karte, Tinte, Linie, Tür, Violett, Gefahr, Erfolg.
 - **Do** den Fokusring 3px stark und 2px außerhalb der Kante zeichnen. Auf der Tür ist der Ring weiß.
 - **Do** unter 800px stapeln, statt Aktionen zu verstecken.
 - **Do** Status mit Worten tragen. Farbe allein unterscheidet Staff, Superuser und Aktiv nicht.

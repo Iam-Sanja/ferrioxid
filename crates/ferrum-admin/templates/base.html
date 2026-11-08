@@ -15,18 +15,22 @@
 <p class="brand">{{ app_name }}</p>
 <p class="brand-note">{{ site_header }}</p>
 <nav aria-label="{{ i18n.navigation }}">
-<a href="/admin" {% if nav_dashboard %}aria-current="page"{% endif %}>{{ i18n.dashboard }}</a>
-<a href="/admin/models" {% if nav_models %}aria-current="page"{% endif %}>{{ i18n.models }}</a>
-<a href="/admin/audit" {% if nav_audit %}aria-current="page"{% endif %}>{{ i18n.history }}</a>
-{% for item in nav_custom %}
-<a href="{{ item.href }}" {% if item.current %}aria-current="page"{% endif %}>{{ item.label }}</a>
+{% for section in nav_sections %}
+{% if section.label %}<p class="nav-label">{{ section.label }}</p>{% endif %}
+{% if section.key == "apps" %}
+{% if section.empty %}<p class="nav-empty">{{ i18n.no_models }}</p>{% endif %}
+{% for group in section.groups %}
+<p class="nav-app">{{ group.label }}</p>
+{% for item in group.items %}
+<a class="nav-child" href="{{ item.href | safe }}" {% if item.current %}aria-current="page"{% endif %}>{{ item.label }}</a>
 {% endfor %}
-{% if superuser %}
-<p class="nav-group">{{ i18n.directory }}</p>
-<a href="/admin/directory/users" {% if nav_users %}aria-current="page"{% endif %}>{{ i18n.users }}</a>
-<a href="/admin/directory/roles" {% if nav_roles %}aria-current="page"{% endif %}>{{ i18n.roles }}</a>
-<a href="/admin/directory/permissions" {% if nav_permissions %}aria-current="page"{% endif %}>{{ i18n.permissions }}</a>
+{% endfor %}
+{% else %}
+{% for item in section.items %}
+<a href="{{ item.href | safe }}" {% if item.current %}aria-current="page"{% endif %}>{{ item.label }}</a>
+{% endfor %}
 {% endif %}
+{% endfor %}
 </nav>
 </aside>
 {% endif %}
@@ -40,7 +44,7 @@
 <div>
 {% if user_email %}<p class="who">{{ user_email }}</p>{% endif %}
 {% if nav %}
-<form method="post" action="/admin/preferences">
+<form class="prefs" method="post" action="/admin/preferences" data-track-dirty="prefs">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="next" value="{{ current_path }}">
 <label>{{ i18n.language }}
@@ -56,7 +60,7 @@
 <option value="dark" {% if theme == "dark" %}selected{% endif %}>{{ i18n.dark }}</option>
 </select>
 </label>
-<button type="submit" class="ghost">{{ i18n.apply }}</button>
+<button type="submit" class="ghost js-save">{{ i18n.apply }}</button>
 </form>
 {% endif %}
 </div>

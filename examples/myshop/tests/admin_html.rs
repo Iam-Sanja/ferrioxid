@@ -594,6 +594,11 @@ async fn html_admin_works_without_javascript() {
     assert_eq!(home.status, 200);
     assert!(home.body.contains("Produkte"));
     assert!(home.body.contains("Kategorien"));
+    assert!(home.body.contains("href=\"/admin/models/html_products\""));
+    assert!(!home.body.contains("href=\"/admin/models\""));
+    assert!(home.body.contains("Anwendungen"));
+    assert!(home.body.contains("Historie"));
+    assert!(!home.body.contains("Benutzer und Zugang"));
     assert!(!home.body.contains("Payroll") && !home.body.contains("html_payroll"));
     assert!(!home.body.contains("$argon"));
     let csrf = field_value(&home.body, "csrf_token");
@@ -894,6 +899,7 @@ async fn html_admin_works_without_javascript() {
     .unwrap();
     assert!(new_product.body.contains(&category_id));
     assert!(new_product.body.contains("Obst"));
+    assert!(!new_product.body.contains("data-track-dirty=\"record\""));
     let created = call(
         "POST",
         "/admin/models/html_products/new".into(),
@@ -1028,6 +1034,9 @@ async fn html_admin_works_without_javascript() {
     assert!(edit.body.contains(&format!("value=\"{category_id}\"")));
     assert!(edit.body.contains("Obst"));
     assert!(edit.body.contains("selected"));
+    assert!(edit.body.contains("data-track-dirty=\"record\""));
+    assert!(edit.body.contains("audit?model=html_products"));
+    assert!(edit.body.contains("class=\"js-save\""));
     let saved = call(
         "POST",
         format!("/admin/models/html_products/{product_id}/edit"),
@@ -1267,6 +1276,15 @@ async fn html_admin_works_without_javascript() {
     assert!(users.body.contains("name=\"role\""));
     assert!(!users.body.contains("<input name=\"role\""));
     assert!(!users.body.contains("Nein · Superuser"));
+    assert!(!users.body.contains("Rolle anlegen"));
+    assert!(users.body.contains("Benutzer und Zugang"));
+    assert!(
+        users.body.contains("href=\"/admin/directory/roles\"")
+            || users
+                .body
+                .contains("href=\"&#x2F;admin&#x2F;directory&#x2F;roles\"")
+    );
+    assert!(users.body.contains("aria-current=\"page\""));
     let titles = call(
         "GET",
         "/admin/models/html_titles".into(),
@@ -3200,6 +3218,12 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
     .await
     .unwrap();
     assert_eq!(history.status, 200, "{}", history.body);
+    assert!(history.body.contains("<time datetime=\""));
+    assert!(history.body.contains(" UTC</time>"));
+    assert!(
+        history.body.contains("Zeitpunkte werden in UTC")
+            || history.body.contains("Times are shown in UTC")
+    );
     assert!(history.body.contains("bulk_update"), "{}", history.body);
     assert!(
         history.body.contains("Inline-Apfel") || history.body.contains("create"),
