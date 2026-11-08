@@ -1,3 +1,4 @@
+# Second pass: retain code-heavy lines for manual review.
 name: One-time offline documentation translation
 
 on:
