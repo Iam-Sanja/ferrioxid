@@ -163,6 +163,9 @@ pub async fn request_reset(
             );
         }
         Err(MailError::Timeout) => {
+            // Treat unknown delivery as unsuccessful: never leave a usable reset
+            // token behind when the transport cannot confirm acceptance.
+            let _ = store::consume_password_reset(auth.database(), reset_id, now).await;
             let _ =
                 store::finish_outbox(auth.database(), outbox_id, None, None, Some("mail.timeout"))
                     .await;
