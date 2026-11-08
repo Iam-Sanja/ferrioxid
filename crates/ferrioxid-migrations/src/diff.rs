@@ -786,7 +786,7 @@ mod tests {
         blocked.tables[0].columns[2].logical_type = LogicalType::String;
         blocked.tables[0].columns[2].default = None;
         let unsupported = plan_change(&initial, &blocked).unwrap();
-        assert!(unsupported.refusal.as_ref().unwrap().contains("blockiert"));
+        assert!(unsupported.refusal.as_ref().unwrap().contains("blocked"));
 
         let dropped = plan_change(&initial, &empty).unwrap();
         assert!(matches!(
