@@ -1,4 +1,4 @@
-//! CLI-Lauf gegen eine temporäre SQLite-Datei. Die Entwicklungsdatenbank bleibt unberührt.
+//! CLI run against a temporary SQLite file. The development database remains untouched.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -72,7 +72,7 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
         "--migrations-dir",
         &migrations_arg,
     ]);
-    assert!(String::from_utf8_lossy(&applied.stdout).contains("Angewendet: 0001_initial"));
+    assert!(String::from_utf8_lossy(&applied.stdout).contains("Applied: 0001_initial"));
 
     let status = run(&[
         "migrate",
@@ -101,7 +101,7 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
         "--migrations-dir",
         &migrations_arg,
     ]);
-    assert!(String::from_utf8_lossy(&second.stdout).contains("Keine ausstehenden Migrationen."));
+    assert!(String::from_utf8_lossy(&second.stdout).contains("No pending migrations."));
 
     let unchanged = run(&[
         "migrate",
@@ -112,6 +112,6 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
         "--migrations-dir",
         &migrations_arg,
     ]);
-    assert!(String::from_utf8_lossy(&unchanged.stdout).contains("Keine Schemaänderung"));
+    assert!(String::from_utf8_lossy(&unchanged.stdout).contains("No schema changes"));
     let _ = std::fs::remove_dir_all(&directory);
 }
