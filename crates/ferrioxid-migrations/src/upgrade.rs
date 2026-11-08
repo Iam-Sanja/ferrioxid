@@ -618,7 +618,7 @@ mod tests {
         std::fs::create_dir_all(root.join(".ferrum")).unwrap();
         std::fs::write(root.join(MANIFEST_RELATIVE), "{\"format\":1}\n").unwrap();
         let error = apply_upgrade(&root, &plan).unwrap_err();
-        assert!(error.0.contains("seit dem Plan"));
+        assert!(error.0.contains("since planning"));
         assert_eq!(
             std::fs::read_to_string(root.join(MANIFEST_RELATIVE)).unwrap(),
             "{\"format\":1}\n"
