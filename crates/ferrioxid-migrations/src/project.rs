@@ -111,17 +111,17 @@ impl ProjectConfig {
     }
 
     pub fn is_production(&self) -> bool {
-        std::env::var("FERRUM_ENV")
+        std::env::var("FERRIOXID_ENV")
             .ok()
             .is_some_and(|value| value.eq_ignore_ascii_case("production"))
     }
 
-    /// `FERRUM_DEBUG` overrides `server.debug`. Invalid values remain errors.
+    /// `FERRIOXID_DEBUG` overrides `server.debug`. Invalid values remain errors.
     pub fn resolved_debug(&self) -> Result<bool, MigrationError> {
-        match std::env::var("FERRUM_DEBUG") {
+        match std::env::var("FERRIOXID_DEBUG") {
             Ok(value) if !value.is_empty() => parse_bool(&value).map_err(|_| {
                 MigrationError::new(
-                    "FERRUM_DEBUG accepts true or false. The invalid value is not silently replaced."
+                    "FERRIOXID_DEBUG accepts true or false. The invalid value is not silently replaced."
                         .to_owned(),
                 )
             }),
@@ -220,14 +220,14 @@ pub fn discover_project(start: &Path) -> Result<ProjectConfig, MigrationError> {
         start.parent()
     };
     while let Some(directory) = current {
-        let manifest = directory.join("ferrum.toml");
+        let manifest = directory.join("ferrioxid.toml");
         if manifest.is_file() {
             return parse_manifest(&manifest);
         }
         current = directory.parent();
     }
     Err(MigrationError::new(
-        "No ferrum.toml found. The CLI does not infer models from source code. Create ferrum.toml with migrations_dir and schema_command, or supply --schema-file and --migrations-dir.",
+        "No ferrioxid.toml found. The CLI does not infer models from source code. Create ferrioxid.toml with migrations_dir and schema_command, or supply --schema-file and --migrations-dir.",
     ))
 }
 
@@ -413,7 +413,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         if let Some(name) = section.strip_prefix("custom.") {
             if secret_config_key(key) {
                 return Err(MigrationError::new(
-                    "Secrets must not be stored in ferrum.toml. Use an environment variable."
+                    "Secrets must not be stored in ferrioxid.toml. Use an environment variable."
                         .to_owned(),
                 ));
             }
@@ -496,7 +496,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "storage.directory" => storage_directory = value,
             "mail.password" | "mail.secret" | "mail.smtp_password" => {
                 return Err(MigrationError::new(
-                    "SMTP passwords must not be stored in ferrum.toml. Set FERRUM_SMTP_PASSWORD."
+                    "SMTP passwords must not be stored in ferrioxid.toml. Set FERRIOXID_SMTP_PASSWORD."
                         .to_owned(),
                 ));
             }
@@ -1026,9 +1026,23 @@ mod tests {
             .as_nanos();
         let directory = std::env::temp_dir().join(format!("ferrioxid-settings-{stamp}"));
         fs::create_dir_all(&directory).unwrap();
-        let path = directory.join("ferrum.toml");
+        let path = directory.join("ferrioxid.toml");
         fs::write(&path, body).unwrap();
         path
+    }
+
+    #[test]
+    fn discovery_requires_the_current_configuration_name() {
+        let path = write_manifest("migrations_dir = \"migrations\"\n");
+        let root = path.parent().unwrap();
+        let old = root.join("ferrum.toml");
+        fs::rename(&path, &old).unwrap();
+        assert!(super::discover_project(root).is_err());
+        fs::rename(old, &path).unwrap();
+        let nested = root.join("nested");
+        fs::create_dir(&nested).unwrap();
+        assert_eq!(super::discover_project(&nested).unwrap().root, root);
+        fs::remove_dir_all(root).unwrap();
     }
 
     #[test]
@@ -1169,28 +1183,28 @@ primary_color = "#0f172a"
         let guard = ENV_LOCK
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let previous_env = std::env::var("FERRUM_ENV").ok();
-        let previous_debug = std::env::var("FERRUM_DEBUG").ok();
+        let previous_env = std::env::var("FERRIOXID_ENV").ok();
+        let previous_debug = std::env::var("FERRIOXID_DEBUG").ok();
         unsafe {
-            std::env::set_var("FERRUM_ENV", "production");
-            std::env::set_var("FERRUM_DEBUG", "true");
+            std::env::set_var("FERRIOXID_ENV", "production");
+            std::env::set_var("FERRIOXID_DEBUG", "true");
         }
         let error = config.enforce_runtime().unwrap_err();
         assert!(error.0.contains("production"));
         assert!(!error.0.contains("super-secret-value"));
         unsafe {
-            std::env::set_var("FERRUM_DEBUG", "maybe");
+            std::env::set_var("FERRIOXID_DEBUG", "maybe");
         }
         assert!(config.resolved_debug().is_err());
         unsafe {
-            std::env::remove_var("FERRUM_DEBUG");
-            std::env::remove_var("FERRUM_ENV");
+            std::env::remove_var("FERRIOXID_DEBUG");
+            std::env::remove_var("FERRIOXID_ENV");
         }
         if let Some(value) = previous_env {
-            unsafe { std::env::set_var("FERRUM_ENV", value) };
+            unsafe { std::env::set_var("FERRIOXID_ENV", value) };
         }
         if let Some(value) = previous_debug {
-            unsafe { std::env::set_var("FERRUM_DEBUG", value) };
+            unsafe { std::env::set_var("FERRIOXID_DEBUG", value) };
         }
         drop(guard);
         let _ = fs::remove_dir_all(path.parent().unwrap());

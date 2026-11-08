@@ -382,7 +382,7 @@ async fn sqlite_constraints_indexes_and_foreign_keys() {
     let baseline_path = directory.join("baseline.sqlite3");
     std::fs::copy(directory.join("app.sqlite3"), &baseline_path).unwrap();
     let baseline_db = open_db(&baseline_path).await;
-    execute(&baseline_db, "DROP TABLE \"_ferrum_migrations\"")
+    execute(&baseline_db, "DROP TABLE \"_ferrioxid_migrations\"")
         .await
         .unwrap();
     let baseline = baseline_database(&baseline_db, &migrations, false)
@@ -429,11 +429,19 @@ async fn sqlite_constraints_indexes_and_foreign_keys() {
             columns: vec!["name".to_owned()],
         });
     make_migration(&migrations, "unique_product_name", &unique_name).unwrap();
-    let history_before = count(&db, "SELECT COUNT(*) AS total FROM \"_ferrum_migrations\"").await;
+    let history_before = count(
+        &db,
+        "SELECT COUNT(*) AS total FROM \"_ferrioxid_migrations\"",
+    )
+    .await;
     let failed = apply_directory(&db, &migrations, false).await;
     assert!(failed.is_err(), "{failed:?}");
     assert_eq!(
-        count(&db, "SELECT COUNT(*) AS total FROM \"_ferrum_migrations\"").await,
+        count(
+            &db,
+            "SELECT COUNT(*) AS total FROM \"_ferrioxid_migrations\""
+        )
+        .await,
         history_before
     );
     assert_eq!(

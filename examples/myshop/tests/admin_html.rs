@@ -585,7 +585,7 @@ async fn html_admin_works_without_javascript() {
     .unwrap();
     assert_eq!(signed.status, 303);
     assert_eq!(location(&signed.headers), "/admin");
-    let session = cookie_value(&signed.headers, "ferrum_session");
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
     assert!(!session.is_empty());
 
     let home = call("GET", "/admin".into(), None, cookie_header(&session))
@@ -632,7 +632,7 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert_eq!(plain_in.status, 303);
-    let plain_session = cookie_value(&plain_in.headers, "ferrum_session");
+    let plain_session = cookie_value(&plain_in.headers, "ferrioxid_session");
     let plain_home = call("GET", "/admin".into(), None, cookie_header(&plain_session))
         .await
         .unwrap();
@@ -650,7 +650,7 @@ async fn html_admin_works_without_javascript() {
         "GET",
         "/admin".into(),
         None,
-        format!("Cookie: ferrum_session={plain_session}; ferrioxid_locale=en\r\n"),
+        format!("Cookie: ferrioxid_session={plain_session}; ferrioxid_locale=en\r\n"),
     )
     .await
     .unwrap();
@@ -722,7 +722,7 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert_eq!(power_in.status, 303);
-    let power_session = cookie_value(&power_in.headers, "ferrum_session");
+    let power_session = cookie_value(&power_in.headers, "ferrioxid_session");
     let power_home = call("GET", "/admin".into(), None, cookie_header(&power_session))
         .await
         .unwrap();
@@ -849,7 +849,9 @@ async fn html_admin_works_without_javascript() {
         "GET",
         "/admin".into(),
         None,
-        format!("Cookie: ferrum_session={session}; ferrioxid_locale=en; ferrioxid_theme=dark\r\n"),
+        format!(
+            "Cookie: ferrioxid_session={session}; ferrioxid_locale=en; ferrioxid_theme=dark\r\n"
+        ),
     )
     .await
     .unwrap();
@@ -1203,7 +1205,7 @@ async fn html_admin_works_without_javascript() {
     )
     .await
     .unwrap();
-    let root_session = cookie_value(&root_in.headers, "ferrum_session");
+    let root_session = cookie_value(&root_in.headers, "ferrioxid_session");
     let root_link_form = call(
         "GET",
         "/admin/models/html_links/new".into(),
@@ -1614,7 +1616,7 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert_eq!(clerk_in.status, 303, "{}", clerk_in.body);
-    let clerk_session = cookie_value(&clerk_in.headers, "ferrum_session");
+    let clerk_session = cookie_value(&clerk_in.headers, "ferrioxid_session");
     let clerk_home = call("GET", "/admin".into(), None, cookie_header(&clerk_session))
         .await
         .unwrap();
@@ -1675,7 +1677,7 @@ async fn html_admin_works_without_javascript() {
     .await
     .unwrap();
     assert_eq!(fresh_in.status, 303, "{}", fresh_in.body);
-    let fresh_session = cookie_value(&fresh_in.headers, "ferrum_session");
+    let fresh_session = cookie_value(&fresh_in.headers, "ferrioxid_session");
     let staff_removed = call(
         "POST",
         format!("/admin/directory/users/{clerk_id}/edit"),
@@ -1812,7 +1814,7 @@ async fn html_admin_works_without_javascript() {
     )
     .await
     .unwrap();
-    let gone_session = cookie_value(&gone_in.headers, "ferrum_session");
+    let gone_session = cookie_value(&gone_in.headers, "ferrioxid_session");
     auth.set_user_active("gone@example.com", false)
         .await
         .unwrap();
@@ -2100,7 +2102,7 @@ async fn html_admin_works_without_javascript() {
 
     db.execute(Statement::from_string(
         DatabaseBackend::Sqlite,
-        "UPDATE _ferrum_sessions SET expires_at = 1",
+        "UPDATE _ferrioxid_sessions SET expires_at = 1",
     ))
     .await
     .unwrap();
@@ -2136,7 +2138,7 @@ async fn html_admin_works_without_javascript() {
     )
     .await
     .unwrap();
-    let fresh_session = cookie_value(&fresh.headers, "ferrum_session");
+    let fresh_session = cookie_value(&fresh.headers, "ferrioxid_session");
     let roles = call(
         "GET",
         "/admin/directory/roles".into(),
@@ -2357,7 +2359,7 @@ async fn html_login_csrf_respects_the_bound_port() {
     .await
     .unwrap();
     assert_eq!(nulled.status, 303, "{}", nulled.body);
-    let nulled_session = cookie_value(&nulled.headers, "ferrum_session");
+    let nulled_session = cookie_value(&nulled.headers, "ferrioxid_session");
     let nulled_home = call("GET", "/admin".into(), None, cookie_header(&nulled_session))
         .await
         .unwrap();
@@ -2398,7 +2400,7 @@ async fn html_login_csrf_respects_the_bound_port() {
     .unwrap();
     assert_eq!(signed.status, 303, "{}", signed.body);
     assert_eq!(location(&signed.headers), "/admin");
-    let session = cookie_value(&signed.headers, "ferrum_session");
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
     assert!(!session.is_empty());
 
     let home = call("GET", "/admin".into(), None, cookie_header(&session))
@@ -2436,7 +2438,7 @@ async fn html_login_csrf_respects_the_bound_port() {
     .await
     .unwrap();
     assert_eq!(relogin.status, 303);
-    assert!(!cookie_value(&relogin.headers, "ferrum_session").is_empty());
+    assert!(!cookie_value(&relogin.headers, "ferrioxid_session").is_empty());
 
     server.abort();
 }
@@ -2673,7 +2675,7 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
         .await
         .unwrap();
         assert_eq!(signed.status, 303, "{}", signed.body);
-        let session = cookie_value(&signed.headers, "ferrum_session");
+        let session = cookie_value(&signed.headers, "ferrioxid_session");
         if email.starts_with("root") {
             root_session = session;
         } else {
@@ -2805,7 +2807,7 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
     let payloads = db
         .query_all(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "SELECT payload FROM _ferrum_admin_drafts",
+            "SELECT payload FROM _ferrioxid_admin_drafts",
         ))
         .await
         .unwrap();
@@ -2818,7 +2820,7 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
     }
     db.execute(Statement::from_string(
         DatabaseBackend::Sqlite,
-        "UPDATE _ferrum_admin_drafts SET expires_at = 1",
+        "UPDATE _ferrioxid_admin_drafts SET expires_at = 1",
     ))
     .await
     .unwrap();
@@ -3293,8 +3295,8 @@ async fn admin_dates_use_native_inputs_and_utc_hierarchy() {
     )
     .await
     .unwrap();
-    let session = cookie_value(&signed.headers, "ferrum_session");
-    let cookie = format!("Cookie: ferrum_session={session}\r\n");
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
+    let cookie = format!("Cookie: ferrioxid_session={session}\r\n");
     let form_page = call(
         "GET",
         "/admin/models/html_appointments/new".into(),
@@ -3507,7 +3509,7 @@ fn cookie_value(headers: &str, name: &str) -> String {
 }
 
 fn cookie_header(token: &str) -> String {
-    format!("Cookie: ferrum_session={token}\r\n")
+    format!("Cookie: ferrioxid_session={token}\r\n")
 }
 
 fn location(headers: &str) -> String {

@@ -6,7 +6,7 @@
     "format_version": 1,
     "tables": [
       {
-        "name": "_ferrum_users",
+        "name": "_ferrioxid_users",
         "columns": [
           {
             "name": "id",
@@ -68,7 +68,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_users_email",
+            "name": "uq__ferrioxid_users_email",
             "columns": [
               "email"
             ]
@@ -76,7 +76,7 @@
         ]
       },
       {
-        "name": "_ferrum_roles",
+        "name": "_ferrioxid_roles",
         "columns": [
           {
             "name": "id",
@@ -93,7 +93,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_roles_name",
+            "name": "uq__ferrioxid_roles_name",
             "columns": [
               "name"
             ]
@@ -101,7 +101,7 @@
         ]
       },
       {
-        "name": "_ferrum_permissions",
+        "name": "_ferrioxid_permissions",
         "columns": [
           {
             "name": "id",
@@ -118,7 +118,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_permissions_code",
+            "name": "uq__ferrioxid_permissions_code",
             "columns": [
               "code"
             ]
@@ -126,7 +126,7 @@
         ]
       },
       {
-        "name": "_ferrum_sessions",
+        "name": "_ferrioxid_sessions",
         "columns": [
           {
             "name": "id",
@@ -179,7 +179,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_sessions_token_hash",
+            "name": "uq__ferrioxid_sessions_token_hash",
             "columns": [
               "token_hash"
             ]
@@ -187,7 +187,7 @@
         ],
         "indexes": [
           {
-            "name": "ix__ferrum_sessions_user_id",
+            "name": "ix__ferrioxid_sessions_user_id",
             "columns": [
               "user_id"
             ]
@@ -195,11 +195,11 @@
         ],
         "foreign_keys": [
           {
-            "name": "fk__ferrum_sessions_user_id__ferrum_users_id",
+            "name": "fk__ferrioxid_sessions_user_id__ferrioxid_users_id",
             "columns": [
               "user_id"
             ],
-            "referenced_table": "_ferrum_users",
+            "referenced_table": "_ferrioxid_users",
             "referenced_columns": [
               "id"
             ],
@@ -209,7 +209,7 @@
         ]
       },
       {
-        "name": "_ferrum_user_roles",
+        "name": "_ferrioxid_user_roles",
         "columns": [
           {
             "name": "id",
@@ -232,7 +232,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_user_roles_user_id_role_id",
+            "name": "uq__ferrioxid_user_roles_user_id_role_id",
             "columns": [
               "user_id",
               "role_id"
@@ -241,11 +241,11 @@
         ],
         "foreign_keys": [
           {
-            "name": "fk__ferrum_user_roles_user_id__ferrum_users_id",
+            "name": "fk__ferrioxid_user_roles_user_id__ferrioxid_users_id",
             "columns": [
               "user_id"
             ],
-            "referenced_table": "_ferrum_users",
+            "referenced_table": "_ferrioxid_users",
             "referenced_columns": [
               "id"
             ],
@@ -253,11 +253,11 @@
             "on_update": "no_action"
           },
           {
-            "name": "fk__ferrum_user_roles_role_id__ferrum_roles_id",
+            "name": "fk__ferrioxid_user_roles_role_id__ferrioxid_roles_id",
             "columns": [
               "role_id"
             ],
-            "referenced_table": "_ferrum_roles",
+            "referenced_table": "_ferrioxid_roles",
             "referenced_columns": [
               "id"
             ],
@@ -267,7 +267,7 @@
         ]
       },
       {
-        "name": "_ferrum_role_permissions",
+        "name": "_ferrioxid_role_permissions",
         "columns": [
           {
             "name": "id",
@@ -290,7 +290,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_role_permissions_role_id_permission_id",
+            "name": "uq__ferrioxid_role_permissions_role_id_permission_id",
             "columns": [
               "role_id",
               "permission_id"
@@ -299,11 +299,11 @@
         ],
         "foreign_keys": [
           {
-            "name": "fk__ferrum_role_permissions_role_id__ferrum_roles_id",
+            "name": "fk__ferrioxid_role_permissions_role_id__ferrioxid_roles_id",
             "columns": [
               "role_id"
             ],
-            "referenced_table": "_ferrum_roles",
+            "referenced_table": "_ferrioxid_roles",
             "referenced_columns": [
               "id"
             ],
@@ -311,11 +311,11 @@
             "on_update": "no_action"
           },
           {
-            "name": "fk__ferrum_role_permissions_permission_id__ferrum_permissions_id",
+            "name": "fk__ferrioxid_role_permissions_permission_id__ferrioxid_permissions_id",
             "columns": [
               "permission_id"
             ],
-            "referenced_table": "_ferrum_permissions",
+            "referenced_table": "_ferrioxid_permissions",
             "referenced_columns": [
               "id"
             ],
@@ -330,7 +330,7 @@
     "format_version": 1,
     "tables": [
       {
-        "name": "_ferrum_users",
+        "name": "_ferrioxid_users",
         "columns": [
           {
             "name": "id",
@@ -392,7 +392,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_users_email",
+            "name": "uq__ferrioxid_users_email",
             "columns": [
               "email"
             ]
@@ -400,7 +400,7 @@
         ]
       },
       {
-        "name": "_ferrum_roles",
+        "name": "_ferrioxid_roles",
         "columns": [
           {
             "name": "id",
@@ -417,7 +417,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_roles_name",
+            "name": "uq__ferrioxid_roles_name",
             "columns": [
               "name"
             ]
@@ -425,7 +425,7 @@
         ]
       },
       {
-        "name": "_ferrum_permissions",
+        "name": "_ferrioxid_permissions",
         "columns": [
           {
             "name": "id",
@@ -442,7 +442,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_permissions_code",
+            "name": "uq__ferrioxid_permissions_code",
             "columns": [
               "code"
             ]
@@ -450,7 +450,7 @@
         ]
       },
       {
-        "name": "_ferrum_sessions",
+        "name": "_ferrioxid_sessions",
         "columns": [
           {
             "name": "id",
@@ -503,7 +503,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_sessions_token_hash",
+            "name": "uq__ferrioxid_sessions_token_hash",
             "columns": [
               "token_hash"
             ]
@@ -511,7 +511,7 @@
         ],
         "indexes": [
           {
-            "name": "ix__ferrum_sessions_user_id",
+            "name": "ix__ferrioxid_sessions_user_id",
             "columns": [
               "user_id"
             ]
@@ -519,11 +519,11 @@
         ],
         "foreign_keys": [
           {
-            "name": "fk__ferrum_sessions_user_id__ferrum_users_id",
+            "name": "fk__ferrioxid_sessions_user_id__ferrioxid_users_id",
             "columns": [
               "user_id"
             ],
-            "referenced_table": "_ferrum_users",
+            "referenced_table": "_ferrioxid_users",
             "referenced_columns": [
               "id"
             ],
@@ -533,7 +533,7 @@
         ]
       },
       {
-        "name": "_ferrum_user_roles",
+        "name": "_ferrioxid_user_roles",
         "columns": [
           {
             "name": "id",
@@ -556,7 +556,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_user_roles_user_id_role_id",
+            "name": "uq__ferrioxid_user_roles_user_id_role_id",
             "columns": [
               "user_id",
               "role_id"
@@ -565,11 +565,11 @@
         ],
         "foreign_keys": [
           {
-            "name": "fk__ferrum_user_roles_user_id__ferrum_users_id",
+            "name": "fk__ferrioxid_user_roles_user_id__ferrioxid_users_id",
             "columns": [
               "user_id"
             ],
-            "referenced_table": "_ferrum_users",
+            "referenced_table": "_ferrioxid_users",
             "referenced_columns": [
               "id"
             ],
@@ -577,11 +577,11 @@
             "on_update": "no_action"
           },
           {
-            "name": "fk__ferrum_user_roles_role_id__ferrum_roles_id",
+            "name": "fk__ferrioxid_user_roles_role_id__ferrioxid_roles_id",
             "columns": [
               "role_id"
             ],
-            "referenced_table": "_ferrum_roles",
+            "referenced_table": "_ferrioxid_roles",
             "referenced_columns": [
               "id"
             ],
@@ -591,7 +591,7 @@
         ]
       },
       {
-        "name": "_ferrum_role_permissions",
+        "name": "_ferrioxid_role_permissions",
         "columns": [
           {
             "name": "id",
@@ -614,7 +614,7 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_role_permissions_role_id_permission_id",
+            "name": "uq__ferrioxid_role_permissions_role_id_permission_id",
             "columns": [
               "role_id",
               "permission_id"
@@ -623,11 +623,11 @@
         ],
         "foreign_keys": [
           {
-            "name": "fk__ferrum_role_permissions_role_id__ferrum_roles_id",
+            "name": "fk__ferrioxid_role_permissions_role_id__ferrioxid_roles_id",
             "columns": [
               "role_id"
             ],
-            "referenced_table": "_ferrum_roles",
+            "referenced_table": "_ferrioxid_roles",
             "referenced_columns": [
               "id"
             ],
@@ -635,11 +635,11 @@
             "on_update": "no_action"
           },
           {
-            "name": "fk__ferrum_role_permissions_permission_id__ferrum_permissions_id",
+            "name": "fk__ferrioxid_role_permissions_permission_id__ferrioxid_permissions_id",
             "columns": [
               "permission_id"
             ],
-            "referenced_table": "_ferrum_permissions",
+            "referenced_table": "_ferrioxid_permissions",
             "referenced_columns": [
               "id"
             ],
@@ -649,7 +649,7 @@
         ]
       },
       {
-        "name": "_ferrum_admin_drafts",
+        "name": "_ferrioxid_admin_drafts",
         "columns": [
           {
             "name": "id",
@@ -708,7 +708,7 @@
         ],
         "indexes": [
           {
-            "name": "ix__ferrum_admin_drafts_session_id",
+            "name": "ix__ferrioxid_admin_drafts_session_id",
             "columns": [
               "session_id"
             ]
@@ -716,11 +716,11 @@
         ],
         "foreign_keys": [
           {
-            "name": "fk__ferrum_admin_drafts_session_id__ferrum_sessions_id",
+            "name": "fk__ferrioxid_admin_drafts_session_id__ferrioxid_sessions_id",
             "columns": [
               "session_id"
             ],
-            "referenced_table": "_ferrum_sessions",
+            "referenced_table": "_ferrioxid_sessions",
             "referenced_columns": [
               "id"
             ],
@@ -730,7 +730,7 @@
         ]
       },
       {
-        "name": "_ferrum_admin_audit",
+        "name": "_ferrioxid_admin_audit",
         "columns": [
           {
             "name": "id",
@@ -783,7 +783,7 @@
         ],
         "indexes": [
           {
-            "name": "ix__ferrum_admin_audit_created_at",
+            "name": "ix__ferrioxid_admin_audit_created_at",
             "columns": [
               "created_at"
             ]
@@ -796,7 +796,7 @@
     {
       "type": "create_table",
       "table": {
-        "name": "_ferrum_admin_audit",
+        "name": "_ferrioxid_admin_audit",
         "columns": [
           {
             "name": "id",
@@ -849,7 +849,7 @@
         ],
         "indexes": [
           {
-            "name": "ix__ferrum_admin_audit_created_at",
+            "name": "ix__ferrioxid_admin_audit_created_at",
             "columns": [
               "created_at"
             ]
@@ -860,7 +860,7 @@
     {
       "type": "create_table",
       "table": {
-        "name": "_ferrum_admin_drafts",
+        "name": "_ferrioxid_admin_drafts",
         "columns": [
           {
             "name": "id",
@@ -919,7 +919,7 @@
         ],
         "indexes": [
           {
-            "name": "ix__ferrum_admin_drafts_session_id",
+            "name": "ix__ferrioxid_admin_drafts_session_id",
             "columns": [
               "session_id"
             ]
@@ -927,11 +927,11 @@
         ],
         "foreign_keys": [
           {
-            "name": "fk__ferrum_admin_drafts_session_id__ferrum_sessions_id",
+            "name": "fk__ferrioxid_admin_drafts_session_id__ferrioxid_sessions_id",
             "columns": [
               "session_id"
             ],
-            "referenced_table": "_ferrum_sessions",
+            "referenced_table": "_ferrioxid_sessions",
             "referenced_columns": [
               "id"
             ],
@@ -943,5 +943,5 @@
     }
   ],
   "risks": [],
-  "checksum": "fd8e6395f999f0acb9eb6c3390167c883fdf371f268d86078c481538d5c488e5"
+  "checksum": "55cab2904be801ebc1920b95a2231ccf8de2916514a9c1dae41582975f814a5e"
 }

@@ -73,7 +73,7 @@ async fn count_history(db: &DatabaseConnection) -> i64 {
     let row = db
         .query_one(Statement::from_string(
             db.get_database_backend(),
-            "SELECT COUNT(*) AS total FROM \"_ferrum_migrations\"",
+            "SELECT COUNT(*) AS total FROM \"_ferrioxid_migrations\"",
         ))
         .await
         .unwrap()

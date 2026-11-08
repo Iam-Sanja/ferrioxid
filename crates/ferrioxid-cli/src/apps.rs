@@ -139,7 +139,7 @@ pub(crate) fn generate_into(root: &Path, name: &str) -> Result<PathBuf, String> 
             );
         }
     }
-    println!("Declare app migrations under [app.{name}] in ferrum.toml. This entry does not load Rust code.");
+    println!("Declare app migrations under [app.{name}] in ferrioxid.toml. This entry does not load Rust code.");
     Ok(app_dir)
 }
 
@@ -256,7 +256,7 @@ mod tests {
         assert!(root.join("src/apps/mod.rs").is_file());
         assert!(generate_into(&root, "shop").is_err());
         std::fs::write(
-            root.join("ferrum.toml"),
+            root.join("ferrioxid.toml"),
             "migrations_dir = \"migrations\"\n",
         )
         .unwrap();

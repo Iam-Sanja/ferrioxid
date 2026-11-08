@@ -40,10 +40,13 @@ pub fn new_project(
         &destination.join("Cargo.toml"),
         &cargo_toml(name, &ferrioxid_display, features),
     )?;
-    write(&destination.join("ferrum.toml"), &manifest(name, template))?;
+    write(
+        &destination.join("ferrioxid.toml"),
+        &manifest(name, template),
+    )?;
     write(
         &destination.join(".gitignore"),
-        "target/\n.env\n.env.*\n!.env.example\n.ferrum/csrf.key\n.ferrioxid/csrf.key\n*.sqlite3\n*.sqlite3-journal\nmedia/*\n!media/.gitkeep\n",
+        "target/\n.env\n.env.*\n!.env.example\n.ferrioxid/csrf.key\n*.sqlite3\n*.sqlite3-journal\nmedia/*\n!media/.gitkeep\n",
     )?;
     write(
         &destination.join("static/css/app.css"),
@@ -163,7 +166,7 @@ fn write_upgrade_manifest(destination: &Path, template: Template) -> Result<(), 
     };
     let mut relative = vec![
         "Cargo.toml",
-        "ferrum.toml",
+        "ferrioxid.toml",
         ".gitignore",
         ".env.example",
         "README.md",
@@ -201,8 +204,8 @@ fn write_upgrade_manifest(destination: &Path, template: Template) -> Result<(), 
     }
     let json = manifest_json(&ProjectManifest::generated(template_name, files))
         .map_err(|error| error.0)?;
-    std::fs::create_dir_all(destination.join(".ferrum")).map_err(|error| error.to_string())?;
-    std::fs::write(destination.join(".ferrum/project.json"), json)
+    std::fs::create_dir_all(destination.join(".ferrioxid")).map_err(|error| error.to_string())?;
+    std::fs::write(destination.join(".ferrioxid/project.json"), json)
         .map_err(|error| error.to_string())
 }
 
@@ -299,7 +302,7 @@ reset_ttl_minutes = 30
 }
 
 fn env_example() -> &'static str {
-    "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRUM_CSRF_SECRET must contain 64 hexadecimal characters in production.\n# FERRUM_PASSWORD is read only when creating users non-interactively.\n# FERRUM_SMTP_PASSWORD must not be stored in ferrum.toml.\n# FERRUM_PUBLIC_ORIGIN sets the password reset URL, for example https://example.com.\n"
+    "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRIOXID_CSRF_SECRET must contain 64 hexadecimal characters in production.\n# FERRIOXID_PASSWORD is read only when creating users non-interactively.\n# FERRIOXID_SMTP_PASSWORD must not be stored in ferrioxid.toml.\n# FERRIOXID_PUBLIC_ORIGIN sets the password reset URL, for example https://example.com.\n"
 }
 
 fn readme(name: &str, template: Template) -> String {

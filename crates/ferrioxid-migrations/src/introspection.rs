@@ -57,7 +57,7 @@ pub async fn introspect_sqlite(
         let name: String = row
             .try_get("", "name")
             .map_err(|error| MigrationError::new(format!("Could not read table name: {error}")))?;
-        if name.starts_with("_ferrum_") {
+        if name.starts_with("_ferrioxid_") {
             continue;
         }
         tables.push(LiveTable {

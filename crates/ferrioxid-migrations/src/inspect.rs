@@ -9,8 +9,8 @@ use crate::runner::{migration_status_in, StatusReport};
 use crate::snapshot::SchemaSnapshot;
 use std::path::Path;
 
-const AUDIT_TABLE: &str = "_ferrum_admin_audit";
-const DRAFTS_TABLE: &str = "_ferrum_admin_drafts";
+const AUDIT_TABLE: &str = "_ferrioxid_admin_audit";
+const DRAFTS_TABLE: &str = "_ferrioxid_admin_drafts";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MigrationScope {
@@ -329,7 +329,7 @@ async fn diagnose_auth_tables(
             "0003_audit_operation",
             Level::Error,
             "migration.auth.table_missing",
-            "Column operation_id is missing from _ferrum_admin_audit.",
+            "Column operation_id is missing from _ferrioxid_admin_audit.",
         ));
     }
     Ok(())
@@ -575,7 +575,7 @@ mod tests {
         let db = ferrioxid_db::connect(&write_url).await.unwrap();
         db.execute(sea_orm::Statement::from_string(
             sea_orm::DatabaseBackend::Sqlite,
-            "UPDATE _ferrum_migrations SET checksum = '00' WHERE id LIKE '0001%'",
+            "UPDATE _ferrioxid_migrations SET checksum = '00' WHERE id LIKE '0001%'",
         ))
         .await
         .unwrap();
@@ -598,7 +598,7 @@ mod tests {
         let db = ferrioxid_db::connect(&write_url).await.unwrap();
         db.execute(sea_orm::Statement::from_string(
             sea_orm::DatabaseBackend::Sqlite,
-            "INSERT INTO _ferrum_migrations (id, name, checksum, applied_at_unix) VALUES ('9999_foreign', 'foreign', 'abc', 1)",
+            "INSERT INTO _ferrioxid_migrations (id, name, checksum, applied_at_unix) VALUES ('9999_foreign', 'foreign', 'abc', 1)",
         ))
         .await
         .unwrap();

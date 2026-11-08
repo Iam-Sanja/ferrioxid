@@ -9,17 +9,17 @@ use ferrioxid_migrations::{
 use sea_orm::DatabaseConnection;
 use std::path::PathBuf;
 
-pub const USERS: &str = "_ferrum_users";
-pub const SESSIONS: &str = "_ferrum_sessions";
-pub const ROLES: &str = "_ferrum_roles";
-pub const PERMISSIONS: &str = "_ferrum_permissions";
-pub const USER_ROLES: &str = "_ferrum_user_roles";
-pub const ROLE_PERMISSIONS: &str = "_ferrum_role_permissions";
-pub const ADMIN_DRAFTS: &str = "_ferrum_admin_drafts";
-pub const ADMIN_AUDIT: &str = "_ferrum_admin_audit";
-pub const PASSWORD_RESETS: &str = "_ferrum_password_resets";
-pub const PASSWORD_RESET_EXCHANGES: &str = "_ferrum_password_reset_exchanges";
-pub const MAIL_OUTBOX: &str = "_ferrum_mail_outbox";
+pub const USERS: &str = "_ferrioxid_users";
+pub const SESSIONS: &str = "_ferrioxid_sessions";
+pub const ROLES: &str = "_ferrioxid_roles";
+pub const PERMISSIONS: &str = "_ferrioxid_permissions";
+pub const USER_ROLES: &str = "_ferrioxid_user_roles";
+pub const ROLE_PERMISSIONS: &str = "_ferrioxid_role_permissions";
+pub const ADMIN_DRAFTS: &str = "_ferrioxid_admin_drafts";
+pub const ADMIN_AUDIT: &str = "_ferrioxid_admin_audit";
+pub const PASSWORD_RESETS: &str = "_ferrioxid_password_resets";
+pub const PASSWORD_RESET_EXCHANGES: &str = "_ferrioxid_password_reset_exchanges";
+pub const MAIL_OUTBOX: &str = "_ferrioxid_mail_outbox";
 
 pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
@@ -508,6 +508,6 @@ mod tests {
         assert!(loaded
             .operations
             .iter()
-            .any(|operation| format!("{operation:?}").contains("_ferrum_password_resets")));
+            .any(|operation| format!("{operation:?}").contains("_ferrioxid_password_resets")));
     }
 }

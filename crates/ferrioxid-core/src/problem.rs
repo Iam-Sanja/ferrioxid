@@ -118,7 +118,7 @@ mod tests {
         let body = problem_json(
             500,
             "Internal server error",
-            "SELECT password_hash FROM _ferrum_users",
+            "SELECT password_hash FROM _ferrioxid_users",
         );
         assert_eq!(body["code"], "request.rejected");
         assert_eq!(body["detail"], "Request rejected");

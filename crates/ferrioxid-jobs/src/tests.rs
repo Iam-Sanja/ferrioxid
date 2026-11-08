@@ -570,7 +570,7 @@ async fn existing_reset_outbox_is_not_sent() {
     apply_migrations(&db).await.expect("jobs");
     db.execute(sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "INSERT INTO _ferrum_mail_outbox (id, kind, recipient, reset_id, created_at, sent_at, failed_at, attempts, error_code) VALUES ('11111111-1111-1111-1111-111111111111', 'password_reset', 'person@example.com', NULL, 10, NULL, NULL, 0, NULL)",
+        "INSERT INTO _ferrioxid_mail_outbox (id, kind, recipient, reset_id, created_at, sent_at, failed_at, attempts, error_code) VALUES ('11111111-1111-1111-1111-111111111111', 'password_reset', 'person@example.com', NULL, 10, NULL, NULL, 0, NULL)",
     ))
     .await
     .expect("outbox");
@@ -592,7 +592,7 @@ async fn existing_reset_outbox_is_not_sent() {
     let row = db
         .query_one(sea_orm::Statement::from_string(
             db.get_database_backend(),
-            "SELECT error_code FROM _ferrum_mail_outbox",
+            "SELECT error_code FROM _ferrioxid_mail_outbox",
         ))
         .await
         .expect("read")

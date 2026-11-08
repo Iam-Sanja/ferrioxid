@@ -893,7 +893,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     }
     let create_dto = format_ident!("{}Create", name);
     let update_dto = format_ident!("{}Update", name);
-    let columns_ident = format_ident!("__FERRUM_COLUMNS_{}", name.to_string().to_uppercase());
+    let columns_ident = format_ident!("__FERRIOXID_COLUMNS_{}", name.to_string().to_uppercase());
     let unique_lists = groups_tokens(&unique_groups);
     let index_lists = groups_tokens(&index_groups);
     let permission_token = match &permission {

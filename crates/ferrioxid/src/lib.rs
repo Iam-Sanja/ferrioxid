@@ -40,7 +40,7 @@ pub use serde;
 pub use serde_json;
 pub use uuid;
 
-/// Baut den Mail-Dienst aus `ferrum.toml`. Das SMTP-Passwort bleibt in der Umgebung.
+/// Baut den Mail-Dienst aus `ferrioxid.toml`. Das SMTP-Passwort bleibt in der Umgebung.
 pub fn mail_for(project: &ferrioxid_migrations::ProjectConfig) -> ferrioxid_mail::MailService {
     ferrioxid_mail::MailService::open(&ferrioxid_mail::MailConfig {
         backend: project.mail_backend.clone(),
