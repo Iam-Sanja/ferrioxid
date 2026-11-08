@@ -363,7 +363,7 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
             {
                 report(
                     "OK",
-                    "migration.current Auth-, Job- und App-Migrationen sind angewendet.",
+                    "migration.current Authentication, job, and app migrations are applied.",
                 );
             }
             if jobs_pending {
@@ -476,7 +476,7 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
     }
     if project.static_enabled {
         if project.static_root().is_dir() {
-            report("OK", "Staticfiles-Verzeichnis exists.");
+            report("OK", "Static files directory exists.");
         } else {
             report(
                 "WARN",
@@ -529,7 +529,7 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
     if project.storage_root().is_dir() {
         report(
             "OK",
-            "Storage-Verzeichnis exists. Ob die Anwendung Routen einhängt, wird nicht aus dem Quelltext geschlossen.",
+            "Storage directory exists. Route registration is not inferred from source code.",
         );
     } else {
         report(
