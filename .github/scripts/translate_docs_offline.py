@@ -104,7 +104,7 @@ def main():
             "the offline translator could not protect reliably. They were left "
             "unchanged to avoid corrupting code, commands, or Markdown links. "
             "Translate and review them manually before merging PR #21.\n\n"
-            + "\n".join(f"- {item}" for item in errors)
+            + "\n".join(f"- {item.rstrip()}" for item in errors)
             + "\n",
             encoding="utf-8",
         )
