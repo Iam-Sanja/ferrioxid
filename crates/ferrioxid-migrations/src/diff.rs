@@ -1,4 +1,4 @@
-//! Vergleich zweier bestätigter Schema-Snapshots.
+//! Compares two verified schema snapshots.
 
 use crate::error::MigrationError;
 use crate::snapshot::{
@@ -77,7 +77,7 @@ pub struct MigrationRisk {
 pub struct MigrationPlan {
     pub operations: Vec<MigrationOperation>,
     pub risks: Vec<MigrationRisk>,
-    /// Gesetzte Begründung: die Änderung darf nicht als Migration geschrieben oder ausgeführt werden.
+    /// Safety reason: this change must not be written or executed as a migration.
     pub refusal: Option<String>,
 }
 
@@ -361,7 +361,7 @@ fn order_by_dependencies(
         });
         let Some(index) = ready else {
             return Err(MigrationError::new(
-                "Fremdschlüssel bilden einen Zyklus. Die Migration wird nicht geschrieben."
+                "Foreign keys form a cycle. No migration is written."
                     .to_owned(),
             ));
         };
@@ -444,19 +444,19 @@ fn risks_for(operations: &[MigrationOperation]) -> Vec<MigrationRisk> {
             MigrationOperation::DropTable { name } => Some(MigrationRisk {
                 operation_index: index,
                 code: "drop_table".to_owned(),
-                message: format!("Tabelle `{name}` würde samt Inhalt gelöscht."),
+                message: format!("Table `{name}` and its data would be deleted."),
             }),
             MigrationOperation::DropColumn { table, name } => Some(MigrationRisk {
                 operation_index: index,
                 code: "drop_column".to_owned(),
-                message: format!("Spalte `{table}.{name}` würde samt Werten gelöscht."),
+                message: format!("Column `{table}.{name}` and its values would be deleted."),
             }),
             MigrationOperation::AlterColumn { table, from, to } if alter_is_supported(from, to) => {
                 Some(MigrationRisk {
                     operation_index: index,
                     code: "rebuild_column".to_owned(),
                     message: format!(
-                        "Spalte `{table}.{}` wird nur geändert, wenn vorhandene Werte verlustfrei übernommen werden können. Bei einem Fehler wird die Transaktion zurückgerollt.",
+                        "Column `{table}.{}` is changed only if existing values can be converted without loss. The transaction is rolled back on failure.",
                         from.name
                     ),
                 })
@@ -465,7 +465,7 @@ fn risks_for(operations: &[MigrationOperation]) -> Vec<MigrationRisk> {
                 operation_index: index,
                 code: "alter_column".to_owned(),
                 message: format!(
-                    "Spalte `{table}.{}` hat keine geprüfte verlustfreie Änderung.",
+                    "Column `{table}.{}` has no verified lossless conversion.",
                     from.name
                 ),
             }),
@@ -476,7 +476,7 @@ fn risks_for(operations: &[MigrationOperation]) -> Vec<MigrationRisk> {
                     operation_index: index,
                     code: "unsafe_add_column".to_owned(),
                     message: format!(
-                        "Spalte `{table}.{}` kann bestehende Zeilen nicht sicher füllen.",
+                        "Column `{table}.{}` cannot safely populate existing rows.",
                         column.name
                     ),
                 })
@@ -485,7 +485,7 @@ fn risks_for(operations: &[MigrationOperation]) -> Vec<MigrationRisk> {
                 operation_index: index,
                 code: "drop_unique".to_owned(),
                 message: format!(
-                    "Unique-Constraint `{name}` auf `{table}` wird entfernt. Vorhandene Zeilen bleiben, neue Duplikate werden danach zugelassen."
+                    "Unique constraint `{name}` on `{table}` will be removed. Existing rows remain, and future duplicates become possible."
                 ),
             }),
             _ => None,
@@ -499,19 +499,19 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
         match operation {
             MigrationOperation::AlterColumn { table, from, to } if !alter_is_supported(from, to) => {
                 reasons.push(format!(
-                    "Änderung an `{table}.{}` ({:?} -> {:?}, nullable {} -> {}, default {:?} -> {:?}) wird blockiert. Es gibt keine geprüfte verlustfreie Übernahme.",
+                    "Change to `{table}.{}` ({:?} -> {:?}, nullable {} -> {}, default {:?} -> {:?}) is blocked: no verified lossless conversion exists.",
                     from.name, from.logical_type, to.logical_type, from.nullable, to.nullable, from.default, to.default
                 ))
             }
             MigrationOperation::AddColumn { table, column, .. } if column.primary_key => reasons.push(format!(
-                "Neue Primärschlüsselspalte `{table}.{}` wird blockiert.",
+                "Adding primary-key column `{table}.{}` is blocked.",
                 column.name
             )),
             MigrationOperation::AddColumn { table, column, .. }
                 if !column.nullable && column.default.is_none() =>
             {
                 reasons.push(format!(
-                    "NOT NULL ohne Default für `{table}.{}` wird blockiert, weil bestehende Zeilen keinen sicheren Wert bekommen.",
+                    "NOT NULL without a default for `{table}.{}` is blocked because existing rows have no safe value.",
                     column.name
                 ))
             }
@@ -527,11 +527,11 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
             | MigrationOperation::AddIndex { .. }
             | MigrationOperation::DropIndex { .. } => {}
             MigrationOperation::AddForeignKey { table, foreign_key } => reasons.push(format!(
-                "Fremdschlüssel `{}` auf `{table}` kann nicht an eine bestehende Spalte angefügt werden. SQLite unterstützt das nicht ohne Tabellenumbau, und dieser Umbau wird für Fremdschlüssel nicht ausgeführt.",
+                "Foreign key `{}` on `{table}` cannot be added to an existing column. SQLite requires a table rebuild, which is blocked for foreign keys.",
                 foreign_key.name
             )),
             MigrationOperation::DropForeignKey { table, name } => reasons.push(format!(
-                "Fremdschlüssel `{name}` auf `{table}` kann nicht entfernt oder in seiner Löschregel geändert werden. SQLite bräuchte dafür einen Tabellenumbau, der für Fremdschlüssel blockiert bleibt."
+                "Foreign key `{name}` on `{table}` cannot be dropped or have its delete rule changed. SQLite would require a table rebuild, which is blocked for foreign keys."
             )),
         }
     }
@@ -571,7 +571,7 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
             .collect();
         if !added.is_empty() && !removed.is_empty() {
             reasons.push(format!(
-                "Tabelle `{table}` verliert {} und erhält {}. Das wird nicht als Umbenennung gedeutet. Verwende `ferrioxid migrate rename-column`, wenn genau diese Spalte umbenannt werden soll.",
+                "Table `{table}` loses {} and gains {}. This is not interpreted as a rename. Use `ferrioxid migrate rename-column` for an intentional rename.",
                 removed.join(", "),
                 added.join(", ")
             ));
@@ -594,7 +594,7 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
         .collect();
     if !dropped_tables.is_empty() && !created_tables.is_empty() {
         reasons.push(format!(
-            "Der Plan löscht {} und erzeugt {}. Das wird nicht als Umbenennung gedeutet. Verwende `ferrioxid migrate rename-table` oder trenne die Änderungen.",
+            "The plan deletes {} and creates {}. This is not interpreted as a rename. Use `ferrioxid migrate rename-table` or split the changes.",
             dropped_tables.join(", "),
             created_tables.join(", ")
         ));
@@ -616,7 +616,7 @@ pub fn classify(
         MigrationOperation::AddColumn { column, .. } if column.primary_key => (
             ApplyClass::Unsupported,
             Some(
-                "Eine Primärschlüsselspalte kann nicht sicher nachträglich angelegt werden.".into(),
+                "A primary-key column cannot safely be added to an existing table.".into(),
             ),
         ),
         MigrationOperation::AddColumn { column, .. }
@@ -624,7 +624,7 @@ pub fn classify(
         {
             (
                 ApplyClass::Unsupported,
-                Some("NOT NULL ohne Default kann bestehende Zeilen nicht füllen.".into()),
+                Some("NOT NULL without a default cannot safely populate existing rows.".into()),
             )
         }
         MigrationOperation::AddColumn { .. } => (ApplyClass::Safe, None),
@@ -640,7 +640,7 @@ pub fn classify(
                 (
                     ApplyClass::Unsupported,
                     Some(format!(
-                        "Primärschlüssel `{table}.{name}` kann nicht gelöscht werden."
+                        "Primary key `{table}.{name}` cannot be dropped."
                     )),
                 )
             } else {
@@ -653,10 +653,10 @@ pub fn classify(
         MigrationOperation::AlterColumn { from, to, .. } => (
             ApplyClass::Unsupported,
             Some(if from.primary_key != to.primary_key {
-                "Primärschlüssel können nicht umgebaut werden.".to_owned()
+                "Primary keys cannot be rebuilt.".to_owned()
             } else {
                 format!(
-                    "Änderung von {:?} nach {:?} ist nicht als verlustfreie Übernahme implementiert.",
+                    "Conversion from {:?} to {:?} has no implemented lossless migration.",
                     from.logical_type, to.logical_type
                 )
             }),
@@ -671,14 +671,14 @@ pub fn classify(
         MigrationOperation::AddForeignKey { .. } => (
             ApplyClass::Unsupported,
             Some(
-                "Ein Fremdschlüssel auf einer bestehenden Spalte wird nicht ausgeführt."
+                "Adding a foreign key to an existing column is not supported."
                     .to_owned(),
             ),
         ),
         MigrationOperation::DropForeignKey { .. } => (
             ApplyClass::Unsupported,
             Some(
-                "Ein vorhandener Fremdschlüssel wird nicht entfernt und seine Löschregel nicht geändert."
+                "Existing foreign keys cannot be removed or have their delete rule changed."
                     .to_owned(),
             ),
         ),
@@ -811,7 +811,7 @@ mod tests {
         let after = products(vec![column("description", LogicalType::String, true, None)]);
         let plan = plan_change(&before, &after).unwrap();
         let refusal = plan.refusal.unwrap();
-        assert!(refusal.contains("nicht als Umbenennung"));
+        assert!(refusal.contains("not interpreted as a rename"));
         assert!(refusal.contains("note"));
         assert!(refusal.contains("description"));
     }
