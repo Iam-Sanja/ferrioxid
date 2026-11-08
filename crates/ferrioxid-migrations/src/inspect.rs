@@ -413,9 +413,18 @@ fn section(locale: &str, de: &str, en: &str, report: &StatusReport) -> String {
         return text;
     }
     for line in &report.lines {
+        let visible_state = if locale == "de" {
+            line.state.as_str()
+        } else {
+            match line.state.as_str() {
+                "angewendet" => "applied",
+                "ausstehend" => "pending",
+                other => other,
+            }
+        };
         text.push_str(&format!(
             "  {}  {}  checksum {}\n",
-            line.id, line.state, line.checksum
+            line.id, visible_state, line.checksum
         ));
     }
     text
