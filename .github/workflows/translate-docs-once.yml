@@ -1,4 +1,4 @@
-# Second pass: retain code-heavy lines for manual review.
+# Corrected pass: strip trailing whitespace from review queue before git diff --check.
 name: One-time offline documentation translation
 
 on:
