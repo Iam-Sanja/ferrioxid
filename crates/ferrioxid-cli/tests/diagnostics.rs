@@ -53,22 +53,15 @@ fn write_project(directory: &Path) {
         "[package]\nname = \"legacy\"\nversion = \"0.1.0\"\n\n[dependencies]\nferrioxid = { path = \"D:/04_Projekte_Arbeit/Projekte/ferrioxid/crates/ferrioxid\", features = [\"admin-ui\"] }\n",
     )
     .unwrap();
-    std::fs::write(directory.join("secret.txt"), "nicht anfassen").unwrap();
+    std::fs::write(directory.join("secret.txt"), "do not touch").unwrap();
     std::fs::create_dir_all(directory.join("src")).unwrap();
     std::fs::write(directory.join("src/main.rs"), "fn main() {}\n").unwrap();
     std::fs::write(directory.join("src/lib.rs"), "\n").unwrap();
 }
 
 fn empty_sqlite(path: &Path) {
-    let script = format!(
-        "import sqlite3; sqlite3.connect(r'{}').close()",
-        path.display()
-    );
-    let status = Command::new("python")
-        .args(["-c", &script])
-        .status()
-        .expect("python");
-    assert!(status.success(), "python sqlite");
+    // SQLite accepts an existing zero-byte file as an empty test database.
+    std::fs::File::create(path).expect("create empty SQLite test file");
 }
 
 #[test]
@@ -115,7 +108,7 @@ fn status_is_read_only_and_shows_auth_and_app() {
     assert!(body.contains("migration.auth.pending"), "{body}");
     assert!(body.contains("migration.app.pending"), "{body}");
     assert!(body.contains("migration.history.missing"), "{body}");
-    assert!(body.contains("nicht geladen"), "{body}");
+    assert!(body.contains("was not loaded"), "{body}");
     assert!(!body.contains("entspricht dem letzten"), "{body}");
     assert!(body.contains("ferrioxid migrate up"), "{body}");
     assert_eq!(std::fs::read(&database).unwrap(), before);
@@ -187,7 +180,7 @@ fn check_strict_doctor_and_dev_warn_without_writing() {
     assert_eq!(std::fs::read(&database).unwrap(), before);
     assert_eq!(
         std::fs::read_to_string(directory.join("secret.txt")).unwrap(),
-        "nicht anfassen"
+        "do not touch"
     );
     let _ = std::fs::remove_dir_all(&directory);
 }
@@ -217,7 +210,7 @@ fn upgrade_check_dry_run_and_yes_keep_unknown_files() {
         dry_text.contains("upgrade.plan.add .ferrum/project.json"),
         "{dry_text}"
     );
-    assert!(dry_text.contains("Geplante Dateiänderungen"), "{dry_text}");
+    assert!(dry_text.contains("Planned file changes"), "{dry_text}");
     assert!(!directory.join(".ferrum").exists());
 
     let applied = output(ferrioxid(&directory).args(["upgrade", "--yes"]));
@@ -281,7 +274,7 @@ fn invalid_database_is_not_reported_as_current() {
     assert_eq!(status.status.code(), Some(1), "{body}");
     assert!(body.contains("migration.database.unavailable"), "{body}");
     assert!(!body.contains("Konflikte: keine"), "{body}");
-    assert!(!body.contains("vollständig migriert"), "{body}");
+    assert!(!body.contains("fully migrated"), "{body}");
     assert_eq!(std::fs::read(&database).unwrap(), bytes);
     let _ = std::fs::remove_dir_all(&directory);
 }
