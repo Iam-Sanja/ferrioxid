@@ -297,15 +297,15 @@ fn assert_current_framework_names(project: &std::path::Path) {
     assert!(project.join(".ferrioxid/project.json").is_file());
     assert!(!project.join(".ferrioxid/csrf.key").exists());
     let ignored = std::fs::read_to_string(project.join(".gitignore")).unwrap();
-    for secret in [
+    for pattern in [
         ".env\n",
         ".env.*\n",
         "!.env.example\n",
         ".ferrioxid/csrf.key\n",
     ] {
         assert!(
-            ignored.contains(secret),
-            "missing secret protection: {secret}"
+            ignored.contains(pattern),
+            "missing secret protection: {pattern}"
         );
     }
     let models = std::fs::read_to_string(project.join("src/models/mod.rs")).unwrap();
