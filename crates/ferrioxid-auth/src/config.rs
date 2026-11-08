@@ -32,7 +32,8 @@ impl AuthConfig {
     pub fn development() -> Self {
         Self {
             environment: Environment::Development,
-            cookie_name: "ferrioxid_session".to_owned(),
+            // Keep the existing cookie name so active sessions survive the framework rename.
+            cookie_name: "ferrum_session".to_owned(),
             cookie_secure: false,
             same_site: CookieSameSite::Lax,
             session_ttl_secs: 12 * 60 * 60,
