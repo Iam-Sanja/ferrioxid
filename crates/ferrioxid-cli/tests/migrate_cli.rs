@@ -91,7 +91,7 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
     assert!(status_text.contains("0001_initial  applied"));
     assert!(!status_text.contains("pending"));
     assert!(status_text.contains("Conflicts: none"));
-    assert!(status_text.contains("entspricht dem letzten angewendeten Migrationsziel"));
+    assert!(status_text.contains("matches the last applied migration target"));
 
     let second = run(&[
         "migrate",
