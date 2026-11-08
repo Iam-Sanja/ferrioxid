@@ -1,4 +1,4 @@
-//! Diagnose und Upgrade an temporären Projekten. Geschützte Datenbanken werden nicht verwendet.
+//! Diagnostics and upgrades use disposable projects. Protected databases are not touched.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -53,16 +53,34 @@ fn write_project(directory: &Path) {
         "[package]\nname = \"legacy\"\nversion = \"0.1.0\"\n\n[dependencies]\nferrioxid = { path = \"D:/04_Projekte_Arbeit/Projekte/ferrioxid/crates/ferrioxid\", features = [\"admin-ui\"] }\n",
     )
     .unwrap();
-    std::fs::write(directory.join("secret.txt"), "nicht anfassen").unwrap();
+    std::fs::write(directory.join("secret.txt"), "do not touch").unwrap();
     std::fs::create_dir_all(directory.join("src")).unwrap();
     std::fs::write(directory.join("src/main.rs"), "fn main() {}\n").unwrap();
     std::fs::write(directory.join("src/lib.rs"), "\n").unwrap();
 }
 
 fn empty_sqlite(path: &Path) {
-    // SQLite treats an existing zero-byte file as an empty database.
-    // Avoid launching a separate Python process, which may fail on Windows CI.
+    // SQLite accepts an existing zero-byte file as an empty test database.
     std::fs::File::create(path).expect("create empty SQLite test file");
+}
+
+#[test]
+fn cli_help_is_english_without_a_locale_override() {
+    let directory = root();
+    write_project(&directory);
+    let result = ferrioxid(&directory)
+        .env_remove("FERRUM_LOCALE")
+        .args(["new", "--help"])
+        .output()
+        .expect("CLI help");
+    assert!(result.status.success());
+    let help = String::from_utf8_lossy(&result.stdout);
+    assert!(
+        help.contains("Creates a standalone Ferrioxid project"),
+        "{help}"
+    );
+    assert!(!help.contains("Erzeugt"), "{help}");
+    let _ = std::fs::remove_dir_all(directory);
 }
 
 #[test]
@@ -109,7 +127,7 @@ fn status_is_read_only_and_shows_auth_and_app() {
     assert!(body.contains("migration.auth.pending"), "{body}");
     assert!(body.contains("migration.app.pending"), "{body}");
     assert!(body.contains("migration.history.missing"), "{body}");
-    assert!(body.contains("nicht geladen"), "{body}");
+    assert!(body.contains("was not loaded"), "{body}");
     assert!(!body.contains("entspricht dem letzten"), "{body}");
     assert!(body.contains("ferrioxid migrate up"), "{body}");
     assert_eq!(std::fs::read(&database).unwrap(), before);
@@ -181,7 +199,7 @@ fn check_strict_doctor_and_dev_warn_without_writing() {
     assert_eq!(std::fs::read(&database).unwrap(), before);
     assert_eq!(
         std::fs::read_to_string(directory.join("secret.txt")).unwrap(),
-        "nicht anfassen"
+        "do not touch"
     );
     let _ = std::fs::remove_dir_all(&directory);
 }
@@ -275,7 +293,7 @@ fn invalid_database_is_not_reported_as_current() {
     assert_eq!(status.status.code(), Some(1), "{body}");
     assert!(body.contains("migration.database.unavailable"), "{body}");
     assert!(!body.contains("Konflikte: keine"), "{body}");
-    assert!(!body.contains("vollständig migriert"), "{body}");
+    assert!(!body.contains("fully migrated"), "{body}");
     assert_eq!(std::fs::read(&database).unwrap(), bytes);
     let _ = std::fs::remove_dir_all(&directory);
 }

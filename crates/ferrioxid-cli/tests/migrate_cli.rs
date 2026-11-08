@@ -1,4 +1,4 @@
-//! CLI-Lauf gegen eine temporäre SQLite-Datei. Die Entwicklungsdatenbank bleibt unberührt.
+//! CLI run against a temporary SQLite file. The development database remains untouched.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
@@ -28,7 +28,7 @@ fn run(args: &[&str]) -> std::process::Output {
         .expect("ferrioxid CLI");
     if !output.status.success() {
         panic!(
-            "CLI fehlgeschlagen: {}\nstdout: {}\nstderr: {}",
+            "CLI failed: {}\nstdout: {}\nstderr: {}",
             output.status,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
@@ -72,7 +72,7 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
         "--migrations-dir",
         &migrations_arg,
     ]);
-    assert!(String::from_utf8_lossy(&applied.stdout).contains("Angewendet: 0001_initial"));
+    assert!(String::from_utf8_lossy(&applied.stdout).contains("Applied: 0001_initial"));
 
     let status = run(&[
         "migrate",
@@ -86,12 +86,12 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
     ]);
     let status_text = String::from_utf8_lossy(&status.stdout);
     assert!(status_text.contains("Backend: sqlite"));
-    assert!(status_text.contains("0001_auth_schema  angewendet"));
-    assert!(status_text.contains("0003_audit_operation  angewendet"));
-    assert!(status_text.contains("0001_initial  angewendet"));
-    assert!(!status_text.contains("ausstehend"));
-    assert!(status_text.contains("Konflikte: keine"));
-    assert!(status_text.contains("entspricht dem letzten angewendeten Migrationsziel"));
+    assert!(status_text.contains("0001_auth_schema  applied"));
+    assert!(status_text.contains("0003_audit_operation  applied"));
+    assert!(status_text.contains("0001_initial  applied"));
+    assert!(!status_text.contains("pending"));
+    assert!(status_text.contains("Conflicts: none"));
+    assert!(status_text.contains("matches the last applied migration target"));
 
     let second = run(&[
         "migrate",
@@ -101,7 +101,7 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
         "--migrations-dir",
         &migrations_arg,
     ]);
-    assert!(String::from_utf8_lossy(&second.stdout).contains("Keine ausstehenden Migrationen."));
+    assert!(String::from_utf8_lossy(&second.stdout).contains("No pending migrations."));
 
     let unchanged = run(&[
         "migrate",
@@ -112,6 +112,6 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
         "--migrations-dir",
         &migrations_arg,
     ]);
-    assert!(String::from_utf8_lossy(&unchanged.stdout).contains("Keine Schemaänderung"));
+    assert!(String::from_utf8_lossy(&unchanged.stdout).contains("No schema changes"));
     let _ = std::fs::remove_dir_all(&directory);
 }

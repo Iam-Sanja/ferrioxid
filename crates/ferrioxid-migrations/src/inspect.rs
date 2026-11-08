@@ -1,4 +1,4 @@
-//! Lesende Migrationsdiagnose für Auth- und App-Verzeichnisse.
+//! Read-only migration diagnostics for authentication and app directories.
 //!
 //! Diese Funktionen legen keine Historientabellen an und wenden keine Migration an.
 
@@ -87,7 +87,7 @@ pub fn readonly_database_url(url: &str) -> Result<String, MigrationError> {
     }
     let Some(rest) = url.strip_prefix("sqlite://") else {
         return Err(MigrationError::new(
-            "migration.database.unavailable: Die Datenbank-URL muss mit sqlite:// oder postgres:// beginnen.".to_owned(),
+            "migration.database.unavailable: Database URL must start with sqlite:// or postgres://.".to_owned(),
         ));
     };
     let path = rest.split('?').next().unwrap_or(rest);
@@ -96,7 +96,7 @@ pub fn readonly_database_url(url: &str) -> Result<String, MigrationError> {
     }
     if !Path::new(path).is_file() {
         return Err(MigrationError::new(format!(
-            "migration.database.missing: Die SQLite-Datei {path} existiert nicht. Es wird keine Datei angelegt."
+            "migration.database.missing: SQLite file {path} does not exist. No file will be created."
         )));
     }
     Ok(format!("sqlite://{path}?mode=ro"))
@@ -151,7 +151,7 @@ async fn diagnose(
             "",
             Level::Warn,
             "migration.history.missing",
-            "Die Auth-Historie fehlt. Die Tabelle wird nicht angelegt.",
+            "Authentication migration history is missing. The table will not be created.",
         ));
     }
     if !history::history_exists_in(db, HISTORY_TABLE).await?
@@ -162,11 +162,11 @@ async fn diagnose(
             "",
             Level::Warn,
             "migration.history.missing",
-            "Die App-Historie fehlt. Die Tabelle wird nicht angelegt.",
+            "App migration history is missing. The table will not be created.",
         ));
     }
     diagnose_auth_tables(db, &auth, &mut diagnostics).await?;
-    if app.schema_note.contains("weicht") || app.schema_note.contains("weder") {
+    if app.schema_note.contains("differs") || app.schema_note.contains("neither") {
         diagnostics.push(note(
             MigrationScope::App,
             "",
@@ -315,7 +315,7 @@ async fn diagnose_auth_tables(
                     "0002_admin_journal",
                     Level::Error,
                     "migration.auth.table_missing",
-                    &format!("Die erwartete Tabelle {table} fehlt."),
+                    &format!("Expected table {table} is missing."),
                 ));
             }
         }
@@ -329,7 +329,7 @@ async fn diagnose_auth_tables(
             "0003_audit_operation",
             Level::Error,
             "migration.auth.table_missing",
-            "Die Spalte operation_id fehlt in _ferrum_admin_audit.",
+            "Column operation_id is missing from _ferrum_admin_audit.",
         ));
     }
     Ok(())
@@ -356,7 +356,7 @@ fn line_diagnostics(scope: MigrationScope, report: &StatusReport) -> Vec<Diagnos
                 &line.id,
                 Level::Warn,
                 code,
-                &format!("{id} ist ausstehend.", id = line.id),
+                &format!("{id} is pending.", id = line.id),
             ));
         }
     }
@@ -373,13 +373,30 @@ fn line_diagnostics(scope: MigrationScope, report: &StatusReport) -> Vec<Diagnos
 }
 
 fn conflict_code(text: &str) -> &'static str {
-    if text.contains("Checksum") {
+    let normalized = text.to_ascii_lowercase();
+    if normalized.contains("checksum") {
         "migration.checksum_mismatch"
-    } else if text.contains("keine Datei") {
+    } else if normalized.contains("no file")
+        || normalized.contains("missing from the directory")
+        || normalized.contains("no longer has a file")
+    {
         "migration.unknown"
     } else {
         "migration.order"
     }
+}
+
+#[cfg(test)]
+#[test]
+fn translated_conflicts_preserve_machine_readable_codes() {
+    assert_eq!(
+        conflict_code("Stored checksum does not match file"),
+        "migration.checksum_mismatch"
+    );
+    assert_eq!(
+        conflict_code("Applied migration has no file"),
+        "migration.unknown"
+    );
 }
 
 fn pending_lines(report: &StatusReport) -> usize {
@@ -413,9 +430,18 @@ fn section(locale: &str, de: &str, en: &str, report: &StatusReport) -> String {
         return text;
     }
     for line in &report.lines {
+        let visible_state = if locale == "de" {
+            line.state.as_str()
+        } else {
+            match line.state.as_str() {
+                "angewendet" => "applied",
+                "ausstehend" => "pending",
+                other => other,
+            }
+        };
         text.push_str(&format!(
             "  {}  {}  checksum {}\n",
-            line.id, line.state, line.checksum
+            line.id, visible_state, line.checksum
         ));
     }
     text
@@ -588,7 +614,7 @@ mod tests {
             .iter()
             .any(|item| item.code == "migration.unknown"));
         let unknown_text = render_diagnosis("de", &unknown);
-        assert!(unknown_text.contains("nicht geladen"));
+        assert!(unknown_text.contains("not loaded"));
         assert!(!unknown_text.contains("entspricht dem letzten"));
         assert_eq!(std::fs::read(&file).unwrap(), before_unknown);
         let _ = std::fs::remove_dir_all(&root);

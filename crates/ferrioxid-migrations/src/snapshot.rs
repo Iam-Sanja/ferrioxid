@@ -149,25 +149,21 @@ impl SchemaSnapshot {
     }
 
     pub fn from_json(text: &str) -> Result<Self, MigrationError> {
-        let snapshot: Self = serde_json::from_str(text).map_err(|error| {
-            MigrationError::new(format!("Snapshot ist kein gültiges JSON: {error}"))
-        })?;
+        let snapshot: Self = serde_json::from_str(text)
+            .map_err(|error| MigrationError::new(format!("Snapshot is not valid JSON: {error}")))?;
         snapshot.validate()?;
         Ok(snapshot)
     }
 
     pub fn to_canonical_json(&self) -> Result<String, MigrationError> {
-        serde_json::to_string(self).map_err(|error| {
-            MigrationError::new(format!(
-                "Snapshot konnte nicht serialisiert werden: {error}"
-            ))
-        })
+        serde_json::to_string(self)
+            .map_err(|error| MigrationError::new(format!("Could not serialize snapshot: {error}")))
     }
 
     pub fn validate(&self) -> Result<(), MigrationError> {
         if self.format_version != FORMAT_VERSION {
             return Err(MigrationError::new(format!(
-                "Unbekannte Snapshot-Version {}. Unterstützt wird nur {FORMAT_VERSION}.",
+                "Unknown snapshot version {}. Only {FORMAT_VERSION} is supported.",
                 self.format_version
             )));
         }
@@ -175,13 +171,13 @@ impl SchemaSnapshot {
         for table in &self.tables {
             if !is_identifier(&table.name) {
                 return Err(MigrationError::new(format!(
-                    "Ungültiger Tabellenname `{}`. Erlaubt sind Buchstaben, Ziffern und Unterstriche.",
+                    "Invalid table name `{}`. Only letters, digits, and underscores are allowed.",
                     table.name
                 )));
             }
             if table_names.contains(&table.name.as_str()) {
                 return Err(MigrationError::new(format!(
-                    "Doppelter Tabellenname `{}`.",
+                    "Duplicate table name `{}`.",
                     table.name
                 )));
             }
@@ -197,13 +193,13 @@ impl SchemaSnapshot {
             for column in &table.columns {
                 if !is_identifier(&column.name) {
                     return Err(MigrationError::new(format!(
-                        "Ungültiger Spaltenname `{}.{}`.",
+                        "Invalid column name `{}.{}`.",
                         table.name, column.name
                     )));
                 }
                 if column_names.contains(&column.name.as_str()) {
                     return Err(MigrationError::new(format!(
-                        "Doppelter Spaltenname `{}.{}`.",
+                        "Duplicate column name `{}.{}`.",
                         table.name, column.name
                     )));
                 }
@@ -212,21 +208,21 @@ impl SchemaSnapshot {
                     primary_keys += 1;
                     if column.nullable {
                         return Err(MigrationError::new(format!(
-                            "Primärschlüssel `{}.{}` darf nicht nullable sein.",
+                            "Primary key `{}.{}` cannot be nullable.",
                             table.name, column.name
                         )));
                     }
                 }
                 if column.default.is_some() && column.logical_type != LogicalType::Bool {
                     return Err(MigrationError::new(format!(
-                        "Ein Default ist nur für boolesche Spalten vorgesehen (`{}.{}`).",
+                        "Defaults are supported only for boolean columns (`{}.{}`).",
                         table.name, column.name
                     )));
                 }
             }
             if primary_keys != 1 {
                 return Err(MigrationError::new(format!(
-                    "Tabelle `{}` braucht genau einen Primärschlüssel, gefunden wurden {primary_keys}.",
+                    "Table `{}` requires exactly one primary key; found {primary_keys}.",
                     table.name
                 )));
             }
@@ -236,7 +232,7 @@ impl SchemaSnapshot {
         Ok(())
     }
 
-    /// Gleicher fachlicher Inhalt. Die Reihenfolge der Tabellen und Spalten spielt keine Rolle.
+    /// Same logical content. Table and column ordering is not significant.
     pub fn semantically_eq(&self, other: &Self) -> bool {
         if self.format_version != other.format_version || self.tables.len() != other.tables.len() {
             return false;
@@ -367,7 +363,7 @@ fn validate_table_objects(table: &TableSnapshot, columns: &[&str]) -> Result<(),
             .any(|unique| unique.columns == index.columns)
         {
             return Err(MigrationError::new(format!(
-                "Index `{}` wiederholt den Unique-Constraint und wird nicht doppelt angelegt.",
+                "Index `{}` duplicates a unique constraint and is not created twice.",
                 index.name
             )));
         }
@@ -378,7 +374,7 @@ fn validate_table_objects(table: &TableSnapshot, columns: &[&str]) -> Result<(),
                 .any(|column| column.name == index.columns[0] && column.primary_key)
         {
             return Err(MigrationError::new(format!(
-                "Index `{}` wiederholt den Primärschlüssel.",
+                "Index `{}` duplicates the primary key.",
                 index.name
             )));
         }
@@ -388,7 +384,7 @@ fn validate_table_objects(table: &TableSnapshot, columns: &[&str]) -> Result<(),
         require_columns(table, columns, &foreign_key.columns)?;
         if foreign_key.on_update != "no_action" {
             return Err(MigrationError::new(format!(
-                "Fremdschlüssel `{}` darf für ON UPDATE nur no_action verwenden.",
+                "Foreign key `{}` supports only no_action for ON UPDATE.",
                 foreign_key.name
             )));
         }
@@ -401,7 +397,7 @@ fn validate_table_objects(table: &TableSnapshot, columns: &[&str]) -> Result<(),
                     .is_some_and(|column| column.nullable);
                 if !nullable {
                     return Err(MigrationError::new(format!(
-                        "SET NULL ist für `{}.{}` unzulässig, weil die Spalte NOT NULL ist.",
+                        "SET NULL is not allowed for `{}.{}` because the column is NOT NULL.",
                         table.name, column_name
                     )));
                 }
@@ -420,7 +416,7 @@ fn validate_foreign_keys(schema: &SchemaSnapshot) -> Result<(), MigrationError> 
                 .find(|candidate| candidate.name == foreign_key.referenced_table)
                 .ok_or_else(|| {
                     MigrationError::new(format!(
-                        "Fremdschlüssel `{}` verweist auf die unbekannte Tabelle `{}`.",
+                        "Foreign key `{}` references unknown table `{}`.",
                         foreign_key.name, foreign_key.referenced_table
                     ))
                 })?;
@@ -428,7 +424,7 @@ fn validate_foreign_keys(schema: &SchemaSnapshot) -> Result<(), MigrationError> 
                 || foreign_key.columns.len() != 1
             {
                 return Err(MigrationError::new(format!(
-                    "Fremdschlüssel `{}` muss genau eine Spalte referenzieren.",
+                    "Foreign key `{}` must reference exactly one column.",
                     foreign_key.name
                 )));
             }
@@ -438,7 +434,7 @@ fn validate_foreign_keys(schema: &SchemaSnapshot) -> Result<(), MigrationError> 
                 .find(|column| column.name == foreign_key.referenced_columns[0])
                 .ok_or_else(|| {
                     MigrationError::new(format!(
-                        "Fremdschlüssel `{}` verweist auf die unbekannte Spalte `{}.{}`.",
+                        "Foreign key `{}` references unknown column `{}.{}`.",
                         foreign_key.name, referenced.name, foreign_key.referenced_columns[0]
                     ))
                 })?;
@@ -448,13 +444,13 @@ fn validate_foreign_keys(schema: &SchemaSnapshot) -> Result<(), MigrationError> 
                 .find(|column| column.name == foreign_key.columns[0])
             else {
                 return Err(MigrationError::new(format!(
-                    "Fremdschlüssel `{}` nennt die fehlende Spalte `{}.{}`.",
+                    "Foreign key `{}` names missing column `{}.{}`.",
                     foreign_key.name, table.name, foreign_key.columns[0]
                 )));
             };
             if local.logical_type != referenced_column.logical_type {
                 return Err(MigrationError::new(format!(
-                    "Fremdschlüssel `{}` verbindet {:?} mit {:?}.",
+                    "Foreign key `{}` joins incompatible types {:?} and {:?}.",
                     foreign_key.name, local.logical_type, referenced_column.logical_type
                 )));
             }
@@ -464,7 +460,7 @@ fn validate_foreign_keys(schema: &SchemaSnapshot) -> Result<(), MigrationError> 
                 });
             if !unique_target {
                 return Err(MigrationError::new(format!(
-                    "Fremdschlüssel `{}` verlangt einen Primärschlüssel oder Unique-Constraint auf `{}.{}`.",
+                    "Foreign key `{}` requires a primary key or unique constraint on `{}.{}`.",
                     foreign_key.name, referenced.name, referenced_column.name
                 )));
             }
@@ -480,7 +476,7 @@ fn remember_name<'a>(
 ) -> Result<(), MigrationError> {
     if !is_identifier(name) {
         return Err(MigrationError::new(format!(
-            "Ungültiger Constraint-Name `{name}`."
+            "Invalid constraint name `{name}`."
         )));
     }
     if names.contains(&name) {
@@ -514,7 +510,7 @@ fn require_columns(
         }
         if seen.contains(&column.as_str()) {
             return Err(MigrationError::new(format!(
-                "Spalte `{column}` ist in einem Constraint von `{}` doppelt.",
+                "Column `{column}` appears twice in a constraint on `{}`.",
                 table.name
             )));
         }
@@ -663,7 +659,7 @@ mod tests {
             .validate()
             .unwrap_err()
             .0
-            .contains("Doppelter Tabellenname"));
+            .contains("Duplicate table name"));
 
         let mut columns = sample();
         let duplicate = columns.tables[0].columns[1].clone();
@@ -672,7 +668,7 @@ mod tests {
             .validate()
             .unwrap_err()
             .0
-            .contains("Doppelter Spaltenname"));
+            .contains("Duplicate column name"));
 
         let mut version = sample();
         version.format_version = 99;
@@ -680,7 +676,7 @@ mod tests {
             .validate()
             .unwrap_err()
             .0
-            .contains("Unbekannte Snapshot-Version"));
+            .contains("Unknown snapshot version"));
 
         let mut ident = sample();
         ident.tables[0].name = "bad-name".to_owned();
@@ -688,6 +684,6 @@ mod tests {
             .validate()
             .unwrap_err()
             .0
-            .contains("Ungültiger Tabellenname"));
+            .contains("Invalid table name"));
     }
 }

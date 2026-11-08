@@ -1,4 +1,4 @@
-//! Ausführung eines geprüften Migrationsplans. Unsichere Operationen werden nicht angefangen.
+//! Executes a verified migration plan. Unsafe operations are rejected.
 
 use crate::diff::{classify, ApplyClass, MigrationOperation};
 use crate::error::MigrationError;
@@ -39,20 +39,26 @@ impl StatusReport {
     pub fn render(&self) -> String {
         let mut text = format!("Backend: {}\n", self.backend);
         if self.lines.is_empty() {
-            text.push_str("Migrationen: keine\n");
+            text.push_str("Migrations: none\n");
         } else {
-            text.push_str("Migrationen:\n");
+            text.push_str("Migrations:\n");
             for line in &self.lines {
                 text.push_str(&format!(
                     "  {}  {}  checksum {}\n",
-                    line.id, line.state, line.checksum
+                    line.id,
+                    match line.state.as_str() {
+                        "angewendet" => "applied",
+                        "ausstehend" => "pending",
+                        other => other,
+                    },
+                    line.checksum
                 ));
             }
         }
         if self.conflicts.is_empty() {
-            text.push_str("Konflikte: keine\n");
+            text.push_str("Conflicts: none\n");
         } else {
-            text.push_str("Konflikte:\n");
+            text.push_str("Conflicts:\n");
             for conflict in &self.conflicts {
                 text.push_str(&format!("  {conflict}\n"));
             }
@@ -79,9 +85,9 @@ pub async fn apply_directory_with_history(
     apply_scoped(db, directory, allow_destructive, history_table, None).await
 }
 
-/// Wendet die Dateien eines App-Verzeichnisses an. Die Historien-ID ist `app:datei`.
+/// Applies migrations in an app directory. History IDs use `app:file`.
 ///
-/// Die Checksum bleibt die der Datei. Ein bereits geschriebenes Legacy-`0001_initial` wird nicht neu zugeordnet.
+/// The file checksum remains unchanged. Existing legacy `0001_initial` history is not remapped.
 pub async fn apply_namespaced_directory(
     db: &DatabaseConnection,
     directory: &Path,
@@ -91,7 +97,7 @@ pub async fn apply_namespaced_directory(
     validate_namespace(namespace)?;
     if !directory.is_dir() {
         return Err(MigrationError::new(format!(
-            "Das Migrationsverzeichnis der App `{namespace}` fehlt."
+            "The migrations directory for app `{namespace}` is missing."
         )));
     }
     apply_scoped(
@@ -168,7 +174,7 @@ pub async fn migration_status_in(
         if let Some(entry) = applied.iter().find(|entry| entry.id == file.id) {
             if entry.checksum != file.checksum {
                 conflicts.push(format!(
-                    "Angewendete Migration {} wurde verändert. Gespeicherte Checksum und Datei stimmen nicht überein.",
+                    "Applied migration {} was changed. Stored checksum and file do not match.",
                     file.id
                 ));
             }
@@ -188,7 +194,7 @@ pub async fn migration_status_in(
     for entry in &applied {
         if !state.files.iter().any(|file| file.id == entry.id) {
             conflicts.push(format!(
-                "Angewendete Migration {} hat keine Datei mehr im Migrationsverzeichnis.",
+                "Applied migration {} no longer has a file in the migrations directory.",
                 entry.id
             ));
         }
@@ -211,7 +217,7 @@ fn schema_note(
     applied: &[HistoryEntry],
 ) -> String {
     let Some(current) = current else {
-        return "Modellschema wurde nicht geladen und deshalb nicht verglichen.".to_owned();
+        return "The model schema was not loaded and was therefore not compared.".to_owned();
     };
     let latest_applied = applied
         .last()
@@ -223,21 +229,19 @@ fn schema_note(
         .collect();
     if let Some(last_pending) = pending.last() {
         if last_pending.to_snapshot.semantically_eq(current) {
-            return "Ausstehende Migrationen führen zum aktuellen Modell.".to_owned();
+            return "Pending migrations result in the current model schema.".to_owned();
         }
-        return "Das aktuelle Modell entspricht weder dem letzten angewendeten Ziel noch der letzten ausstehenden Migration.".to_owned();
+        return "The current model matches neither the last applied target nor the latest pending migration.".to_owned();
     }
     match latest_applied {
         Some(snapshot) if snapshot.semantically_eq(current) => {
-            "Das aktuelle Modell entspricht dem letzten angewendeten Migrationsziel.".to_owned()
+            "The current model matches the last applied migration target.".to_owned()
         }
-        Some(_) => {
-            "Das aktuelle Modell weicht vom letzten angewendeten Migrationsziel ab.".to_owned()
-        }
+        Some(_) => "The current model differs from the last applied migration target.".to_owned(),
         None if current.semantically_eq(&SchemaSnapshot::empty()) => {
-            "Es gibt weder Migrationen noch Modelltabellen.".to_owned()
+            "No migrations or model tables exist.".to_owned()
         }
-        None => "Es gibt Modelle, aber noch keine Migration.".to_owned(),
+        None => "Models exist but no migration has been created yet.".to_owned(),
     }
 }
 
@@ -247,19 +251,19 @@ fn pending_files<'a>(
 ) -> Result<Vec<&'a MigrationFile>, MigrationError> {
     if applied.len() > files.len() {
         return Err(MigrationError::new(
-            "Die Historie enthält mehr Migrationen als das Verzeichnis.".to_owned(),
+            "The migration history contains more entries than the directory.".to_owned(),
         ));
     }
     for (index, entry) in applied.iter().enumerate() {
         let file = files.get(index).ok_or_else(|| {
             MigrationError::new(format!(
-                "Angewendete Migration {} fehlt im Verzeichnis.",
+                "Applied migration {} is missing from the directory.",
                 entry.id
             ))
         })?;
         if file.id != entry.id {
             return Err(MigrationError::new(format!(
-                "Die Historie erwartet an Position {} die Migration {}, gefunden wurde {}.",
+                "History expects position {} to contain migration {}, but found {}.",
                 index + 1,
                 entry.id,
                 file.id
@@ -267,7 +271,7 @@ fn pending_files<'a>(
         }
         if file.checksum != entry.checksum {
             return Err(MigrationError::new(format!(
-                "Angewendete Migration {} wurde verändert. Gespeicherte Checksum und Datei stimmen nicht überein.",
+                "Applied migration {} was changed. Stored checksum and file do not match.",
                 file.id
             )));
         }
@@ -285,7 +289,7 @@ fn reject_blocked(file: &MigrationFile, allow_destructive: bool) -> Result<(), M
             ApplyClass::Destructive if allow_destructive => {}
             ApplyClass::Destructive => {
                 return Err(MigrationError::new(format!(
-                    "Migration {} enthält die riskante Operation `{}` und wurde nicht ausgeführt. Wiederhole den Lauf mit --allow-destructive, wenn der Datenverlust beabsichtigt ist. {}",
+                    "Migration {} includes destructive operation `{}` and was not executed. Re-run with --allow-destructive only if data loss is intentional. {}",
                     file.id,
                     operation.summary(),
                     file.risks.iter().map(|risk| risk.message.as_str()).collect::<Vec<_>>().join(" ")
@@ -295,9 +299,8 @@ fn reject_blocked(file: &MigrationFile, allow_destructive: bool) -> Result<(), M
                 return Err(MigrationError::new(format!(
                     "Migration {} wurde abgebrochen: {}",
                     file.id,
-                    reason.unwrap_or_else(
-                        || "Die Operation ist nicht sicher implementiert.".to_owned()
-                    )
+                    reason
+                        .unwrap_or_else(|| "This operation has no safe implementation.".to_owned())
                 )));
             }
         }
@@ -309,7 +312,7 @@ fn validate_namespace(namespace: &str) -> Result<(), MigrationError> {
     if !crate::snapshot::is_identifier(namespace) || namespace.contains(':') || namespace.len() > 32
     {
         return Err(MigrationError::new(format!(
-            "Ungültiger App-Name `{namespace}`."
+            "Invalid app name `{namespace}`."
         )));
     }
     Ok(())
@@ -339,7 +342,7 @@ fn scoped_history(
                 if let Some(rest) = entry.id.strip_prefix(&prefix) {
                     if rest.is_empty() || rest.contains(':') {
                         return Err(MigrationError::new(format!(
-                            "Die Historien-ID `{}` ist nicht eindeutig qualifiziert.",
+                            "History ID `{}` is not fully qualified.",
                             entry.id
                         )));
                     }
@@ -381,7 +384,7 @@ async fn status_scoped(
         if let Some(entry) = applied.iter().find(|entry| entry.id == file.id) {
             if entry.checksum != file.checksum {
                 conflicts.push(format!(
-                    "Angewendete Migration {shown} wurde verändert. Gespeicherte Checksum und Datei stimmen nicht überein."
+                    "Applied migration {shown} was changed. Stored checksum and file do not match."
                 ));
             }
             lines.push(MigrationLine {
@@ -400,7 +403,7 @@ async fn status_scoped(
     for entry in &applied {
         if !state.files.iter().any(|file| file.id == entry.id) {
             conflicts.push(format!(
-                "Angewendete Migration {} hat keine Datei mehr im Migrationsverzeichnis.",
+                "Applied migration {} no longer has a file in the migrations directory.",
                 history_key(namespace, &entry.id)
             ));
         }
@@ -424,11 +427,10 @@ async fn apply_one(
 ) -> Result<(), MigrationError> {
     let backend = db.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
-    let transaction = db.begin().await.map_err(|error| {
-        MigrationError::new(format!(
-            "Transaktion konnte nicht gestartet werden: {error}"
-        ))
-    })?;
+    let transaction = db
+        .begin()
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not start transaction: {error}")))?;
     let mut schema = file.from_snapshot.clone();
     for operation in &file.operations {
         if let Some((table, from, to)) = crate::rebuild::alter_parts(operation) {
@@ -436,7 +438,7 @@ async fn apply_one(
                 .await
                 .map_err(|error| {
                     MigrationError::new(format!(
-                        "Migration {} wurde zurückgerollt bei `{}`: {}",
+                        "Migration {} was rolled back at `{}`: {}",
                         file.id,
                         operation.summary(),
                         error.0
@@ -460,7 +462,7 @@ async fn apply_one(
     }
     let applied_at_unix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|error| MigrationError::new(format!("Systemzeit ist ungültig: {error}")))?
+        .map_err(|error| MigrationError::new(format!("Invalid system time: {error}")))?
         .as_secs() as i64;
     history::insert_history_in(
         &transaction,
@@ -472,10 +474,7 @@ async fn apply_one(
     )
     .await?;
     transaction.commit().await.map_err(|error| {
-        MigrationError::new(format!(
-            "Migration {} konnte nicht festgeschrieben werden: {error}",
-            file.id
-        ))
+        MigrationError::new(format!("Could not commit migration {}: {error}", file.id))
     })?;
     Ok(())
 }
@@ -595,12 +594,13 @@ fn render_operation(
         }
         MigrationOperation::AddForeignKey { .. } | MigrationOperation::DropForeignKey { .. } => {
             return Err(MigrationError::new(
-                "Fremdschlüssel auf bestehenden Spalten werden nicht ausgeführt.".to_owned(),
+                "Adding foreign keys to existing columns is not supported.".to_owned(),
             ));
         }
         MigrationOperation::AlterColumn { .. } => {
             return Err(MigrationError::new(
-                "ALTER COLUMN wird über den geprüften Umbau ausgeführt und nicht als einzelnes DDL gerendert.".to_owned(),
+                "ALTER COLUMN is handled by the verified table rebuild, not as standalone DDL."
+                    .to_owned(),
             ));
         }
     })
@@ -697,17 +697,17 @@ pub async fn reseal_unapplied(
 ) -> Result<crate::store::MigrationFile, MigrationError> {
     let text = std::fs::read_to_string(path).map_err(|error| {
         MigrationError::new(format!(
-            "Migration {} ist nicht lesbar: {error}",
+            "Could not read migration {}: {error}",
             path.display()
         ))
     })?;
     let id = serde_json::from_str::<crate::store::MigrationFile>(&text)
-        .map_err(|error| MigrationError::new(format!("Migration ist kein gültiges JSON: {error}")))?
+        .map_err(|error| MigrationError::new(format!("Migration is not valid JSON: {error}")))?
         .id;
     let history = history::read_history(db).await?;
     if history.iter().any(|entry| entry.id == id) {
         return Err(MigrationError::new(format!(
-            "Migration {id} ist bereits angewendet. Die Checksum einer angewendeten Datei wird nicht neu geschrieben."
+            "Migration {id} is already applied. The checksum of an applied migration cannot be rewritten."
         )));
     }
     crate::store::reseal_migration(path)
@@ -720,7 +720,7 @@ fn physical_columns(columns: &[ColumnSnapshot]) -> Result<Vec<PhysicalColumn<'_>
 fn physical_column(column: &ColumnSnapshot) -> Result<PhysicalColumn<'_>, MigrationError> {
     if column.default.is_some() && column.logical_type != crate::snapshot::LogicalType::Bool {
         return Err(MigrationError::new(format!(
-            "Spalte `{}` hat einen Default, der nur für bool erlaubt ist.",
+            "Column `{}` has a default that is supported only for bool.",
             column.name
         )));
     }
@@ -737,12 +737,12 @@ fn map_execute_error(id: &str, operation: &MigrationOperation, detail: &str) -> 
     let lower = detail.to_ascii_lowercase();
     if lower.contains("already exists") || lower.contains("duplicate") {
         return MigrationError::new(format!(
-            "Migration {id} wurde zurückgerollt. `{}` trifft auf ein vorhandenes Objekt. Vorhandene Tabellen werden nicht als migriert markiert. Lege für einen sauberen Migrationsstand eine neue Datenbank an; bestehende Dateien werden nicht gelöscht.",
+            "Migration {id} was rolled back. `{}` conflicts with an existing object. Existing tables are not marked as migrated. Use a new database for a clean migration state; existing files are not deleted.",
             operation.summary()
         ));
     }
     MigrationError::new(format!(
-        "Migration {id} wurde zurückgerollt bei `{}`: {detail}",
+        "Migration {id} was rolled back at `{}`: {detail}",
         operation.summary()
     ))
 }

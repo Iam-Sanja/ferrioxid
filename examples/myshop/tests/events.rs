@@ -118,7 +118,7 @@ async fn sqlite_event_roundtrip_sort_filter_and_blocked_conversion() {
     }])
     .unwrap();
     let refused = plan_change(&current, &changed).unwrap();
-    assert!(refused.refusal.unwrap().contains("blockiert"));
+    assert!(refused.refusal.unwrap().contains("blocked"));
 }
 
 #[tokio::test]

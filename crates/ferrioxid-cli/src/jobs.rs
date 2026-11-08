@@ -1,4 +1,4 @@
-//! Job-Befehle. Lesende Aufrufe öffnen SQLite nur mit `mode=ro`.
+//! Job commands. Read-only operations open SQLite using `mode=ro`.
 
 use ferrioxid_jobs::{
     describe_job, render_migration_status, JobPolicy, Queue, SystemClock, WorkerConfig, WorkerHost,
@@ -15,7 +15,7 @@ pub fn confirm(yes: bool) -> Result<(), String> {
         Ok(())
     } else {
         Err(
-            "job.confirm Der Schreibbefehl braucht --yes. Ohne --yes wird nichts geändert."
+            "job.confirm This command modifies data and requires --yes. No changes were made."
                 .to_owned(),
         )
     }
@@ -45,16 +45,14 @@ pub fn worker(
         config.concurrency = value;
     }
     if !config.enabled {
-        eprintln!("job.disabled jobs.enabled ist false. ferrioxid dev und der Webserver starten keinen Worker.");
+        eprintln!("job.disabled jobs.enabled is false. Neither ferrioxid dev nor the web server starts a worker.");
         return ExitCode::from(2);
     }
     if config.concurrency > 1 && config.database_url.starts_with("sqlite") {
-        eprintln!(
-            "job.sqlite.concurrency SQLite nutzt eine Verbindung. Die Parallelität bleibt 1."
-        );
+        eprintln!("job.sqlite.concurrency SQLite uses one connection. Concurrency remains 1.");
         config.concurrency = 1;
     }
-    println!("job.handlers.builtin Der CLI-Worker führt nur den eingebauten Mail-Handler aus. Anwendungshandler startet src/bin/worker.rs.");
+    println!("job.handlers.builtin The CLI worker runs only the built-in mail handler. Start app handlers with src/bin/worker.rs.");
     let host = WorkerHost::new(config).with_mail(mail_from(project));
     match host.run_until_ctrl_c() {
         Ok(()) => ExitCode::SUCCESS,
@@ -76,7 +74,7 @@ pub fn list(url: String) -> ExitCode {
     read(url, |queue| async move {
         let rows = queue.list(50).await.map_err(show)?;
         if rows.is_empty() {
-            println!("Jobs: keine");
+            println!("Jobs: none");
         }
         for row in rows {
             println!(
@@ -100,9 +98,7 @@ pub fn inspect(url: String, id: String, show_payload: bool) -> ExitCode {
         let job = queue.get(id).await.map_err(show)?;
         println!("{}", describe_job(&job, show_payload));
         if show_payload {
-            eprintln!(
-                "job.payload.visible Die angeforderte Payload kann personenbezogene Daten enthalten."
-            );
+            eprintln!("job.payload.visible The requested payload may contain personal data.");
         }
         Ok(())
     })
@@ -112,7 +108,7 @@ pub fn retry(url: String, id: String, yes: bool) -> ExitCode {
     mutate(url, yes, |queue| async move {
         let id = parse_id(&id)?;
         queue.retry(id).await.map_err(show)?;
-        println!("Job {id} wartet erneut.");
+        println!("Job {id} has been scheduled for retry.");
         Ok(())
     })
 }
@@ -121,7 +117,7 @@ pub fn cancel(url: String, id: String, yes: bool) -> ExitCode {
     mutate(url, yes, |queue| async move {
         let id = parse_id(&id)?;
         queue.cancel(id).await.map_err(show)?;
-        println!("Job {id} ist abgebrochen.");
+        println!("Job {id} has been cancelled.");
         Ok(())
     })
 }
@@ -222,7 +218,7 @@ fn existing_sqlite(url: &str) -> Result<(), String> {
     if Path::new(path).is_file() {
         Ok(())
     } else {
-        Err("job.database Die SQLite-Datei fehlt. Es wird keine Datei angelegt.".to_owned())
+        Err("job.database The SQLite database file is missing. No file will be created.".to_owned())
     }
 }
 
@@ -237,7 +233,7 @@ fn sqlite_file(url: &str) -> Option<&str> {
 }
 
 fn parse_id(value: &str) -> Result<Uuid, String> {
-    Uuid::parse_str(value).map_err(|_| "job.not_found Die Job-ID ist kein UUID.".to_owned())
+    Uuid::parse_str(value).map_err(|_| "job.not_found The job ID is not a valid UUID.".to_owned())
 }
 
 fn show(error: ferrioxid_jobs::JobError) -> String {

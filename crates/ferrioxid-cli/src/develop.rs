@@ -1,4 +1,4 @@
-//! Entwicklungsserver und Release-Build. Der Admin steckt im Rust-Binary.
+//! Development server and release build. The admin is embedded in the Rust binary.
 
 use ferrioxid_migrations::discover_project;
 use notify::{Event, RecommendedWatcher, RecursiveMode, Watcher};
@@ -39,19 +39,19 @@ pub fn dev() -> ExitCode {
     ) {
         Ok(watcher) => watcher,
         Err(error) => {
-            eprintln!("Dateiwächter konnte nicht starten: {error}");
+            eprintln!("File watcher failed to start: {error}");
             return ExitCode::from(1);
         }
     };
     if let Err(error) = watcher.watch(&project.root, RecursiveMode::Recursive) {
-        eprintln!("Projektverzeichnis kann nicht beobachtet werden: {error}");
+        eprintln!("Cannot watch project directory: {error}");
         return ExitCode::from(1);
     }
     let stop_tx = control_tx.clone();
     if let Err(error) = ctrlc::set_handler(move || {
         let _ = stop_tx.send(Signal::Stop);
     }) {
-        eprintln!("Abbruchsignal konnte nicht gesetzt werden: {error}");
+        eprintln!("Could not register the shutdown signal: {error}");
         return ExitCode::from(1);
     }
     println!(
@@ -87,7 +87,7 @@ pub fn dev() -> ExitCode {
         }
         if let Some(running) = child.as_mut() {
             if let Ok(Some(status)) = running.try_wait() {
-                eprintln!("Der Server ist mit Status {status} beendet. Ferrioxid startet erst nach einer Dateiänderung neu.");
+                eprintln!("The server exited with status {status}. Ferrioxid will restart after a file change.");
                 child = None;
             }
         }
@@ -132,7 +132,7 @@ pub fn build() -> ExitCode {
         }
         Ok(_) => ExitCode::from(1),
         Err(error) => {
-            eprintln!("cargo build konnte nicht gestartet werden: {error}");
+            eprintln!("Could not start cargo build: {error}");
             ExitCode::from(1)
         }
     }
@@ -188,9 +188,9 @@ fn start_server(root: &Path, package: &str) -> Result<Child, String> {
         .args(["build", "--bin", package])
         .current_dir(root)
         .status()
-        .map_err(|error| format!("cargo build konnte nicht gestartet werden: {error}"))?;
+        .map_err(|error| format!("Could not start cargo build: {error}"))?;
     if !status.success() {
-        return Err("Der Build ist fehlgeschlagen. Der alte Server bleibt beendet.".to_owned());
+        return Err("The build failed. The previous server remains stopped.".to_owned());
     }
     let binary = binary_path(root, package);
     Command::new(&binary)
@@ -198,7 +198,7 @@ fn start_server(root: &Path, package: &str) -> Result<Child, String> {
         .stdout(Stdio::inherit())
         .stderr(Stdio::inherit())
         .spawn()
-        .map_err(|error| format!("{} konnte nicht starten: {error}", binary.display()))
+        .map_err(|error| format!("Could not start {}: {error}", binary.display()))
 }
 
 fn stop_child(child: &mut Option<Child>) {
@@ -229,7 +229,7 @@ fn package_name(root: &Path) -> Result<String, String> {
             return Ok(value.trim().trim_matches('"').to_owned());
         }
     }
-    Err("Cargo.toml enthält keinen Paketnamen.".to_owned())
+    Err("Cargo.toml does not contain a package name.".to_owned())
 }
 
 pub fn relevant(path: &Path) -> bool {

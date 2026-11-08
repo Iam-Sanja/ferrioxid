@@ -1,4 +1,4 @@
-//! Erzeugt ein eigenständiges Ferrioxid-Projekt außerhalb des Framework-Workspaces.
+//! Generates a standalone Ferrioxid project outside the framework workspace.
 
 use ferrioxid_migrations::{
     manifest_json, plan_change, save_migration, seal, sha256_hex, ColumnSnapshot, LogicalType,
@@ -19,7 +19,7 @@ pub fn new_project(
         .join(name);
     if destination.exists() {
         return Err(format!(
-            "{} existiert bereits. Ferrioxid überschreibt kein vorhandenes Verzeichnis.",
+            "{} already exists. Ferrioxid does not overwrite existing directories.",
             destination.display()
         ));
     }
@@ -91,21 +91,21 @@ fn parse_template(value: &str) -> Result<Template, String> {
     match value {
         "api" => Ok(Template::Api),
         "fullstack" => Ok(Template::Fullstack),
-        _ => Err("Unbekanntes Template. Erlaubt sind api und fullstack.".to_owned()),
+        _ => Err("Unknown template. Choose api or fullstack.".to_owned()),
     }
 }
 
 pub fn validate_project_name(name: &str) -> Result<(), String> {
     let mut chars = name.chars();
     let Some(first) = chars.next() else {
-        return Err("Der Projektname darf nicht leer sein.".to_owned());
+        return Err("The project name cannot be empty.".to_owned());
     };
     if !first.is_ascii_alphabetic()
         || !chars.all(|char| char.is_ascii_alphanumeric() || char == '_')
         || name.len() > 48
     {
         return Err(
-            "Der Projektname muss mit einem Buchstaben beginnen und darf nur Buchstaben, Ziffern und Unterstriche enthalten."
+            "The project name must start with a letter and contain only letters, digits, and underscores."
                 .to_owned(),
         );
     }
@@ -125,7 +125,7 @@ pub fn validate_project_name(name: &str) -> Result<(), String> {
             | "lpt1"
     );
     if reserved {
-        return Err(format!("`{name}` ist als Projektname reserviert."));
+        return Err(format!("`{name}` is a reserved project name."));
     }
     Ok(())
 }
@@ -137,13 +137,13 @@ fn resolve_ferrum_path(explicit: Option<&Path>) -> Result<PathBuf, String> {
         PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../..")
     };
     let path = raw.canonicalize().map_err(|_| {
-        "Der Ferrioxid-Pfad existiert nicht. Übergib --ferrioxid-path mit dem Repository."
+        "The Ferrioxid path does not exist. Use --ferrioxid-path to specify the repository."
             .to_owned()
     })?;
     let crate_manifest = path.join("crates/ferrioxid/Cargo.toml");
     if !crate_manifest.is_file() {
         return Err(
-            "Der Ferrioxid-Pfad enthält keine crates/ferrioxid/Cargo.toml. Eine veröffentlichte Crate ist noch nicht vorgesehen."
+            "The Ferrioxid path does not contain crates/ferrioxid/Cargo.toml. The crate is not published yet."
                 .to_owned(),
         );
     }
@@ -193,7 +193,7 @@ fn write_upgrade_manifest(destination: &Path, template: Template) -> Result<(), 
     let mut files = Vec::new();
     for path in relative {
         let bytes = std::fs::read(destination.join(path))
-            .map_err(|error| format!("{path} fehlt im neuen Projekt: {error}"))?;
+            .map_err(|error| format!("{path} is missing from the new project: {error}"))?;
         files.push(TrackedFile {
             path: path.to_owned(),
             sha256: sha256_hex(&bytes),
@@ -209,7 +209,7 @@ fn write_upgrade_manifest(destination: &Path, template: Template) -> Result<(), 
 fn write(path: &Path, contents: &str) -> Result<(), String> {
     if path.exists() {
         return Err(format!(
-            "{} existiert bereits und wird nicht überschrieben.",
+            "{} already exists and will not be overwritten.",
             path.display()
         ));
     }
@@ -240,7 +240,7 @@ fn manifest(name: &str, template: Template) -> String {
         Template::Fullstack => ("fullstack", "true", "true", "true"),
     };
     format!(
-        r##"# Ferrioxid-Projekt. Diese Datei enthält keine Secrets.
+        r##"# Ferrioxid project. This file does not contain secrets.
 migrations_dir = "migrations"
 schema_command = "cargo run --quiet -- --print-schema"
 
@@ -299,20 +299,20 @@ reset_ttl_minutes = 30
 }
 
 fn env_example() -> &'static str {
-    "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRUM_CSRF_SECRET muss in Produktion 64 Hex-Zeichen sein.\n# FERRUM_PASSWORD wird nur für die nicht interaktive Benutzeranlage gelesen.\n# FERRUM_SMTP_PASSWORD bleibt außerhalb von ferrum.toml.\n# FERRUM_PUBLIC_ORIGIN setzt die Reset-URL, zum Beispiel https://example.com.\n"
+    "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRUM_CSRF_SECRET must contain 64 hexadecimal characters in production.\n# FERRUM_PASSWORD is read only when creating users non-interactively.\n# FERRUM_SMTP_PASSWORD must not be stored in ferrum.toml.\n# FERRUM_PUBLIC_ORIGIN sets the password reset URL, for example https://example.com.\n"
 }
 
 fn readme(name: &str, template: Template) -> String {
     let frontend = match template {
-        Template::Api => "Dieses API-Projekt braucht kein Node.js.\n",
+        Template::Api => "This API project does not require Node.js.\n",
         Template::Fullstack => {
-            "Der Admin wird mit dem Rust-Binary ausgeliefert. Node.js ist nicht erforderlich.\n"
+            "The admin is embedded in the Rust binary. Node.js is not required.\n"
         }
     };
     format!(
         r#"# {name}
 
-SQLite ist die lokale Datenbank. Docker und PostgreSQL sind nicht erforderlich.
+SQLite is the local database. Docker and PostgreSQL are not required.
 
 ```powershell
 ferrioxid migrate up
@@ -321,7 +321,7 @@ ferrioxid dev
 ```
 
 {frontend}
-Der Server bindet standardmäßig nur `127.0.0.1`. Die Startseite liegt unter `/`. Statische Dateien liegen in `static/` und werden unter `/static/` ausgeliefert. `media/` ist für Uploads vorgesehen und wird nicht versioniert. Ein Benutzer wird mit `ferrioxid admin create-user --email name@example.com --staff --superuser` angelegt. Das Passwort wird abgefragt. Vorlagen stehen in `templates/` und nutzen Tera. Das Kontaktformular eines Fullstack-Projekts liegt unter `/contact` und versendet keine E-Mail. `[mail] backend = "disabled"` versendet ebenfalls keine E-Mail. Ein Passwort-Reset liegt unter `/auth/password-reset`, sobald ein Mail-Backend aktiv ist.
+The server binds to `127.0.0.1` by default. The home page is available at `/`. Static files are stored in `static/` and served at `/static/`. `media/` is used for uploads and is not version-controlled. Create a user with `ferrioxid admin create-user --email name@example.com --staff --superuser`. The command prompts for a password. Templates are stored in `templates/` and use Tera. The contact form of a fullstack project is available at `/contact` and does not send email. `[mail] backend = "disabled"` also prevents email from being sent. Password reset is available at `/auth/password-reset` once a mail backend is enabled.
 "#
     )
 }
@@ -422,7 +422,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {{
     let db = ferrioxid::db::connect(&url).await?;
     let address = settings.bind_address()?;
     if address.starts_with("0.0.0.0") {{
-        return Err("Ferrioxid bindet neue Projekte nicht an 0.0.0.0.".into());
+        return Err("Ferrioxid does not bind new projects to 0.0.0.0.".into());
     }}
     {auth}
     let app = ferrioxid::App::new(db)

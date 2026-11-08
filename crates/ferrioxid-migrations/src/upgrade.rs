@@ -1,4 +1,4 @@
-//! Sicherer Projekt-Upgrade-Plan. Unbekannte Dateien werden nicht überschrieben.
+//! Safe project upgrade plan. Unknown files are never overwritten.
 
 use crate::error::MigrationError;
 use crate::manifest::{
@@ -119,7 +119,7 @@ pub fn ferrioxid_dependency(cargo_toml: &str) -> DependencyReport {
 pub fn plan_upgrade(root: &Path) -> Result<UpgradePlan, MigrationError> {
     let root = root.canonicalize().map_err(|error| {
         MigrationError::new(format!(
-            "project.file.missing: Projektwurzel ist nicht lesbar: {error}"
+            "project.file.missing: Cannot read project root: {error}"
         ))
     })?;
     let cargo = std::fs::read_to_string(root.join("Cargo.toml")).unwrap_or_default();
@@ -128,20 +128,20 @@ pub fn plan_upgrade(root: &Path) -> Result<UpgradePlan, MigrationError> {
     if dependency.kind == DependencyKind::Missing {
         actions.push(PlanAction::Manual {
             code: "project.dependency.unavailable",
-            message: "Cargo.toml enthält keine Ferrioxid-Abhängigkeit.".to_owned(),
+            message: "Cargo.toml does not declare a Ferrioxid dependency.".to_owned(),
         });
     }
     if dependency.admin_ui {
         actions.push(PlanAction::Manual {
             code: "project.dependency.admin_ui",
-            message: "Das Feature admin-ui bleibt aus Kompatibilität gültig und muss nicht entfernt werden.".to_owned(),
+            message: "The admin-ui feature remains supported for compatibility and does not need to be removed.".to_owned(),
         });
     }
     let manifest_path = contained_target(&root, MANIFEST_RELATIVE)?;
     if !manifest_path.is_file() {
         actions.push(PlanAction::Manual {
             code: "project.template.legacy",
-            message: "Es gibt kein Upgrade-Manifest. Vorhandene Dateien gelten als unbekannt und werden nicht überschrieben.".to_owned(),
+            message: "No upgrade manifest exists. Existing files are treated as unknown and are not overwritten.".to_owned(),
         });
         actions.push(PlanAction::Add {
             relative: MANIFEST_RELATIVE.to_owned(),
@@ -170,7 +170,7 @@ pub fn plan_upgrade(root: &Path) -> Result<UpgradePlan, MigrationError> {
             relative: MANIFEST_RELATIVE.to_owned(),
             code: "upgrade.conflict",
             message: format!(
-                "Manifestformat {} wird nicht automatisch umgeschrieben.",
+                "Manifest format {} is not automatically rewritten.",
                 manifest.format
             ),
         });
@@ -185,7 +185,7 @@ pub fn plan_upgrade(root: &Path) -> Result<UpgradePlan, MigrationError> {
         });
         actions.push(PlanAction::Manual {
             code: "project.template.legacy",
-            message: "Legacy-Manifest. Bestehende Projektdateien bleiben unverändert.".to_owned(),
+            message: "Legacy manifest. Existing project files remain unchanged.".to_owned(),
         });
         return Ok(UpgradePlan {
             actions,
@@ -196,7 +196,7 @@ pub fn plan_upgrade(root: &Path) -> Result<UpgradePlan, MigrationError> {
         actions.push(PlanAction::Manual {
             code: "project.template.outdated",
             message: format!(
-                "Template {} ist nicht {}. Dateien werden deshalb nicht ersetzt.",
+                "Template {} differs from {}. Files will not be replaced.",
                 manifest.template_version, TEMPLATE_VERSION
             ),
         });
@@ -212,14 +212,14 @@ pub fn plan_upgrade(root: &Path) -> Result<UpgradePlan, MigrationError> {
                 relative: tracked.path.clone(),
                 code: "project.file.missing",
                 message: format!(
-                    "{} fehlt. Ferrioxid legt diese Datei nicht neu an.",
+                    "{} is missing. Ferrioxid will not recreate this file.",
                     tracked.path
                 ),
             }),
             Ok(path) => {
                 let bytes = std::fs::read(&path).map_err(|error| {
                     MigrationError::new(format!(
-                        "project.file.missing: {} ist nicht lesbar: {error}",
+                        "project.file.missing: Cannot read {}: {error}",
                         path.display()
                     ))
                 })?;
@@ -232,7 +232,7 @@ pub fn plan_upgrade(root: &Path) -> Result<UpgradePlan, MigrationError> {
                         relative: tracked.path.clone(),
                         code: "project.file.modified",
                         message: format!(
-                            "{} weicht vom Manifest ab und wird nicht überschrieben.",
+                            "{} differs from the manifest and will not be overwritten.",
                             tracked.path
                         ),
                     });
@@ -275,7 +275,7 @@ pub fn render_plan(locale: &str, plan: &UpgradePlan, dry_run: bool) -> String {
         text.push_str(if locale == "de" {
             "Keine Dateiänderung.\n"
         } else {
-            "No file change.\n"
+            "No file changes.\n"
         });
     }
     for action in &plan.actions {
@@ -302,7 +302,7 @@ pub fn render_plan(locale: &str, plan: &UpgradePlan, dry_run: bool) -> String {
 pub fn apply_upgrade(root: &Path, plan: &UpgradePlan) -> Result<bool, MigrationError> {
     if plan.has_conflict() {
         return Err(MigrationError::new(
-            "upgrade.conflict: Es gibt Konflikte. Es wurde keine Datei geschrieben.".to_owned(),
+            "upgrade.conflict: Conflicts were found. No files were written.".to_owned(),
         ));
     }
     let adds: Vec<&str> = plan
@@ -318,7 +318,7 @@ pub fn apply_upgrade(root: &Path, plan: &UpgradePlan) -> Result<bool, MigrationE
     }
     if adds != [MANIFEST_RELATIVE] {
         return Err(MigrationError::new(
-            "upgrade.conflict: Nur das neue Manifest ist eine sichere Dateiänderung.".to_owned(),
+            "upgrade.conflict: Only the new manifest is a safe file change.".to_owned(),
         ));
     }
     let fresh = plan_upgrade(root)?;
@@ -327,7 +327,8 @@ pub fn apply_upgrade(root: &Path, plan: &UpgradePlan) -> Result<bool, MigrationE
     );
     if !still || fresh.has_conflict() {
         return Err(MigrationError::new(
-            "upgrade.conflict: Das Projekt hat sich seit dem Plan geändert. Der Vorgang wurde abgebrochen.".to_owned(),
+            "upgrade.conflict: The project has changed since planning. The operation was aborted."
+                .to_owned(),
         ));
     }
     write_new_file(
@@ -346,7 +347,7 @@ pub fn contained_target(root: &Path, relative: &str) -> Result<PathBuf, Migratio
         || relative.starts_with('\\')
     {
         return Err(MigrationError::new(format!(
-            "upgrade.unsafe_path: `{relative}` liegt nicht im Projekt."
+            "upgrade.unsafe_path: `{relative}` is outside the project."
         )));
     }
     for component in Path::new(relative).components() {
@@ -354,7 +355,7 @@ pub fn contained_target(root: &Path, relative: &str) -> Result<PathBuf, Migratio
             Component::Normal(_) => {}
             _ => {
                 return Err(MigrationError::new(format!(
-                    "upgrade.unsafe_path: `{relative}` verlässt das Projekt."
+                    "upgrade.unsafe_path: `{relative}` escapes the project directory."
                 )));
             }
         }
@@ -382,13 +383,13 @@ pub fn contained_target(root: &Path, relative: &str) -> Result<PathBuf, Migratio
     while !cursor.exists() {
         let Some(name) = cursor.file_name() else {
             return Err(MigrationError::new(format!(
-                "upgrade.unsafe_path: `{relative}` ist kein Projektpfad."
+                "upgrade.unsafe_path: `{relative}` is not a project path."
             )));
         };
         missing.push(name.to_os_string());
         cursor = cursor.parent().ok_or_else(|| {
             MigrationError::new(format!(
-                "upgrade.unsafe_path: `{relative}` hat kein übergeordnetes Verzeichnis."
+                "upgrade.unsafe_path: `{relative}` has no parent directory."
             ))
         })?;
     }
@@ -410,14 +411,15 @@ fn write_new_file(root: &Path, relative: &str, contents: &str) -> Result<(), Mig
     let destination = contained_target(root, relative)?;
     if destination.exists() {
         return Err(MigrationError::new(
-            "upgrade.conflict: Die Zieldatei existiert bereits und wird nicht ersetzt.".to_owned(),
+            "upgrade.conflict: The destination file already exists and will not be replaced."
+                .to_owned(),
         ));
     }
     let partial_relative = format!("{relative}.partial");
     let partial = contained_target(root, &partial_relative)?;
     if let Some(parent) = partial.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
-            MigrationError::new(format!("upgrade.conflict: Verzeichnis fehlt: {error}"))
+            MigrationError::new(format!("upgrade.conflict: Directory is missing: {error}"))
         })?;
     }
     if partial.exists() {
@@ -429,12 +431,12 @@ fn write_new_file(root: &Path, relative: &str, contents: &str) -> Result<(), Mig
     if destination.exists() {
         let _ = std::fs::remove_file(&partial);
         return Err(MigrationError::new(
-            "upgrade.conflict: Die Zieldatei wurde während des Schreibens angelegt. Abbruch ohne Ersatz.".to_owned(),
+            "upgrade.conflict: The destination file was created during the write. Aborting without overwriting.".to_owned(),
         ));
     }
     std::fs::rename(&partial, &destination).map_err(|error| {
         MigrationError::new(format!(
-            "upgrade.conflict: Die Datei wurde nicht eingewechselt: {error}"
+            "upgrade.conflict: Could not replace the file: {error}"
         ))
     })?;
     Ok(())
@@ -457,9 +459,7 @@ fn backup_file(root: &Path, source: &Path) -> Result<(), MigrationError> {
         })?;
     }
     std::fs::rename(source, &target).map_err(|error| {
-        MigrationError::new(format!(
-            "upgrade.conflict: Backup ist fehlgeschlagen: {error}"
-        ))
+        MigrationError::new(format!("upgrade.conflict: Backup failed: {error}"))
     })?;
     Ok(())
 }
@@ -618,7 +618,7 @@ mod tests {
         std::fs::create_dir_all(root.join(".ferrum")).unwrap();
         std::fs::write(root.join(MANIFEST_RELATIVE), "{\"format\":1}\n").unwrap();
         let error = apply_upgrade(&root, &plan).unwrap_err();
-        assert!(error.0.contains("seit dem Plan"));
+        assert!(error.0.contains("since planning"));
         assert_eq!(
             std::fs::read_to_string(root.join(MANIFEST_RELATIVE)).unwrap(),
             "{\"format\":1}\n"

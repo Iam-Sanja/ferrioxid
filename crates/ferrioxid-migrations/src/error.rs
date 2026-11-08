@@ -1,4 +1,4 @@
-//! Fehler der Migrations-Engine. Die Texte sind für die CLI bestimmt.
+//! Migration engine errors. The messages are intended for the CLI.
 
 #[derive(Debug, thiserror::Error)]
 #[error("{0}")]

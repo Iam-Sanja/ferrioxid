@@ -1,4 +1,4 @@
-//! Übernimmt eine vorhandene SQLite-Datenbank in die Migrationshistorie, ohne Tabellen oder Zeilen zu ändern.
+//! Baselines an existing SQLite database into migration history without changing tables or rows.
 
 use crate::diff::MigrationOperation;
 use crate::error::MigrationError;
@@ -20,7 +20,8 @@ pub async fn baseline_database(
         .map_err(|error| MigrationError::new(error.to_string()))?;
     if kind != DatabaseKind::Sqlite {
         return Err(MigrationError::new(
-            "Baseline ist für PostgreSQL nicht implementiert. Es wurde keine Historie geschrieben. Die Übernahme muss manuell erfolgen.".to_owned(),
+            "Baseline is not implemented for PostgreSQL. No history was written; migrate manually."
+                .to_owned(),
         ));
     }
     let state = inspect_directory(directory);
@@ -29,45 +30,41 @@ pub async fn baseline_database(
     }
     if state.files.is_empty() {
         return Err(MigrationError::new(
-            "Es gibt keine Migrationsdateien für eine Baseline.".to_owned(),
+            "There are no migration files to baseline.".to_owned(),
         ));
     }
     refuse_unverifiable(&state.files)?;
     let history = history::read_history(db).await?;
     if !history.is_empty() {
         return Err(MigrationError::new(
-            "Die Migrationshistorie enthält bereits Einträge. Baseline überschreibt sie nicht und verändert keine Daten.".to_owned(),
+            "Migration history already contains entries. Baseline does not overwrite history or change data.".to_owned(),
         ));
     }
     let expected = &state
         .files
         .last()
-        .ok_or_else(|| {
-            MigrationError::new("Es gibt keine Migrationsdateien für eine Baseline.".to_owned())
-        })?
+        .ok_or_else(|| MigrationError::new("There are no migration files to baseline.".to_owned()))?
         .to_snapshot;
     let live = introspect_sqlite(db).await?;
     let differences = compare_snapshot(expected, &live);
     if !differences.is_empty() {
         return Err(MigrationError::new(format!(
-            "Baseline abgebrochen. Schema und Migrationsziel stimmen nicht überein. Es wurde keine Historie geschrieben.\n{}",
+            "Baseline aborted. Database schema and migration target do not match. No history was written.\n{}",
             differences.join("\n")
         )));
     }
     if !confirm {
         return Err(MigrationError::new(
-            "Prüfung erfolgreich: das vorhandene Schema entspricht dem Migrationsziel. Es wurden keine Tabellen und keine Daten verändert. Wiederhole den Befehl mit --confirm, um ausschließlich die Historie zu schreiben.".to_owned(),
+            "Validation successful: the database schema matches the migration target. No tables or data were changed. Re-run with --confirm to write history only.".to_owned(),
         ));
     }
     let transaction = db.begin().await.map_err(|error| {
-        MigrationError::new(format!(
-            "Transaktion für die Baseline konnte nicht gestartet werden: {error}"
-        ))
+        MigrationError::new(format!("Could not begin baseline transaction: {error}"))
     })?;
     history::ensure_history(&transaction).await?;
     let applied_at_unix = SystemTime::now()
         .duration_since(UNIX_EPOCH)
-        .map_err(|error| MigrationError::new(format!("Systemzeit ist ungültig: {error}")))?
+        .map_err(|error| MigrationError::new(format!("Invalid system time: {error}")))?
         .as_secs() as i64;
     let mut ids = Vec::new();
     for file in &state.files {
@@ -81,11 +78,10 @@ pub async fn baseline_database(
         .await?;
         ids.push(file.id.clone());
     }
-    transaction.commit().await.map_err(|error| {
-        MigrationError::new(format!(
-            "Baseline konnte nicht festgeschrieben werden: {error}"
-        ))
-    })?;
+    transaction
+        .commit()
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not commit baseline: {error}")))?;
     Ok(ids)
 }
 
@@ -114,7 +110,7 @@ fn refuse_unverifiable(files: &[MigrationFile]) -> Result<(), MigrationError> {
             };
             if blocked {
                 return Err(MigrationError::new(format!(
-                    "Migration {} enthält `{}`. Das lässt sich am Endschema nicht belegen. Baseline markiert diese Kette nicht als ausgeführt. Die Übernahme muss manuell erfolgen.",
+                    "Migration {} contains `{}`. This cannot be verified from the final schema. Baseline will not mark this chain as executed; migrate manually.",
                     file.id,
                     operation.summary()
                 )));

@@ -139,10 +139,10 @@ async fn sqlite_chain_preserves_rows_and_detects_tampering() {
         .unwrap();
     let rendered = status.render();
     assert!(rendered.contains("Backend: sqlite"));
-    assert!(rendered.contains("0001_initial  angewendet"));
-    assert!(rendered.contains("0002_add_note  angewendet"));
-    assert!(rendered.contains("Konflikte: keine"));
-    assert!(rendered.contains("letzten angewendeten Migrationsziel"));
+    assert!(rendered.contains("0001_initial  applied"));
+    assert!(rendered.contains("0002_add_note  applied"));
+    assert!(rendered.contains("Conflicts: none"));
+    assert!(rendered.contains("last applied migration target"));
 
     let tampered = migrations.join("0002_add_note.json");
     let text = std::fs::read_to_string(&tampered)
@@ -244,7 +244,7 @@ async fn existing_table_is_not_marked_migrated() {
     .await
     .unwrap();
     let error = apply_directory(&db, &migrations, false).await.unwrap_err();
-    assert!(error.0.contains("nicht als migriert"));
+    assert!(error.0.contains("not marked as migrated"));
     assert_eq!(count_history(&db).await, 0);
     let _ = std::fs::remove_dir_all(&directory);
 }
@@ -350,7 +350,7 @@ async fn rename_column_keeps_values_snapshot_and_history() {
     let status = migration_status(&db, &migrations, Some(&renamed))
         .await
         .unwrap();
-    assert!(status.schema_note.contains("entspricht"));
+    assert!(status.schema_note.contains("matches"));
     let _ = std::fs::remove_dir_all(&directory);
 }
 
@@ -467,7 +467,7 @@ async fn failed_rebuild_keeps_the_original_table_and_writes_no_history() {
     changed.tables[0].columns[1].logical_type = LogicalType::I64;
     make_migration(&migrations, "bad_number", &changed).unwrap();
     let error = apply_directory(&db, &migrations, false).await.unwrap_err();
-    assert!(error.0.contains("zurückgerollt"));
+    assert!(error.0.contains("rolled back"));
     assert_eq!(
         cell_text(&db, "SELECT \"name\" AS value FROM \"products\"").await,
         "Laptop"
@@ -531,7 +531,7 @@ async fn baseline_marks_history_without_touching_rows() {
     let refused = baseline_database(&db, &migrations, false)
         .await
         .unwrap_err();
-    assert!(refused.0.contains("Prüfung erfolgreich"));
+    assert!(refused.0.contains("Validation successful"));
     assert!(!history_exists(&db).await.unwrap());
     let ids = baseline_database(&db, &migrations, true).await.unwrap();
     assert_eq!(ids, vec!["0001_initial".to_owned()]);
@@ -557,7 +557,7 @@ async fn mismatched_baseline_writes_no_history() {
     .await
     .unwrap();
     let error = baseline_database(&db, &migrations, true).await.unwrap_err();
-    assert!(error.0.contains("Baseline abgebrochen"));
+    assert!(error.0.contains("Baseline aborted"));
     assert!(!history_exists(&db).await.unwrap());
     let _ = std::fs::remove_dir_all(&directory);
 }
@@ -577,7 +577,7 @@ async fn destructive_chain_cannot_be_baselined() {
     .await
     .unwrap();
     let error = baseline_database(&db, &migrations, true).await.unwrap_err();
-    assert!(error.0.contains("manuell"));
+    assert!(error.0.contains("manually"));
     assert!(!history_exists(&db).await.unwrap());
     let _ = std::fs::remove_dir_all(&directory);
 }
@@ -599,7 +599,7 @@ async fn reseal_refuses_an_applied_migration_and_repairs_an_unapplied_checksum()
     let db = open_db(&directory.join("app.sqlite3")).await;
     apply_directory(&db, &migrations, false).await.unwrap();
     let error = reseal_unapplied(&db, &path).await.unwrap_err();
-    assert!(error.0.contains("bereits angewendet"));
+    assert!(error.0.contains("already applied"));
     let _ = std::fs::remove_dir_all(&directory);
 }
 

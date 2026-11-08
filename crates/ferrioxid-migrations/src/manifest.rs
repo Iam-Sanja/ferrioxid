@@ -1,4 +1,4 @@
-//! Upgrade-Manifest. Die Cargo-Version bleibt 0.1.0; die Template-Version steht hier.
+//! Upgrade manifest. Cargo remains at version 0.1.0; the template version is stored here.
 
 use crate::error::MigrationError;
 use serde::{Deserialize, Serialize};
@@ -48,13 +48,13 @@ impl ProjectManifest {
 pub fn load_manifest(path: &Path) -> Result<ProjectManifest, MigrationError> {
     let text = std::fs::read_to_string(path).map_err(|error| {
         MigrationError::new(format!(
-            "project.file.missing: {} konnte nicht gelesen werden: {error}",
+            "project.file.missing: Could not read {}: {error}",
             path.display()
         ))
     })?;
     serde_json::from_str(&text).map_err(|error| {
         MigrationError::new(format!(
-            "upgrade.conflict: Das Manifest ist kein gültiges Projektmanifest: {error}"
+            "upgrade.conflict: The manifest is not a valid project manifest: {error}"
         ))
     })
 }
@@ -65,5 +65,5 @@ pub fn manifest_json(manifest: &ProjectManifest) -> Result<String, MigrationErro
             text.push('\n');
             text
         })
-        .map_err(|error| MigrationError::new(format!("Manifest ist nicht serialisierbar: {error}")))
+        .map_err(|error| MigrationError::new(format!("Could not serialize manifest: {error}")))
 }

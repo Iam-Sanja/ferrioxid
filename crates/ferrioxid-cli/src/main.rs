@@ -1,4 +1,4 @@
-//! Ferrioxid-CLI. Migrationen fragen die Modell-Registry über ferrum.toml ab.
+//! Ferrioxid CLI. Migrations obtain the model registry through ferrum.toml.
 
 mod apps;
 mod develop;
@@ -19,7 +19,7 @@ use std::path::PathBuf;
 use std::process::ExitCode;
 
 #[derive(Parser)]
-#[command(name = "ferrioxid", about = "Ferrioxid-Entwicklungswerkzeuge", version)]
+#[command(name = "ferrioxid", about = "Ferrioxid development tools", version)]
 struct Cli {
     #[command(subcommand)]
     command: Command,
@@ -27,61 +27,61 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Erzeugt ein eigenständiges Ferrioxid-Projekt.
+    /// Creates a standalone Ferrioxid project.
     New {
         name: String,
-        /// `api` oder `fullstack`. Standard ist `fullstack`.
+        /// `api` or `fullstack`. Defaults to `fullstack`.
         #[arg(long, default_value = "fullstack")]
         template: String,
-        /// Pfad zum Ferrioxid-Repository, solange Ferrioxid nicht veröffentlicht ist.
+        /// Path to the Ferrioxid repository until the crate is published.
         #[arg(long)]
         ferrioxid_path: Option<PathBuf>,
     },
-    /// Prüft Werkzeuge, Konfiguration und Projektdateien.
+    /// Checks tools, configuration, and project files.
     Doctor,
-    /// Prüft Konfiguration, Migrationen und Kompilierung, ohne Daten zu ändern.
+    /// Checks configuration, migrations, and compilation without changing data.
     Check {
-        /// Warnungen, ausstehende Migrationen und Legacy-Projekte beenden mit Exitcode 2.
+        /// Warnings, pending migrations, and legacy projects result in exit code 2.
         #[arg(long)]
         strict: bool,
     },
-    /// Analysiert ein bestehendes Projekt und schreibt höchstens ein fehlendes Legacy-Manifest.
+    /// Inspects an existing project and writes at most one missing legacy manifest.
     Upgrade {
-        /// Nur Diagnose. Es wird keine Datei geschrieben.
+        /// Diagnostics only. No files are written.
         #[arg(long)]
         check: bool,
-        /// Zeigt den Dateiplan. Es wird keine Datei geschrieben.
+        /// Shows planned file changes without writing files.
         #[arg(long)]
         dry_run: bool,
-        /// Legt ein fehlendes Legacy-Manifest an. Überschreibt keine Projektdatei.
+        /// Creates a missing legacy manifest without overwriting project files.
         #[arg(long)]
         yes: bool,
     },
-    /// Startet den Entwicklungsserver und startet ihn nach Rust-Änderungen neu.
+    /// Starts the development server and restarts it when Rust files change.
     Dev,
-    /// Kompiliert das Projekt. Fullstack bettet das Admin-Frontend ein.
+    /// Builds the project. Fullstack embeds the admin frontend.
     Build,
-    /// Erzeugt Quelltext.
+    /// Generates source files.
     Generate {
         #[command(subcommand)]
         action: GenerateCommand,
     },
-    /// Versionierte Schema-Migrationen.
+    /// Versioned database schema migrations.
     Migrate {
         #[command(subcommand)]
         action: MigrateCommand,
     },
-    /// Benutzer anlegen. Das Passwort wird verdeckt abgefragt.
+    /// Creates a user and securely prompts for a password.
     Admin {
         #[command(subcommand)]
         action: AdminCommand,
     },
-    /// Benutzer, Rollen und Berechtigungen.
+    /// Users, roles, and permissions.
     Auth {
         #[command(subcommand)]
         action: AuthCommand,
     },
-    /// Startet den Job-Worker. Der Webserver bleibt aus.
+    /// Starts the job worker without running the web server.
     Worker {
         #[arg(long)]
         database_url: Option<String>,
@@ -90,7 +90,7 @@ enum Command {
         #[arg(long)]
         poll_ms: Option<u64>,
     },
-    /// Zeigt und steuert persistente Jobs.
+    /// Lists and manages persistent jobs.
     Jobs {
         #[command(subcommand)]
         action: JobsCommand,
@@ -99,21 +99,21 @@ enum Command {
 
 #[derive(Subcommand)]
 enum JobsCommand {
-    /// Listet Jobs. Der Befehl schreibt nicht.
+    /// Lists jobs without modifying them.
     List {
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Zeigt einen Job. Die Payload bleibt ohne `--show-payload` verborgen.
+    /// Inspects a job. The payload stays hidden unless `--show-payload` is supplied.
     Inspect {
         id: String,
-        /// Gibt die gespeicherte Payload aus. Sie kann personenbezogene Daten enthalten.
+        /// Displays the stored payload, which may contain personal data.
         #[arg(long)]
         show_payload: bool,
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Setzt einen fehlgeschlagenen oder abgebrochenen Job zurück.
+    /// Retries a failed or cancelled job.
     Retry {
         id: String,
         #[arg(long)]
@@ -121,7 +121,7 @@ enum JobsCommand {
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Bricht einen wartenden Job ab.
+    /// Cancels a queued job.
     Cancel {
         id: String,
         #[arg(long)]
@@ -133,30 +133,30 @@ enum JobsCommand {
 
 #[derive(Subcommand)]
 enum GenerateCommand {
-    /// Legt ein Modell an und trägt es in die Registry ein.
+    /// Creates a model and registers it.
     Model {
         name: String,
-        /// Ergänzt die verwalteten Felder created_at und updated_at.
+        /// Adds managed created_at and updated_at fields.
         #[arg(long)]
         timestamps: bool,
     },
-    /// Legt eine Ferrioxid-App an, ohne vorhandene Dateien zu überschreiben.
+    /// Creates a Ferrioxid app without overwriting files.
     App { name: String },
-    /// Schreibt `src/bin/worker.rs`, ohne vorhandene Dateien zu überschreiben.
+    /// Writes `src/bin/worker.rs` without overwriting existing files.
     Worker,
 }
 
 #[derive(Subcommand)]
 enum AdminCommand {
-    /// Legt einen Benutzer an. Es gibt kein voreingestelltes Admin-Passwort.
+    /// Creates a user. There is no default administrator password.
     CreateUser {
-        /// Login. Ohne Angabe wird die Adresse abgefragt.
+        /// Login email address. Prompt if omitted.
         #[arg(long)]
         email: Option<String>,
-        /// Öffnet die Verwaltung. Ein Superuser ohne dieses Flag bleibt ausgesperrt.
+        /// Grants admin access. Superusers also need this flag.
         #[arg(long)]
         staff: bool,
-        /// Modellrechte. Setzt Staff nicht und öffnet die Verwaltung nicht allein.
+        /// Grants model permissions but does not grant staff or admin access.
         #[arg(long)]
         superuser: bool,
         #[arg(long)]
@@ -166,18 +166,18 @@ enum AdminCommand {
 
 #[derive(Subcommand)]
 enum AuthCommand {
-    /// Listet Benutzer ohne Passwort-Hash.
+    /// Lists users without exposing password hashes.
     ListUsers {
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Legt eine Rolle an oder erkennt eine vorhandene.
+    /// Creates a role or reuses an existing one.
     CreateRole {
         name: String,
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Vergibt `resource.read|create|update|delete` an eine Rolle.
+    /// Grants `resource.read|create|update|delete` to a role.
     GrantPermission {
         code: String,
         #[arg(long)]
@@ -185,7 +185,7 @@ enum AuthCommand {
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Entzieht einer Rolle eine Berechtigung.
+    /// Revokes a permission from a role.
     RevokePermission {
         code: String,
         #[arg(long)]
@@ -193,7 +193,7 @@ enum AuthCommand {
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Weist einem Benutzer eine Rolle zu.
+    /// Assigns a role to a user.
     AssignRole {
         #[arg(long)]
         email: String,
@@ -202,7 +202,7 @@ enum AuthCommand {
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Entzieht einem Benutzer eine Rolle.
+    /// Revokes a role from a user.
     RevokeRole {
         #[arg(long)]
         email: String,
@@ -215,28 +215,28 @@ enum AuthCommand {
 
 #[derive(Subcommand)]
 enum MigrateCommand {
-    /// Schreibt eine Migration aus dem registrierten Modellschema.
+    /// Creates a migration from the registered model schema.
     Make {
-        /// Kurzname, zum Beispiel add_note.
+        /// Short name, for example add_note.
         name: Option<String>,
-        /// Snapshot-JSON statt schema_command.
+        /// Schema snapshot JSON instead of schema_command.
         #[arg(long)]
         schema_file: Option<PathBuf>,
-        /// Überschreibt migrations_dir aus ferrum.toml.
+        /// Overrides migrations_dir from ferrum.toml.
         #[arg(long)]
         migrations_dir: Option<PathBuf>,
     },
-    /// Wendet ausstehende Migrationen an.
+    /// Applies pending migrations.
     Up {
         #[arg(long)]
         database_url: Option<String>,
         #[arg(long)]
         migrations_dir: Option<PathBuf>,
-        /// Erlaubt ausdrücklich als riskant markierte Löschungen.
+        /// Explicitly allows destructive schema changes.
         #[arg(long)]
         allow_destructive: bool,
     },
-    /// Zeigt Backend, Dateien, Historie, Konflikte und Schemaabweichung.
+    /// Shows database backend, files, history, conflicts, and schema drift.
     Status {
         #[arg(long)]
         database_url: Option<String>,
@@ -245,7 +245,7 @@ enum MigrateCommand {
         #[arg(long)]
         schema_file: Option<PathBuf>,
     },
-    /// Schreibt eine explizite Spaltenumbenennung. Das registrierte Schema muss bereits den neuen Namen enthalten.
+    /// Creates an explicit column rename. The registered schema must already use the new name.
     RenameColumn {
         #[arg(long)]
         table: String,
@@ -253,7 +253,7 @@ enum MigrateCommand {
         from: String,
         #[arg(long)]
         to: String,
-        /// Kurzname der Datei. Standard ist rename_<ziel>.
+        /// Short file name. Defaults to rename_<target>.
         #[arg(long)]
         name: Option<String>,
         #[arg(long)]
@@ -261,7 +261,7 @@ enum MigrateCommand {
         #[arg(long)]
         migrations_dir: Option<PathBuf>,
     },
-    /// Schreibt eine explizite Tabellenumbenennung. Das registrierte Schema muss bereits den neuen Namen enthalten.
+    /// Creates an explicit table rename. The registered schema must already use the new name.
     RenameTable {
         #[arg(long)]
         from: String,
@@ -274,19 +274,19 @@ enum MigrateCommand {
         #[arg(long)]
         migrations_dir: Option<PathBuf>,
     },
-    /// Berechnet die Checksum einer noch nicht angewendeten Datei neu.
+    /// Recalculates the checksum of a migration that has not been applied.
     Reseal {
         path: PathBuf,
         #[arg(long)]
         database_url: Option<String>,
     },
-    /// Markiert vorhandene SQLite-Migrationen als angewendet, wenn das Schema exakt passt. Ohne --confirm wird nichts geschrieben.
+    /// Baselines existing SQLite migrations only when the schema matches exactly. Requires --confirm to write.
     Baseline {
         #[arg(long)]
         database_url: Option<String>,
         #[arg(long)]
         migrations_dir: Option<PathBuf>,
-        /// Schreibt nach erfolgreicher Prüfung nur die Historie.
+        /// Writes migration history only after successful verification.
         #[arg(long)]
         confirm: bool,
     },
@@ -320,7 +320,7 @@ fn main() -> ExitCode {
         Command::Generate { action } => match action {
             GenerateCommand::Worker => match apps::generate_worker() {
                 Ok(path) => {
-                    println!("Worker angelegt: {}", path.display());
+                    println!("Worker created: {}", path.display());
                     ExitCode::SUCCESS
                 }
                 Err(error) => {
@@ -330,7 +330,7 @@ fn main() -> ExitCode {
             },
             GenerateCommand::App { name } => match apps::generate_app(&name) {
                 Ok(path) => {
-                    println!("App angelegt: {}", path.display());
+                    println!("App created: {}", path.display());
                     ExitCode::SUCCESS
                 }
                 Err(error) => {
@@ -409,7 +409,7 @@ fn main() -> ExitCode {
                     JobsCommand::Retry { .. } | JobsCommand::Cancel { .. }
                 )
             {
-                eprintln!("job.disabled jobs.enabled ist false.");
+                eprintln!("job.disabled jobs.enabled is false.");
                 return ExitCode::from(2);
             }
             let database_url = match &action {
@@ -450,10 +450,10 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 .map_err(|error| error.0)?
             {
                 MakeOutcome::Unchanged => {
-                    println!("Keine Schemaänderung. Es wurde keine Migration geschrieben.");
+                    println!("No schema changes. No migration was written.");
                 }
                 MakeOutcome::Written { path, id, risks } => {
-                    println!("Migration geschrieben: {} ({id})", path.display());
+                    println!("Migration written: {} ({id})", path.display());
                     print_risks(&risks);
                 }
             }
@@ -504,7 +504,7 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 reseal_unapplied(&db, &path).await.map_err(|error| error.0)
             })?;
             println!(
-                "Checksum neu geschrieben für {}. Angewendete Migrationen bleiben unverändert.",
+                "Checksum updated for {}. Applied migrations remain unchanged.",
                 file.id
             );
         }
@@ -523,9 +523,9 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                     .await
                     .map_err(|error| error.0)
             })?;
-            println!("Baseline geschrieben. Es wurden keine Tabellen und keine Daten verändert.");
+            println!("Baseline written. No tables or data were changed.");
             for id in ids {
-                println!("Als angewendet markiert: {id}");
+                println!("Marked as applied: {id}");
             }
         }
         MigrateCommand::Up {
@@ -555,31 +555,31 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 Ok::<_, String>((auth_applied, jobs_applied, report, package_report))
             })?;
             if auth_applied.is_empty() {
-                println!("Keine ausstehenden Auth-Migrationen.");
+                println!("No pending authentication migrations.");
             } else {
                 for id in auth_applied {
-                    println!("Auth-Migration angewendet: {id}");
+                    println!("Authentication migration applied: {id}");
                 }
             }
             if jobs_applied.is_empty() {
-                println!("Keine ausstehenden Job-Migrationen.");
+                println!("No pending job migrations.");
             } else {
                 for id in jobs_applied {
-                    println!("Job-Migration angewendet: {id}");
+                    println!("Job migration applied: {id}");
                 }
             }
             if report.applied.is_empty() {
-                println!("Keine ausstehenden Migrationen.");
+                println!("No pending migrations.");
             } else {
                 for id in report.applied {
-                    println!("Angewendet: {id}");
+                    println!("Applied: {id}");
                 }
             }
             if package_report.is_empty() {
-                println!("Keine ausstehenden App-Migrationen.");
+                println!("No pending app migrations.");
             } else {
                 for id in package_report {
-                    println!("App-Migration angewendet: {id}");
+                    println!("App migration applied: {id}");
                 }
             }
         }
@@ -611,7 +611,7 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 println!("{}", runtime_contract_note());
             }
             if report.has_error() {
-                return Err("Es gibt Migrationskonflikte.".to_owned());
+                return Err("Migration conflicts were detected.".to_owned());
             }
             let jobs_current = runtime.block_on(async {
                 let db = ferrioxid_db::connect(&readonly)
@@ -620,7 +620,7 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 jobs::print_status(&db).await
             })?;
             if !jobs_current {
-                println!("Job-Migrationen sind nicht vollständig angewendet. ferrioxid migrate up holt sie nach. Dieser Status schreibt nicht.");
+                println!("Job migrations are not fully applied. Run ferrioxid migrate up. This status check is read-only.");
             }
         }
     }
@@ -631,7 +631,7 @@ fn optional_project() -> Result<Option<ferrioxid_migrations::ProjectConfig>, Str
     let directory = std::env::current_dir().map_err(|error| error.to_string())?;
     match ferrioxid_migrations::discover_project(&directory) {
         Ok(project) => Ok(Some(project)),
-        Err(error) if error.0.contains("Keine ferrum.toml") => Ok(None),
+        Err(error) if error.0.contains("No ferrum.toml found") => Ok(None),
         Err(error) => Err(error.0),
     }
 }
@@ -649,7 +649,7 @@ fn jobs_database_url(
     match std::env::var("DATABASE_URL") {
         Ok(url) if !url.is_empty() => Ok(url),
         _ => Err(
-            "job.database Es gibt keine Datenbank-URL. Setze DATABASE_URL oder --database-url."
+            "job.database No database URL was provided. Set DATABASE_URL or use --database-url."
                 .to_owned(),
         ),
     }
@@ -658,10 +658,10 @@ fn jobs_database_url(
 fn print_written(outcome: MakeOutcome) {
     match outcome {
         MakeOutcome::Unchanged => {
-            println!("Keine Schemaänderung. Es wurde keine Migration geschrieben.");
+            println!("No schema changes. No migration was written.");
         }
         MakeOutcome::Written { path, id, risks } => {
-            println!("Migration geschrieben: {} ({id})", path.display());
+            println!("Migration written: {} ({id})", path.display());
             print_risks(&risks);
         }
     }
@@ -669,10 +669,10 @@ fn print_written(outcome: MakeOutcome) {
 
 fn print_risks(risks: &[ferrioxid_migrations::MigrationRisk]) {
     if risks.is_empty() {
-        println!("Risiken: keine");
+        println!("Risks: none");
         return;
     }
-    println!("Risiken:");
+    println!("Risks:");
     for risk in risks {
         println!("  {}: {}", risk.code, risk.message);
     }
@@ -680,7 +680,7 @@ fn print_risks(risks: &[ferrioxid_migrations::MigrationRisk]) {
         .iter()
         .any(|risk| risk.code == "drop_table" || risk.code == "drop_column");
     if destructive {
-        println!("Löschungen führt ferrioxid migrate up erst mit --allow-destructive aus.");
+        println!("Destructive changes require ferrioxid migrate up --allow-destructive.");
     }
 }
 
@@ -696,7 +696,7 @@ fn declared_packages() -> Result<Vec<PackageMigration>, String> {
                 depends_on: app.depends_on,
             })
             .collect()),
-        Err(error) if error.0.contains("Keine ferrum.toml") => Ok(Vec::new()),
+        Err(error) if error.0.contains("No ferrum.toml found") => Ok(Vec::new()),
         Err(error) => Err(error.0),
     }
 }
@@ -724,7 +724,7 @@ fn resolve_schema(
         .map_err(|error| error.0)?;
     let directory = migrations_dir.unwrap_or(project.migrations_dir);
     let command = project.schema_command.ok_or_else(|| {
-        "ferrum.toml enthält kein schema_command. Übergib --schema-file.".to_owned()
+        "ferrum.toml does not define schema_command. Supply --schema-file.".to_owned()
     })?;
     let schema = load_schema_from_command(&project.root, &command).map_err(|error| error.0)?;
     Ok((directory, schema))
@@ -760,21 +760,21 @@ fn run_admin(action: AdminCommand) -> Result<(), String> {
         } => {
             let email = match email {
                 Some(email) => email,
-                None => prompt_line("E-Mail: ")?,
+                None => prompt_line("Email: ")?,
             };
             let password = if let Ok(value) = std::env::var("FERRUM_PASSWORD") {
                 if value.len() < 12 {
                     return Err(
-                        "FERRUM_PASSWORD muss mindestens 12 Zeichen haben. Es gibt kein Standardpasswort."
+                        "FERRUM_PASSWORD must contain at least 12 characters. There is no default password."
                             .to_owned(),
                     );
                 }
                 value
             } else {
-                let password = prompt_secret("Passwort: ")?;
-                let confirm = prompt_secret("Passwort wiederholen: ")?;
+                let password = prompt_secret("Password: ")?;
+                let confirm = prompt_secret("Confirm password: ")?;
                 if password != confirm {
-                    return Err("Die Passwörter stimmen nicht überein.".to_owned());
+                    return Err("Passwords do not match.".to_owned());
                 }
                 password
             };
@@ -846,7 +846,7 @@ fn run_auth(action: AuthCommand) -> Result<(), String> {
                 let service = open_auth(&url).await?;
                 service.ensure_role(&name).await.map_err(auth_message)
             })?;
-            println!("Rolle bereit: {name} ({id})");
+            println!("Role ready: {name} ({id})");
         }
         AuthCommand::GrantPermission {
             code,
@@ -861,7 +861,7 @@ fn run_auth(action: AuthCommand) -> Result<(), String> {
                     .await
                     .map_err(auth_message)
             })?;
-            println!("Berechtigung {code} an Rolle {role} vergeben.");
+            println!("Granted permission {code} to role {role}.");
         }
         AuthCommand::RevokePermission {
             code,
@@ -876,7 +876,7 @@ fn run_auth(action: AuthCommand) -> Result<(), String> {
                     .await
                     .map_err(auth_message)
             })?;
-            println!("Berechtigung {code} von Rolle {role} entzogen.");
+            println!("Revoked permission {code} from role {role}.");
         }
         AuthCommand::AssignRole {
             email,
@@ -891,7 +891,7 @@ fn run_auth(action: AuthCommand) -> Result<(), String> {
                     .await
                     .map_err(auth_message)
             })?;
-            println!("Rolle {role} an {email} zugewiesen.");
+            println!("Assigned role {role} to {email}.");
         }
         AuthCommand::RevokeRole {
             email,
@@ -906,7 +906,7 @@ fn run_auth(action: AuthCommand) -> Result<(), String> {
                     .await
                     .map_err(auth_message)
             })?;
-            println!("Rolle {role} von {email} entzogen.");
+            println!("Revoked role {role} from {email}.");
         }
     }
     Ok(())
@@ -945,17 +945,15 @@ fn prompt_secret(label: &str) -> Result<String, String> {
 fn auth_message(error: ferrioxid_auth::AuthError) -> String {
     match error {
         ferrioxid_auth::AuthError::Validation(message) if message == "record already exists" => {
-            "Der Benutzer oder die Zuordnung existiert bereits.".to_owned()
+            "The user or assignment already exists.".to_owned()
         }
         ferrioxid_auth::AuthError::Validation(message) if message == "user was not found" => {
-            "Der Benutzer wurde nicht gefunden.".to_owned()
+            "User not found.".to_owned()
         }
         ferrioxid_auth::AuthError::Validation(message) if message == "email is invalid" => {
-            "Die E-Mail-Adresse ist ungültig.".to_owned()
+            "Invalid email address.".to_owned()
         }
-        ferrioxid_auth::AuthError::Database(_) => {
-            "Die Datenbankoperation ist fehlgeschlagen.".to_owned()
-        }
+        ferrioxid_auth::AuthError::Database(_) => "Database operation failed.".to_owned(),
         other => other.to_string(),
     }
 }

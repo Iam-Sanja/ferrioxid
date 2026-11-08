@@ -1,4 +1,4 @@
-//! Diagnose und Prüfung ohne Schreibzugriff auf die Datenbank.
+//! Diagnostics and checks without modifying the database.
 
 use ferrioxid_migrations::{
     apply_upgrade, discover_project, inspect_directory, load_schema_from_command, plan_upgrade,
@@ -10,37 +10,37 @@ pub fn doctor() -> ExitCode {
     println!("Ferrioxid Doctor\n");
     let mut errors = 0;
     match command_version("rustc") {
-        Some(version) => report("OK", &format!("Rust ist installiert: {version}")),
+        Some(version) => report("OK", &format!("Rust is installed: {version}")),
         None => {
             errors += 1;
             report(
                 "ERROR",
-                "rustc fehlt. Installiere eine stabile Rust-Toolchain.",
+                "rustc is missing. Install a stable Rust toolchain.",
             );
         }
     }
     match command_version("cargo") {
-        Some(version) => report("OK", &format!("Cargo ist installiert: {version}")),
+        Some(version) => report("OK", &format!("Cargo is installed: {version}")),
         None => {
             errors += 1;
-            report("ERROR", "cargo fehlt.");
+            report("ERROR", "cargo is missing.");
         }
     }
-    report("OK", "Docker ist optional und wird nicht vorausgesetzt.");
+    report("OK", "Docker is optional and not required.");
     let current = std::env::current_dir().ok();
     let Some(current) = current else {
-        report("ERROR", "Das Arbeitsverzeichnis ist nicht lesbar.");
+        report("ERROR", "Cannot read the working directory.");
         return ExitCode::from(1);
     };
     match discover_project(&current) {
         Ok(project) => {
             report(
                 "OK",
-                &format!("ferrum.toml gefunden in {}", project.root.display()),
+                &format!("ferrum.toml found in {}", project.root.display()),
             );
             report(
                 "OK",
-                "ferrioxid dev startet keinen Job-Worker. Der Worker heißt ferrioxid worker.",
+                "ferrioxid dev does not start a job worker. Run ferrioxid worker separately.",
             );
             if project.migrations_dir.is_dir() {
                 report(
@@ -51,62 +51,62 @@ pub fn doctor() -> ExitCode {
                 errors += 1;
                 report(
                     "ERROR",
-                    "Das Migrationsverzeichnis fehlt. Lege es an, bevor du migrate up ausführst.",
+                    "The migrations directory is missing. Create it before running migrate up.",
                 );
             }
             for relative in ["Cargo.toml", "src/main.rs", "src/lib.rs"] {
                 let path = project.root.join(relative);
                 if path.is_file() {
-                    report("OK", &format!("{relative} ist vorhanden."));
+                    report("OK", &format!("{relative} exists."));
                 } else {
                     errors += 1;
-                    report("ERROR", &format!("{relative} fehlt."));
+                    report("ERROR", &format!("{relative} is missing."));
                 }
             }
             if project.host == "0.0.0.0" {
                 errors += 1;
                 report(
                     "ERROR",
-                    "server.host ist 0.0.0.0. Neue Projekte bleiben auf 127.0.0.1.",
+                    "server.host is 0.0.0.0. New projects should bind to 127.0.0.1.",
                 );
             } else {
                 report(
                     "OK",
-                    &format!("Serverbindung ist {}:{}", project.host, project.port),
+                    &format!("Server is bound to {}:{}", project.host, project.port),
                 );
             }
             if project.templates_enabled {
                 if project.templates_directory().is_dir() {
-                    report("OK", "Vorlagenverzeichnis ist vorhanden.");
+                    report("OK", "Vorlagenverzeichnis exists.");
                 } else {
                     errors += 1;
                     report(
                         "ERROR",
-                        "templates.enabled ist wahr, aber das Vorlagenverzeichnis fehlt.",
+                        "templates.enabled is true, but the templates directory is missing.",
                     );
                 }
             }
             if std::env::var("DATABASE_URL").is_ok() {
                 report(
                     "OK",
-                    "DATABASE_URL überschreibt die URL aus ferrum.toml. Der Wert wird nicht angezeigt.",
+                    "DATABASE_URL overrides the URL from ferrum.toml. Its value is hidden.",
                 );
             }
             if project.database_url.starts_with("sqlite:") {
                 report(
                     "OK",
-                    "SQLite ist konfiguriert. Es ist kein Datenbankserver nötig.",
+                    "SQLite is configured. No database server is required.",
                 );
             } else if project.database_url.starts_with("postgres:") {
                 report(
                     "OK",
-                    "PostgreSQL ist konfiguriert und bleibt optional. Die Diagnose verbindet sich nur lesend.",
+                    "PostgreSQL is configured and remains optional. Diagnostics use a read-only connection.",
                 );
             } else {
                 errors += 1;
                 report(
                     "ERROR",
-                    "Die Datenbank-URL muss mit sqlite: oder postgres: beginnen.",
+                    "The database URL must start with sqlite: or postgres:.",
                 );
             }
             let counts = migration_lines(&project, false);
@@ -114,7 +114,7 @@ pub fn doctor() -> ExitCode {
             let project_counts = project_lines(&project);
             errors += project_counts.errors;
             if project.template.as_deref() == Some("fullstack") || project.embedded_assets {
-                report("OK", "Der Admin wird mit dem Rust-Binary ausgeliefert.");
+                report("OK", "The admin UI is embedded in the Rust binary.");
             }
         }
         Err(error) => {
@@ -148,18 +148,18 @@ pub fn check(strict: bool) -> ExitCode {
         let valid =
             value.trim().len() == 64 && value.trim().chars().all(|char| char.is_ascii_hexdigit());
         if !valid {
-            eprintln!("FERRUM_CSRF_SECRET muss 64 Hex-Zeichen haben.");
+            eprintln!("FERRUM_CSRF_SECRET must contain 64 hexadecimal characters.");
             return ExitCode::from(1);
         }
     }
     if let Ok(value) = std::env::var("DATABASE_URL") {
         if value.is_empty() {
-            eprintln!("DATABASE_URL ist leer.");
+            eprintln!("DATABASE_URL is empty.");
             return ExitCode::from(1);
         }
     }
-    println!("Ferrioxid-Projektprüfung\n");
-    report("OK", "project.config Projektkonfiguration gültig.");
+    println!("Ferrioxid project check\n");
+    report("OK", "project.config Project configuration is valid.");
     let state = inspect_directory(&project.migrations_dir);
     if !state.conflicts.is_empty() {
         for conflict in state.conflicts {
@@ -174,14 +174,14 @@ pub fn check(strict: bool) -> ExitCode {
         return ExitCode::from(1);
     }
     if std::env::var("FERRUM_CHECK_SKIP_CARGO").ok().as_deref() == Some("1") {
-        println!("cargo check wurde für diesen Testlauf übersprungen.");
+        println!("cargo check was skipped for this test run.");
         return if strict && warnings > 0 {
             ExitCode::from(2)
         } else {
             ExitCode::SUCCESS
         };
     }
-    println!("Starte cargo check. Es wird keine Migration ausgeführt.");
+    println!("Running cargo check. No migrations are applied.");
     let status = Command::new("cargo")
         .arg("check")
         .current_dir(&project.root)
@@ -196,7 +196,7 @@ pub fn check(strict: bool) -> ExitCode {
         }
         Ok(_) => ExitCode::from(1),
         Err(error) => {
-            eprintln!("cargo check konnte nicht gestartet werden: {error}");
+            eprintln!("Could not start cargo check: {error}");
             ExitCode::from(1)
         }
     }
@@ -229,10 +229,10 @@ pub fn upgrade(check_only: bool, dry_run: bool, yes: bool) -> ExitCode {
         "{}",
         render_plan(&crate::text::locale(), &plan, dry_run || check_only)
     );
-    println!("Migrationen werden nicht angewendet. Es gibt kein Datenbank-Reset.");
+    println!("No migrations are applied and the database is not reset.");
     let writing = yes && !check_only && !dry_run;
     if !writing {
-        println!("Es wurde keine Datei geschrieben.");
+        println!("No files were written.");
         return if plan.has_conflict() {
             ExitCode::from(1)
         } else {
@@ -242,11 +242,11 @@ pub fn upgrade(check_only: bool, dry_run: bool, yes: bool) -> ExitCode {
     match apply_upgrade(&project.root, &plan) {
         Ok(true) => {
             println!("Manifest geschrieben: .ferrum/project.json");
-            println!("Template-Stand für neue Projekte: {TEMPLATE_VERSION}. Bestehende Dateien bleiben unverändert.");
+            println!("Template version for new projects: {TEMPLATE_VERSION}. Existing files remain unchanged.");
             ExitCode::SUCCESS
         }
         Ok(false) => {
-            println!("Keine Dateiänderung.");
+            println!("No file changes.");
             ExitCode::SUCCESS
         }
         Err(error) => {
@@ -314,7 +314,7 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
     if compare_schema && schema.is_none() {
         report(
             "OK",
-            "migration.schema Das Modellschema wurde nicht geladen. ferrioxid migrate status vergleicht es, wenn schema_command oder FERRUM_SCHEMA_FILE gesetzt ist.",
+            "migration.schema The model schema was not loaded. ferrioxid migrate status compares it when schema_command or FERRUM_SCHEMA_FILE is set.",
         );
     }
     let runtime = match tokio::runtime::Runtime::new() {
@@ -363,14 +363,14 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
             {
                 report(
                     "OK",
-                    "migration.current Auth-, Job- und App-Migrationen sind angewendet.",
+                    "migration.current Authentication, job, and app migrations are applied.",
                 );
             }
             if jobs_pending {
                 warnings += 1;
                 report(
                     "WARN",
-                    "job.migration.pending 0001_jobs Die Job-Migration ist nicht angewendet. ferrioxid migrate up holt sie nach. Diese Prüfung schreibt nicht.",
+                    "job.migration.pending 0001_jobs The job migration has not been applied. Run ferrioxid migrate up. This check is read-only.",
                 );
             }
             for item in &report_value.diagnostics {
@@ -457,30 +457,32 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
                 dependency.path.as_deref().unwrap_or("")
             ),
         ),
-        ferrioxid_migrations::DependencyKind::Git => {
-            report("OK", "project.dependency.git")
-        }
-        ferrioxid_migrations::DependencyKind::Registry => {
-            report("OK", "project.dependency.registry Die Cargo-Version 0.1.0 ist nicht die interne Template-Version.")
-        }
+        ferrioxid_migrations::DependencyKind::Git => report("OK", "project.dependency.git"),
+        ferrioxid_migrations::DependencyKind::Registry => report(
+            "OK",
+            "project.dependency.registry Cargo version 0.1.0 is not the internal template version.",
+        ),
         ferrioxid_migrations::DependencyKind::Missing => {
-            report("WARN", "project.dependency.unavailable Cargo.toml enthält keine Ferrioxid-Abhängigkeit.");
+            report(
+                "WARN",
+                "project.dependency.unavailable Cargo.toml has no Ferrioxid dependency.",
+            );
             warnings += 1;
         }
     }
     if dependency.admin_ui {
         report(
             "OK",
-            "project.dependency.admin_ui bleibt aus Kompatibilität gültig.",
+            "project.dependency.admin_ui remains valid for compatibility.",
         );
     }
     if project.static_enabled {
         if project.static_root().is_dir() {
-            report("OK", "Staticfiles-Verzeichnis ist vorhanden.");
+            report("OK", "Static files directory exists.");
         } else {
             report(
                 "WARN",
-                "project.file.missing Das Staticfiles-Verzeichnis fehlt.",
+                "project.file.missing The static files directory is missing.",
             );
             warnings += 1;
         }
@@ -488,7 +490,7 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
     match project.enforce_runtime() {
         Ok(()) => report(
             "OK",
-            "settings.runtime Datei, Defaults und Umgebungsvariablen sind zusammengeführt. Es wird keine Verbindung geöffnet.",
+            "settings.runtime File settings, defaults, and environment overrides have been merged. No connection is opened.",
         ),
         Err(error) => {
             report("ERROR", &format!("settings.runtime {}", error.0));
@@ -498,16 +500,16 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
     match project.mail_backend.as_str() {
         "disabled" => report(
             "OK",
-            "mail.disabled Es wird keine E-Mail versendet und kein SMTP-Server erwartet.",
+            "mail.disabled No emails are sent and no SMTP server is required.",
         ),
         "console" | "memory" => report(
             "OK",
-            "mail.local Das Backend bleibt im Prozess. Es öffnet keine SMTP-Verbindung.",
+            "mail.local The backend runs in-process without opening an SMTP connection.",
         ),
         "smtp" => {
             report(
                 "OK",
-                "mail.smtp Die Form ist gültig. ferrioxid check verbindet sich nicht mit dem Server.",
+                "mail.smtp The configuration is valid. ferrioxid check does not connect to the server.",
             );
             if std::env::var("FERRUM_SMTP_PASSWORD")
                 .ok()
@@ -516,25 +518,25 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
             {
                 report(
                     "WARN",
-                    "mail.credentials FERRUM_SMTP_PASSWORD fehlt. Der Wert wird nicht angezeigt.",
+                    "mail.credentials FERRUM_SMTP_PASSWORD is missing. Its value is never displayed.",
                 );
                 warnings += 1;
             }
         }
         _ => {
-            report("WARN", "mail.backend ist nicht bekannt.");
+            report("WARN", "mail.backend is not recognized.");
             warnings += 1;
         }
     }
     if project.storage_root().is_dir() {
         report(
             "OK",
-            "Storage-Verzeichnis ist vorhanden. Ob die Anwendung Routen einhängt, wird nicht aus dem Quelltext geschlossen.",
+            "Storage directory exists. Route registration is not inferred from source code.",
         );
     } else {
         report(
             "WARN",
-            "project.file.missing Storage-Verzeichnis fehlt. Das ist nur relevant, wenn die Anwendung Dateien speichert.",
+            "project.file.missing Storage directory is missing. This matters only if the app stores files.",
         );
         warnings += 1;
     }

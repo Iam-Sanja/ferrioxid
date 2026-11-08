@@ -1,4 +1,4 @@
-//! Erzeugt ein Modell und trägt es über feste Markierungen in die Registry ein.
+//! Generates a model and registers it using stable source markers.
 
 use crate::scaffold::validate_project_name;
 use ferrioxid_migrations::discover_project;
@@ -13,7 +13,7 @@ pub fn generate_model(name: &str, timestamps: bool) -> Result<PathBuf, String> {
     let model_path = project.root.join(format!("src/models/{module}.rs"));
     if model_path.exists() {
         return Err(format!(
-            "Das Modell `{name}` existiert bereits und wird nicht überschrieben."
+            "Model `{name}` already exists and will not be overwritten."
         ));
     }
     let package = package_name(&project.root)?;
@@ -60,12 +60,10 @@ pub fn generate_model(name: &str, timestamps: bool) -> Result<PathBuf, String> {
 pub fn validate_model_name(name: &str) -> Result<(), String> {
     let mut chars = name.chars();
     let Some(first) = chars.next() else {
-        return Err("Der Modellname darf nicht leer sein.".to_owned());
+        return Err("The model name cannot be empty.".to_owned());
     };
     if !first.is_ascii_uppercase() || !chars.all(|char| char.is_ascii_alphanumeric()) {
-        return Err(
-            "Der Modellname muss PascalCase sein und darf keine Pfadzeichen enthalten.".to_owned(),
-        );
+        return Err("The model name must use PascalCase without path characters.".to_owned());
     }
     Ok(())
 }
@@ -122,13 +120,13 @@ pub struct {name} {{
 
 pub(crate) fn insert_line(path: &Path, marker: &str, line: &str) -> Result<(), String> {
     let text = std::fs::read_to_string(path)
-        .map_err(|error| format!("{} konnte nicht gelesen werden: {error}", path.display()))?;
+        .map_err(|error| format!("Could not read {}: {error}", path.display()))?;
     if text.contains(line) {
-        return Err(format!("`{line}` ist bereits registriert."));
+        return Err(format!("`{line}` is already registered."));
     }
     let Some(index) = text.find(marker) else {
         return Err(format!(
-            "{} enthält die Markierung `{marker}` nicht. Es wird nichts ersetzt.",
+            "{} does not contain the `{marker}` marker. No changes were made.",
             path.display()
         ));
     };
@@ -148,12 +146,12 @@ fn package_name(root: &Path) -> Result<String, String> {
         if let Some(value) = line.strip_prefix("name = ") {
             let name = value.trim().trim_matches('"').to_owned();
             if name.is_empty() {
-                return Err("Der Paketname ist leer.".to_owned());
+                return Err("The package name is empty.".to_owned());
             }
             return Ok(name);
         }
     }
-    Err("Cargo.toml enthält keinen Paketnamen.".to_owned())
+    Err("Cargo.toml does not contain a package name.".to_owned())
 }
 
 #[cfg(test)]
