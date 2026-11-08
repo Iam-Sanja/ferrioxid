@@ -1,4 +1,4 @@
-//! Migrationsdateien, Checksums und Verzeichnisprüfung.
+//! Migration files, checksums, and directory validation.
 
 use crate::diff::{plan_change, MigrationOperation, MigrationPlan, MigrationRisk};
 use crate::error::MigrationError;
@@ -64,7 +64,7 @@ pub fn checksum_of(file: &MigrationFile) -> Result<String, MigrationError> {
     };
     let canonical = serde_json::to_string(&body).map_err(|error| {
         MigrationError::new(format!(
-            "Checksum-Grundlage ist nicht serialisierbar: {error}"
+            "Could not serialize checksum input: {error}"
         ))
     })?;
     let digest = Sha256::digest(canonical.as_bytes());
@@ -98,25 +98,25 @@ pub fn seal(
 pub fn save_migration(directory: &Path, file: &MigrationFile) -> Result<PathBuf, MigrationError> {
     fs::create_dir_all(directory).map_err(|error| {
         MigrationError::new(format!(
-            "Migrationsverzeichnis {} konnte nicht angelegt werden: {error}",
+            "Could not create migrations directory {}: {error}",
             directory.display()
         ))
     })?;
     let path = directory.join(format!("{}.json", file.id));
     if path.exists() {
         return Err(MigrationError::new(format!(
-            "Migrationsdatei {} existiert bereits und wird nicht überschrieben.",
+            "Migration file {} already exists and will not be overwritten.",
             path.display()
         )));
     }
     let text = serde_json::to_string_pretty(file).map_err(|error| {
         MigrationError::new(format!(
-            "Migration konnte nicht serialisiert werden: {error}"
+            "Could not serialize migration: {error}"
         ))
     })?;
     fs::write(&path, format!("{text}\n")).map_err(|error| {
         MigrationError::new(format!(
-            "Migration {} konnte nicht geschrieben werden: {error}",
+            "Could not write migration {}: {error}",
             path.display()
         ))
     })?;
@@ -135,7 +135,7 @@ pub fn inspect_directory(directory: &Path) -> DirectoryState {
         Ok(entries) => entries,
         Err(error) => {
             state.conflicts.push(format!(
-                "Migrationsverzeichnis {} ist nicht lesbar: {error}",
+                "Could not read migrations directory {}: {error}",
                 directory.display()
             ));
             return state;
@@ -168,13 +168,13 @@ pub fn inspect_directory(directory: &Path) -> DirectoryState {
 pub fn load_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
     let text = fs::read_to_string(path).map_err(|error| {
         MigrationError::new(format!(
-            "Migration {} ist nicht lesbar: {error}",
+            "Could not read migration {}: {error}",
             path.display()
         ))
     })?;
     let file: MigrationFile = serde_json::from_str(&text).map_err(|error| {
         MigrationError::new(format!(
-            "Migration {} ist kein gültiges JSON: {error}",
+            "Migration {} is not valid JSON: {error}",
             path.display()
         ))
     })?;
@@ -190,19 +190,19 @@ pub fn load_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
         .unwrap_or("");
     if stem != file.id {
         return Err(MigrationError::new(format!(
-            "Dateiname `{stem}` und Migrations-ID `{}` stimmen nicht überein.",
+            "Filename `{stem}` does not match migration ID `{}`.",
             file.id
         )));
     }
     file.from_snapshot.validate().map_err(|error| {
         MigrationError::new(format!(
-            "Ausgangsschema von {} ist ungültig: {}",
+            "Original schema of {} is invalid: {}",
             file.id, error.0
         ))
     })?;
     file.to_snapshot.validate().map_err(|error| {
         MigrationError::new(format!(
-            "Zielschema von {} ist ungültig: {}",
+            "Target schema of {} is invalid: {}",
             file.id, error.0
         ))
     })?;
@@ -210,20 +210,20 @@ pub fn load_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
     let expected = checksum_of(&file)?;
     if expected != file.checksum {
         return Err(MigrationError::new(format!(
-            "Checksum der Migration {} stimmt nicht. Die Datei wurde verändert oder beschädigt.",
+            "Checksum mismatch for migration {}. The file was changed or corrupted.",
             file.id
         )));
     }
     let produced = crate::simulate::apply_operations(&file.from_snapshot, &file.operations)
         .map_err(|error| {
             MigrationError::new(format!(
-                "Operationen der Migration {} passen nicht zum Ausgangsschema: {}",
+                "Operations of migration {} do not match the original schema: {}",
                 file.id, error.0
             ))
         })?;
     if !produced.semantically_eq(&file.to_snapshot) {
         return Err(MigrationError::new(format!(
-            "Operationen der Migration {} erzeugen nicht das gespeicherte Zielschema.",
+            "Operations of migration {} do not reproduce the stored target schema.",
             file.id
         )));
     }
@@ -238,7 +238,7 @@ pub fn make_migration(
     current.validate()?;
     if !is_migration_slug(name) {
         return Err(MigrationError::new(
-            "Der Migrationsname muss mit einem Buchstaben beginnen und darf nur Kleinbuchstaben, Ziffern und Unterstriche enthalten.",
+            "A migration name must start with a letter and contain only lowercase letters, digits, and underscores.",
         ));
     }
     let state = inspect_directory(directory);
@@ -256,7 +256,7 @@ pub fn make_migration(
     }
     if let Some(reason) = plan.refusal {
         return Err(MigrationError::new(format!(
-            "Es wurde keine Migration geschrieben.\n{reason}"
+            "No migration was written.\n{reason}"
         )));
     }
     let number = state
@@ -266,7 +266,7 @@ pub fn make_migration(
         .unwrap_or(1);
     if number > 9999 {
         return Err(MigrationError::new(
-            "Es sind höchstens 9999 nummerierte Migrationen vorgesehen.",
+            "At most 9999 numbered migrations are supported.",
         ));
     }
     let id = format!("{number:04}_{name}");
@@ -285,13 +285,13 @@ pub fn validate_chain(files: &[MigrationFile]) -> Result<(), MigrationError> {
     for file in files {
         let number = migration_number(&file.id).ok_or_else(|| {
             MigrationError::new(format!(
-                "Migrations-ID `{}` hat kein vierstelliges Präfix.",
+                "Migration ID `{}` does not have a four-digit prefix.",
                 file.id
             ))
         })?;
         if number <= previous_number {
             return Err(MigrationError::new(format!(
-                "Migrationsreihenfolge ist nicht eindeutig bei `{}`.",
+                "Migration ordering is ambiguous at `{}`.",
                 file.id
             )));
         }
@@ -299,7 +299,7 @@ pub fn validate_chain(files: &[MigrationFile]) -> Result<(), MigrationError> {
             None => {
                 if !file.from_snapshot.semantically_eq(&SchemaSnapshot::empty()) {
                     return Err(MigrationError::new(format!(
-                        "Die erste Migration {} muss von einem leeren Schema ausgehen.",
+                        "First migration {} must start from an empty schema.",
                         file.id
                     )));
                 }
@@ -307,7 +307,7 @@ pub fn validate_chain(files: &[MigrationFile]) -> Result<(), MigrationError> {
             Some(target) => {
                 if file.from_snapshot.to_canonical_json()? != target.to_canonical_json()? {
                     return Err(MigrationError::new(format!(
-                        "Migration {} setzt nicht auf dem Zielschema der vorherigen Migration auf.",
+                        "Migration {} does not use the previous migration's target schema.",
                         file.id
                     )));
                 }
@@ -322,18 +322,18 @@ pub fn validate_chain(files: &[MigrationFile]) -> Result<(), MigrationError> {
 fn validate_migration_name(id: &str, name: &str) -> Result<(), MigrationError> {
     let number = migration_number(id).ok_or_else(|| {
         MigrationError::new(format!(
-            "Migrations-ID `{id}` muss die Form 0001_name haben."
+            "Migration ID `{id}` must match 0001_name."
         ))
     })?;
     let expected = format!("{number:04}_{name}");
     if id != expected || !is_migration_slug(name) {
         return Err(MigrationError::new(format!(
-            "Migrations-ID `{id}` passt nicht zum Namen `{name}`."
+            "Migration ID `{id}` does not match name `{name}`."
         )));
     }
     if !is_identifier(name) {
         return Err(MigrationError::new(format!(
-            "Ungültiger Migrationsname `{name}`."
+            "Invalid migration name `{name}`."
         )));
     }
     Ok(())
@@ -365,7 +365,7 @@ pub fn write_explicit_migration(
     current.validate()?;
     if !is_migration_slug(name) {
         return Err(MigrationError::new(
-            "Der Migrationsname muss mit einem Buchstaben beginnen und darf nur Kleinbuchstaben, Ziffern und Unterstriche enthalten.".to_owned(),
+            "A migration name must start with a letter and contain only lowercase letters, digits, and underscores.".to_owned(),
         ));
     }
     let state = inspect_directory(directory);
@@ -380,7 +380,7 @@ pub fn write_explicit_migration(
     let produced = crate::simulate::apply_operations(&from, std::slice::from_ref(&operation))?;
     if !produced.semantically_eq(current) {
         return Err(MigrationError::new(
-            "Die Umbenennung erklärt nicht die gesamte Abweichung zwischen dem letzten Migrationsziel und dem registrierten Schema. Es wurde keine Datei geschrieben.".to_owned(),
+            "The rename does not account for all differences between the last migration target and registered schema. No file was written.".to_owned(),
         ));
     }
     let number = state
@@ -390,7 +390,7 @@ pub fn write_explicit_migration(
         .unwrap_or(1);
     if number > 9999 {
         return Err(MigrationError::new(
-            "Es sind höchstens 9999 nummerierte Migrationen vorgesehen.".to_owned(),
+            "At most 9999 numbered migrations are supported.".to_owned(),
         ));
     }
     let id = format!("{number:04}_{name}");
@@ -411,13 +411,13 @@ pub fn write_explicit_migration(
 pub fn reseal_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
     let text = fs::read_to_string(path).map_err(|error| {
         MigrationError::new(format!(
-            "Migration {} ist nicht lesbar: {error}",
+            "Could not read migration {}: {error}",
             path.display()
         ))
     })?;
     let mut file: MigrationFile = serde_json::from_str(&text).map_err(|error| {
         MigrationError::new(format!(
-            "Migration {} ist kein gültiges JSON: {error}",
+            "Migration {} is not valid JSON: {error}",
             path.display()
         ))
     })?;
@@ -427,7 +427,7 @@ pub fn reseal_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
         .unwrap_or("");
     if stem != file.id {
         return Err(MigrationError::new(format!(
-            "Dateiname `{stem}` und Migrations-ID `{}` stimmen nicht überein.",
+            "Filename `{stem}` does not match migration ID `{}`.",
             file.id
         )));
     }
@@ -437,19 +437,19 @@ pub fn reseal_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
     let produced = crate::simulate::apply_operations(&file.from_snapshot, &file.operations)?;
     if !produced.semantically_eq(&file.to_snapshot) {
         return Err(MigrationError::new(format!(
-            "Migration {} wird nicht neu versiegelt, weil die Operationen das Zielschema nicht erzeugen.",
+            "Migration {} cannot be resealed because its operations do not produce the target schema.",
             file.id
         )));
     }
     file.checksum = checksum_of(&file)?;
     let text = serde_json::to_string_pretty(&file).map_err(|error| {
         MigrationError::new(format!(
-            "Migration konnte nicht serialisiert werden: {error}"
+            "Could not serialize migration: {error}"
         ))
     })?;
     fs::write(path, format!("{text}\n")).map_err(|error| {
         MigrationError::new(format!(
-            "Migration {} konnte nicht geschrieben werden: {error}",
+            "Could not write migration {}: {error}",
             path.display()
         ))
     })?;
