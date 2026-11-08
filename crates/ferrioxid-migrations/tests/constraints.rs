@@ -389,7 +389,7 @@ async fn sqlite_constraints_indexes_and_foreign_keys() {
         .await
         .unwrap_err()
         .to_string();
-    assert!(baseline.contains("Prüfung erfolgreich"), "{baseline}");
+    assert!(baseline.contains("Validation successful"), "{baseline}");
 
     let mut without_index = initial.clone();
     without_index
