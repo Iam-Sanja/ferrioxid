@@ -631,7 +631,7 @@ fn optional_project() -> Result<Option<ferrioxid_migrations::ProjectConfig>, Str
     let directory = std::env::current_dir().map_err(|error| error.to_string())?;
     match ferrioxid_migrations::discover_project(&directory) {
         Ok(project) => Ok(Some(project)),
-        Err(error) if error.0.contains("Keine ferrum.toml") => Ok(None),
+        Err(error) if error.0.contains("No ferrum.toml found") => Ok(None),
         Err(error) => Err(error.0),
     }
 }
@@ -696,7 +696,7 @@ fn declared_packages() -> Result<Vec<PackageMigration>, String> {
                 depends_on: app.depends_on,
             })
             .collect()),
-        Err(error) if error.0.contains("Keine ferrum.toml") => Ok(Vec::new()),
+        Err(error) if error.0.contains("No ferrum.toml found") => Ok(Vec::new()),
         Err(error) => Err(error.0),
     }
 }
