@@ -43,7 +43,7 @@ pub fn new_project(
     write(&destination.join("ferrum.toml"), &manifest(name, template))?;
     write(
         &destination.join(".gitignore"),
-        "target/\n.env\n*.sqlite3\n*.sqlite3-journal\nmedia/*\n!media/.gitkeep\n",
+        "target/\n.env\n.env.*\n!.env.example\n.ferrum/csrf.key\n.ferrioxid/csrf.key\n*.sqlite3\n*.sqlite3-journal\nmedia/*\n!media/.gitkeep\n",
     )?;
     write(
         &destination.join("static/css/app.css"),
