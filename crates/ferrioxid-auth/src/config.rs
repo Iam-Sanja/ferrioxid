@@ -219,6 +219,12 @@ mod tests {
     use super::*;
 
     #[test]
+    fn framework_rename_preserves_existing_session_cookie() {
+        let config = AuthConfig::development();
+        assert_eq!(config.cookie_name, "ferrum_session");
+    }
+
+    #[test]
     fn loopback_origins_follow_the_bound_port() {
         assert_eq!(
             loopback_http_origins("127.0.0.1:3000"),
