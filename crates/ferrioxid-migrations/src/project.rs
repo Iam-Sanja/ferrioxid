@@ -1,4 +1,4 @@
-//! Explizite Projektintegration. Die CLI liest keine Rust-Quellen ein.
+//! Explicit project integration. The CLI does not parse Rust source code.
 
 use crate::error::MigrationError;
 use crate::snapshot::SchemaSnapshot;
@@ -56,7 +56,7 @@ pub struct ProjectConfig {
     pub jobs_retention_hours: u32,
     pub jobs_jitter: bool,
     pub custom: BTreeMap<String, BTreeMap<String, String>>,
-    /// Migrationsverzeichnisse. Die Liste lädt keinen Rust-Code.
+    /// Migration directories. Entries never load Rust code.
     pub apps: Vec<DeclaredApp>,
 }
 
@@ -116,12 +116,12 @@ impl ProjectConfig {
             .is_some_and(|value| value.eq_ignore_ascii_case("production"))
     }
 
-    /// `FERRUM_DEBUG` ersetzt `server.debug`. Ein ungültiger Wert bleibt ein Fehler.
+    /// `FERRUM_DEBUG` overrides `server.debug`. Invalid values remain errors.
     pub fn resolved_debug(&self) -> Result<bool, MigrationError> {
         match std::env::var("FERRUM_DEBUG") {
             Ok(value) if !value.is_empty() => parse_bool(&value).map_err(|_| {
                 MigrationError::new(
-                    "FERRUM_DEBUG erlaubt true oder false. Der ungültige Wert wird nicht ersetzt."
+                    "FERRUM_DEBUG accepts true or false. The invalid value is not silently replaced."
                         .to_owned(),
                 )
             }),
@@ -135,7 +135,7 @@ impl ProjectConfig {
             if !value.is_empty() {
                 if value.starts_with("0.0.0.0") {
                     return Err(MigrationError::new(
-                        "BIND_ADDRESS darf nicht 0.0.0.0 sein.".to_owned(),
+                        "BIND_ADDRESS must not be 0.0.0.0.".to_owned(),
                     ));
                 }
                 return Ok(value);
@@ -144,11 +144,11 @@ impl ProjectConfig {
         Ok(format!("{}:{}", self.host, self.port))
     }
 
-    /// Produktion mit aktivem Debug ist ein Fehler. Es gibt keinen stillen Wechsel.
+    /// Debug mode is forbidden in production. No implicit fallback is applied.
     pub fn enforce_runtime(&self) -> Result<(), MigrationError> {
         if self.is_production() && self.resolved_debug()? {
             return Err(MigrationError::new(
-                "server.debug ist in Produktion nicht erlaubt.".to_owned(),
+                "server.debug is not permitted in production.".to_owned(),
             ));
         }
         self.bind_address().map(|_| ())
@@ -161,14 +161,14 @@ impl ProjectConfig {
         let section = self
             .custom
             .get(name)
-            .ok_or_else(|| MigrationError::new(format!("custom.{name} ist nicht konfiguriert.")))?;
+            .ok_or_else(|| MigrationError::new(format!("custom.{name} is not configured.")))?;
         let mut object = serde_json::Map::new();
         for (key, value) in section {
             object.insert(key.clone(), coerce_custom(value));
         }
         serde_json::from_value(serde_json::Value::Object(object)).map_err(|_| {
             MigrationError::new(format!(
-                "custom.{name} passt nicht zur erwarteten Struktur."
+                "custom.{name} does not match the expected structure."
             ))
         })
     }
@@ -227,7 +227,7 @@ pub fn discover_project(start: &Path) -> Result<ProjectConfig, MigrationError> {
         current = directory.parent();
     }
     Err(MigrationError::new(
-        "Keine ferrum.toml gefunden. Die CLI erkennt Modelle nicht aus dem Quelltext. Lege eine ferrum.toml mit migrations_dir und schema_command an oder übergib --schema-file und --migrations-dir.",
+        "No ferrum.toml found. The CLI does not infer models from source code. Create ferrum.toml with migrations_dir and schema_command, or supply --schema-file and --migrations-dir.",
     ))
 }
 
@@ -241,17 +241,17 @@ pub fn load_schema_from_command(
         .output()
         .map_err(|error| {
             MigrationError::new(format!(
-                "Schema-Befehl konnte nicht gestartet werden: {error}"
+                "Could not start schema command: {error}"
             ))
         })?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(MigrationError::new(format!(
-            "Schema-Befehl ist fehlgeschlagen.\n{stderr}"
+            "Schema command failed.\n{stderr}"
         )));
     }
     let stdout = String::from_utf8(output.stdout).map_err(|_| {
-        MigrationError::new("Die Modell-Registry hat kein UTF-8-Schema geliefert.".to_owned())
+        MigrationError::new("The model registry did not produce a UTF-8 schema.".to_owned())
     })?;
     SchemaSnapshot::from_json(stdout.trim())
 }
@@ -259,7 +259,7 @@ pub fn load_schema_from_command(
 fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let text = std::fs::read_to_string(path).map_err(|error| {
         MigrationError::new(format!(
-            "{} konnte nicht gelesen werden: {error}",
+            "Could not read {}: {error}",
             path.display()
         ))
     })?;
@@ -335,14 +335,14 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             if let Some(name) = section.strip_prefix("app.") {
                 if !valid_custom_name(name) {
                     return Err(MigrationError::new(format!(
-                        "{}:{line_number}: app.{name} ist kein gültiger Abschnitt.",
+                        "{}:{line_number}: app.{name} is not a valid section.",
                         path.display()
                     )));
                 }
             } else if let Some(name) = section.strip_prefix("custom.") {
                 if !valid_custom_name(name) {
                     return Err(MigrationError::new(format!(
-                        "{}:{line_number}: custom.{name} ist kein gültiger Abschnitt.",
+                        "{}:{line_number}: custom.{name} is not a valid section.",
                         path.display()
                     )));
                 }
@@ -369,14 +369,14 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         }
         let Some((key, value)) = line.split_once('=') else {
             return Err(MigrationError::new(format!(
-                "{}:{line_number}: erwartet wird schluessel = \"wert\".",
+                "{}:{line_number}: expected key = \"value\".",
                 path.display()
             )));
         };
         let key = key.trim();
         let value = parse_value(value.trim()).ok_or_else(|| {
             MigrationError::new(format!(
-                "{}:{line_number}: der Wert von `{key}` ist ungültig.",
+                "{}:{line_number}: invalid value for `{key}`.",
                 path.display()
             ))
         })?;
@@ -386,7 +386,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
                 "migrations" => {
                     if !relative_dir(&value) {
                         return Err(MigrationError::new(format!(
-                            "{}:{line_number}: app.{name}.migrations muss ein relativer Ordner ohne .. sein.",
+                            "{}:{line_number}: app.{name}.migrations must be a relative directory without ..",
                             path.display()
                         )));
                     }
@@ -402,7 +402,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
                     for dependency in &entry.1 {
                         if !valid_custom_name(dependency) {
                             return Err(MigrationError::new(format!(
-                                "{}:{line_number}: Abhängigkeit `{dependency}` ist kein gültiger App-Name.",
+                                "{}:{line_number}: dependency `{dependency}` is not a valid app name.",
                                 path.display()
                             )));
                         }
@@ -410,7 +410,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
                 }
                 _ => {
                     return Err(MigrationError::new(format!(
-                        "{}:{line_number}: unbekannter Schlüssel `app.{name}.{key}`.",
+                        "{}:{line_number}: unknown key `app.{name}.{key}`.",
                         path.display()
                     )));
                 }
@@ -420,13 +420,13 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         if let Some(name) = section.strip_prefix("custom.") {
             if secret_config_key(key) {
                 return Err(MigrationError::new(
-                    "Secrets gehören nicht in ferrum.toml. Verwende eine Umgebungsvariable."
+                    "Secrets must not be stored in ferrum.toml. Use an environment variable."
                         .to_owned(),
                 ));
             }
             if !valid_custom_name(key) {
                 return Err(MigrationError::new(format!(
-                    "{}:{line_number}: custom.{name}.{key} ist kein gültiger Schlüssel.",
+                    "{}:{line_number}: custom.{name}.{key} is not a valid key.",
                     path.display()
                 )));
             }
@@ -455,7 +455,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "server.port" => {
                 port = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: server.port muss eine Zahl sein.",
+                        "{}:{line_number}: server.port must be a number.",
                         path.display()
                     ))
                 })?;
@@ -469,7 +469,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "auth.session_hours" => {
                 session_hours = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: auth.session_hours muss eine Zahl sein.",
+                        "{}:{line_number}: auth.session_hours must be a number.",
                         path.display()
                     ))
                 })?;
@@ -477,7 +477,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "auth.idle_minutes" => {
                 idle_minutes = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: auth.idle_minutes muss eine Zahl sein.",
+                        "{}:{line_number}: auth.idle_minutes must be a number.",
                         path.display()
                     ))
                 })?;
@@ -494,7 +494,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "static.cache_seconds" => {
                 static_cache_seconds = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: static.cache_seconds muss eine Zahl sein.",
+                        "{}:{line_number}: static.cache_seconds must be a number.",
                         path.display()
                     ))
                 })?;
@@ -503,7 +503,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "storage.directory" => storage_directory = value,
             "mail.password" | "mail.secret" | "mail.smtp_password" => {
                 return Err(MigrationError::new(
-                    "SMTP-Passwörter stehen nicht in ferrum.toml. Setze FERRUM_SMTP_PASSWORD."
+                    "SMTP passwords must not be stored in ferrum.toml. Set FERRUM_SMTP_PASSWORD."
                         .to_owned(),
                 ));
             }
@@ -512,7 +512,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "mail.port" => {
                 mail_port = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: mail.port muss eine Zahl sein.",
+                        "{}:{line_number}: mail.port must be a number.",
                         path.display()
                     ))
                 })?;
@@ -523,7 +523,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "mail.timeout_secs" => {
                 mail_timeout_secs = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: mail.timeout_secs muss eine Zahl sein.",
+                        "{}:{line_number}: mail.timeout_secs must be a number.",
                         path.display()
                     ))
                 })?;
@@ -533,7 +533,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "jobs.poll_ms" => {
                 jobs_poll_ms = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: jobs.poll_ms muss eine Zahl sein.",
+                        "{}:{line_number}: jobs.poll_ms must be a number.",
                         path.display()
                     ))
                 })?;
@@ -541,7 +541,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "jobs.concurrency" => {
                 jobs_concurrency = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: jobs.concurrency muss eine Zahl sein.",
+                        "{}:{line_number}: jobs.concurrency must be a number.",
                         path.display()
                     ))
                 })?;
@@ -549,7 +549,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "jobs.lease_secs" => {
                 jobs_lease_secs = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: jobs.lease_secs muss eine Zahl sein.",
+                        "{}:{line_number}: jobs.lease_secs must be a number.",
                         path.display()
                     ))
                 })?;
@@ -557,7 +557,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "jobs.max_attempts" => {
                 jobs_max_attempts = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: jobs.max_attempts muss eine Zahl sein.",
+                        "{}:{line_number}: jobs.max_attempts must be a number.",
                         path.display()
                     ))
                 })?;
@@ -565,7 +565,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "jobs.retention_hours" => {
                 jobs_retention_hours = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: jobs.retention_hours muss eine Zahl sein.",
+                        "{}:{line_number}: jobs.retention_hours must be a number.",
                         path.display()
                     ))
                 })?;
@@ -574,7 +574,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "mail.reset_ttl_minutes" => {
                 mail_reset_ttl_minutes = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: mail.reset_ttl_minutes muss eine Zahl sein.",
+                        "{}:{line_number}: mail.reset_ttl_minutes must be a number.",
                         path.display()
                     ))
                 })?;
@@ -582,26 +582,26 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "storage.max_upload_size_mb" => {
                 storage_max_upload_mb = value.parse().map_err(|_| {
                     MigrationError::new(format!(
-                        "{}:{line_number}: storage.max_upload_size_mb muss eine Zahl sein.",
+                        "{}:{line_number}: storage.max_upload_size_mb must be a number.",
                         path.display()
                     ))
                 })?;
             }
             _ => {
                 return Err(MigrationError::new(format!(
-                    "{}:{line_number}: unbekannter Schlüssel `{qualified}`.",
+                    "{}:{line_number}: unknown key `{qualified}`.",
                     path.display()
                 )))
             }
         }
     }
     let migrations_dir = migrations_dir.ok_or_else(|| {
-        MigrationError::new(format!("{} enthält kein migrations_dir.", path.display()))
+        MigrationError::new(format!("{} does not define migrations_dir.", path.display()))
     })?;
     if let Some(template) = &template {
         if template != "api" && template != "fullstack" {
             return Err(MigrationError::new(format!(
-                "project.template `{template}` ist unbekannt. Erlaubt sind api und fullstack."
+                "project.template `{template}` is unknown. Choose api or fullstack."
             )));
         }
     }
@@ -609,19 +609,19 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     validate_locale(&fallback_locale)?;
     if !(1..=168).contains(&session_hours) {
         return Err(MigrationError::new(
-            "auth.session_hours muss zwischen 1 und 168 liegen.".to_owned(),
+            "auth.session_hours must be between 1 and 168.".to_owned(),
         ));
     }
     if !(1..=1440).contains(&idle_minutes)
         || u64::from(idle_minutes) > u64::from(session_hours) * 60
     {
         return Err(MigrationError::new(
-            "auth.idle_minutes muss zwischen 1 und der Sitzungsdauer liegen.".to_owned(),
+            "auth.idle_minutes must be between 1 and the session duration.".to_owned(),
         ));
     }
     if template_engine != "tera" {
         return Err(MigrationError::new(
-            "templates.engine unterstützt derzeit nur tera.".to_owned(),
+            "templates.engine currently supports only tera.".to_owned(),
         ));
     }
     if templates_dir.is_empty()
@@ -629,7 +629,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         || Path::new(&templates_dir).is_absolute()
     {
         return Err(MigrationError::new(
-            "templates.templates_dir muss ein relativer Ordner ohne .. sein.".to_owned(),
+            "templates.templates_dir must be a relative directory without ..".to_owned(),
         ));
     }
     validate_label("admin.site_title", &site_title)?;
@@ -639,64 +639,64 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     validate_label("branding.app_name", &app_name)?;
     if !is_hex_color(&primary_color) {
         return Err(MigrationError::new(
-            "branding.primary_color muss #rgb oder #rrggbb sein.".to_owned(),
+            "branding.primary_color must be #rgb or #rrggbb.".to_owned(),
         ));
     }
     if currency.len() != 3 || !currency.chars().all(|char| char.is_ascii_uppercase()) {
         return Err(MigrationError::new(
-            "branding.currency muss ein ISO-4217-Code aus drei Großbuchstaben sein.".to_owned(),
+            "branding.currency must be a three-letter uppercase ISO 4217 code.".to_owned(),
         ));
     }
     if !matches!(storage_backend.as_str(), "local") {
         return Err(MigrationError::new(
-            "storage.backend unterstützt derzeit nur local.".to_owned(),
+            "storage.backend currently supports only local.".to_owned(),
         ));
     }
     if !relative_dir(&static_directory) || !relative_dir(&storage_directory) {
         return Err(MigrationError::new(
-            "static.directory und storage.directory müssen relative Ordner ohne .. sein."
+            "static.directory and storage.directory must be relative directories without .."
                 .to_owned(),
         ));
     }
     if !valid_static_prefix(&static_url_prefix) {
         return Err(MigrationError::new(
-            "static.url_prefix muss mit / beginnen und darf Admin, API und Auth nicht überdecken."
+            "static.url_prefix must start with / and must not shadow admin, API, or auth routes."
                 .to_owned(),
         ));
     }
     if static_cache_seconds > 2_592_000 {
         return Err(MigrationError::new(
-            "static.cache_seconds darf höchstens 2592000 sein.".to_owned(),
+            "static.cache_seconds must not exceed 2592000.".to_owned(),
         ));
     }
     if !(1..=100).contains(&storage_max_upload_mb) {
         return Err(MigrationError::new(
-            "storage.max_upload_size_mb muss zwischen 1 und 100 liegen.".to_owned(),
+            "storage.max_upload_size_mb must be between 1 and 100.".to_owned(),
         ));
     }
     if !(50..=60_000).contains(&jobs_poll_ms) {
         return Err(MigrationError::new(
-            "jobs.poll_ms muss zwischen 50 und 60000 liegen.".to_owned(),
+            "jobs.poll_ms must be between 50 and 60000.".to_owned(),
         ));
     }
     if !(1..=4).contains(&jobs_concurrency) {
         return Err(MigrationError::new(
-            "jobs.concurrency muss zwischen 1 und 4 liegen.".to_owned(),
+            "jobs.concurrency must be between 1 and 4.".to_owned(),
         ));
     }
     if !(5..=600).contains(&jobs_lease_secs) {
         return Err(MigrationError::new(
-            "jobs.lease_secs muss zwischen 5 und 600 liegen.".to_owned(),
+            "jobs.lease_secs must be between 5 and 600.".to_owned(),
         ));
     }
     if !(1..=20).contains(&jobs_max_attempts) {
         return Err(MigrationError::new(
-            "jobs.max_attempts muss zwischen 1 und 20 liegen.".to_owned(),
+            "jobs.max_attempts must be between 1 and 20.".to_owned(),
         ));
     }
     if !(1..=2160).contains(&jobs_retention_hours) {
         return Err(MigrationError::new(
-            "jobs.retention_hours muss zwischen 1 und 2160 liegen.".to_owned(),
+            "jobs.retention_hours must be between 1 and 2160.".to_owned(),
         ));
     }
     validate_mail(MailFields {
@@ -724,7 +724,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     apps.sort_by(|left, right| left.name.cmp(&right.name));
     if host == "0.0.0.0" {
         return Err(MigrationError::new(
-            "server.host darf nicht 0.0.0.0 sein.".to_owned(),
+            "server.host must not be 0.0.0.0.".to_owned(),
         ));
     }
     Ok(ProjectConfig {
@@ -806,27 +806,27 @@ fn validate_mail(mail: MailFields<'_>) -> Result<(), MigrationError> {
     } = mail;
     if !matches!(backend, "disabled" | "console" | "memory" | "smtp") {
         return Err(MigrationError::new(
-            "mail.backend erlaubt disabled, console, memory oder smtp.".to_owned(),
+            "mail.backend accepts disabled, console, memory, or smtp.".to_owned(),
         ));
     }
     if !(1..=30).contains(&timeout_secs) {
         return Err(MigrationError::new(
-            "mail.timeout_secs muss zwischen 1 und 30 liegen.".to_owned(),
+            "mail.timeout_secs must be between 1 and 30.".to_owned(),
         ));
     }
     if !(5..=1440).contains(&ttl_minutes) {
         return Err(MigrationError::new(
-            "mail.reset_ttl_minutes muss zwischen 5 und 1440 liegen.".to_owned(),
+            "mail.reset_ttl_minutes must be between 5 and 1440.".to_owned(),
         ));
     }
     if port == 0 {
         return Err(MigrationError::new(
-            "mail.port muss zwischen 1 und 65535 liegen.".to_owned(),
+            "mail.port must be between 1 and 65535.".to_owned(),
         ));
     }
     if !reply_to.is_empty() && !plausible_email(reply_to) {
         return Err(MigrationError::new(
-            "mail.reply_to muss eine E-Mail-Adresse ohne Steuerzeichen sein.".to_owned(),
+            "mail.reply_to must be an email address without control characters.".to_owned(),
         ));
     }
     if backend == "disabled" {
@@ -834,12 +834,12 @@ fn validate_mail(mail: MailFields<'_>) -> Result<(), MigrationError> {
     }
     if !plausible_email(from) {
         return Err(MigrationError::new(
-            "mail.from ist für ein aktives Backend erforderlich.".to_owned(),
+            "mail.from is required when a mail backend is enabled.".to_owned(),
         ));
     }
     if !trusted_origin(origin) {
         return Err(MigrationError::new(
-            "mail.public_origin muss http://127.0.0.1, http://localhost oder https sein."
+            "mail.public_origin must use http://127.0.0.1, http://localhost, or https."
                 .to_owned(),
         ));
     }
@@ -850,12 +850,12 @@ fn validate_mail(mail: MailFields<'_>) -> Result<(), MigrationError> {
                 .any(|char| char.is_whitespace() || char.is_control())
         {
             return Err(MigrationError::new(
-                "mail.host ist für smtp erforderlich.".to_owned(),
+                "mail.host is required for smtp.".to_owned(),
             ));
         }
         if !matches!(security, "starttls" | "tls") {
             return Err(MigrationError::new(
-                "mail.security erlaubt starttls oder tls. Klartext ist nicht vorgesehen."
+                "mail.security accepts starttls or tls. Plaintext is not supported."
                     .to_owned(),
             ));
         }
@@ -926,7 +926,7 @@ fn validate_locale(value: &str) -> Result<(), MigrationError> {
         Ok(())
     } else {
         Err(MigrationError::new(format!(
-            "Sprache `{value}` ist noch nicht vorbereitet. Erlaubt sind de und en."
+            "Locale `{value}` is not configured. Supported values are de and en."
         )))
     }
 }
@@ -935,7 +935,7 @@ fn validate_label(key: &str, value: &str) -> Result<(), MigrationError> {
     if value.is_empty() || value.chars().count() > 80 || value.chars().any(|char| char.is_control())
     {
         return Err(MigrationError::new(format!(
-            "{key} muss 1 bis 80 sichtbare Zeichen haben."
+            "{key} must contain 1 to 80 printable characters."
         )));
     }
     Ok(())
@@ -990,7 +990,7 @@ fn parse_bool(value: &str) -> Result<bool, MigrationError> {
         "true" => Ok(true),
         "false" => Ok(false),
         _ => Err(MigrationError::new(format!(
-            "`{value}` ist kein Wahrheitswert. Erlaubt sind true und false."
+            "`{value}` is not a boolean. Use true or false."
         ))),
     }
 }
