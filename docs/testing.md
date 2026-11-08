@@ -80,7 +80,7 @@ Name executed commands, exit codes and relevant errors. Mark unexecuted tests as
 
 ## Admin
 
-SQLite: `cargo test -p myshop --test admin_http` and `cargo test -p myshop --test admin_html`. `seed_file_database_when_requested` does nothing without `FERRIOXID_E2E_DATABASE`. There are no PostgreSQL admin tests. A browser run is not a substitute for these HTTP tests.
+SQLite: `cargo test -p myshop --test admin_http` and `cargo test -p myshop --test admin_html`. These tests use in-memory databases and never seed a database selected by `FERRIOXID_E2E_DATABASE` or the historical `FERRUM_E2E_DATABASE`. `tests_ignore_external_seed_database` verifies this in a child test process. For manual browser testing, create an account explicitly with `ferrioxid admin create-user --email admin@example.com --staff --superuser` and enter a unique password at the prompt; see [Authentication](auth.md#example). There are no PostgreSQL admin tests. A browser run is not a substitute for these HTTP tests.
 
 ## Fresh framework initialization
 
