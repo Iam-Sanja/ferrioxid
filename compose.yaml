@@ -1,19 +1,25 @@
+# Keep the legacy Compose project name, PostgreSQL user/database, and named volume.
+# Renaming these would silently start with a new empty database after an upgrade.
+# Existing deployments with an explicit COMPOSE_PROJECT_NAME must keep using that name.
+name: ${COMPOSE_PROJECT_NAME:-ferrum}
+
 services:
   db:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ferrioxid
-      POSTGRES_USER: ferrioxid
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ferrioxid_dev_only}
+      POSTGRES_DB: ferrum
+      POSTGRES_USER: ferrum
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ferrum_dev_only}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - ferrioxid_pgdata:/var/lib/postgresql/data
+      - ferrum_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ferrioxid -d ferrioxid"]
+      test: ["CMD-SHELL", "pg_isready -U ferrum -d ferrum"]
       interval: 5s
       timeout: 3s
       retries: 10
+
 volumes:
-  ferrioxid_pgdata:
+  ferrum_pgdata:
