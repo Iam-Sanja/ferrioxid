@@ -75,7 +75,10 @@ fn cli_help_is_english_without_a_locale_override() {
         .expect("CLI help");
     assert!(result.status.success());
     let help = String::from_utf8_lossy(&result.stdout);
-    assert!(help.contains("Creates a standalone Ferrioxid project."), "{help}");
+    assert!(
+        help.contains("Creates a standalone Ferrioxid project."),
+        "{help}"
+    );
     assert!(!help.contains("Erzeugt"), "{help}");
     let _ = std::fs::remove_dir_all(directory);
 }
