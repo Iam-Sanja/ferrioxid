@@ -691,7 +691,7 @@ pub async fn insert_password_audit(
             text(&Uuid::new_v4().to_string()),
             number(created_at),
             text(&actor_id.to_string()),
-            text("_ferrum_users"),
+            text("_ferrioxid_users"),
             text(&actor_id.to_string()),
             text("password_reset"),
             text("ok"),

@@ -16,11 +16,11 @@ let app = ferrioxid::App::new(database)
     .seal()?;
 ```
 
-`examples/notes` registers `notes.list` under `/notes/items`. The `examples/notes/tests/reuse.rs` test also installs a second app and shows that `install` and `seal` do not create a table `_ferrum_migrations`. The answer of `/notes/items` is JSON.
+`examples/notes` registers `notes.list` under `/notes/items`. The `examples/notes/tests/reuse.rs` test also installs a second app and shows that `install` and `seal` do not create a table `_ferrioxid_migrations`. The answer of `/notes/items` is JSON.
 
 ## Limitations
 
-- The crate must occur in the binary. Ferrioxid does not load a Dynamic Library and does not read the Crate name from `ferrum.toml`.
+- The crate must occur in the binary. Ferrioxid does not load a Dynamic Library and does not read the Crate name from `ferrioxid.toml`.
 - Models use `FerrioxidModel` and `registry.model`. A table name remains the name from the model. Two models with the same table are rejected.
 - Relationships between apps remain normal foreign keys. The target table must exist. A qualified model name does not change the SQL name.
 - App settings are `[custom.<app>]` and `ProjectConfig::custom_settings`. `Registration::project` provides the configuration only if `with_settings` was called before `install`. Framework keys are not replaced.

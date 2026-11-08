@@ -690,7 +690,7 @@ async fn admin_assets_reject_traversal_and_keep_the_api() {
     )
     .unwrap();
     std::fs::write(dir.join("assets").join("app.js"), "console.log(1)").unwrap();
-    std::env::set_var("FERRUM_ADMIN_DIST", &dir);
+    std::env::set_var("FERRIOXID_ADMIN_DIST", &dir);
 
     let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
     let app = ferrioxid::App::new(db).with_admin(AdminRegistry::new());
@@ -735,7 +735,7 @@ async fn admin_assets_reject_traversal_and_keep_the_api() {
     assert!(!api.body.contains("<title>"));
 
     server.abort();
-    std::env::remove_var("FERRUM_ADMIN_DIST");
+    std::env::remove_var("FERRIOXID_ADMIN_DIST");
     let _ = std::fs::remove_dir_all(&dir);
 }
 

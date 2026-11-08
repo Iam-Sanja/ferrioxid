@@ -13,7 +13,7 @@
 7. **One repository implementation:** handlers and models do not distinguish between SQLite and PostgreSQL.
 8. **Schema changes run through migrations.** `myshop --bootstrap` is legacy and does not write tables or history.
 9. **Create policies run before INSERT.** REST and admin call the same `can_create` rule, which denies access by default.
-10. **One settings file:** `ferrum.toml` configures the project. Tera renders HTML pages outside the admin.
+10. **One settings file:** `ferrioxid.toml` configures the project. Tera renders HTML pages outside the admin.
 
 ## 2. Actual Workspace (Implemented)
 
@@ -61,9 +61,9 @@ myshop::main
   └─ BIND_ADDRESS lesen → TcpListener → axum::serve
 
 ferrioxid migrate make|up|status|rename-column|rename-table|reseal|baseline
-  → ferrum.toml oder --schema-file
-  → zuerst Auth-Verzeichnis und Historie `_ferrum_auth_migrations`
-  → danach Snapshot, Diff, Datei, Historie `_ferrum_migrations`
+  → ferrioxid.toml oder --schema-file
+  → zuerst Auth-Verzeichnis und Historie `_ferrioxid_auth_migrations`
+  → danach Snapshot, Diff, Datei, Historie `_ferrioxid_migrations`
 
 POST /api/v1/products
   → Axum Json<ProductCreate>
@@ -127,10 +127,10 @@ Rust-Modelle + Makros
 
 ## 8. Admin writes in v0.18
 
-`ModelRepository` exposes `get_tx`, `create_tx`, `update_tx` and `delete_tx` on `&DatabaseTransaction`. SQL helpers accept `&impl ConnectionTrait`. `ManagedModel::update` and `remove` receive the `AuthUser`. Admin creates, updates and deletes write the record and `_ferrum_admin_audit` in one transaction; a failure rolls back both. Direct repository calls do not write admin audit entries.
+`ModelRepository` exposes `get_tx`, `create_tx`, `update_tx` and `delete_tx` on `&DatabaseTransaction`. SQL helpers accept `&impl ConnectionTrait`. `ManagedModel::update` and `remove` receive the `AuthUser`. Admin creates, updates and deletes write the record and `_ferrioxid_admin_audit` in one transaction; a failure rolls back both. Direct repository calls do not write admin audit entries.
 
 Since v0.20, directory events (`user_create`, `user_update`, `password_reset`, `role_assign`, `role_revoke`) share a transaction with the corresponding auth changes. Self-service password reset at `/auth/password-reset` atomically consumes the token, changes the password, revokes sessions and writes the audit entry. Email delivery follows the commit. See [password-reset.md](password-reset.md).
 
-Drafts are in `_ferrum_admin_drafts` and refer as text UUID to `_ferrum_sessions.id`. Auth stores session IDs as text. The same text binding applies to audit IDs. The migration is `crates/ferrioxid-auth/migrations/0002_admin_journal.json`. `0001_auth_schema` remains unchanged.
+Drafts are in `_ferrioxid_admin_drafts` and refer as text UUID to `_ferrioxid_sessions.id`. Auth stores session IDs as text. The same text binding applies to audit IDs. The migration is `crates/ferrioxid-auth/migrations/0002_admin_journal.json`. `0001_auth_schema` remains unchanged.
 
 Further reading: [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [security.md](security.md), [admin-audit-log.md](admin-audit-log.md).

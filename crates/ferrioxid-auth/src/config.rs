@@ -32,8 +32,7 @@ impl AuthConfig {
     pub fn development() -> Self {
         Self {
             environment: Environment::Development,
-            // Keep the existing cookie name so active sessions survive the framework rename.
-            cookie_name: "ferrum_session".to_owned(),
+            cookie_name: "ferrioxid_session".to_owned(),
             cookie_secure: false,
             same_site: CookieSameSite::Lax,
             session_ttl_secs: 12 * 60 * 60,
@@ -45,22 +44,22 @@ impl AuthConfig {
             trust_proxy: false,
             login_max_attempts: 5,
             login_window_secs: 15 * 60,
-            csrf_secret: *b"ferrum-dev-csrf-secret-32-bytes!",
+            csrf_secret: *b"ferrioxid-dev-csrf-key-32-bytes!",
         }
     }
 
     pub fn from_env() -> Self {
-        let environment = match std::env::var("FERRUM_ENV").ok().as_deref() {
+        let environment = match std::env::var("FERRIOXID_ENV").ok().as_deref() {
             Some("production") => Environment::Production,
             _ => Environment::Development,
         };
         let mut config = Self::development();
         config.environment = environment;
-        config.cookie_secure = match std::env::var("FERRUM_COOKIE_SECURE") {
+        config.cookie_secure = match std::env::var("FERRIOXID_COOKIE_SECURE") {
             Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE"),
             Err(_) => environment == Environment::Production,
         };
-        if let Ok(origins) = std::env::var("FERRUM_ALLOWED_ORIGINS") {
+        if let Ok(origins) = std::env::var("FERRIOXID_ALLOWED_ORIGINS") {
             config.allowed_origins = origins
                 .split(',')
                 .map(str::trim)
@@ -72,18 +71,18 @@ impl AuthConfig {
         }
         config.csrf_secret = load_csrf_secret();
         config.trust_proxy = matches!(
-            std::env::var("FERRUM_TRUST_PROXY").ok().as_deref(),
+            std::env::var("FERRIOXID_TRUST_PROXY").ok().as_deref(),
             Some("1" | "true" | "TRUE")
         );
-        if let Some(hours) = env_range("FERRUM_SESSION_HOURS", 1, 168) {
+        if let Some(hours) = env_range("FERRIOXID_SESSION_HOURS", 1, 168) {
             config.session_ttl_secs = i64::from(hours) * 3600;
         }
-        if let Some(minutes) = env_range("FERRUM_IDLE_MINUTES", 1, 1440) {
+        if let Some(minutes) = env_range("FERRIOXID_IDLE_MINUTES", 1, 1440) {
             config.idle_timeout_secs = i64::from(minutes) * 60;
         }
         if environment == Environment::Production && !config.cookie_secure {
             tracing::warn!(
-                "FERRUM_COOKIE_SECURE ist in Produktion aus. Session-Cookies werden ohne Secure gesendet."
+                "FERRIOXID_COOKIE_SECURE ist in Produktion aus. Session-Cookies werden ohne Secure gesendet."
             );
         }
         config
@@ -91,18 +90,18 @@ impl AuthConfig {
 
     /// Dateiwerte gelten nur, wenn die Umgebung sie nicht bereits gesetzt hat.
     pub fn apply_project_session(&mut self, session_hours: u32, idle_minutes: u32) {
-        if std::env::var("FERRUM_SESSION_HOURS").is_err() {
+        if std::env::var("FERRIOXID_SESSION_HOURS").is_err() {
             self.session_ttl_secs = i64::from(session_hours) * 3600;
         }
-        if std::env::var("FERRUM_IDLE_MINUTES").is_err() {
+        if std::env::var("FERRIOXID_IDLE_MINUTES").is_err() {
             self.idle_timeout_secs = i64::from(idle_minutes) * 60;
         }
     }
 
     /// Ersetzt die Entwicklungsliste durch die Loopback-Origins der Prozessadresse.
-    /// `FERRUM_ALLOWED_ORIGINS` bleibt unverändert. Der Host-Header einer Anfrage wird nicht gelesen.
+    /// `FERRIOXID_ALLOWED_ORIGINS` bleibt unverändert. Der Host-Header einer Anfrage wird nicht gelesen.
     pub fn apply_bound_address(&mut self, address: &str) {
-        if std::env::var_os("FERRUM_ALLOWED_ORIGINS").is_some() {
+        if std::env::var_os("FERRIOXID_ALLOWED_ORIGINS").is_some() {
             return;
         }
         let _ = self.with_loopback_address(address);
@@ -177,13 +176,13 @@ fn env_range(name: &str, min: u32, max: u32) -> Option<u32> {
 }
 
 fn load_csrf_secret() -> [u8; 32] {
-    if let Ok(value) = std::env::var("FERRUM_CSRF_SECRET") {
+    if let Ok(value) = std::env::var("FERRIOXID_CSRF_SECRET") {
         if let Some(secret) = decode_hex_32(&value) {
             return secret;
         }
-        tracing::warn!("FERRUM_CSRF_SECRET muss 64 Hex-Zeichen sein. Ferrioxid verwendet die gespeicherte Schlüsseldatei.");
+        tracing::warn!("FERRIOXID_CSRF_SECRET muss 64 Hex-Zeichen sein. Ferrioxid verwendet die gespeicherte Schlüsseldatei.");
     }
-    let path = std::path::PathBuf::from(".ferrum/csrf.key");
+    let path = std::path::PathBuf::from(".ferrioxid/csrf.key");
     if let Ok(bytes) = std::fs::read(&path) {
         if bytes.len() == 32 {
             let mut secret = [0u8; 32];
@@ -219,9 +218,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn framework_rename_preserves_existing_session_cookie() {
+    fn session_cookie_uses_the_current_framework_name() {
         let config = AuthConfig::development();
-        assert_eq!(config.cookie_name, "ferrum_session");
+        assert_eq!(config.cookie_name, "ferrioxid_session");
     }
 
     #[test]

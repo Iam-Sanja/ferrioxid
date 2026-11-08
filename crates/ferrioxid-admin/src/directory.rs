@@ -233,7 +233,7 @@ pub async fn grant_permission(
 fn event(actor: Uuid, record: String, action: &str, summary: &str) -> Event {
     Event {
         actor_id: actor,
-        model_key: "_ferrum_users".to_owned(),
+        model_key: "_ferrioxid_users".to_owned(),
         record_id: clip(record, 80),
         action: action.to_owned(),
         outcome: "ok".to_owned(),
@@ -399,7 +399,7 @@ mod tests {
         let tx = auth.begin().await.unwrap();
         tx.execute(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
-            "UPDATE \"_ferrum_users\" SET \"is_superuser\" = 0 WHERE \"id\" = ?",
+            "UPDATE \"_ferrioxid_users\" SET \"is_superuser\" = 0 WHERE \"id\" = ?",
             [DbValue::from(actor.id.to_string())],
         ))
         .await

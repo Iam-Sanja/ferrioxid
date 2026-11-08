@@ -1,4 +1,4 @@
-//! Ferrioxid CLI. Migrations obtain the model registry through ferrum.toml.
+//! Ferrioxid CLI. Migrations obtain the model registry through ferrioxid.toml.
 
 mod apps;
 mod develop;
@@ -222,7 +222,7 @@ enum MigrateCommand {
         /// Schema snapshot JSON instead of schema_command.
         #[arg(long)]
         schema_file: Option<PathBuf>,
-        /// Overrides migrations_dir from ferrum.toml.
+        /// Overrides migrations_dir from ferrioxid.toml.
         #[arg(long)]
         migrations_dir: Option<PathBuf>,
     },
@@ -631,7 +631,7 @@ fn optional_project() -> Result<Option<ferrioxid_migrations::ProjectConfig>, Str
     let directory = std::env::current_dir().map_err(|error| error.to_string())?;
     match ferrioxid_migrations::discover_project(&directory) {
         Ok(project) => Ok(Some(project)),
-        Err(error) if error.0.contains("No ferrum.toml found") => Ok(None),
+        Err(error) if error.0.contains("No ferrioxid.toml found") => Ok(None),
         Err(error) => Err(error.0),
     }
 }
@@ -696,7 +696,7 @@ fn declared_packages() -> Result<Vec<PackageMigration>, String> {
                 depends_on: app.depends_on,
             })
             .collect()),
-        Err(error) if error.0.contains("No ferrum.toml found") => Ok(Vec::new()),
+        Err(error) if error.0.contains("No ferrioxid.toml found") => Ok(Vec::new()),
         Err(error) => Err(error.0),
     }
 }
@@ -724,7 +724,7 @@ fn resolve_schema(
         .map_err(|error| error.0)?;
     let directory = migrations_dir.unwrap_or(project.migrations_dir);
     let command = project.schema_command.ok_or_else(|| {
-        "ferrum.toml does not define schema_command. Supply --schema-file.".to_owned()
+        "ferrioxid.toml does not define schema_command. Supply --schema-file.".to_owned()
     })?;
     let schema = load_schema_from_command(&project.root, &command).map_err(|error| error.0)?;
     Ok((directory, schema))
@@ -762,10 +762,10 @@ fn run_admin(action: AdminCommand) -> Result<(), String> {
                 Some(email) => email,
                 None => prompt_line("Email: ")?,
             };
-            let password = if let Ok(value) = std::env::var("FERRUM_PASSWORD") {
+            let password = if let Ok(value) = std::env::var("FERRIOXID_PASSWORD") {
                 if value.len() < 12 {
                     return Err(
-                        "FERRUM_PASSWORD must contain at least 12 characters. There is no default password."
+                        "FERRIOXID_PASSWORD must contain at least 12 characters. There is no default password."
                             .to_owned(),
                     );
                 }

@@ -8,10 +8,10 @@
 
 | Location | Contents |
 |---|---|
-| `_ferrum_password_resets.token_hash` |SHA-256-hex, unique|
-| `_ferrum_password_reset_exchanges.secret_hash` |SHA-256-hex, unique|
-| `_ferrum_mail_outbox` |Type, recipient address, optional `reset_id`, timestamp, trial number, error code|
-| `_ferrum_admin_audit` |`password reset completed`, without token and without password|
+| `_ferrioxid_password_resets.token_hash` |SHA-256-hex, unique|
+| `_ferrioxid_password_reset_exchanges.secret_hash` |SHA-256-hex, unique|
+| `_ferrioxid_mail_outbox` |Type, recipient address, optional `reset_id`, timestamp, trial number, error code|
+| `_ferrioxid_admin_audit` |`password reset completed`, without token and without password|
 | Tracing | Codes such as `reset.limited`, `mail.timeout`, `mail.rejected` |
 
 The outbox does not contain the raw token. Console and memory may contain it because they are the delivery itself. Both are rejected in production.
@@ -25,7 +25,7 @@ This is not guaranteed delivery. An accepted SMTP delivery may miss the inbox. A
 ## Further limitations
 
 - The rate limit is process-local and does not share between instances.
-- `ferrioxid doctor` checks the form and presence of `FERRUM_SMTP_PASSWORD`, not the accessibility of the server.
+- `ferrioxid doctor` checks the form and presence of `FERRIOXID_SMTP_PASSWORD`, not the accessibility of the server.
 - Certificate verification is active. An insecure TLS fallback does not exist.
 - The reset pages do not load a third-party file and do not set an Analytics call.
 - A manipulated, expired or foreign token looks like an invalid link from the outside.

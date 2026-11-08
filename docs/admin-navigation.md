@@ -25,11 +25,11 @@ The current item matches the path exactly or as a prefix with a slash. Editing a
 
 `?model=` and `?record=` filter rows that already store `model_key` and `record_id`. The values are limited to 80 ASCII letters, digits, `_`, `-`, and `.`. Invalid filters are ignored. Record pages and user pages link here when that correlation exists.
 
-Directory permission changes are stored with model key `_ferrum_users` and the role name as `record_id`. Role history uses that existing pair. It does not invent events.
+Directory permission changes are stored with model key `_ferrioxid_users` and the role name as `record_id`. Role history uses that existing pair. It does not invent events.
 
 ## Time
 
-`created_at` stays a Unix second in `_ferrum_admin_audit`. The admin renders it as `YYYY-MM-DD HH:MM:SS UTC` inside `<time datetime="...Z">`. The zone is UTC, not the browser zone. A value that cannot be represented is labeled unavailable. The first paint does not depend on JavaScript.
+`created_at` stays a Unix second in `_ferrioxid_admin_audit`. The admin renders it as `YYYY-MM-DD HH:MM:SS UTC` inside `<time datetime="...Z">`. The zone is UTC, not the browser zone. A value that cannot be represented is labeled unavailable. The first paint does not depend on JavaScript.
 
 ## Unsaved changes
 

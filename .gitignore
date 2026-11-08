@@ -42,7 +42,7 @@ Desktop.ini
 *.swp
 
 # Local framework metadata and embedded admin build output.
-.ferrum/
+.ferrioxid/
 crates/ferrioxid-admin/embedded-admin/
 
 # Uploaded example media. The keep-file stays tracked.

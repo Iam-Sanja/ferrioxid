@@ -164,4 +164,4 @@ v0.14 Abmelden, Flags, Spalten
         → v0.18 Entwürfe, Inlines, Aktionen, Historie   umgesetzt
 ```
 
-The historical diagram is retained verbatim. v0.16 uses `AuthService` rather than duplicating CLI password rules. Audit records use `_ferrum_admin_audit`; template names remain fixed.
+The historical diagram is retained verbatim. v0.16 uses `AuthService` rather than duplicating CLI password rules. Audit records use `_ferrioxid_admin_audit`; template names remain fixed.

@@ -451,7 +451,7 @@ fn backup_file(root: &Path, source: &Path) -> Result<(), MigrationError> {
         .file_name()
         .and_then(|name| name.to_str())
         .unwrap_or("file");
-    let relative = format!(".ferrum/backup/{stamp}/{name}");
+    let relative = format!(".ferrioxid/backup/{stamp}/{name}");
     let target = contained_target(root, &relative)?;
     if let Some(parent) = target.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
@@ -523,13 +523,13 @@ mod tests {
         assert!(error.0.contains("upgrade.unsafe_path"));
         let plan = plan_upgrade(&root).unwrap();
         assert!(plan.adds() == 1);
-        assert!(!root.join(".ferrum").exists());
+        assert!(!root.join(".ferrioxid").exists());
         assert_eq!(
             std::fs::read_to_string(root.join("secret.txt")).unwrap(),
             "behalten"
         );
         apply_upgrade(&root, &plan).unwrap();
-        assert!(root.join(".ferrum").join("project.json").is_file());
+        assert!(root.join(".ferrioxid").join("project.json").is_file());
         assert_eq!(
             std::fs::read_to_string(root.join("secret.txt")).unwrap(),
             "behalten"
@@ -556,7 +556,7 @@ mod tests {
                 sha256: "deadbeef".to_owned(),
             }],
         );
-        std::fs::create_dir_all(root.join(".ferrum")).unwrap();
+        std::fs::create_dir_all(root.join(".ferrioxid")).unwrap();
         std::fs::write(
             root.join(MANIFEST_RELATIVE),
             manifest_json(&manifest).unwrap(),
@@ -585,14 +585,16 @@ mod tests {
             cargo("C:/ferrioxid/crates/ferrioxid"),
         )
         .unwrap();
-        let partial_dir = root.join(".ferrum");
+        let partial_dir = root.join(".ferrioxid");
         std::fs::create_dir_all(&partial_dir).unwrap();
         std::fs::write(partial_dir.join("project.json.partial"), "abbruch").unwrap();
         let plan = plan_upgrade(&root).unwrap();
         apply_upgrade(&root, &plan).unwrap();
-        assert!(std::fs::read_to_string(root.join(".ferrum/project.json"))
-            .unwrap()
-            .contains("legacy"));
+        assert!(
+            std::fs::read_to_string(root.join(".ferrioxid/project.json"))
+                .unwrap()
+                .contains("legacy")
+        );
         assert!(!partial_dir.join("project.json.partial").exists());
         let backup = partial_dir.join("backup");
         assert!(backup.is_dir());
@@ -615,7 +617,7 @@ mod tests {
         )
         .unwrap();
         let plan = plan_upgrade(&root).unwrap();
-        std::fs::create_dir_all(root.join(".ferrum")).unwrap();
+        std::fs::create_dir_all(root.join(".ferrioxid")).unwrap();
         std::fs::write(root.join(MANIFEST_RELATIVE), "{\"format\":1}\n").unwrap();
         let error = apply_upgrade(&root, &plan).unwrap_err();
         assert!(error.0.contains("since planning"));
@@ -636,7 +638,7 @@ mod tests {
             cargo("C:/ferrioxid/crates/ferrioxid"),
         )
         .unwrap();
-        let link = root.join(".ferrum");
+        let link = root.join(".ferrioxid");
         let status = std::process::Command::new("cmd")
             .args([
                 "/c",

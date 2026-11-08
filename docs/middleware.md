@@ -51,7 +51,7 @@ let router = ferrioxid::middleware::apply(router, ferrioxid::middleware::Standar
 
 ## Limitations
 
-Standard Axum and Tower layers can supplement the built-in middleware. There is no declarative middleware list in `ferrum.toml`. Logging uses `tracing` without an additional text-filtering pass.
+Standard Axum and Tower layers can supplement the built-in middleware. There is no declarative middleware list in `ferrioxid.toml`. Logging uses `tracing` without an additional text-filtering pass.
 
 ## Extension
 

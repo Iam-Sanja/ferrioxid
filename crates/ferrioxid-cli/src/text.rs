@@ -46,7 +46,7 @@ fn line_for(locale: &str, key: &str) -> &'static str {
 }
 
 pub fn locale() -> String {
-    if let Ok(value) = std::env::var("FERRUM_LOCALE") {
+    if let Ok(value) = std::env::var("FERRIOXID_LOCALE") {
         if let Some(locale) = supported(&value) {
             return locale;
         }

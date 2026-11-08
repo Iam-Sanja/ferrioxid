@@ -6,7 +6,7 @@
 
 ## What the command does
 
-The command checks an existing project and can create a missing legacy manifest at `.ferrum/project.json` without regenerating the project.
+The command checks an existing project and can create a missing legacy manifest at `.ferrioxid/project.json` without regenerating the project.
 
 The following operations are outside the command’s scope:
 
@@ -35,7 +35,7 @@ Without `--yes` nothing is written. The consent is this flag, not a question.
 
 | Action | Meaning |
 |---|---|
-| `upgrade.plan.add .ferrum/project.json` | The legacy manifest is missing and may be created. |
+| `upgrade.plan.add .ferrioxid/project.json` | The legacy manifest is missing and may be created. |
 | `upgrade.unchanged` | The file matches its recorded hash, or the legacy manifest already exists |
 | `project.template.legacy` |Unknown origin. Existing files remain|
 | `project.template.outdated` |The template version is not `0.24`. Nothing is replaced|
@@ -53,7 +53,7 @@ Without `--yes` nothing is written. The consent is this flag, not a question.
 
 Paths must be relative and contain only normal components. `..`, absolute paths and drive prefixes produce `upgrade.unsafe_path`. If the target or an ancestor exists, its canonical path is checked against the project root. Junctions and symlinks that escape the project, including those under `.ferrioxid`, are rejected before writing.
 
-The manifest is first written to `.ferrum/project.json.partial`, then renamed. An existing partial file is moved to `.ferrum/backup/<zeit>/`. If the target appears between planning and writing, the command aborts and preserves it. An interruption before the rename leaves no incomplete `project.json`.
+The manifest is first written to `.ferrioxid/project.json.partial`, then renamed. An existing partial file is moved to `.ferrioxid/backup/<zeit>/`. If the target appears between planning and writing, the command aborts and preserves it. An interruption before the rename leaves no incomplete `project.json`.
 
 Conflicts also prevent the creation of the manifest. The run ends with exit code 1.
 

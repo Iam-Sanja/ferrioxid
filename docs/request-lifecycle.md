@@ -39,7 +39,7 @@ Auth and CSRF run in the handler. A middleware cannot skip it because it does no
 
 ## Configuration
 
-Static files and storage are in `ferrum.toml`. The body limit follows the upload size when `prepare` is used. myshop mounts static files and middleware explicitly because the workspace file omits static files.
+Static files and storage are in `ferrioxid.toml`. The body limit follows the upload size when `prepare` is used. myshop mounts static files and middleware explicitly because the workspace file omits static files.
 
 ## Security
 
@@ -59,7 +59,7 @@ The middleware order is in `ferrioxid-middleware`. Auth, CSRF and CRUD tests rem
 
 ## Limitations
 
-myshop and generated projects differ in the attachment point: myshop knows the workspace file and mounts its own `static/`. `prepare` reads the discovered `ferrum.toml`.
+myshop and generated projects differ in the attachment point: myshop knows the workspace file and mounts its own `static/`. `prepare` reads the discovered `ferrioxid.toml`.
 
 ## Extension
 

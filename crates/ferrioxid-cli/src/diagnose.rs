@@ -36,7 +36,7 @@ pub fn doctor() -> ExitCode {
         Ok(project) => {
             report(
                 "OK",
-                &format!("ferrum.toml found in {}", project.root.display()),
+                &format!("ferrioxid.toml found in {}", project.root.display()),
             );
             report(
                 "OK",
@@ -89,7 +89,7 @@ pub fn doctor() -> ExitCode {
             if std::env::var("DATABASE_URL").is_ok() {
                 report(
                     "OK",
-                    "DATABASE_URL overrides the URL from ferrum.toml. Its value is hidden.",
+                    "DATABASE_URL overrides the URL from ferrioxid.toml. Its value is hidden.",
                 );
             }
             if project.database_url.starts_with("sqlite:") {
@@ -144,11 +144,11 @@ pub fn check(strict: bool) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    if let Ok(value) = std::env::var("FERRUM_CSRF_SECRET") {
+    if let Ok(value) = std::env::var("FERRIOXID_CSRF_SECRET") {
         let valid =
             value.trim().len() == 64 && value.trim().chars().all(|char| char.is_ascii_hexdigit());
         if !valid {
-            eprintln!("FERRUM_CSRF_SECRET must contain 64 hexadecimal characters.");
+            eprintln!("FERRIOXID_CSRF_SECRET must contain 64 hexadecimal characters.");
             return ExitCode::from(1);
         }
     }
@@ -173,7 +173,7 @@ pub fn check(strict: bool) -> ExitCode {
     if counts.errors > 0 || project_counts.errors > 0 {
         return ExitCode::from(1);
     }
-    if std::env::var("FERRUM_CHECK_SKIP_CARGO").ok().as_deref() == Some("1") {
+    if std::env::var("FERRIOXID_CHECK_SKIP_CARGO").ok().as_deref() == Some("1") {
         println!("cargo check was skipped for this test run.");
         return if strict && warnings > 0 {
             ExitCode::from(2)
@@ -241,7 +241,7 @@ pub fn upgrade(check_only: bool, dry_run: bool, yes: bool) -> ExitCode {
     }
     match apply_upgrade(&project.root, &plan) {
         Ok(true) => {
-            println!("Manifest geschrieben: .ferrum/project.json");
+            println!("Manifest geschrieben: .ferrioxid/project.json");
             println!("Template version for new projects: {TEMPLATE_VERSION}. Existing files remain unchanged.");
             ExitCode::SUCCESS
         }
@@ -314,7 +314,7 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
     if compare_schema && schema.is_none() {
         report(
             "OK",
-            "migration.schema The model schema was not loaded. ferrioxid migrate status compares it when schema_command or FERRUM_SCHEMA_FILE is set.",
+            "migration.schema The model schema was not loaded. ferrioxid migrate status compares it when schema_command or FERRIOXID_SCHEMA_FILE is set.",
         );
     }
     let runtime = match tokio::runtime::Runtime::new() {
@@ -422,10 +422,10 @@ fn jobs_pending(url: &str) -> bool {
 }
 
 fn load_check_schema(project: &ProjectConfig) -> Result<Option<SchemaSnapshot>, String> {
-    if std::env::var("FERRUM_CHECK_SKIP_SCHEMA").ok().as_deref() == Some("1") {
+    if std::env::var("FERRIOXID_CHECK_SKIP_SCHEMA").ok().as_deref() == Some("1") {
         return Ok(None);
     }
-    if let Ok(path) = std::env::var("FERRUM_SCHEMA_FILE") {
+    if let Ok(path) = std::env::var("FERRIOXID_SCHEMA_FILE") {
         let text = std::fs::read_to_string(path).map_err(|error| error.to_string())?;
         return Ok(Some(
             SchemaSnapshot::from_json(&text).map_err(|error| error.0)?,
@@ -511,14 +511,14 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
                 "OK",
                 "mail.smtp The configuration is valid. ferrioxid check does not connect to the server.",
             );
-            if std::env::var("FERRUM_SMTP_PASSWORD")
+            if std::env::var("FERRIOXID_SMTP_PASSWORD")
                 .ok()
                 .filter(|value| !value.is_empty())
                 .is_none()
             {
                 report(
                     "WARN",
-                    "mail.credentials FERRUM_SMTP_PASSWORD is missing. Its value is never displayed.",
+                    "mail.credentials FERRIOXID_SMTP_PASSWORD is missing. Its value is never displayed.",
                 );
                 warnings += 1;
             }

@@ -2,11 +2,11 @@
 
 [Overview](index.md) · Mail: [mail.md](mail.md) · Reset: [password-reset.md](password-reset.md) · Jobs: [jobs.md](jobs.md)
 
-**Implemented.** The `_ferrum_mail_outbox` from `0004_password_reset` remains unchanged. Password reset makes one delivery attempt after commit, keeping the raw token only in memory and in the message.
+**Implemented.** The `_ferrioxid_mail_outbox` from `0004_password_reset` remains unchanged. Password reset makes one delivery attempt after commit, keeping the raw token only in memory and in the message.
 
 ## What the worker does not repeat
 
-Reset tokens are stored in neither the outbox nor `_ferrum_jobs`. `enqueue_notice` rejects `Notice::PasswordResetRequested` with `job.mail.reset_refused`. The built-in `ferrioxid_mail_notice` handler refuses `password_reset`, even if a job payload requests that notice type.
+Reset tokens are stored in neither the outbox nor `_ferrioxid_jobs`. `enqueue_notice` rejects `Notice::PasswordResetRequested` with `job.mail.reset_refused`. The built-in `ferrioxid_mail_notice` handler refuses `password_reset`, even if a job payload requests that notice type.
 
 The worker does not read existing outbox rows. `sweep` in `ferrioxid-auth` marks stale reset rows as `mail.expired` and consumes their tokens. A stopped worker cannot cause a second reset email.
 

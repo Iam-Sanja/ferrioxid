@@ -20,7 +20,7 @@ The engine does not parse Rust source and depends on neither Axum nor the admin 
 
 App packages use the same migration-history table. An entry is namespaced as `shop:0001_initial`, while the file ID remains `0001_initial`; see [app-migrations.md](app-migrations.md). Existing unqualified history rows are not rewritten. Startup compares `registry.migrations` with `[app.<name>]`; the CLI reads only the TOML declaration and reports that limit. A field group creates no table on its own: its fields appear in `columns()` of concrete models and therefore in schema diffs.
 
-Auth files are in `crates/ferrioxid-auth/migrations/` and write the history `_ferrum_auth_migrations`. `ferrioxid migrate up` applies this directory before the application files. The application history remains `_ferrum_migrations`. As a result, `0001_auth_schema` does not collide with `0001_initial`. The server start does not migrate. `0001_initial.json` remains unchanged.
+Auth files are in `crates/ferrioxid-auth/migrations/` and write the history `_ferrioxid_auth_migrations`. `ferrioxid migrate up` applies this directory before the application files. The application history remains `_ferrioxid_migrations`. As a result, `0001_auth_schema` does not collide with `0001_initial`. The server start does not migrate. `0001_initial.json` remains unchanged.
 
 | Responsibility |File|
 |---|---|
@@ -33,16 +33,16 @@ Auth files are in `crates/ferrioxid-auth/migrations/` and write the history `_fe
 |SQLite conversion and PostgreSQL-ALTER| `crates/ferrioxid-migrations/src/rebuild.rs` |
 | SQLite introspection | `crates/ferrioxid-migrations/src/introspection.rs` |
 | Baseline | `crates/ferrioxid-migrations/src/baseline.rs` |
-|`ferrum.toml` and Schema command| `crates/ferrioxid-migrations/src/project.rs` |
+|`ferrioxid.toml` and Schema command| `crates/ferrioxid-migrations/src/project.rs` |
 | CLI | `crates/ferrioxid-cli/src/main.rs` |
-|myshop registration| `examples/myshop/src/main.rs`, `ferrum.toml` |
+|myshop registration| `examples/myshop/src/main.rs`, `ferrioxid.toml` |
 | DDL | `crates/ferrioxid-db/src/sql.rs` |
 
 `ColumnSpec` and `TableConstraints` remain the model metadata. Snapshots convert them into logical types, unique constraints, indexes and foreign keys. SQL is rendered for a specific `DatabaseKind`. Single-column foreign keys are supported; changing a foreign key on an existing column remains blocked. See [constraints.md](constraints.md).
 
 ## 2. Registration
 
-`ferrum.toml` in the project or an overarching directory:
+`ferrioxid.toml` in the project or an overarching directory:
 
 ```toml
 migrations_dir = "examples/myshop/migrations"
@@ -133,7 +133,7 @@ A file not yet applied may be edited. Thereafter:
 cargo run -p ferrioxid-cli -- migrate reseal migrations\0002_rename_title.json
 ```
 
-`reseal` checks that the operations generate the target snapshot, rewrites the checksum and refuses the file if its ID is already in `_ferrum_migrations`. An applied file with changed checksum stops `migrate up`.
+`reseal` checks that the operations generate the target snapshot, rewrites the checksum and refuses the file if its ID is already in `_ferrioxid_migrations`. An applied file with changed checksum stops `migrate up`.
 
 ## 5. File format
 
@@ -149,7 +149,7 @@ The first migration must start from an empty schema. Each subsequent migration m
 
 ## 6. History
 
-Table `_ferrum_migrations`:
+Table `_ferrioxid_migrations`:
 
 | Column | Meaning |
 |---|---|
@@ -239,7 +239,7 @@ Before executing SQL, the runner checks checksums, ordering and whether each ope
 - Table `products` without history: cancellation, no deletion, no marking as migrated.
 - Empty database: cancellation, reference to `migrate make` and `migrate up`.
 
-`App::bootstrap_schema` remains a test assistant for empty databases without history. If `_ferrum_migrations` exists, this function does not create anything. It is not a migration and does not recognize schema drift.
+`App::bootstrap_schema` remains a test assistant for empty databases without history. If `_ferrioxid_migrations` exists, this function does not create anything. It is not a migration and does not recognize schema drift.
 
 The HTTP server does not migrate at startup.
 
@@ -250,7 +250,7 @@ The HTTP server does not migrate at startup.
 Procedure:
 
 1. Open connection. PostgreSQL is rejected.
-2. Inspect the schema through `sqlite_master`, `PRAGMA table_info`, `PRAGMA index_list`, `PRAGMA index_info` and `PRAGMA foreign_key_list`. Ignore `_ferrum_migrations`, `sqlite_%` and the primary-key autoindex.
+2. Inspect the schema through `sqlite_master`, `PRAGMA table_info`, `PRAGMA index_list`, `PRAGMA index_info` and `PRAGMA foreign_key_list`. Ignore `_ferrioxid_migrations`, `sqlite_%` and the primary-key autoindex.
 3. Existing history entries reject the baseline.
 4. The migration chain must be consistent from the empty schema.
 5. Reject the entire chain if any file contains `drop_table`, `drop_column`, `drop_index`, `drop_unique_constraint`, `drop_foreign_key`, `add_foreign_key` or an `alter_column` that changes logical type. The final live schema cannot prove that these historical operations occurred; manual migration is required.

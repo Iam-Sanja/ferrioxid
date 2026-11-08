@@ -10,7 +10,7 @@ Permissions are enforced on the server and reloaded on each request. Role and pe
 
 A user can have several roles, and each role can grant several permissions. Codes use the form `ressource.aktion` (resource and action), with actions `read`, `create`, `update` or `delete`.
 
-`authorize` checks the tables `_ferrum_user_roles`, `_ferrum_role_permissions` and `_ferrum_permissions` on each call.
+`authorize` checks the tables `_ferrioxid_user_roles`, `_ferrioxid_role_permissions` and `_ferrioxid_permissions` on each call.
 
 ## Responsible files
 
@@ -35,10 +35,10 @@ The CLI provides the same steps: `auth create-role`, `auth grant-permission`, `a
 
 | Table | Contents |
 |---|---|
-| `_ferrum_roles` | `id`, unique `name` |
-| `_ferrum_permissions` | `id`, unique `code` |
-| `_ferrum_user_roles` |own UUID, `user_id`, `role_id`, uniquely as a pair|
-| `_ferrum_role_permissions` |own UUID, `role_id`, `permission_id`, uniquely as a pair|
+| `_ferrioxid_roles` | `id`, unique `name` |
+| `_ferrioxid_permissions` | `id`, unique `code` |
+| `_ferrioxid_user_roles` |own UUID, `user_id`, `role_id`, uniquely as a pair|
+| `_ferrioxid_role_permissions` |own UUID, `role_id`, `permission_id`, uniquely as a pair|
 
 Foreign Keys delete assignments via `CASCADE`.
 

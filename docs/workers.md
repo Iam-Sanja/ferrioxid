@@ -14,7 +14,7 @@ NotesApp.register_jobs(host.registry_mut())?;
 host.run_until_ctrl_c()?;
 ```
 
-`WorkerHost::new` accepts a `WorkerConfig`; `from_project` reads `[jobs]` and the resolved database URL. `register` and `registry_mut` add handlers to the shared `JobRegistry`; duplicate `NAME` values return `job.handler`. `with_mail` adds `ferrioxid_mail_notice` if absent. `prepare` checks the SQLite file and `_ferrum_jobs`, then returns a `Worker`. `run_until_ctrl_c` creates the Tokio runtime and runs until Ctrl+C.
+`WorkerHost::new` accepts a `WorkerConfig`; `from_project` reads `[jobs]` and the resolved database URL. `register` and `registry_mut` add handlers to the shared `JobRegistry`; duplicate `NAME` values return `job.handler`. `with_mail` adds `ferrioxid_mail_notice` if absent. `prepare` checks the SQLite file and `_ferrioxid_jobs`, then returns a `Worker`. `run_until_ctrl_c` creates the Tokio runtime and runs until Ctrl+C.
 
 The API neither migrates the database nor mounts a router. A missing SQLite file returns `job.database` without creating a file. A missing jobs table returns `job.migration.missing`; `jobs.enabled = false` returns `job.disabled`.
 
@@ -31,7 +31,7 @@ ferrioxid worker --concurrency 2 --poll-ms 500
 
 The CLI worker only registers `ferrioxid_mail_notice`. Handlers of an app start `src/bin/worker.rs`. The CLI does not load any Rust code and no unknown Crate.
 
-If the SQLite file is missing, it is not created. If `_ferrum_jobs` is missing, the process ends with Exitcode 2 and `job.migration.missing`. `jobs.enabled = false` also terminates the worker with Exitcode 2. A clean stop signal ends with 0. A database error ends with 1.
+If the SQLite file is missing, it is not created. If `_ferrioxid_jobs` is missing, the process ends with Exitcode 2 and `job.migration.missing`. `jobs.enabled = false` also terminates the worker with Exitcode 2. A clean stop signal ends with 0. A database error ends with 1.
 
 Ctrl+C sets a stop flag on Windows and Linux. The worker does not claim a new job afterwards and ends the current execution. A handler is not rolled back in the middle of an external effect.
 
@@ -57,7 +57,7 @@ Delivery is at least once. An Exactly-once guarantee does not provide Ferrioxid.
 
 ## Configuration
 
-`[jobs]` in `ferrum.toml` is optional.
+`[jobs]` in `ferrioxid.toml` is optional.
 
 | Key | Default | Limit |
 |---|---|---|

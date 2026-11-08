@@ -10,8 +10,8 @@
 - A different payload version ends as `failed` with `job.version`.
 - No JSON object, an unknown field at `deny_unknown_fields` and more than 16 KiB end before or upon execution as `job.payload.invalid` or `job.payload.large`.
 - Secret keys are not stored.
-- Error texts and tracing call codes, not the payload and not `FERRUM_SMTP_PASSWORD`.
-- A handler code with spaces, capitals or `password=` becomes `job.error`. In `_ferrum_jobs.error_code` is this code, not the detailed text.
+- Error texts and tracing call codes, not the payload and not `FERRIOXID_SMTP_PASSWORD`.
+- A handler code with spaces, capitals or `password=` becomes `job.error`. In `_ferrioxid_jobs.error_code` is this code, not the detailed text.
 - `JobError::message` withholds a message if it contains `password`, `secret`, `token`, `authorization`, `cookie` or `reset_url`.
 - SQL identifiers come from fixed column names. Search columns are only `idempotency_key` and `schedule_key`. Values are bound.
 - There is no way to turn a job line into a shell command.

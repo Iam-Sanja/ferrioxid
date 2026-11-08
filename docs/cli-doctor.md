@@ -22,26 +22,26 @@ Status lines are `[OK]`, `[WARN]` and `[ERROR]`. An error gives exit code 1. `ch
 
 ## Configuration
 
-It reads `ferrum.toml`. `DATABASE_URL` may replace the database entry. `check` rejects an empty `DATABASE_URL`. If `FERRUM_CSRF_SECRET` is set, it must have 64 hex characters. A missing value is not an error here, because the runtime can generate a development key.
+It reads `ferrioxid.toml`. `DATABASE_URL` may replace the database entry. `check` rejects an empty `DATABASE_URL`. If `FERRIOXID_CSRF_SECRET` is set, it must have 64 hex characters. A missing value is not an error here, because the runtime can generate a development key.
 
 ## Data flow
 
-`doctor` runs `rustc --version` and `cargo --version`, then checks `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` and the migration directory. Existing databases are inspected read-only; a missing SQLite file produces a warning without being created. PostgreSQL connection failures are errors. For fullstack projects, it explains that the admin is embedded in the Rust binary and needs no Node.js. It does not infer storage route registration from `main.rs`.
+`doctor` runs `rustc --version` and `cargo --version`, then checks `ferrioxid.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` and the migration directory. Existing databases are inspected read-only; a missing SQLite file produces a warning without being created. PostgreSQL connection failures are errors. For fullstack projects, it explains that the admin is embedded in the Rust binary and needs no Node.js. It does not infer storage route registration from `main.rs`.
 
-`check` checks the environment, both migration histories and executes `cargo check`. If the database file is available and `schema_command` is set, it compares the model. `FERRUM_CHECK_SKIP_SCHEMA=1` and `FERRUM_CHECK_SKIP_CARGO=1` skip these steps in tests. It does not call `migrate up` and does not delete anything.
+`check` checks the environment, both migration histories and executes `cargo check`. If the database file is available and `schema_command` is set, it compares the model. `FERRIOXID_CHECK_SKIP_SCHEMA=1` and `FERRIOXID_CHECK_SKIP_CARGO=1` skip these steps in tests. It does not call `migrate up` and does not delete anything.
 
 ## Error cases
 
 | Case | Status |
 |---|---|
 |`rustc` or `cargo` is missing| Error |
-|`ferrum.toml` or `src/lib.rs` is missing| Error |
+|`ferrioxid.toml` or `src/lib.rs` is missing| Error |
 | `server.host` is `0.0.0.0` | Error |
 |SQLite file is missing| Warning |
 | Docker is missing | Not an error; Docker is optional and is not probed. |
 |Checksum conflict| Error in `check` |
 
-`doctor` in the Ferrioxid workspace itself reports missing `src/main.rs` and `src/lib.rs` because the workspace root is not an application. The command applies to generated projects and to `examples/myshop` only if there is a separate `ferrum.toml` there. The workspace file remains valid for `migrate`.
+`doctor` in the Ferrioxid workspace itself reports missing `src/main.rs` and `src/lib.rs` because the workspace root is not an application. The command applies to generated projects and to `examples/myshop` only if there is a separate `ferrioxid.toml` there. The workspace file remains valid for `migrate`.
 
 ## Security rules
 

@@ -204,7 +204,7 @@ async fn parent_and_children_commit_or_roll_back_together() {
     let rows = db
         .query_all(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "SELECT \"operation_id\", \"summary\" FROM \"_ferrum_admin_audit\" WHERE \"operation_id\" IS NOT NULL",
+            "SELECT \"operation_id\", \"summary\" FROM \"_ferrioxid_admin_audit\" WHERE \"operation_id\" IS NOT NULL",
         ))
         .await
         .unwrap();
@@ -380,8 +380,8 @@ async fn the_order_form_adds_a_row_without_javascript_or_a_write() {
     .await
     .unwrap();
     assert_eq!(signed.status, 303);
-    let session = cookie_value(&signed.headers, "ferrum_session");
-    let cookie = format!("Cookie: ferrum_session={session}\r\n");
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
+    let cookie = format!("Cookie: ferrioxid_session={session}\r\n");
     let page = ask(
         "GET",
         "/admin/models/orders/new".into(),

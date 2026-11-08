@@ -24,8 +24,8 @@ fn seal(command: &mut Command) -> &mut Command {
     command
         .env("DATABASE_URL", url)
         .env("CARGO_BUILD_JOBS", nested_build_jobs())
-        .env_remove("FERRUM_E2E_DATABASE")
-        .env_remove("FERRUM_PASSWORD")
+        .env_remove("FERRIOXID_E2E_DATABASE")
+        .env_remove("FERRIOXID_PASSWORD")
 }
 
 /// Limits nested Cargo builds. rustc 1.98.1 previously crashed during unrestricted release builds (0xc0000005 and 0xc0000409). The root cause is unresolved. Builds passed with two jobs; preserve any lower caller-specified limit.
@@ -125,12 +125,15 @@ fn generated_api_and_fullstack_projects_compile() {
     assert!(create(&root, "demo_full", "fullstack", &repo)
         .status
         .success());
+    for name in ["demo_api", "demo_full"] {
+        assert_current_framework_names(&root.join(name));
+    }
     let api = root.join("demo_api");
     assert!(api.join("migrations/0001_initial.json").is_file());
     assert!(api.join("templates/index.html").is_file());
     assert!(api.join("templates/errors/404.html").is_file());
-    assert!(api.join("ferrum.toml").is_file());
-    assert!(!std::fs::read_to_string(api.join("ferrum.toml"))
+    assert!(api.join("ferrioxid.toml").is_file());
+    assert!(!std::fs::read_to_string(api.join("ferrioxid.toml"))
         .unwrap()
         .contains("0.0.0.0"));
     let doctor = ferrioxid()
@@ -196,7 +199,7 @@ fn generated_api_and_fullstack_projects_compile() {
     let dev = ferrioxid()
         .current_dir(&api)
         .env("CARGO_TARGET_DIR", &target)
-        .env("FERRUM_DEV_EXIT_MS", "800")
+        .env("FERRIOXID_DEV_EXIT_MS", "800")
         .env("BIND_ADDRESS", "127.0.0.1:18761")
         .arg("dev")
         .output()
@@ -254,4 +257,57 @@ fn cargo(
         .env("CARGO_TARGET_DIR", target)
         .output()
         .unwrap()
+}
+
+// The dependency path is caller-supplied and may itself contain the historical name.
+fn assert_current_framework_names(project: &std::path::Path) {
+    let dependency = repository()
+        .canonicalize()
+        .unwrap()
+        .join("crates/ferrioxid");
+    let dependency = dependency.to_string_lossy();
+    let dependency = dependency
+        .strip_prefix(r"\\?\")
+        .unwrap_or(&dependency)
+        .replace('\\', "/");
+    let mut pending = vec![project.to_path_buf()];
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(directory).unwrap() {
+            let path = entry.unwrap().path();
+            let relative = path.strip_prefix(project).unwrap();
+            assert!(!relative
+                .to_string_lossy()
+                .to_ascii_lowercase()
+                .contains("ferrum"));
+            if path.is_dir() {
+                pending.push(path);
+            } else {
+                let content = std::fs::read_to_string(&path)
+                    .unwrap()
+                    .replace(&dependency, "<framework>");
+                assert!(
+                    !content.to_ascii_lowercase().contains("ferrum"),
+                    "{}",
+                    relative.display()
+                );
+            }
+        }
+    }
+    assert!(project.join("ferrioxid.toml").is_file());
+    assert!(project.join(".ferrioxid/project.json").is_file());
+    assert!(!project.join(".ferrioxid/csrf.key").exists());
+    let ignored = std::fs::read_to_string(project.join(".gitignore")).unwrap();
+    for pattern in [
+        ".env\n",
+        ".env.*\n",
+        "!.env.example\n",
+        ".ferrioxid/csrf.key\n",
+    ] {
+        assert!(
+            ignored.contains(pattern),
+            "missing secret protection: {pattern}"
+        );
+    }
+    let models = std::fs::read_to_string(project.join("src/models/mod.rs")).unwrap();
+    assert!(models.contains("// ferrioxid:models:end"));
 }

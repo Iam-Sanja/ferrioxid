@@ -8,7 +8,7 @@
 
 `ferrioxid migrate status`, `ferrioxid check`, `ferrioxid doctor`, `ferrioxid dev` and `ferrioxid upgrade --check` or `--dry-run` share read-only diagnostics. These checks apply no migrations and create neither history tables nor SQLite files.
 
-Auth files live in `crates/ferrioxid-auth/migrations`, with history in `_ferrum_auth_migrations`. Project migrations use `migrations_dir` and `_ferrum_migrations`. Declared `[app.<name>]` packages share that table with namespaced IDs such as `shop:0001_initial`. The CLI reads TOML rather than `registry.migrations` and reports this limit as `app.migration.runtime`; startup compares both declarations.
+Auth files live in `crates/ferrioxid-auth/migrations`, with history in `_ferrioxid_auth_migrations`. Project migrations use `migrations_dir` and `_ferrioxid_migrations`. Declared `[app.<name>]` packages share that table with namespaced IDs such as `shop:0001_initial`. The CLI reads TOML rather than `registry.migrations` and reports this limit as `app.migration.runtime`; startup compares both declarations.
 
 ## Report
 
@@ -18,8 +18,8 @@ Stable codes:
 
 | Code | Level | Meaning |
 |---|---|---|
-| `migration.auth.pending` | Warning |Auth file is not in `_ferrum_auth_migrations`|
-| `migration.app.pending` | Warning |App file is not in `_ferrum_migrations`|
+| `migration.auth.pending` | Warning |Auth file is not in `_ferrioxid_auth_migrations`|
+| `migration.app.pending` | Warning |App file is not in `_ferrioxid_migrations`|
 | `migration.history.missing` | Warning | The history table is missing; diagnostics do not create it |
 | `migration.checksum_mismatch` | Error |Saved checksum and file do not match|
 | `migration.unknown` | Error |An applied ID no longer has a file|
@@ -29,23 +29,23 @@ Stable codes:
 | `migration.database.missing` |Warning in Check, Doctor, Dev and Upgrade. Error in `migrate status`|The SQLite file does not exist|
 | `migration.database.unavailable` | Error |The existing file is not a readable database. This is not a success|
 
-`0002_admin_journal` relates to `_ferrum_admin_audit` and `_ferrum_admin_drafts`. `0003_audit_operation` relates to the column `operation_id`. As long as these files are only pending, this is a warning and not a silent creation.
+`0002_admin_journal` relates to `_ferrioxid_admin_audit` and `_ferrioxid_admin_drafts`. `0003_audit_operation` relates to the column `operation_id`. As long as these files are only pending, this is a warning and not a silent creation.
 
 ## Reading without writing
 
 SQLite diagnoses open an existing file with `mode=ro`. A missing file does not lead to a `connect`. PostgreSQL is connected to the same URL, the queries are `SELECT`. `ensure_history` is reserved for writing commands.
 
-The URL is `DATABASE_URL`, otherwise `database.url` from `ferrum.toml`. The same resolution is used by the generated program. A URL that is calculated only in the application code does not see the CLI.
+The URL is `DATABASE_URL`, otherwise `database.url` from `ferrioxid.toml`. The same resolution is used by the generated program. A URL that is calculated only in the application code does not see the CLI.
 
 ## Schema
 
-`ferrioxid migrate status` loads the model via `--schema-file` or `schema_command`. `ferrioxid check` does the same after the database file is present. `FERRUM_SCHEMA_FILE` replaces the command. `FERRUM_CHECK_SKIP_SCHEMA=1` skips it in `check`. `doctor`, `dev` and `upgrade` do not start `schema_command`. Without a loaded schema, the diagnosis explicitly reports this and claims no match.
+`ferrioxid migrate status` loads the model via `--schema-file` or `schema_command`. `ferrioxid check` does the same after the database file is present. `FERRIOXID_SCHEMA_FILE` replaces the command. `FERRIOXID_CHECK_SKIP_SCHEMA=1` skips it in `check`. `doctor`, `dev` and `upgrade` do not start `schema_command`. Without a loaded schema, the diagnosis explicitly reports this and claims no match.
 
 ## Commands
 
 `migrate status` remains successful for pending migrations and names `ferrioxid migrate up`. Conflicts, a missing file and an unreadable database terminate it with Exitcode 1.
 
-`check` terminates warnings only with `--strict` and exit code 2. Without `--strict`, the exit code remains 0 as long as there is no error. `cargo check` then runs. `FERRUM_CHECK_SKIP_CARGO=1` omits this step and is intended for testing.
+`check` terminates warnings only with `--strict` and exit code 2. Without `--strict`, the exit code remains 0 as long as there is no error. `cargo check` then runs. `FERRIOXID_CHECK_SKIP_CARGO=1` omits this step and is intended for testing.
 
 `doctor` explains the same situation and proposes `ferrioxid migrate up`. Warnings do not change its exit code. An unreadable database is an error. An uncreated SQLite file is a warning. Storage routes are not guessed from the source code. A missing storage directory is only a warning if the directory itself is missing.
 
@@ -73,12 +73,12 @@ Nächster Schritt:
   ferrioxid migrate up
 ```
 
-`FERRUM_LOCALE=en` switches the headings in English. The codes remain English.
+`FERRIOXID_LOCALE=en` switches the headings in English. The codes remain English.
 
 ## PowerShell
 
 ```powershell
-$env:FERRUM_LOCALE = "de"
+$env:FERRIOXID_LOCALE = "de"
 ferrioxid migrate status
 ferrioxid check
 ferrioxid check --strict

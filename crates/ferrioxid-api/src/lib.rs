@@ -211,7 +211,7 @@ impl App {
 
     /// Legacy-Helfer für leere Testdatenbanken. Keine Migrationshistorie und kein Schema-Diff.
     ///
-    /// Existiert `_ferrum_migrations`, wird nichts verändert.
+    /// Existiert `_ferrioxid_migrations`, wird nichts verändert.
     pub async fn bootstrap_schema(&self) -> Result<(), FerrioxidError> {
         if history_exists(&self.db)
             .await

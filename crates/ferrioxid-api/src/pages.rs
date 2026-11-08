@@ -394,7 +394,7 @@ mod tests {
         let _ = fs::remove_dir_all(&directory);
         fs::create_dir_all(directory.join("templates/errors")).unwrap();
         fs::write(
-            directory.join("ferrum.toml"),
+            directory.join("ferrioxid.toml"),
             "migrations_dir = \"migrations\"\n[project]\nname = \"Demo\"\n[templates]\nenabled = true\n[branding]\napp_name = \"Demo\"\n",
         )
         .unwrap();

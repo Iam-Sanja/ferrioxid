@@ -1367,7 +1367,7 @@ async fn roles(
         .map(|(_, name)| {
             json!({
                 "name": name,
-                "history": history_href("_ferrum_users", &name)
+                "history": history_href("_ferrioxid_users", &name)
             })
         })
         .collect();

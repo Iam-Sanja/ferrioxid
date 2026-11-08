@@ -4,7 +4,7 @@
 
 ## Actual Functionality (Implemented)
 
-`ferrioxid doctor` and `ferrioxid check` check tools, files, both migration areas, `settings.runtime` and the mail form. The runtime test does not open a connection. `settings.runtime` becomes `ERROR` when production and debug coincide, `FERRUM_DEBUG` is neither `true` nor `false`, or `BIND_ADDRESS` begins with `0.0.0.0`. `disabled` does not expect an SMTP server. `console` and `memory` remain local. `smtp` is not connected. If `FERRUM_SMTP_PASSWORD` is missing, the `mail.credentials` warning arises without showing the value. Details are available in [cli-doctor.md](cli-doctor.md) and [migration-diagnostics.md](migration-diagnostics.md). `ferrioxid upgrade` describes [project-upgrade.md](project-upgrade.md). Generator, templates and the development server are available in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) and [development-server.md](development-server.md).
+`ferrioxid doctor` and `ferrioxid check` check tools, files, both migration areas, `settings.runtime` and the mail form. The runtime test does not open a connection. `settings.runtime` becomes `ERROR` when production and debug coincide, `FERRIOXID_DEBUG` is neither `true` nor `false`, or `BIND_ADDRESS` begins with `0.0.0.0`. `disabled` does not expect an SMTP server. `console` and `memory` remain local. `smtp` is not connected. If `FERRIOXID_SMTP_PASSWORD` is missing, the `mail.credentials` warning arises without showing the value. Details are available in [cli-doctor.md](cli-doctor.md) and [migration-diagnostics.md](migration-diagnostics.md). `ferrioxid upgrade` describes [project-upgrade.md](project-upgrade.md). Generator, templates and the development server are available in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) and [development-server.md](development-server.md).
 
 ```powershell
 cargo run -p ferrioxid-cli -- new myproject --template fullstack --ferrioxid-path .
@@ -29,7 +29,7 @@ cargo run -p ferrioxid-cli -- upgrade --dry-run
 cargo run -p ferrioxid-cli -- upgrade --yes
 ```
 
-`migrate` reads `ferrum.toml` or the flags `--schema-file`, `--migrations-dir` and `--database-url`. The execution describes [migrations.md](migrations.md). `--bootstrap` belongs to the `myshop` binary, is legacy and does not perform a migration.
+`migrate` reads `ferrioxid.toml` or the flags `--schema-file`, `--migrations-dir` and `--database-url`. The execution describes [migrations.md](migrations.md). `--bootstrap` belongs to the `myshop` binary, is legacy and does not perform a migration.
 
 ```powershell
 cargo run -p ferrioxid-cli -- admin create-user --email admin@example.com --superuser
@@ -39,7 +39,7 @@ cargo run -p ferrioxid-cli -- auth grant-permission notes.read --role editor
 cargo run -p ferrioxid-cli -- auth assign-role --email admin@example.com --role editor
 ```
 
-`create-user` prompts for a password without echoing it and asks for confirmation. It accepts no password argument. `FERRUM_PASSWORD` can supply a password of at least 12 characters for automation; there is no default. `migrate up` applies auth migrations first. Auth commands that write data also create missing auth tables. `list-users` never prints hashes.
+`create-user` prompts for a password without echoing it and asks for confirmation. It accepts no password argument. `FERRIOXID_PASSWORD` can supply a password of at least 12 characters for automation; there is no default. `migrate up` applies auth migrations first. Auth commands that write data also create missing auth tables. `list-users` never prints hashes.
 
 `generate worker` writes `src/bin/worker.rs` without overwriting an existing file. `jobs inspect` hides the payload unless `--show-payload` is supplied, which warns that it may contain personal data. Neither output includes the lease token. `ferrioxid worker` runs only the mail handler.
 

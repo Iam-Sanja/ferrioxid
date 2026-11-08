@@ -17,7 +17,7 @@
 | `memory` |Holds the message in the process. `MemoryInbox::messages` returns them.|
 | `smtp` |An attempt via STARTTLS or implicit TLS. Details in [mail-smtp.md](mail-smtp.md).|
 
-`FERRUM_ENV=production` rejects `console` and `memory` and falls back to `disabled`. The password is never in `ferrum.toml`. SMTP reads `FERRUM_SMTP_USERNAME` and `FERRUM_SMTP_PASSWORD`.
+`FERRIOXID_ENV=production` rejects `console` and `memory` and falls back to `disabled`. The password is never in `ferrioxid.toml`. SMTP reads `FERRIOXID_SMTP_USERNAME` and `FERRIOXID_SMTP_PASSWORD`.
 
 ## Configuration
 
@@ -30,9 +30,9 @@ reset_ttl_minutes = 30
 
 For SMTP additionally `host`, `port`, `security = "starttls"` or `"tls"`, `from` and `timeout_secs` between 1 and 30. `reset_ttl_minutes` is between 5 and 1440. An active backend needs a plausible sender address and a trusted `public_origin`: `http://127.0.0.1`, `http://localhost` or `https` without user info, path, query and fragment. Keys `mail.password`, `mail.secret` and `mail.smtp_password` are an error.
 
-Environment variables override file settings: `FERRUM_MAIL_BACKEND`, `FERRUM_MAIL_FROM`, `FERRUM_MAIL_REPLY_TO`, `FERRUM_PUBLIC_ORIGIN`, `FERRUM_RESET_TTL_MINUTES`, `FERRUM_SMTP_HOST`, `FERRUM_SMTP_PORT`, `FERRUM_SMTP_SECURITY`, `FERRUM_SMTP_TIMEOUT_SECS`, `FERRUM_SMTP_USERNAME` and `FERRUM_SMTP_PASSWORD`.
+Environment variables override file settings: `FERRIOXID_MAIL_BACKEND`, `FERRIOXID_MAIL_FROM`, `FERRIOXID_MAIL_REPLY_TO`, `FERRIOXID_PUBLIC_ORIGIN`, `FERRIOXID_RESET_TTL_MINUTES`, `FERRIOXID_SMTP_HOST`, `FERRIOXID_SMTP_PORT`, `FERRIOXID_SMTP_SECURITY`, `FERRIOXID_SMTP_TIMEOUT_SECS`, `FERRIOXID_SMTP_USERNAME` and `FERRIOXID_SMTP_PASSWORD`.
 
-`ferrioxid check` and `ferrioxid doctor` do not open network sockets. SMTP without `FERRUM_SMTP_PASSWORD` produces `mail.credentials`; `check --strict` exits with code 2 for this warning. `ferrioxid upgrade` does not rewrite existing `ferrum.toml` files. The current project template version is `0.24`.
+`ferrioxid check` and `ferrioxid doctor` do not open network sockets. SMTP without `FERRIOXID_SMTP_PASSWORD` produces `mail.credentials`; `check --strict` exits with code 2 for this warning. `ferrioxid upgrade` does not rewrite existing `ferrioxid.toml` files. The current project template version is `0.24`.
 
 ## API
 

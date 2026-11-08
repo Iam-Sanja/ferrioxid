@@ -86,5 +86,6 @@ jobs:
         env:
           DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid
         run: |
+          cargo test -p myshop --test framework_names -- --ignored fresh_postgres_initializes_auth_jobs_and_application
           cargo test -p myshop --test postgres_api -- --ignored postgres_http_roundtrip
           cargo test -p ferrioxid-migrations --test engine -- --ignored postgres_migration_roundtrip

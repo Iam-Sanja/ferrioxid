@@ -47,7 +47,7 @@
 <a href="/admin/directory/users/{{ user.id }}/edit">{{ i18n.edit }}</a>
 <a href="/admin/directory/users/{{ user.id }}/edit#roles">{{ i18n.manage_roles }}</a>
 {% else %}<span class="hint">{{ i18n.blocked }}</span>{% endif %}
-<a href="/admin/audit?model=_ferrum_users&amp;record={{ user.id }}">{{ i18n.history }}</a>
+<a href="/admin/audit?model=_ferrioxid_users&amp;record={{ user.id }}">{{ i18n.history }}</a>
 {% if user.mutable %}
 <form method="post" action="/admin/directory/users/{{ user.id }}/active">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
