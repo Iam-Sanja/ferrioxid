@@ -409,7 +409,7 @@ fn main() -> ExitCode {
                     JobsCommand::Retry { .. } | JobsCommand::Cancel { .. }
                 )
             {
-                eprintln!("job.disabled jobs.enabled ist false.");
+                eprintln!("job.disabled jobs.enabled is false.");
                 return ExitCode::from(2);
             }
             let database_url = match &action {
@@ -649,7 +649,7 @@ fn jobs_database_url(
     match std::env::var("DATABASE_URL") {
         Ok(url) if !url.is_empty() => Ok(url),
         _ => Err(
-            "job.database Es gibt keine Datenbank-URL. Setze DATABASE_URL oder --database-url."
+            "job.database No database URL was provided. Set DATABASE_URL or use --database-url."
                 .to_owned(),
         ),
     }
