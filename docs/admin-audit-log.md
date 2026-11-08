@@ -4,7 +4,7 @@
 
 ## Table
 
-`_ferrum_admin_audit` from `crates/ferrioxid-auth/migrations/0002_admin_journal.json`. SQLite saves the UUID columns as text. The same migration runs through the existing engine. PostgreSQL compatibility follows from the dialect of the engine. The ignored PostgreSQL tests were not run for this.
+`_ferrioxid_admin_audit` from `crates/ferrioxid-auth/migrations/0002_admin_journal.json`. SQLite saves the UUID columns as text. The same migration runs through the existing engine. PostgreSQL compatibility follows from the dialect of the engine. The ignored PostgreSQL tests were not run for this.
 
 | Column | Contents |
 |---|---|
@@ -36,7 +36,7 @@ Directory changes and an inline configured with `|form` write the audit entry in
 
 `GET /admin/audit` requires staff access. Superusers see all entries, ordered by descending timestamp and ID, with 25 entries per page. Other staff see only entries whose `actor_id` is their own ID. They cannot use history to read other users' changes or field values.
 
-The page appears under System in the sidebar, not as a model. `?model=` and `?record=` filter the stored columns; invalid filters are discarded. Detail pages link to these filters when a model key and record ID are available. Directory permission events use `_ferrum_users` as the model key and the role name as `record_id`.
+The page appears under System in the sidebar, not as a model. `?model=` and `?record=` filter the stored columns; invalid filters are discarded. Detail pages link to these filters when a model key and record ID are available. Directory permission events use `_ferrioxid_users` as the model key and the role name as `record_id`.
 
 `created_at` remains Unix seconds. The HTML page shows `YYYY-MM-DD HH:MM:SS UTC` in `<time>`. The time zone of the display is UTC. An unrepresentable value is called unreadable. The stored value is not converted and is not overwritten.
 

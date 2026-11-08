@@ -11,11 +11,11 @@
 ```text
 meinprojekt/
 ├── Cargo.toml
-├── ferrum.toml
+├── ferrioxid.toml
 ├── .gitignore
 ├── .env.example
 ├── README.md
-├── .ferrum/project.json
+├── .ferrioxid/project.json
 ├── src/main.rs
 ├── src/lib.rs
 ├── src/settings.rs
@@ -50,7 +50,7 @@ There is no second settings module besides `settings.rs`. This module only calls
 
 ## Legacy
 
-A project whose `main.rs` uses `discover_project`, `App::new`, `register` and `merge` does not need to rewrite this file. `ferrum.toml` without `[custom]` remains valid. Existing migrations are not changed. `admin-ui` remains an accepted feature.
+A project whose `main.rs` uses `discover_project`, `App::new`, `register` and `merge` does not need to rewrite this file. `ferrioxid.toml` without `[custom]` remains valid. Existing migrations are not changed. `admin-ui` remains an accepted feature.
 
 `ferrioxid upgrade` does not replace a custom file. If the template version is not on `0.24`, the plan reports `project.template.outdated` and leaves the files. A modified file kept in the manifest remains `project.file.modified`. The adjustment to `src/settings.rs` and `src/urls.rs` is manual if an old project wants to adopt it.
 

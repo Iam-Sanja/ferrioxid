@@ -27,7 +27,7 @@ The handler reads the body, builds `FormValues` and calls `from_form`. Valid val
 
 ## Configuration
 
-Forms do not have their own `ferrum.toml` section. The maximum URL-encoded size is in `FormValues::parse_urlencoded`. Larger requests are previously rejected by the body limit middleware if `ferrioxid::web::prepare` or `ferrioxid::middleware::apply` is used.
+Forms do not have their own `ferrioxid.toml` section. The maximum URL-encoded size is in `FormValues::parse_urlencoded`. Larger requests are previously rejected by the body limit middleware if `ferrioxid::web::prepare` or `ferrioxid::middleware::apply` is used.
 
 ## Security
 

@@ -10,7 +10,7 @@
 |---|---|
 | `INSTALLED_APPS` |`App::install` with a type that implements `FerrioxidApplication`|
 | `AppConfig` | `AppConfig::new("shop").label(...).prefix(...).depends_on(...)` |
-| `apps.py` and dynamic imports | Rust code compiled into the binary; `ferrum.toml` does not load code |
+| `apps.py` and dynamic imports | Rust code compiled into the binary; `ferrioxid.toml` does not load code |
 | `shop.Product` and `inventory.Product` | Separate table names; the app name does not change SQL or API paths. |
 | `migrations/` per app | Shared migration engine; history ID `shop:0001_initial` |
 | `{% url "shop:product_detail" id=product.id %}` | `{{ url(name="shop.detail", id=product.id) }}` |

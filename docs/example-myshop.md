@@ -17,7 +17,7 @@ cargo run -p ferrioxid-cli -- migrate up
 cargo run -p myshop
 ```
 
-The commands belong in the workspace root, because there is `ferrum.toml`. Without `DATABASE_URL`, CLI and myshop use `sqlite://db.sqlite3?mode=rwc` in the working directory. `0001_initial.json` creates `products` and remains unchanged. `0002_categories_and_product_relations.json` creates `categories`, adds the nullable `category_id` with Foreign Key and creates `ix_products_name`. The server starts on `127.0.0.1:3000` if `BIND_ADDRESS` is not set and does not migrate itself. User creates `ferrioxid admin create-user`. Login, cookie, `/auth/me`, protected access, roles and logout shows `examples/myshop/tests/auth.rs`.
+The commands belong in the workspace root, because there is `ferrioxid.toml`. Without `DATABASE_URL`, CLI and myshop use `sqlite://db.sqlite3?mode=rwc` in the working directory. `0001_initial.json` creates `products` and remains unchanged. `0002_categories_and_product_relations.json` creates `categories`, adds the nullable `category_id` with Foreign Key and creates `ix_products_name`. The server starts on `127.0.0.1:3000` if `BIND_ADDRESS` is not set and does not migrate itself. User creates `ferrioxid admin create-user`. Login, cookie, `/auth/me`, protected access, roles and logout shows `examples/myshop/tests/auth.rs`.
 
 `cargo run -p myshop -- --bootstrap` aborts without deleting files, creating tables or writing history. `cargo run -p myshop -- --print-schema` outputs all registered models for `schema_command`.
 

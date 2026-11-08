@@ -41,6 +41,7 @@ async fn sessions_permissions_and_repeatable_migrations() {
         .login("admin@example.com", password, "peer")
         .await
         .expect("login");
+    assert!(issued.cookie.starts_with("ferrioxid_session="));
     assert!(!issued.cookie.contains("Secure"));
     assert!(issued.cookie.contains("HttpOnly"));
     assert!(issued.cookie.contains("SameSite=Lax"));
@@ -54,7 +55,7 @@ async fn sessions_permissions_and_repeatable_migrations() {
         .database()
         .query_one(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "SELECT token_hash, csrf_token_hash FROM _ferrum_sessions",
+            "SELECT token_hash, csrf_token_hash FROM _ferrioxid_sessions",
         ))
         .await
         .unwrap()
@@ -180,7 +181,7 @@ async fn sessions_permissions_and_repeatable_migrations() {
         .database()
         .query_all(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "SELECT id FROM _ferrum_auth_migrations ORDER BY id",
+            "SELECT id FROM _ferrioxid_auth_migrations ORDER BY id",
         ))
         .await
         .unwrap();
@@ -299,7 +300,7 @@ async fn expiries_for(db: &sea_orm::DatabaseConnection, user_id: &str) -> Vec<i6
     let rows = db
         .query_all(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
-            "SELECT expires_at FROM _ferrum_sessions WHERE user_id = ?",
+            "SELECT expires_at FROM _ferrioxid_sessions WHERE user_id = ?",
             [user_id.into()],
         ))
         .await

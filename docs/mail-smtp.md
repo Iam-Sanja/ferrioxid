@@ -17,8 +17,8 @@ let mail = MailService::smtp(
         host: "smtp.example.com".into(),
         port: 587,
         security: SmtpSecurity::Starttls,
-        username: std::env::var("FERRUM_SMTP_USERNAME").unwrap_or_default(),
-        password: std::env::var("FERRUM_SMTP_PASSWORD").unwrap_or_default(),
+        username: std::env::var("FERRIOXID_SMTP_USERNAME").unwrap_or_default(),
+        password: std::env::var("FERRIOXID_SMTP_PASSWORD").unwrap_or_default(),
         timeout: Duration::from_secs(15),
     },
     "noreply@example.com",
@@ -44,6 +44,6 @@ public_origin = "https://shop.example.com"
 reset_ttl_minutes = 30
 ```
 
-Username and password come from `FERRUM_SMTP_USERNAME` and `FERRUM_SMTP_PASSWORD`. If one of these is missing, the service remains deactivated and writes `mail.invalid` without giving the password.
+Username and password come from `FERRIOXID_SMTP_USERNAME` and `FERRIOXID_SMTP_PASSWORD`. If one of these is missing, the service remains deactivated and writes `mail.invalid` without giving the password.
 
 The workspace test does not address a public SMTP server. An error case against `127.0.0.1:9` only checks that the token is not usable afterwards and that the error code does not contain a secret.

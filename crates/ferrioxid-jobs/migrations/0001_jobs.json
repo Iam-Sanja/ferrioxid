@@ -10,7 +10,7 @@
     "format_version": 1,
     "tables": [
       {
-        "name": "_ferrum_jobs",
+        "name": "_ferrioxid_jobs",
         "columns": [
           {
             "name": "id",
@@ -123,13 +123,13 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_jobs_idempotency_key",
+            "name": "uq__ferrioxid_jobs_idempotency_key",
             "columns": [
               "idempotency_key"
             ]
           },
           {
-            "name": "uq__ferrum_jobs_schedule_key",
+            "name": "uq__ferrioxid_jobs_schedule_key",
             "columns": [
               "schedule_key"
             ]
@@ -137,7 +137,7 @@
         ],
         "indexes": [
           {
-            "name": "ix__ferrum_jobs_status_available_at",
+            "name": "ix__ferrioxid_jobs_status_available_at",
             "columns": [
               "status",
               "available_at"
@@ -151,7 +151,7 @@
     {
       "type": "create_table",
       "table": {
-        "name": "_ferrum_jobs",
+        "name": "_ferrioxid_jobs",
         "columns": [
           {
             "name": "id",
@@ -264,13 +264,13 @@
         ],
         "unique_constraints": [
           {
-            "name": "uq__ferrum_jobs_idempotency_key",
+            "name": "uq__ferrioxid_jobs_idempotency_key",
             "columns": [
               "idempotency_key"
             ]
           },
           {
-            "name": "uq__ferrum_jobs_schedule_key",
+            "name": "uq__ferrioxid_jobs_schedule_key",
             "columns": [
               "schedule_key"
             ]
@@ -278,7 +278,7 @@
         ],
         "indexes": [
           {
-            "name": "ix__ferrum_jobs_status_available_at",
+            "name": "ix__ferrioxid_jobs_status_available_at",
             "columns": [
               "status",
               "available_at"
@@ -289,5 +289,5 @@
     }
   ],
   "risks": [],
-  "checksum": "c68a6ad4f57a0bee35c3411597eddb3c3a1b3252466aaaf03e30b8a8ee83b5f6"
+  "checksum": "5c49af049f34f86b13cfa1ac29cdbff025e698c8b25f2939f4253e256e54dd20"
 }

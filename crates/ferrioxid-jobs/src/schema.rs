@@ -1,4 +1,4 @@
-//! Job-Tabelle. Die Migration hängt an der eigenen Historie `_ferrum_job_migrations`.
+//! Job-Tabelle. Die Migration hängt an der eigenen Historie `_ferrioxid_job_migrations`.
 
 use crate::error::JobError;
 #[cfg(test)]
@@ -9,8 +9,8 @@ use ferrioxid_migrations::{
 use sea_orm::DatabaseConnection;
 use std::path::PathBuf;
 
-pub const JOBS: &str = "_ferrum_jobs";
-pub const JOB_HISTORY: &str = "_ferrum_job_migrations";
+pub const JOBS: &str = "_ferrioxid_jobs";
+pub const JOB_HISTORY: &str = "_ferrioxid_job_migrations";
 
 pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
@@ -170,6 +170,6 @@ mod tests {
         let loaded = ferrioxid_migrations::load_migration(&path).expect("load migration");
         assert_eq!(loaded.id, "0001_jobs");
         assert_eq!(loaded.checksum, file.checksum);
-        assert!(format!("{loaded:?}").contains("_ferrum_jobs"));
+        assert!(format!("{loaded:?}").contains("_ferrioxid_jobs"));
     }
 }

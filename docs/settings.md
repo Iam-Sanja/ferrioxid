@@ -4,12 +4,12 @@
 
 ## Purpose
 
-`ferrum.toml` remains the only project file. `Settings` reads it, checks the runtime and returns `ProjectConfig`. There is no global singleton. Secrets are in environment variables, not in the file and not in `Debug`.
+`ferrioxid.toml` remains the only project file. `Settings` reads it, checks the runtime and returns `ProjectConfig`. There is no global singleton. Secrets are in environment variables, not in the file and not in `Debug`.
 
 ## Priority
 
 1. Built-in defaults if a key is missing.
-2. The value from `ferrum.toml`.
+2. The value from `ferrioxid.toml`.
 3. A set environment variable replaces only the intended value.
 
 An unknown section or key remains an error. Exceptions are `[custom.<name>]`, described in [custom-settings.md](custom-settings.md), and `[app.<name>]`, described in [app-registry.md](app-registry.md). `[custom]` and `[app]` without names are errors. `[app.<name>]` declares a migration directory and does not load a rust code. App settings remain under `[custom.<name>]` and do not override framework keys.
@@ -26,7 +26,7 @@ fn load() -> Result<ferrioxid::migrations::ProjectConfig, Box<dyn std::error::Er
 }
 ```
 
-`discover` searches `ferrum.toml` from the start directory upwards and calls `enforce_runtime`. `from_project` checks an already read `ProjectConfig` again. `project()` borrows the configuration. The generator writes the same sequence in `src/settings.rs`.
+`discover` searches `ferrioxid.toml` from the start directory upwards and calls `enforce_runtime`. `from_project` checks an already read `ProjectConfig` again. `project()` borrows the configuration. The generator writes the same sequence in `src/settings.rs`.
 
 ## Sections
 
@@ -39,23 +39,23 @@ Existing sections remain `project`, `server`, `database`, `admin`, `auth`, `temp
 | Variable | Effect |
 |---|---|
 | `DATABASE_URL` |Replaces the file URL if it is not empty. The value does not appear in `Debug`|
-| `FERRUM_ENV=production` |Turn on the production mode. Any other or missing value remains development|
-| `FERRUM_DEBUG` |Only `true` or `false`. Another value is an error and is not replaced by the file|
+| `FERRIOXID_ENV=production` |Turn on the production mode. Any other or missing value remains development|
+| `FERRIOXID_DEBUG` |Only `true` or `false`. Another value is an error and is not replaced by the file|
 | `BIND_ADDRESS` |Replaces `host:port`. A value starting with `0.0.0.0` is rejected|
-| `FERRUM_PUBLIC_ORIGIN` |Replaces `mail.public_origin` only when opening the mail service|
-| `FERRUM_SMTP_USERNAME` |SMTP users. If it is missing, the field remains empty|
-| `FERRUM_SMTP_PASSWORD` |SMTP password. It is not in `ferrum.toml`|
-| `FERRUM_SESSION_HOURS` |Replaces the file when set. Otherwise, `auth.session_hours` applies over `apply_project_session`|
-| `FERRUM_IDLE_MINUTES` |Replaces the file when set. Otherwise `auth.idle_minutes` applies|
-| `FERRUM_COOKIE_SECURE` |`1` or `true` sets the Secure cookie. In production, the standard|
-| `FERRUM_CSRF_SECRET` |64 Hex marks in production. The value is not logged|
-| `FERRUM_ALLOWED_ORIGINS` |Comma-separated origins. In production without this variable, the list is empty until `apply_bound_address` sets loopback|
+| `FERRIOXID_PUBLIC_ORIGIN` |Replaces `mail.public_origin` only when opening the mail service|
+| `FERRIOXID_SMTP_USERNAME` |SMTP users. If it is missing, the field remains empty|
+| `FERRIOXID_SMTP_PASSWORD` |SMTP password. It is not in `ferrioxid.toml`|
+| `FERRIOXID_SESSION_HOURS` |Replaces the file when set. Otherwise, `auth.session_hours` applies over `apply_project_session`|
+| `FERRIOXID_IDLE_MINUTES` |Replaces the file when set. Otherwise `auth.idle_minutes` applies|
+| `FERRIOXID_COOKIE_SECURE` |`1` or `true` sets the Secure cookie. In production, the standard|
+| `FERRIOXID_CSRF_SECRET` |64 Hex marks in production. The value is not logged|
+| `FERRIOXID_ALLOWED_ORIGINS` |Comma-separated origins. In production without this variable, the list is empty until `apply_bound_address` sets loopback|
 
-A missing optional variable retains the file or default value. A missing mandatory production specification remains an error: `FERRUM_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FERRUM_ENV=production`. Ferrioxid does not switch debug silently to `false` in this case.
+A missing optional variable retains the file or default value. A missing mandatory production specification remains an error: `FERRIOXID_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FERRIOXID_ENV=production`. Ferrioxid does not switch debug silently to `false` in this case.
 
 ## Development and production
 
-Development is the default. Generated projects set `debug = true` and bind to `127.0.0.1`. Production is selected only by `FERRUM_ENV=production`; `enforce_runtime` then rejects enabled debug mode. `ferrioxid check` and `ferrioxid doctor` use the same runtime validation without opening a database or SMTP connection for that check. Success is `OK settings.runtime`; failure is `ERROR settings.runtime` with exit code 1.
+Development is the default. Generated projects set `debug = true` and bind to `127.0.0.1`. Production is selected only by `FERRIOXID_ENV=production`; `enforce_runtime` then rejects enabled debug mode. `ferrioxid check` and `ferrioxid doctor` use the same runtime validation without opening a database or SMTP connection for that check. Success is `OK settings.runtime`; failure is `ERROR settings.runtime` with exit code 1.
 
 ## Debug and logs
 

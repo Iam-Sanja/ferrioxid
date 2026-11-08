@@ -2,6 +2,8 @@
 
 Ferrioxid is a pre-release Rust full-stack web framework with a Django-inspired shape: explicit models, migrations, authentication, a server-rendered admin, and application modules on Axum and SeaORM. The framework name is Ferrioxid. Crate names stay `ferrioxid`, `ferrioxid-api`, `ferrioxid-cli`, and the other workspace members. The Cargo version is `0.1.0`. This is not a stable public release, and `ferrioxid` is not an installable crate.
 
+**Breaking configuration and schema change:** use `ferrioxid.toml`, `.ferrioxid/`, `FERRIOXID_*` and `_ferrioxid_*` tables with a fresh database. Old names are not aliases. See [the legacy-name removal record](docs/ferrum-legacy-removal.md) for the complete mapping and compatibility limits.
+
 SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js are not required for the admin.
 
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
@@ -15,7 +17,7 @@ SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js
 
 The milestone numbers below describe implemented features; the Cargo package version remains `0.1.0`.
 
-Milestone v0.28 groups the native admin by app. v0.27.1 runs application jobs through `WorkerHost` and `src/bin/worker.rs`; `ferrioxid jobs inspect` hides payloads unless `--show-payload` is supplied. v0.27 adds persistent jobs without Redis. v0.26 adds reusable model fields and validates installed apps before startup; soft delete is not implemented. v0.25 adds typed apps through `App::install` without loading Rust crates from `ferrum.toml`. v0.24 adds typed settings, named Axum routes and view helpers. v0.23 adds email and public password reset at `/auth/password-reset`; mail remains disabled by default. v0.22 adds custom admin pages, actions, filters, widgets and templates through `AdminRegistry` in `ferrioxid::admin`. Migration diagnostics report pending changes without applying them, and `ferrioxid upgrade` creates only a missing legacy manifest. Model and directory changes share transactions with their audits; `admin_inline` with `|form` saves parent and child records together. The admin uses Axum and Tera, supports German and English, and exposes branding through `GET /admin/api/config`. Forms, static files, local uploads and middleware remain available. Runtime settings stay in `ferrum.toml`; production `FERRUM_CSRF_SECRET` values contain 64 hex characters. See the [documentation portal](docs/index.md) for each feature and its limits.
+Milestone v0.28 groups the native admin by app. v0.27.1 runs application jobs through `WorkerHost` and `src/bin/worker.rs`; `ferrioxid jobs inspect` hides payloads unless `--show-payload` is supplied. v0.27 adds persistent jobs without Redis. v0.26 adds reusable model fields and validates installed apps before startup; soft delete is not implemented. v0.25 adds typed apps through `App::install` without loading Rust crates from `ferrioxid.toml`. v0.24 adds typed settings, named Axum routes and view helpers. v0.23 adds email and public password reset at `/auth/password-reset`; mail remains disabled by default. v0.22 adds custom admin pages, actions, filters, widgets and templates through `AdminRegistry` in `ferrioxid::admin`. Migration diagnostics report pending changes without applying them, and `ferrioxid upgrade` creates only a missing legacy manifest. Model and directory changes share transactions with their audits; `admin_inline` with `|form` saves parent and child records together. The admin uses Axum and Tera, supports German and English, and exposes branding through `GET /admin/api/config`. Forms, static files, local uploads and middleware remain available. Runtime settings stay in `ferrioxid.toml`; production `FERRIOXID_CSRF_SECRET` values contain 64 hex characters. See the [documentation portal](docs/index.md) for each feature and its limits.
 
 Create a standalone project outside the framework workspace. Start in the Ferrioxid repository; the CLI is installed from this checkout because the crates are not published:
 
@@ -30,7 +32,7 @@ ferrioxid admin create-user --email admin@example.com --staff --superuser
 ferrioxid dev
 ```
 
-The generated project is a sibling of the framework repository, so Cargo does not treat it as an unlisted workspace member. The CLI prompts for a password. `FERRUM_PASSWORD` is an optional automation input with no default value.
+The generated project is a sibling of the framework repository, so Cargo does not treat it as an unlisted workspace member. The CLI prompts for a password. `FERRIOXID_PASSWORD` is an optional automation input with no default value.
 
 [Authentication, sessions and roles](docs/auth.md) protect `/api/v1/internal_notes` in myshop. Products and categories are explicitly public demo routes.
 
@@ -61,7 +63,7 @@ cargo run -p ferrioxid-cli -- admin create-user --email admin@example.com --supe
 cargo run -p myshop
 ```
 
-`myshop` already contains `examples/myshop/migrations/0001_initial.json`. On a new SQLite file, `migrate up` is enough. `ferrum.toml` points the CLI at the myshop model registry. The CLI does not parse Rust source. `--bootstrap` is legacy: it no longer creates tables, does not write migration history, and does not delete existing files.
+`myshop` already contains `examples/myshop/migrations/0001_initial.json`. On a new SQLite file, `migrate up` is enough. `ferrioxid.toml` points the CLI at the myshop model registry. The CLI does not parse Rust source. `--bootstrap` is legacy: it no longer creates tables, does not write migration history, and does not delete existing files.
 
 In another terminal:
 

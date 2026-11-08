@@ -1,4 +1,4 @@
-//! Tabelle `_ferrum_migrations`. Ein Eintrag entsteht nur nach erfolgreicher Transaktion.
+//! Tabelle `_ferrioxid_migrations`. Ein Eintrag entsteht nur nach erfolgreicher Transaktion.
 
 use crate::error::MigrationError;
 use ferrioxid_core::{ColumnKind, DatabaseKind};
@@ -8,8 +8,8 @@ use sea_orm::sea_query::{
 };
 use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
 
-pub const HISTORY_TABLE: &str = "_ferrum_migrations";
-pub const AUTH_HISTORY_TABLE: &str = "_ferrum_auth_migrations";
+pub const HISTORY_TABLE: &str = "_ferrioxid_migrations";
+pub const AUTH_HISTORY_TABLE: &str = "_ferrioxid_auth_migrations";
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct HistoryEntry {

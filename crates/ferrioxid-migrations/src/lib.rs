@@ -1,7 +1,7 @@
 //! Versionierte Migrationen aus Ferrioxid-Modellmetadaten.
 //!
 //! Die Engine liest keine Rust-Quellen. Anwendungen registrieren ihre Modelle
-//! explizit und stellen das Schema der CLI über `ferrum.toml` oder eine Schema-Datei bereit.
+//! explizit und stellen das Schema der CLI über `ferrioxid.toml` oder eine Schema-Datei bereit.
 
 mod baseline;
 mod diff;

@@ -59,7 +59,7 @@ pub fn dev() -> ExitCode {
         crate::text::line("dev_started"),
         crate::text::line("dev_stop_hint")
     );
-    let exit_after = std::env::var("FERRUM_DEV_EXIT_MS")
+    let exit_after = std::env::var("FERRIOXID_DEV_EXIT_MS")
         .ok()
         .and_then(|value| value.parse::<u64>().ok())
         .map(Duration::from_millis);

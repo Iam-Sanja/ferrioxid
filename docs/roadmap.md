@@ -55,7 +55,7 @@ In the long term, the admin should cover the relevant functions of the Django ad
 
 - `views::fail` uses its own HTML page and not `templates/errors/`.
 - `require_user` continues to authenticate with GET. Mutations use `require_mutation`.
-- Since v0.26, the process start compares both lists. The CLI remains with `ferrum.toml`.
+- Since v0.26, the process start compares both lists. The CLI remains with `ferrioxid.toml`.
 - `ferrioxid new` does not yet generate `src/apps/`.
 
 ## Open after v0.24

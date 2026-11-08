@@ -36,7 +36,7 @@ pub fn same_migration_contract(
             .is_some()
         {
             return Err(MigrationError::new(format!(
-                "App `{}` is declared more than once in ferrum.toml.",
+                "App `{}` is declared more than once in ferrioxid.toml.",
                 package.name
             )));
         }
@@ -56,12 +56,12 @@ pub fn same_migration_contract(
         let declared = declared_names.get(name).expect("name checked");
         if dependency_set(&registered.depends_on) != dependency_set(&declared.depends_on) {
             return Err(MigrationError::new(format!(
-                "depends_on von `{name}` unterscheidet sich zwischen Rust und ferrum.toml."
+                "depends_on von `{name}` unterscheidet sich zwischen Rust und ferrioxid.toml."
             )));
         }
         if !same_directory(root, &declared.directory, &registered.directory) {
             return Err(MigrationError::new(format!(
-                "The migration directory for `{name}` differs between Rust and ferrum.toml."
+                "The migration directory for `{name}` differs between Rust and ferrioxid.toml."
             )));
         }
     }

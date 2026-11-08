@@ -19,7 +19,7 @@ fn ferrioxid(directory: &Path) -> Command {
     let mut command = Command::new(env!("CARGO_BIN_EXE_ferrioxid"));
     command
         .current_dir(directory)
-        .env("FERRUM_LOCALE", "de")
+        .env("FERRIOXID_LOCALE", "de")
         .env(
             "DATABASE_URL",
             format!(
@@ -44,7 +44,7 @@ fn text(output: &std::process::Output) -> String {
 
 fn write_project(directory: &Path) {
     std::fs::write(
-        directory.join("ferrum.toml"),
+        directory.join("ferrioxid.toml"),
         "migrations_dir = \"migrations\"\n\n[project]\ndefault_locale = \"de\"\n",
     )
     .unwrap();
@@ -69,7 +69,7 @@ fn cli_help_is_english_without_a_locale_override() {
     let directory = root();
     write_project(&directory);
     let result = ferrioxid(&directory)
-        .env_remove("FERRUM_LOCALE")
+        .env_remove("FERRIOXID_LOCALE")
         .args(["new", "--help"])
         .output()
         .expect("CLI help");
@@ -149,7 +149,7 @@ fn check_strict_doctor_and_dev_warn_without_writing() {
     let loose = output(
         ferrioxid(&directory)
             .env("DATABASE_URL", &url)
-            .env("FERRUM_CHECK_SKIP_CARGO", "1")
+            .env("FERRIOXID_CHECK_SKIP_CARGO", "1")
             .args(["check"]),
     );
     let loose_text = text(&loose);
@@ -168,7 +168,7 @@ fn check_strict_doctor_and_dev_warn_without_writing() {
     let strict = output(
         ferrioxid(&directory)
             .env("DATABASE_URL", &url)
-            .env("FERRUM_CHECK_SKIP_CARGO", "1")
+            .env("FERRIOXID_CHECK_SKIP_CARGO", "1")
             .args(["check", "--strict"]),
     );
     assert_eq!(strict.status.code(), Some(2), "{}", text(&strict));
@@ -220,28 +220,28 @@ fn upgrade_check_dry_run_and_yes_keep_unknown_files() {
         checked_text.contains("project.dependency.path"),
         "{checked_text}"
     );
-    assert!(!directory.join(".ferrum").exists(), "{checked_text}");
+    assert!(!directory.join(".ferrioxid").exists(), "{checked_text}");
 
     let dry = output(ferrioxid(&directory).args(["upgrade", "--dry-run"]));
     let dry_text = text(&dry);
     assert!(dry.status.success(), "{dry_text}");
     assert!(
-        dry_text.contains("upgrade.plan.add .ferrum/project.json"),
+        dry_text.contains("upgrade.plan.add .ferrioxid/project.json"),
         "{dry_text}"
     );
     assert!(dry_text.contains("Geplante Dateiänderungen"), "{dry_text}");
-    assert!(!directory.join(".ferrum").exists());
+    assert!(!directory.join(".ferrioxid").exists());
 
     let applied = output(ferrioxid(&directory).args(["upgrade", "--yes"]));
     assert!(applied.status.success(), "{}", text(&applied));
-    let manifest = std::fs::read(directory.join(".ferrum/project.json")).unwrap();
+    let manifest = std::fs::read(directory.join(".ferrioxid/project.json")).unwrap();
     assert!(std::str::from_utf8(&manifest).unwrap().contains("legacy"));
     assert_eq!(std::fs::read(directory.join("secret.txt")).unwrap(), secret);
 
     let again = output(ferrioxid(&directory).args(["upgrade", "--yes"]));
     assert!(again.status.success(), "{}", text(&again));
     assert_eq!(
-        std::fs::read(directory.join(".ferrum/project.json")).unwrap(),
+        std::fs::read(directory.join(".ferrioxid/project.json")).unwrap(),
         manifest
     );
     let _ = std::fs::remove_dir_all(&directory);
@@ -251,10 +251,10 @@ fn upgrade_check_dry_run_and_yes_keep_unknown_files() {
 fn upgrade_does_not_replace_a_modified_file() {
     let directory = root();
     write_project(&directory);
-    std::fs::create_dir_all(directory.join(".ferrum")).unwrap();
+    std::fs::create_dir_all(directory.join(".ferrioxid")).unwrap();
     std::fs::write(directory.join("README.md"), "eigene fassung").unwrap();
     std::fs::write(
-        directory.join(".ferrum/project.json"),
+        directory.join(".ferrioxid/project.json"),
         "{\n  \"format\": 1,\n  \"template_version\": \"0.21\",\n  \"origin\": \"generated\",\n  \"template\": \"api\",\n  \"files\": [{ \"path\": \"README.md\", \"sha256\": \"deadbeef\" }]\n}\n",
     )
     .unwrap();

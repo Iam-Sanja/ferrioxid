@@ -308,7 +308,7 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     assert!(!raw.contains("password_hash"));
     assert!(!raw.contains("argon2"));
     let cookie = session_cookie(&login.headers);
-    assert!(cookie.starts_with("ferrum_session="));
+    assert!(cookie.starts_with("ferrioxid_session="));
     assert!(!raw.contains(cookie.split('=').nth(1).unwrap_or("missing-token")));
     let csrf = login.json["csrf_token"].as_str().unwrap().to_owned();
     let me = call(
@@ -684,7 +684,7 @@ async fn sqlite_auth_http_permissions_and_csrf() {
         "GET",
         "/auth/me".into(),
         None,
-        "Cookie: ferrum_session=tampered\r\n".into(),
+        "Cookie: ferrioxid_session=tampered\r\n".into(),
     )
     .await
     .unwrap();

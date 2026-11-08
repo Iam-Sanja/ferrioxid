@@ -140,7 +140,7 @@ async fn reset_keeps_accounts_private_and_sessions_consistent() {
         .database()
         .query_one(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "SELECT summary FROM _ferrum_admin_audit WHERE action = 'password_reset'",
+            "SELECT summary FROM _ferrioxid_admin_audit WHERE action = 'password_reset'",
         ))
         .await
         .unwrap()
@@ -171,7 +171,7 @@ async fn rate_limit_parallel_replay_and_failed_delivery_stay_closed() {
     auth.database()
         .execute(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
-            "UPDATE _ferrum_password_resets SET expires_at = 1 WHERE token_hash = ?",
+            "UPDATE _ferrioxid_password_resets SET expires_at = 1 WHERE token_hash = ?",
             [crate_digest(&token).into()],
         ))
         .await
@@ -238,7 +238,7 @@ async fn rate_limit_parallel_replay_and_failed_delivery_stay_closed() {
         .database()
         .query_one(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "SELECT COUNT(*) AS open_count FROM _ferrum_password_resets WHERE used_at IS NULL",
+            "SELECT COUNT(*) AS open_count FROM _ferrioxid_password_resets WHERE used_at IS NULL",
         ))
         .await
         .unwrap()
@@ -250,7 +250,7 @@ async fn rate_limit_parallel_replay_and_failed_delivery_stay_closed() {
         .database()
         .query_one(Statement::from_string(
             DatabaseBackend::Sqlite,
-            "SELECT error_code FROM _ferrum_mail_outbox",
+            "SELECT error_code FROM _ferrioxid_mail_outbox",
         ))
         .await
         .unwrap()

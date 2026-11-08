@@ -27,11 +27,11 @@ The standard is `fullstack`.
 ```text
 meinprojekt/
 ├── Cargo.toml
-├── ferrum.toml
+├── ferrioxid.toml
 ├── .gitignore
 ├── .env.example
 ├── README.md
-├── .ferrum/project.json
+├── .ferrioxid/project.json
 ├── src/main.rs
 ├── src/lib.rs
 ├── src/settings.rs

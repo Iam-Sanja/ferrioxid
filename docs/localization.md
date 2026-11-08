@@ -19,7 +19,7 @@ The selected language is added to the Tera context as `locale`; it never becomes
 
 ## CLI
 
-`FERRUM_LOCALE=en` or `de` overrides `default_locale` for the CLI. Project-generation, model-generation and development-server start/stop messages are localized. `ferrioxid dev` passes through the generated program’s `Ferrioxid lauscht` line unchanged. Migration status messages, including `Angewendet` and `Keine Schemaänderung`, remain unchanged.
+`FERRIOXID_LOCALE=en` or `de` overrides `default_locale` for the CLI. Project-generation, model-generation and development-server start/stop messages are localized. `ferrioxid dev` passes through the generated program’s `Ferrioxid lauscht` line unchanged. Migration status messages, including `Angewendet` and `Keine Schemaänderung`, remain unchanged.
 
 ## Tests
 

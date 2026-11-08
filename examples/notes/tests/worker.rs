@@ -32,7 +32,7 @@ async fn notes_worker_binary_runs_restarts_and_leaves_unknown_jobs() {
     let path = root.join("jobs.sqlite");
     let url = sqlite_url(&path);
     std::fs::write(
-        root.join("ferrum.toml"),
+        root.join("ferrioxid.toml"),
         format!(
             "migrations_dir = \"migrations\"\n[database]\nurl = \"{url}\"\n[jobs]\npoll_ms = 50\njitter = false\n[mail]\nbackend = \"memory\"\nfrom = \"noreply@example.com\"\npublic_origin = \"http://127.0.0.1:3000\"\n"
         ),
@@ -99,9 +99,9 @@ fn sqlite_url(path: &Path) -> String {
 
 fn spawn(root: &Path, url: &str) -> Child {
     Command::new(env!("CARGO_BIN_EXE_worker"))
-        .env("FERRUM_PROJECT", root)
+        .env("FERRIOXID_PROJECT", root)
         .env("DATABASE_URL", url)
-        .env_remove("FERRUM_SMTP_PASSWORD")
+        .env_remove("FERRIOXID_SMTP_PASSWORD")
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()

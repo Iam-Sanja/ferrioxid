@@ -34,7 +34,7 @@ The application loads the settings, opens the template directory and renders aga
 | Case | Behavior |
 |---|---|
 | Missing `index.html` | Startup fails with an error message |
-| Unknown template engine | Reject `ferrum.toml` |
+| Unknown template engine | Reject `ferrioxid.toml` |
 | Unknown route | 404 rendered from `errors/404.html` |
 
 ## Security rules

@@ -60,7 +60,7 @@ Workers claim due `pending` and `retry` jobs, and may reclaim `running` jobs who
 
 ## Schema
 
-The migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` creates `_ferrum_jobs`, with history in `_ferrum_job_migrations`. Auth migrations `0001` to `0004` remain unchanged. `ferrioxid migrate up` applies the job migration; workers and `ferrioxid dev` do not.
+The migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` creates `_ferrioxid_jobs`, with history in `_ferrioxid_job_migrations`. Auth migrations `0001` to `0004` remain unchanged. `ferrioxid migrate up` applies the job migration; workers and `ferrioxid dev` do not.
 
 Timestamps are UTC Unix seconds. Reusing an `idempotency_key` returns the existing job. A `schedule_key` belongs to one row at a time and transfers to the next scheduled job after success. Missed intervals are skipped to avoid a backlog when a worker has been stopped.
 
@@ -72,8 +72,8 @@ The example with Instant, Delay, Interval and Mail Job is in `examples/notes`. `
 
 1. Defining the job. One type implements `JobHandler` with `NAME`, `VERSION` and a JSON object as a payload.
 2. Register handlers. The app implements `FerrioxidApplication::register_jobs`. `App::install` does not call this method.
-3. Enqueue a job from the web process with `queue.enqueue::<Handler>(...)`. First create `_ferrum_jobs` with `ferrioxid migrate up`.
-4. Starting the worker. `ferrioxid generate worker` creates `src/bin/worker.rs` if the file is missing. The process loads `ferrum.toml`, connects the configured database and calls `WorkerHost::run_until_ctrl_c`. `ferrioxid dev` does not start it.
+3. Enqueue a job from the web process with `queue.enqueue::<Handler>(...)`. First create `_ferrioxid_jobs` with `ferrioxid migrate up`.
+4. Starting the worker. `ferrioxid generate worker` creates `src/bin/worker.rs` if the file is missing. The process loads `ferrioxid.toml`, connects the configured database and calls `WorkerHost::run_until_ctrl_c`. `ferrioxid dev` does not start it.
 5. Inspect status with `ferrioxid jobs list` or `ferrioxid jobs inspect <id>`. Output includes the handler, version, attempt count, timestamps and error code. Payloads remain hidden unless `--show-payload` is supplied.
 6. Handle failures with `JobError::retry` or `JobError::permanent`. Operators can use `ferrioxid jobs retry <id> --yes` or `ferrioxid jobs cancel <id> --yes` for eligible states.
 

@@ -25,12 +25,12 @@ Login generates a 32-byte session token with `OsRng`. The CSRF token is derived 
 
 `logout` revokes the session if the token is still known and deletes the cookie. Without a cookie, the HTTP 204 call remains. With a valid cookie, Logout requires the CSRF token.
 
-## Data model: `_ferrum_sessions`
+## Data model: `_ferrioxid_sessions`
 
 | Column | Meaning |
 |---|---|
 | `id` | UUID |
-| `user_id` | Foreign key to `_ferrum_users`, `ON DELETE CASCADE` |
+| `user_id` | Foreign key to `_ferrioxid_users`, `ON DELETE CASCADE` |
 | `token_hash` |SHA-256-hex, unique|
 | `csrf_token_hash` | SHA-256 hex digest of the CSRF token |
 | `created_at`, `expires_at`, `last_seen_at` | Unix seconds |
@@ -40,7 +40,7 @@ Standard life: 12 hours absolute, 30 minutes without use.
 
 ## Security mechanisms
 
-The default cookie name remains `ferrum_session` for compatibility. It uses `HttpOnly`, `Path=/`, `SameSite=Lax` and no `Domain` attribute. `Secure` follows `FERRUM_COOKIE_SECURE`, or `FERRUM_ENV=production` when the former is unset. `BIND_ADDRESS` does not affect this setting. Local HTTP works in development without `Secure`; production logs a warning if `Secure` is disabled.
+The default session cookie is `ferrioxid_session`. It uses `HttpOnly`, `Path=/`, `SameSite=Lax` and no `Domain` attribute. `Secure` follows `FERRIOXID_COOKIE_SECURE`, or `FERRIOXID_ENV=production` when the former is unset. `BIND_ADDRESS` does not affect this setting. Local HTTP works in development without `Secure`; production logs a warning if `Secure` is disabled.
 
 Logout uses the same cookie attributes and `Max-Age=0`.
 
@@ -52,7 +52,7 @@ Expired, revoked, unknown and too long unused tokens result in `Unauthenticated`
 
 ## Example
 
-The preserved HTTP example uses `ferrioxid_session` as a placeholder cookie name. Replace it with the default `ferrum_session` or your configured cookie name; it is not an alias.
+The HTTP example uses the default `ferrioxid_session` cookie name.
 
 ```http
 POST /auth/logout

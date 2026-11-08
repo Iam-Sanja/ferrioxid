@@ -1,4 +1,4 @@
-//! Statische App-Registrierung. Es wird kein Code aus `ferrum.toml` geladen.
+//! Statische App-Registrierung. Es wird kein Code aus `ferrioxid.toml` geladen.
 
 use crate::pages::{PageError, Site};
 use crate::urls::{UrlError, UrlSet};
@@ -347,7 +347,7 @@ impl App {
             let Some(settings) = self.settings.as_ref() else {
                 return Err(AppError::new(
                     "app.migration.undeclared",
-                    "App-Migrationen sind nicht an ferrum.toml gebunden. Der Start gilt nicht als geprüft.",
+                    "App-Migrationen sind nicht an ferrioxid.toml gebunden. Der Start gilt nicht als geprüft.",
                 ));
             };
             let declared = settings
@@ -756,7 +756,7 @@ mod tests {
         std::fs::create_dir_all(root.join("templates/shop")).unwrap();
         std::fs::create_dir_all(root.join("app/shop")).unwrap();
         std::fs::write(
-            root.join("ferrum.toml"),
+            root.join("ferrioxid.toml"),
             "migrations_dir = \"migrations\"\n",
         )
         .unwrap();
@@ -813,7 +813,7 @@ mod tests {
         ));
         std::fs::create_dir_all(&root).unwrap();
         std::fs::write(
-            root.join("ferrum.toml"),
+            root.join("ferrioxid.toml"),
             "migrations_dir = \"migrations\"\n[app.blog]\nmigrations = \"src/apps/blog/migrations\"\n",
         )
         .unwrap();

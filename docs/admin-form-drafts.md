@@ -10,12 +10,12 @@ The foreign key selection is its own GET page. The draft keeps the remaining, no
 
 ## Storage
 
-The table is `_ferrum_admin_drafts`, created by `crates/ferrioxid-auth/migrations/0002_admin_journal.json`.
+The table is `_ferrioxid_admin_drafts`, created by `crates/ferrioxid-auth/migrations/0002_admin_journal.json`.
 
 | Column | Contents |
 |---|---|
 | `id` |Random UUID|
-| `session_id` |Text UUID of the session, foreign key on `_ferrum_sessions.id` with `ON DELETE CASCADE`|
+| `session_id` |Text UUID of the session, foreign key on `_ferrioxid_sessions.id` with `ON DELETE CASCADE`|
 | `user_id` |Text UUID of the user|
 | `model_key` |Registered model key|
 | `record_id` |Empty when created, otherwise the record ID|

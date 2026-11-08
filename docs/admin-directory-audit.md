@@ -32,7 +32,7 @@ The CLI methods `create_user`, `assign_role`, `grant_permission` and `set_user_a
 
 ## Migration
 
-`crates/ferrioxid-auth/migrations/0003_audit_operation.json` attaches the nullable column `operation_id` to `_ferrum_admin_audit`. `0001_auth_schema` and `0002_admin_journal` remain unchanged. Older lines read `operation_id` as empty. The history shows the first eight characters when a value exists.
+`crates/ferrioxid-auth/migrations/0003_audit_operation.json` attaches the nullable column `operation_id` to `_ferrioxid_admin_audit`. `0001_auth_schema` and `0002_admin_journal` remain unchanged. Older lines read `operation_id` as empty. The history shows the first eight characters when a value exists.
 
 ## JSON
 

@@ -3,7 +3,7 @@
 use ferrioxid::apps::FerrioxidApplication;
 
 fn main() {
-    let root = std::env::var("FERRUM_PROJECT")
+    let root = std::env::var("FERRIOXID_PROJECT")
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::current_dir().expect("cwd"));
     let project = match ferrioxid::migrations::discover_project(&root) {
