@@ -2,6 +2,8 @@
 
 This page documents repository settings, the contributor workflow, and CI maintenance. Settings must be verified in the GitHub UI or API; documentation alone cannot enable them.
 
+Before switching to a public repository, complete the [public release security and contributor checklist](public-release-checklist.md), including a full history-aware secret scan and actual GitHub settings verification.
+
 The repository has been pushed to GitHub. The local development checkout uses `origin` to track its GitHub remote. GitHub settings and CI results can change independently of this document.
 
 The repository is <https://github.com/Iam-Sanja/ferrioxid>. The framework is Ferrioxid, with the local facade crate `ferrioxid`. Until publication, use the workspace or a path dependency; do not assume a stable crates.io release.
