@@ -1,80 +1,80 @@
 # Public release security and contributor setup
 
-This checklist applies to `Iam-Sanja/ferrioxid`. It must be completed **before** making the repository public and immediately afterward where GitHub Free only enables the feature for public repositories. A README or policy file alone does **not** enable GitHub protection settings.
+This checklist records verified settings and remaining work for [Iam-Sanja/ferrioxid](https://github.com/Iam-Sanja/ferrioxid). The repository is already **public**. Checked items are evidence observed on **2026-11-08**, not a permanent security certification. Settings can change independently of Git. No repository setting was changed during this documentation update, and the separate historical `ferrum` repository was not modified.
 
-## 1. Before changing visibility
+Current source baseline: `main` at `5c9bd7c438179b53d02f36130871ac42f313ef5e`. See [GitHub maintenance](github-maintenance.md) for the settings snapshot and repeatable verification endpoints.
 
-- [ ] Confirm that **only ferrioxid** will become public; the separate legacy `ferrum` repository must remain untouched.
-- [ ] Review the entire repository, full Git history (including orphaned/reachable objects, all PR branches and tags), closed PR discussions, CI logs, and downloadable artifacts for tokens, credentials, private keys, database dumps, personal information and proprietary material. Inspect any previous test projects if they were ever committed. `.gitignore` does not remove an already committed secret.
-- [ ] Run a dedicated history-aware scanner (for example `gitleaks git --log-opts="--all"` on an up-to-date **full** clone, using the current supported gitleaks syntax). Triage findings; never upload unredacted results. GitHub's native secret scanning should be enabled as a second independent check when available.
-- [ ] Rotate and revoke any actual credentials found **before** publishing. Removing a file from the latest commit is not sufficient. Do not rewrite published Git history casually; assess disclosure and coordinate any required removal.
-- [ ] Review license and third-party asset permissions. `LICENSE-MIT` exists; check third-party fonts, screenshots, templates, JS/CSS and copied examples independently.
-- [ ] Confirm `SECURITY.md`, `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`, `GOVERNANCE.md`, `.github/CODEOWNERS`, issue forms and PR template remain accurate.
-- [ ] Inspect Settings → Secrets and variables → Actions and all environments for unneeded credentials; grant no repository secret to untrusted pull-request builds.
-- [ ] Document that release/demo credentials are **not** production defaults; keep sample databases bound to loopback and do not deploy anonymously writable demo endpoints to the internet.
-- [ ] Review existing Actions workflow logs: GitHub makes their history and logs public when repository visibility changes.
-- [ ] Record current settings and plan the post-public hardening steps below. Branch `main` was **not protected** during the private GitHub Free audit; do not assume its protection will automatically appear.
+## 1. Publication and historical exposure
 
-## 2. Change visibility (owner-only action)
+- [x] Confirm public visibility and default branch `main` through the repository API. Visibility is an owner decision that has already been completed; do not repeat the visibility-change procedure.
+- [ ] Complete and record a full content/history secret review covering all fetched branches and tags, previous test projects, relevant PR discussions, Actions logs and downloadable artifacts. Assess separately any available unreachable/local objects and external copies. A clean working tree or `.gitignore` does not establish that these sources are free of secrets.
+- [ ] Run a dedicated history-aware scanner against a current full clone, record the tool version, exact refs and exclusions, and triage findings. Use the scanner's current supported syntax; do not publish unredacted reports. Native Secret Scanning is a second check, not proof that every historical or unsupported secret was covered.
+- [ ] Revoke and rotate any real exposed credentials and record remediation. Deleting a file or adding an ignore pattern cannot revoke a credential. Coordinate any necessary history removal; do not casually rewrite public history or assume it removes forks and downloaded copies.
+- [x] Verify that [LICENSE-MIT](../LICENSE-MIT), [SECURITY.md](../SECURITY.md), [CONTRIBUTING.md](../CONTRIBUTING.md), [CODE_OF_CONDUCT.md](../CODE_OF_CONDUCT.md), [GOVERNANCE.md](../GOVERNANCE.md), [CODEOWNERS](../.github/CODEOWNERS), issue forms and the PR template exist on current main.
+- [ ] Complete the license/third-party asset review, including fonts, screenshots, templates, JS/CSS and copied examples. The MIT file's presence does not establish permission for every asset.
+- [ ] Finish policy-text and contact-route review. `CONTRIBUTING.md` still describes product documentation as German and lists only two of the three PostgreSQL integration tests; `SECURITY.md` still describes Private Vulnerability Reporting conditionally. Use the verified reporting route below. The Code of Conduct has no published reporting email; verify a usable private contact route.
+- [ ] Review repository/environment Actions secrets, variables, collaborators and installed apps for necessity and scope. Do not expose credentials to untrusted code. This documentation review did not inventory secret values or certify all environments.
+- [x] Verify current development defaults and naming: generated projects use `ferrioxid.toml`, `.ferrioxid/`, `FERRIOXID_*` and `_ferrioxid_*`; local demo credentials are not production defaults. See [the breaking-change record](ferrum-legacy-removal.md).
+- [ ] Review previously publicized workflow logs/artifacts and any earlier disclosure. Publication has already happened; remaining review is incident-prevention/remediation work, not a claim that a pre-publication audit was completed.
 
-In repository **Settings → General → Danger Zone → Change repository visibility**, choose **Public** for `ferrioxid` only. Confirm the GitHub warning about public history, issues, forks and Actions logs. Visibility change is a separate explicit owner decision, not a CI fix.
+## 2. Repository and main-branch protection
 
-GitHub may disable existing push rulesets when a repository becomes public. Re-check enforcement immediately afterward.
+Repository API and effective branch-rule checks confirmed:
 
-## 3. Immediately harden public repository settings
+- [x] Issues and Discussions enabled; [issue configuration](../.github/ISSUE_TEMPLATE/config.yml) disables blank issues and routes security reports to the policy. Having Discussions enabled does not prove it is actively moderated.
+- [x] Squash merge enabled; merge commits and rebase merge disabled; automatic head-branch deletion enabled. Normal merges of main into topic branches remain possible; the restriction applies to merging PRs into protected main.
+- [x] Active [protect-main ruleset](https://github.com/Iam-Sanja/ferrioxid/rules/26812021), ID `26812021`, applies to the default branch, currently `main`; no excluded refs or bypass actors. The API reports `main.protected=true` and the current user cannot bypass the ruleset.
+- [x] Require a PR, resolved review conversations and linear history; allow squash only into main. Block deletion and non-fast-forward pushes. Do not push directly to main or bypass these controls.
+- [x] Require the four exact GitHub Actions check names: **Rust (ubuntu-latest)**, **Rust (windows-latest)**, **PostgreSQL**, **Cargo audit**. Strict status-check policy requires the branch to be up to date. Each check is associated with GitHub Actions integration ID `15368`.
+- [x] Configure zero mandatory approving reviews, no mandatory code-owner review and no last-push approval, consistent with the current single-maintainer setup. This does not replace the maintainer's final review. Reassess approval requirements when an independent reviewer is available.
+- [ ] Record a controlled enforcement exercise showing that a deliberately failing required check blocks merging, without actually merging a failing PR or weakening protection. API configuration and successful PRs do not by themselves prove this negative case.
 
-In **Settings → General**:
+CodeQL is enabled but is **not** one of the four required check contexts. Review its results before merging; do not silently claim the ruleset requires CodeQL.
 
-- [ ] Keep Issues enabled and use the existing bug/feature forms; do not allow blank issues unless deliberately chosen.
-- [ ] Allow **squash merge only**, disable merge commits and rebase merge, and enable **Automatically delete head branches**.
-- [ ] Enable Discussions only if there is time to moderate and answer questions; direct support questions there instead of treating every question as a defect.
+## 3. Security features
 
-In **Settings → Branches / Rules → Rulesets**, for `main`:
+- [x] **Private Vulnerability Reporting** enabled (`GET /private-vulnerability-reporting` returns `enabled=true`). Report vulnerabilities using the [private advisory form](https://github.com/Iam-Sanja/ferrioxid/security/advisories/new), which may require sign-in. Do not post exploit details in public issues, discussions or PRs.
+- [x] **Dependabot alerts** enabled (vulnerability-alerts endpoint returns HTTP 204); **security updates** enabled and not paused. The alert listing was accessible. This establishes alert availability, not perfect dependency coverage.
+- [x] Verify [Dependabot configuration](../.github/dependabot.yml): weekly Cargo and GitHub Actions updates. Configuration does not auto-merge updates or prove the timing of every scheduled run.
+- [ ] Independently verify the Dependency graph UI/data coverage, including any dependencies outside the Cargo lockfile and Actions configuration. Alert enablement alone is not a complete inventory audit.
+- [x] **Secret Scanning** and **Push Protection** enabled in repository `security_and_analysis` metadata. Coverage is limited to supported patterns and available features; neither setting proves that all historic material was scanned.
+- [ ] Assess whether additional Secret Scanning coverage is appropriate: non-provider patterns and validity checks were both reported **disabled**. No setting was changed by this PR.
+- [x] **CodeQL default setup** configured, weekly schedule, default query suite, remote threat model, with language identifiers `actions`, `javascript`, `javascript-typescript`, `rust` and `typescript`. This is not a claim that every security query suite is enabled.
+- [x] Retain the [94-alert review](security/codeql-review.md) and [per-alert ledger](security/codeql-alerts.csv) from PR #27, plus the documented PR #25 follow-up for false positive #95. Individual technical assessments do not authorize blanket alert dismissal or query suppression.
+- [x] Preserve the existing [audit workflow](../.github/workflows/security.yml): unfiltered audit remains visible; `RUSTSEC-2023-0071` is the sole existing exception and is guarded by an all-target enabled-dependency check that fails if RSA becomes reachable. [Issue #8](https://github.com/Iam-Sanja/ferrioxid/issues/8) remains open. Do not broaden this exception to make a check green.
 
-- [ ] Require a pull request before merging; prevent direct pushes to `main`.
-- [ ] Require successful checks: **Rust (ubuntu-latest)**, **Rust (windows-latest)**, **PostgreSQL**, and **Cargo audit**, using the **exact names** exposed by Actions after they have run on the public repo. If the names change, update the rule. Include checks of recent PR branch commits as appropriate.
-- [ ] Block force pushes and deletion; include administrators in enforcement / do not permit routine bypass.
-- [ ] Require conversations to be resolved before merging; allow only fast-forward/squash-compatible history where supported.
-- [ ] Do **not** require one additional approving reviewer while the project has only one maintainer. A mandatory external approval can lock out the sole maintainer. Add code-owner review requirements only after a real second reviewer is available.
-- [ ] Test the protection with a harmless PR; verify it **actually blocks** a failed-check merge.
+## 4. Actions, fork PRs and external contributions
 
-In **Settings → Security / Advanced Security**:
+- [x] Actions enabled. Repository default `GITHUB_TOKEN` permissions are read-only and Actions cannot approve PR reviews. Both checked-in workflows explicitly set `permissions: contents: read`, pin third-party `uses:` entries to full commit SHAs, and do not execute `pull_request_target` code or reference repository secrets.
+- [x] Fork workflow approval policy is **first_time_contributors**. This is the observed policy, not approval of every outside contributor's workflow execution.
+- [ ] Review whether broader approval of outside contributors is needed. Exercise a real fork PR, inspect token/secret handling, artifacts and permission boundaries, and require deliberate review of workflow changes. Do not assume a returning contributor is trusted.
+- [ ] Decide whether to restrict Actions at repository level: the current policy permits **all** actions and does **not** require SHA pinning globally. The checked-in SHA pins are a separate, narrower source-control safeguard.
+- [ ] Inspect usage/billing, runner types and environments. The old private-repository Actions billing blockage is historical; public-repository Actions now execute. No larger/self-hosted runner or external service cost audit was performed.
 
-- [ ] Enable **Private vulnerability reporting**. `SECURITY.md` alone does not create a safe confidential reporting channel.
-- [ ] Enable **Dependency graph**, **Dependabot alerts**, and security updates where offered.
-- [ ] Enable **Secret scanning** and **push protection** for supported secret types where available; verify actual on/off state.
-- [ ] Enable **Code scanning/CodeQL** if available and configure a suitable Rust analysis; check false positives and alerts before adding it as a required check.
-- [ ] Review the known `RUSTSEC-2023-0071` exception in `.github/workflows/security.yml` and the tracked dependency issue. Never broaden that exception without checking reachability.
-- [ ] Ensure token permission defaults stay minimal. Keep each workflow's `permissions: contents: read` or narrower; avoid `pull_request_target` for execution of outsider-submitted code.
+Contributor flow remains fork + focused feature branch → tests and documentation → PR template → all required checks → maintainer review → squash merge. Public visibility does not grant write access. CODEOWNERS names `@Iam-Sanja` for routing but is not required approval under the current ruleset. Never execute outsider-controlled code with elevated credentials, remove existing protections or auto-merge failed dependency updates.
 
-In **Settings → Actions**:
+Releases require an intentional version/tag, successful checks, changelog and migration guidance. Development milestone labels do not establish a stable Cargo release. See [Contributing](../CONTRIBUTING.md) and [Governance](../GOVERNANCE.md).
 
-- [ ] Verify fork pull-request approval policy; require approval for workflows from first-time or otherwise untrusted contributors where available.
-- [ ] Keep GitHub Actions `GITHUB_TOKEN` read-only by default; no privileged secrets in fork PR jobs.
-- [ ] Restrict reusable actions to trusted sources or immutable SHAs where practical. Current CI and security workflows pin their third-party `uses:` to full commit SHAs.
-- [ ] Review Actions usage and limits; regular GitHub-hosted standard runners are free for public repositories, but self-hosted/larger runners and other services can have different terms.
+## 5. Merged security and naming work
 
-## 4. Contributor and maintenance process
+- [x] [PR #27](https://github.com/Iam-Sanja/ferrioxid/pull/27) merged as `d48dbecc731b2b83f9529cf74bd13d187ee6f82c`: the external database test-seeder is deleted. The regression `tests_ignore_external_seed_database` checks both `FERRUM_E2E_DATABASE` and `FERRIOXID_E2E_DATABASE`; the old name is a negative security test, not a runtime alias.
+- [x] [PR #25](https://github.com/Iam-Sanja/ferrioxid/pull/25) merged as `5c9bd7c438179b53d02f36130871ac42f313ef5e`: Ferrioxid-only configuration/schema names, generated-project secret exclusions and the seeder deletion are present on main. No compatibility alias or automatic data conversion was introduced.
+- [x] PR #25's final head `eb3389ffc3169d433b0604168ae23699f2eb3f96` passed Ubuntu, Windows, PostgreSQL, Cargo Audit and CodeQL before merge. The recorded local validation passed 180 Rust tests plus all three PostgreSQL integration tests. The five built-in migration seals and both generated project builds passed. These are pinned historical results, not a claim about future commits.
+- [ ] If an earlier external-seeder run touched a reused database, inspect the known privileged account, revoke sessions and replace compromised credentials as described in the [security review](security/codeql-review.md). Code deletion does not repair previously seeded databases. No operator database audit is claimed here.
 
-- **Issues:** bug reports use `.github/ISSUE_TEMPLATE/bug_report.yml` with version, OS, Rust version, backend, reproduction, expected/actual behavior and sanitized logs. Features use `feature_request.yml`. Security reports use private vulnerability reporting—not public issues.
-- **Pull requests:** fork + feature branch → focused changes → tests + updated docs → PR template → CI → maintainer review → squash merge. Users have no direct write access merely because the repo is public.
-- Never use contributor-supplied `pull_request_target` code execution or expose secrets to fork workflows. Verify all workflow changes carefully in code review.
-- **Dependabot:** review semver-major changes and Rust/Windows/PostgreSQL CI. Never auto-merge failed dependency updates.
-- **Code owners:** `.github/CODEOWNERS` routes responsibility but is not an enforcement mechanism without GitHub rules.
-- **Labels/triage:** maintain `bug`, `enhancement`, `documentation`, `security`, `dependencies`, `good first issue` as applicable; avoid posting exploit details in public security issues.
-- **Releases:** publish tagged versions only after successful checks, a changelog, migration guidance and a verified reproducible build. Do not represent development milestone numbers as stable Cargo releases.
+The schema/configuration rename intentionally requires fresh databases. Existing migration histories and checksums must not be silently reused. Current instructions use Ferrioxid names; historical audit records, mapping tables, original license attribution and negative tests may retain Ferrum names with their original meaning.
 
-## 5. Verification after publication
+## 6. Verification and ongoing work
 
-- [ ] Make a harmless PR from a separate contributor/fork, confirm Actions permissions, required checks, issue forms and review workflow.
-- [ ] Open the repository as a signed-out visitor and verify links and documentation.
-- [ ] Confirm that private vulnerability reporting offers a private report form.
-- [ ] Confirm branch/ruleset enforcement and that GitHub Actions can actually start after the visibility change.
-- [ ] Re-run PR #25 only once billing/access is fixed; do not merge a PR with missing execution just because its workflows report an accounting failure.
-- [ ] Periodically audit collaborators, GitHub apps, credentials and repository security alerts.
+- [ ] Exercise a separate contributor/fork PR, including approvals, required checks, issue forms and review behavior.
+- [ ] Inspect repository pages and documentation as a signed-out visitor; verify the private reporting form through an appropriately signed-in reporter account.
+- [ ] Complete the unresolved secret-history, license and policy/contact reviews above; do not mark them complete based on enabled scanners.
+- [ ] Periodically recheck rules, collaborators, apps, credentials, dependency coverage and security alerts. Refresh this dated snapshot when settings change.
 
-## Inspection notes (2026-11-08)
+Before merging PR #26, inspect the checks attached to its **latest head**, including Ubuntu, Windows, PostgreSQL, Cargo Audit and CodeQL. The review agent must leave the PR open for the owner's decision. A green PR-diff CodeQL analysis is not a full-history secret scan or a statement that unrelated baseline alerts were closed.
 
-Read-only GitHub checks confirmed a private `main` branch with `protected: false`; the GitHub rulesets API reported that GitHub Pro or public visibility is required. Issue forms, PR template, CODEOWNERS, MIT license, security and contributor policies, pinned GitHub Actions, and explicit read-only workflow tokens are present.
+## Evidence and historical limits
 
-A **filename-based** check of all 23 commits on the default branch, current repository file list and selected PR head snapshots found no obvious committed `.env`, private key or database dump files. Targeted current-code token searches found no matches for some common token prefixes. These checks do **not** constitute a complete content- or history-wide secrets scan, including all branches, unreachable objects, CI artifacts or nonstandard secret encodings. No public-safety certification is implied.
+The current snapshot comes from authenticated read-only repository, effective branch-rule/ruleset, vulnerability-alerts, automated-security-fixes, private-vulnerability-reporting, CodeQL default-setup and Actions permission APIs, plus inspection of tracked policies/workflows. [GitHub maintenance](github-maintenance.md) lists the routes. The private-repository-only fork-settings endpoint is not applicable to this public repository; it was not treated as evidence about public fork permissions.
+
+The earlier private GitHub Free inspection reported unprotected main and unavailable rulesets; that observation is superseded by the active public ruleset above. Its filename-based inspection of 23 default-branch commits and selected snapshots, and limited token-prefix searches, did **not** establish a full content/history secret scan. This update makes no such claim either. Publication, enabled scanners and green CI cannot retroactively certify historical disclosure safety.
