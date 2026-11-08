@@ -10,20 +10,20 @@ pub fn doctor() -> ExitCode {
     println!("Ferrioxid Doctor\n");
     let mut errors = 0;
     match command_version("rustc") {
-        Some(version) => report("OK", &format!("Rust ist installiert: {version}")),
+        Some(version) => report("OK", &format!("Rust is installed: {version}")),
         None => {
             errors += 1;
             report(
                 "ERROR",
-                "rustc fehlt. Installiere eine stabile Rust-Toolchain.",
+                "rustc is missing. Install a stable Rust toolchain.",
             );
         }
     }
     match command_version("cargo") {
-        Some(version) => report("OK", &format!("Cargo ist installiert: {version}")),
+        Some(version) => report("OK", &format!("Cargo is installed: {version}")),
         None => {
             errors += 1;
-            report("ERROR", "cargo fehlt.");
+            report("ERROR", "cargo is missing.");
         }
     }
     report("OK", "Docker is optional and not required.");
@@ -60,19 +60,19 @@ pub fn doctor() -> ExitCode {
                     report("OK", &format!("{relative} exists."));
                 } else {
                     errors += 1;
-                    report("ERROR", &format!("{relative} fehlt."));
+                    report("ERROR", &format!("{relative} is missing."));
                 }
             }
             if project.host == "0.0.0.0" {
                 errors += 1;
                 report(
                     "ERROR",
-                    "server.host ist 0.0.0.0. Neue Projekte bleiben auf 127.0.0.1.",
+                    "server.host is 0.0.0.0. New projects should bind to 127.0.0.1.",
                 );
             } else {
                 report(
                     "OK",
-                    &format!("Serverbindung ist {}:{}", project.host, project.port),
+                    &format!("Server is bound to {}:{}", project.host, project.port),
                 );
             }
             if project.templates_enabled {
@@ -82,7 +82,7 @@ pub fn doctor() -> ExitCode {
                     errors += 1;
                     report(
                         "ERROR",
-                        "templates.enabled ist wahr, aber das Vorlagenverzeichnis fehlt.",
+                        "templates.enabled is true, but the templates directory is missing.",
                     );
                 }
             }
@@ -154,7 +154,7 @@ pub fn check(strict: bool) -> ExitCode {
     }
     if let Ok(value) = std::env::var("DATABASE_URL") {
         if value.is_empty() {
-            eprintln!("DATABASE_URL ist leer.");
+            eprintln!("DATABASE_URL is empty.");
             return ExitCode::from(1);
         }
     }
