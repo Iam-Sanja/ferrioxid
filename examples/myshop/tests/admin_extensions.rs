@@ -569,7 +569,7 @@ async fn login(
     .await
     .unwrap();
     assert_eq!(signed.status, 303, "{}", signed.body);
-    cookie_value(&signed.headers, "ferrioxid_session")
+    cookie_value(&signed.headers, "ferrum_session")
 }
 
 struct Reply {
@@ -615,7 +615,7 @@ fn http(port: u16, method: &str, path: &str, body: Option<&str>, extra: &str) ->
 }
 
 fn cookie(token: &str) -> String {
-    format!("Cookie: ferrioxid_session={token}\r\n")
+    format!("Cookie: ferrum_session={token}\r\n")
 }
 
 fn cookie_value(headers: &str, name: &str) -> String {

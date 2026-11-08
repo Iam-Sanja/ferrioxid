@@ -60,15 +60,9 @@ fn write_project(directory: &Path) {
 }
 
 fn empty_sqlite(path: &Path) {
-    let script = format!(
-        "import sqlite3; sqlite3.connect(r'{}').close()",
-        path.display()
-    );
-    let status = Command::new("python")
-        .args(["-c", &script])
-        .status()
-        .expect("python");
-    assert!(status.success(), "python sqlite");
+    // SQLite treats an existing zero-byte file as an empty database.
+    // Avoid launching a separate Python process, which may fail on Windows CI.
+    std::fs::File::create(path).expect("create empty SQLite test file");
 }
 
 #[test]
