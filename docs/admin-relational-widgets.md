@@ -1,20 +1,20 @@
-# Fremdschlüssel-Auswahl
+# Foreign key selection
 
-[Zur Übersicht](admin.md) · Sicherheit: [admin-security.md](admin-security.md)
+[Overview](admin.md) · Security: [admin-security.md](admin-security.md)
 
-**Stand:** v0.17. Die Cargo-Version bleibt `0.1.0`.
+**Milestone:** v0.17. The Cargo version remains `0.1.0`.
 
-Das Formular zeigt weiter ein `<select>` mit höchstens 100 lesbaren Zielen. Fehlt der aktuelle Wert in dieser Seite und darf der Benutzer ihn lesen, wird er vorne ergänzt. Darunter steht der Link „Weiter suchen“.
+The form offers a `<select>` containing up to 100 readable target records. If the current value is outside that page but readable, it is prepended. A “Continue searching” link opens the selection page.
 
-Die Auswahlseite ist GET:
+The selection page is GET:
 
 - `/admin/models/{modell}/pick/{feld}`
 - `/admin/models/{modell}/{id}/pick/{feld}`
 
-Sie prüft Staff, das Schreibrecht des Ausgangsmodells und das Leserecht des Ziels. Die Suche nutzt die sichtbaren `searchable`-Spalten des Ziels. Die Seite nutzt `admin_per_page` des Ziels, gedeckelt bei 100, und denselben Query-Scope wie die Liste. Ein unbekannter Feldname, ein verborgenes oder nur lesbares Feld und ein Ziel ohne Anzeigetext sind 404. Ohne Leserecht ist die Antwort 403.
+The selection page requires staff access, write permission on the source model and read permission on the target. Search uses visible `searchable` target columns. Page size comes from the target's `admin_per_page`, capped at 100, and the normal list query scope applies. An unknown field, hidden or read-only field, or target without a display field returns 404. Missing read permission returns 403.
 
-Ein Treffer verlinkt nur auf das Formular des Ausgangsmodells und setzt den Feldnamen auf die UUID aus der Datenbank. Andere Formulardaten bleiben dabei nicht erhalten. Es gibt keine `next`-Adresse aus der Anfrage und kein Pflicht-Skript.
+A result links back to the source form with the field set to its database UUID. Other form values are not retained unless a draft is used. Requests cannot provide an arbitrary `next` destination; JavaScript is not required.
 
-Beim Speichern lehnt `ensure_relations` eine UUID ab, die der Benutzer am registrierten Ziel nicht lesen darf. Die Antwort bleibt das Formular mit dem Fehler am Feld. Ein nicht registriertes Ziel bleibt der Datenbank-Fremdschlüsselprüfung überlassen.
+When saving, `ensure_relations` rejects a UUID that the user cannot read at the registered destination. The answer remains the form with the error in the field. An unregistered destination is left to the database foreign key check.
 
-Nach einem Validierungsfehler bleibt eine lesbare Auswahl im Formular, weil die gesendeten Feldwerte erneut gerendert werden.
+After a validation error, a readable selection remains in the form because the transmitted field values are rendered again.

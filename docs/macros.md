@@ -1,18 +1,18 @@
-# ferrioxid-macros – Compilerbasierte Modellgenerierung
+# ferrioxid-macros – compiler-based model generation
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-macros/src/lib.rs`.
+[Overview](index.md) · **Implemented file:** `crates/ferrioxid-macros/src/lib.rs`.
 
-## Verantwortung und Verarbeitungsschritte (IST)
+## Responsibility and Processing Steps (Implemented)
 
-1. `#[derive(FerrioxidModel)]` empfängt `syn::DeriveInput`.
-2. `#[ferrioxid(...)]` liest `table`, `api`, `allow_anonymous`, `admin`, `admin_label` und `admin_permission`. Felder lesen zusätzlich `#[admin(...)]`. Die Admin-Angaben erzeugen `admin_meta()` und keine zusätzliche Spalte. Details: [admin-customization.md](admin-customization.md).
-3. Erlaubt sind nur Structs mit benannten Feldern.
-4. Pro Feld wird `#[field(...)]` geprüft.
-5. SQL-Datentyp, Constraints und generiertes Create-DTO werden bestimmt.
-6. `quote!` erzeugt `FerrioxidModel`- und `ModelRepository`-Implementierung plus `ProductCreate`-artigen Typ.
-7. Falsche Attribute erzeugen `syn::Error` als Compiler-Diagnose.
+1. `#[derive(FerrioxidModel)]` receives `syn::DeriveInput`.
+2. `#[ferrioxid(...)]` reads `table`, `api`, `allow_anonymous`, `admin`, `admin_label` and `admin_permission`. Fields also read `#[admin(...)]`. The admin data generates `admin_meta()` and no additional column. Details: [admin-customization.md](admin-customization.md).
+3. Only Structs with named fields are allowed.
+4. `#[field(...)]` is checked per field.
+5. SQL data type, constraints and generated Create DTO are determined.
+6. `quote!` generates `FerrioxidModel` and `ModelRepository` implementation plus `ProductCreate`-like type.
+7. Incorrect attributes generate `syn::Error` as a compiler diagnosis.
 
-### Modellsyntax (IST, Pfad `examples/myshop/src/models/product.rs`)
+### Model syntax (Implemented, path `examples/myshop/src/models/product.rs`)
 
 ```rust
 #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
@@ -27,67 +27,67 @@ pub struct Product {
 }
 ```
 
-`pub struct ProductCreate` und `pub struct ProductUpdate` werden im Modul des Models erzeugt. Create besitzt kein `id`. Bei `#[field(default = true)]` ist `active` im Create-DTO `Option<bool>` mit `#[serde(default)]` und wird bei `None` durch `true` ersetzt. Update enthält kein `id` und keine `#[field(readonly)]`-Felder. Jedes änderbare Feld hat den Typ `ferrioxid::db::PatchField<T>`. Der `Product`-Typ selbst muss Serde-Serialize und Deserialize ableiten.
+The macro generates `pub struct ProductCreate` and `pub struct ProductUpdate` in the model’s module. Neither DTO contains `id`. With `#[field(default = true)]`, the create DTO uses `Option<bool>` and `#[serde(default)]` for `active`, replacing `None` with `true`. Read-only fields are omitted from update DTOs. Every writable update field uses `ferrioxid::db::PatchField<T>`. The model itself must derive `Serialize` and `Deserialize`.
 
-## Zulässige Typen (IST)
+## Permitted types (Implemented)
 
-| Rust-Typ | SQL | Regeln | Create-DTO |
+| Rust-Type | SQL | Rules | Create-DTO |
 |---|---|---|---|
-| `Uuid` | `UUID NOT NULL` | nur `id` mit `primary_key, auto` | weggelassen; nicht im Update |
+| `Uuid` | `UUID NOT NULL` | The primary key uses `primary_key, auto`; other UUID fields can reference models | `Uuid`; auto-generated primary keys are omitted |
 | `String` | `TEXT NOT NULL` | `required`, `min_length`, `max_length` | `String`; Update `PatchField<String>` |
-| `i64` | `BIGINT NOT NULL` | `min` als nichtnegatives Integer-Literal | `i64`; Update `PatchField<i64>` |
-| `bool` | `BOOLEAN NOT NULL` | `default = true/false` | `Option<bool>` bei Default; Update `PatchField<bool>` |
-| `Option<String/i64/bool/Uuid>` | Typ ohne `NOT NULL` | Länge und `min` nur bei vorhandenem Wert | `Option<T>` mit `#[serde(default)]`; Update `PatchField<T>` |
+| `i64` | `BIGINT NOT NULL` |`min` as a non-negative integer literal| `i64`; Update `PatchField<i64>` |
+| `bool` | `BOOLEAN NOT NULL` | `default = true/false` | `Option<bool>` when a default is set; updates use `PatchField<bool>` |
+| `Option<String/i64/bool/Uuid>` | Type without `NOT NULL` | Length and `min` apply only to present values | `Option<T>` with `#[serde(default)]`; update uses `PatchField<T>` |
 
-`id` darf nicht nullable sein. `required` und `default` dürfen nicht mit `Option<T>` kombiniert werden. `#[field(readonly)]` lässt das Feld im Create-DTO, entfernt es aus dem Update-DTO. Nicht unterstützt: `Decimal`, `DateTime`, Many-to-Many, benutzerdefinierte Felder, generische Models. `min = -5` ist kein Literal, das das Makro akzeptiert. Belongs-To und Has-Many sind implementiert und in [relations.md](relations.md) beschrieben. Unique, Index und Foreign Key sind in [constraints.md](constraints.md) beschrieben.
+`id` cannot be nullable. `required` and `default` cannot be combined with `Option<T>`. `#[field(readonly)]` keeps a field in the create DTO and removes it from the update DTO; managed timestamp fields have their own rules in [model-timestamps.md](model-timestamps.md). Temporal model types `NaiveDate`, `NaiveTime` and `DateTime<Utc>` are supported; see [date-time-types.md](date-time-types.md). Unsupported types include `Decimal` and JSON fields. Many-to-many, generic models and arbitrary custom field types are not implemented. `min = -5` is not an accepted literal. See [relations.md](relations.md) and [constraints.md](constraints.md) for implemented relationships and constraints.
 
-## Validierung (IST)
+## Validation (Implemented)
 
-- `required` auf `String`: `.trim().is_empty()` → `Validation`.
-- `min_length`/`max_length`: `.trim().chars().count()`; Anzahl Unicode-Skalarwerte, **keine** Graphem-Cluster und **keine** Bytes.
-- `min` auf `i64`: numerischer Vergleich, nicht automatisch SQL-CHECK-Constraint.
-- `required` auf `Uuid`/`i64`/`bool`: Compile-Fehler.
-- `default` für bool: Datenbank-DDL `DEFAULT TRUE`/`FALSE` und DTO-Fallback `unwrap_or(...)`.
-- `null` bei `active` wird als `None` behandelt und verwendet denselben Default wie ein fehlendes Feld.
-- `trim()` prüft die Eingabe, **speichert aber keine getrimmte Version** der Zeichenkette.
-- `min_length` darf nicht größer als `max_length` sein.
-- PATCH: `PatchField::Missing` überspringt die Spalte. `PatchField::Null` ist bei `NOT NULL` ein Validierungsfehler `cannot be null` und bei nullable Spalten ein SQL-`NULL`. `PatchField::Value` durchläuft dieselben String- und `min`-Regeln.
+- `required` on `String`: `.trim().is_empty()` → `Validation`.
+- `min_length`/`max_length`: `.trim().chars().count()`; Number of Unicode scalar values, **no** grapheme clusters and **no** bytes.
+- `min` on `i64`: numerical comparison, not automatically SQL-CHECK-Constraint.
+- `required` on `Uuid`/`i64`/`bool`: compiler error.
+- `default` for bool: database DDL `DEFAULT TRUE`/`FALSE` and DTO fallback `unwrap_or(...)`.
+- `null` at `active` is treated as `None` and uses the same default as a missing field.
+- `trim()` checks the input, but does not save a trimmed version of the string.
+- `min_length` must not be larger than `max_length`.
+- PATCH: `PatchField::Missing` skips the column. `PatchField::Null` is a validation error `cannot be null` for `NOT NULL` and a SQL-`NULL` for nullable columns. `PatchField::Value` goes through the same string and `min` rules.
 
-## SQL-Generierung (IST)
+## SQL generation (Implemented)
 
-- Identifikatoren: ASCII-Buchstaben/Unterstrich zuerst, danach Buchstaben/Ziffern/Unterstrich; SQL-Namen sind mit `"` gequotet.
-- API-Pfad: statische Abschnitte mit denselben Identifier-Regeln; keine Platzhalter, `*` oder `?`.
-- DDL für den Legacy-Bootstrap: `schema_sql(DatabaseKind)` ruft `render_schema` auf. Migrationen verwenden dieselben Spaltenmetadaten, aber die Crate `ferrioxid-migrations`.
-- INSERT, LIST, GET, UPDATE und DELETE rufen `ferrioxid::db` auf. SeaQuery bindet Werte und quotet Bezeichner.
-- LIST liest 101 Zeilen, gibt höchstens 100 zurück und setzt `truncated`.
-- UPDATE schreibt nur Spalten, deren `PatchField` nicht `Missing` ist. Ein leeres Patch liest die Zeile.
-- DELETE filtert über die gebundene UUID und wertet `rows_affected` aus.
-- Die Datenbankschicht baut intern JSON und deserialisiert es in den Model-Typ. `to_jsonb` wird nicht verwendet.
+- Identifiers: ASCII letter or underscore first, followed by letters, digits or underscores. SQL names are quoted with `"`.
+- API path: static sections with the same identifier rules; no placeholders, `*` or `?`.
+- DDL for the legacy bootstrap: `schema_sql(DatabaseKind)` calls `render_schema`. Migrations use the same column metadata, but the Crate `ferrioxid-migrations`.
+- INSERT, LIST, GET, UPDATE and DELETE call `ferrioxid::db`. SeaQuery binds values and quotes identifiers.
+- LIST reads 101 rows, returns at most 100 and sets `truncated`.
+- UPDATE writes only fields whose `PatchField` is not `Missing`. An empty patch reads the current row.
+- DELETE filters over the bound UUID and evaluates `rows_affected`.
+- The database layer builds JSON internally and deserializes it into the model type. `to_jsonb` is not used.
 
-## Grenzen und bekannte Risiken (IST)
+## Limits and Known Risks (Implemented)
 
-- Der vom Makro generierte SQL-Text wird nicht auf die konkrete Datenbank-Schema-Version abgeglichen.
-- Validation läuft in `create` und `update`, nicht bei beliebigen direkten SQL-Zugriffen.
-- Serde-JSON-Fehler beim HTTP-Parsing stammen von Axum, nicht `FerrioxidError`.
-- Ohne Versionsfeld gibt es keine Erkennung verlorener paralleler Updates.
-- Strenge Namensprüfung schließt viele Sonderzeichen aus, nicht ein SQL-Audit.
+- The SQL text generated by the macro is not compared to the specific database schema version.
+- Validation runs in `create` and `update`, not for any direct SQL access.
+- Serde JSON HTTP parsing errors are from Axum, not `FerrioxidError`.
+- Without a version field, there is no detection of lost parallel updates.
+- Strict name checking excludes many special characters, not an SQL audit.
 
-## Erweiterungsstrategie (SOLL)
+## Extension strategy (planned)
 
-1. Parse in neutrales internes `ParsedModel` statt SQL direkt beim Parsen zusammenzusetzen.
-2. Normierte Metadaten erzeugen (Felder, SQL, API-Sichtbarkeit, Validation).
-3. Codegen getrennt für ORM, Repository, DTO und Schema.
-4. Die Attribute versionieren, damit zukünftige Defaults oder Beziehungen keine stillen Bedeutungswechsel auslösen.
-5. Compile-Fail-Tests (`trybuild` nur nach bewusster Dependency-Entscheidung) für ungültige Kombinationen.
-6. Die drei PATCH-Zustände sind implementiert. Offen bleibt eine gemeinsame Metadatenstruktur statt direkt generiertem SQL.
-7. `syn::Error` an exakten Quellspans ausgeben, nicht `panic!`.
+1. Parse into neutral internal `ParsedModel` instead of assembling SQL directly when parsing.
+2. Generate normalized metadata (fields, SQL, API visibility, validation).
+3. Separate code generation for ORM metadata, repository methods, DTOs and schema.
+4. Version the attributes so that future defaults or relationships do not trigger silent change of meaning.
+5. Compile fail tests (`trybuild` only after conscious dependency decision) for invalid combinations.
+6. The three PATCH states are implemented. A common metadata structure remains open instead of directly generated SQL.
+7. `syn::Error` to exact source spans, not `panic!`.
 
-## Testfälle und Abnahme
+## Test cases and acceptance
 
-- `String` mit nur `required`: `""`, `"   "` → 422.
-- String-Länge anhand getrimmter Zeichen; Unicode-Tests.
-- `default = true/false`: SQL und POST-Rückgabe prüfen.
-- unbekannte Attribute, mehrfacher PK, fehlendes `id`, ungültige SQL-Namen → Compile-Fehler.
-- DTO-Serialisierungsgrenze: Type-Correctness ohne `Value` in der öffentlichen Repository-Signatur.
+- `String` with only `required`: `""`, `"   "` → 422.
+- string length based on trimmed characters; Unicode tests.
+- `default = true/false`: Check SQL and POST return.
+- unknown attributes, multiple PK, missing `id`, invalid SQL names → compile errors.
+- DTO serialization limit: Type-correctness without `Value` in the public repository signature.
 
-**Nicht hier implementieren:** Netzwerk-Routing, Datenbankverbindungen, Admin-Oberflächen.
+**Do not implement here:** Network routing, database connections, admin interfaces.

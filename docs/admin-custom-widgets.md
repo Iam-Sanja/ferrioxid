@@ -1,19 +1,19 @@
-# Eigene Admin-Widgets
+# Custom admin widgets
 
-[Zur Übersicht](admin-extension-api.md)
+[Overview](admin-extension-api.md)
 
-## IST
+## Implemented
 
-`AdminWidget` ändert die HTML-Darstellung eines sichtbaren Feldes. Es ändert `AdminFieldMeta` nicht. Verborgen, sensibel, Primärschlüssel und Fremdschlüssel werden bei `seal` abgelehnt. Ein Feld hat höchstens ein Widget.
+`AdminWidget` changes the HTML representation of a visible field. It does not change `AdminFieldMeta`. Hidden, sensitive, primary and foreign keys are rejected by `seal`. A field has at most one widget.
 
-| Art | HTML | Zusätzliche Prüfung beim POST |
+| Kind | HTML | Additional POST validation |
 |---|---|---|
-| `text` | `input type="text"` | die Modellregeln |
-| `textarea` | `textarea`, 1 bis 4000 Zeichen | Zeichengrenze des Widgets und die Modellregeln |
+| `text` | `input type="text"` | Model validation rules |
+| `textarea` |`textarea`, 1 to 4000 characters|Character limit of the widget and the model rules|
 | `email` | `input type="email"` | `ferrioxid_core::is_email` |
 | `url` | `input type="url"` | `ferrioxid_core::is_http_url` |
-| `number` | `input type="number"` | Unter- und Obergrenze, danach die Modellregeln |
-| `readonly` | Text, kein absendbares Feld | ein mitgesendeter Wert ist `field is not writable` |
+| `number` | `input type="number"` |Lower and upper limits, then the model rules|
+| `readonly` | Text rather than an input | A submitted value is rejected with `field is not writable` |
 
 ```rust
 registry
@@ -23,4 +23,4 @@ registry
     .widget(ferrioxid::admin::AdminWidget::readonly("orders", "status"))?;
 ```
 
-Tera escaped den Wert. Ein Fehler bleibt am Formular und schreibt nicht. Entwürfe, CSRF und die drei Speicherziele bleiben die des normalen Formulars. Boolesche Felder und Fremdschlüssel behalten ihre eingebauten Kontrollen.
+Tera escapes the value. Validation errors keep the form open and do not write data. Drafts, CSRF and the three save destinations behave as in standard forms. Boolean and foreign-key fields retain their built-in controls.

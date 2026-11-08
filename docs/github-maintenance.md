@@ -4,7 +4,7 @@ This page documents repository settings, the contributor workflow, and CI mainte
 
 The repository has been pushed to GitHub. The local development checkout uses `origin` to track its GitHub remote. GitHub settings and CI results can change independently of this document.
 
-The intended repository is <https://github.com/Iam-Sanja/ferrioxid>. The framework name remains Ferrioxid. `ferrioxid` is not a Rust crate.
+The repository is <https://github.com/Iam-Sanja/ferrioxid>. The framework is Ferrioxid, with the local facade crate `ferrioxid`. Until publication, use the workspace or a path dependency; do not assume a stable crates.io release.
 
 ## Repository files
 

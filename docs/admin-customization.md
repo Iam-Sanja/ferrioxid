@@ -1,12 +1,12 @@
-# Admin anpassen
+# Admin customization
 
-[Zur Übersicht](admin.md) · Makro: [macros.md](macros.md)
+[Overview](admin.md) · Macro: [macros.md](macros.md)
 
-## Zweck
+## Purpose
 
-Die Anpassung geschieht am Rust-Modell. Es gibt keinen Laufzeit-Baukasten und kein zweites Schema.
+Customize the admin through Rust model attributes. There is no runtime schema builder or second schema definition.
 
-## Attribute
+## Attributes
 
 ```rust
 #[ferrioxid(
@@ -20,47 +20,47 @@ Die Anpassung geschieht am Rust-Modell. Es gibt keinen Laufzeit-Baukasten und ke
 #[admin(list_display, searchable, sortable, filterable, readonly, hidden, label = "Name")]
 ```
 
-`admin = true` ist nötig, bevor Feldattribute erlaubt sind. `admin_label` ist 1 bis 80 Zeichen und sonst der Tabellenname. `admin_permission` ist entweder `authenticated` oder ein Bezeichner. Fehlt es, gilt das vorhandene `permissions`. Fehlen beide, ist das Modell im Admin nur für Superuser sichtbar.
+`admin = true` is required before field attributes are allowed. `admin_label` is 1 to 80 characters and otherwise the table name. `admin_permission` is either `authenticated` or an identifier. If it is missing, the existing `permissions` applies. If both are missing, the model is visible in the admin only for superusers.
 
-## Feldregeln
+## Field rules
 
-- `id` erscheint in der Liste und ist nicht editierbar.
-- `readonly` und der Primärschlüssel lassen sich über den Admin nicht schreiben.
-- `hidden` verträgt sich nicht mit Liste, Suche, Sortierung oder Filter.
-- `searchable` verlangt `String`.
-- Sensible Feldnamen müssen `hidden` sein.
-- Ein unbekanntes Attribut ist ein Compilerfehler mit der Liste der erlaubten Namen.
+- `id` appears in the list and is not editable.
+- `readonly` and the primary key cannot be written via the admin.
+- `hidden` is not compatible with list, search, sorting or filtering.
+- `searchable` requires `String`.
+- Sensitive field names must be `hidden`.
+- An unknown attribute is a compiler error with the list of allowed names.
 
-`allow_anonymous` und `permissions` bleiben gemeinsam ein Compilerfehler. `allow_anonymous` mit `admin` und `admin_permission` ist erlaubt: die öffentliche Route bleibt öffentlich, der Admin verlangt die genannte Ressource und zusätzlich Staff.
+`allow_anonymous` and `permissions` together remain a compiler error. `allow_anonymous` with `admin` and `admin_permission` is allowed: the public route remains public, the admin requires the mentioned resource and additional staff.
 
-## Registrierung
+## Registration
 
 ```rust
 AdminRegistry::new().add::<Product>().add_policy::<InternalNote, NotePolicy>()
 ```
 
-`add` ignoriert Modelle ohne `admin = true`. Eine Objektregel muss mit `add_policy` gebunden werden. Ohne Bindung antwortet der Einzelzugriff 403 mit `object policy is not bound`.
+`add` ignores models without `admin = true`. Bind an object policy with `add_policy`; otherwise, individual record access returns 403 with `object policy is not bound`.
 
 ## myshop
 
-`Product` nutzt `admin_permission = "products"`, `Category` nutzt `categories`, `InternalNote` übernimmt `notes` aus `permissions`. Die Migrationen `0001`, `0002` und `0003` bleiben unverändert, weil keine Spalte hinzukommt.
+`Product` uses `admin_permission = "products"`, `Category` uses `categories`, `InternalNote` takes `notes` from `permissions`. The migrations `0001`, `0002` and `0003` remain unchanged because no column is added.
 
-## Sicherheit
+## Security
 
-`permissions = "authenticated"` zusammen mit Staff erlaubt jedem Staff-Benutzer das Modell. Das ist ausdrücklich und sollte nur für interne Werkzeuge verwendet werden.
+`permissions = "authenticated"` together with staff access grants every staff user access to the model. This is explicit and should be limited to internal tools.
 
-## Fehler
+## Errors
 
-Compilerfehler bei unbekannten Attributen, verstecktem `id`, durchsuchbarer Nicht-Textspalte und sichtbaren sensiblen Feldern. Laufzeitfehler stehen in [admin-backend.md](admin-backend.md).
+Unknown attributes, a hidden `id`, a searchable non-text column and visible sensitive fields produce compiler errors. Runtime errors are described in [admin-backend.md](admin-backend.md).
 
 ## Tests
 
-Der Admin-HTTP-Test prüft `AdminProduct::admin_meta`, die Registry und ein nicht registriertes Modell.
+The admin HTTP test checks `AdminProduct::admin_meta`, the registry and an unregistered model.
 
-## Grenzen
+## Limitations
 
-Keine eigenen Widget-Namen, keine berechneten Spalten, keine Mehrfachbeziehungen in der Auswahl. Has-Many bleibt eine Rust-Beziehung und wird im Formular nicht als Untertabelle gezeigt.
+Custom widgets and has-many inline lists are implemented; see [admin-custom-widgets.md](admin-custom-widgets.md) and [admin-inlines.md](admin-inlines.md). Computed columns and many-to-many selectors remain unimplemented. Transactional child forms are opt-in through [admin-transactional-inlines.md](admin-transactional-inlines.md).
 
-## Später
+## Later
 
-Deklarierte Widget-Namen und ein SQL-Scope als eigenes Attribut, sobald die Abfrage das sicher kann.
+Further work includes computed columns and richer declarative scopes, while retaining the existing SQL scope checks.

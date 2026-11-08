@@ -1,8 +1,8 @@
-# Modelle
+# Models
 
-[Zur Übersicht](index.md) · Komponenten: [model-components.md](model-components.md) · Zeitstempel: [model-timestamps.md](model-timestamps.md) · **IST:** `FerrioxidModel` in `crates/ferrioxid-macros`.
+[Overview](index.md) · Components: [model-components.md](model-components.md) · Timestamps: [model-timestamps.md](model-timestamps.md) · **Implemented:** `FerrioxidModel` in `crates/ferrioxid-macros`.
 
-Ein Modell ist eine Rust-Struct mit `#[derive(FerrioxidModel)]`. Dieselbe Struct liefert Spalten, Repository, JSON, REST und Admin. Es gibt kein zweites Model-System.
+A model is a Rust struct with `#[derive(FerrioxidModel)]`. That struct supplies columns, repository methods, JSON, REST routes and admin metadata.
 
 ```rust
 use ferrioxid::prelude::*;
@@ -22,8 +22,8 @@ pub struct Product {
 }
 ```
 
-`id` bleibt `Uuid` mit `#[field(primary_key, auto)]`. Unterstützte Feldtypen sind `Uuid`, `String`, `i64`, `bool`, `NaiveDate`, `NaiveTime`, `DateTime<Utc>` und `Option` davon, außer bei `id`.
+`id` remains `Uuid` with `#[field(primary_key, auto)]`. Supported field types are `Uuid`, `String`, `i64`, `bool`, `NaiveDate`, `NaiveTime`, `DateTime<Utc>` and `Option` thereof, except for `id`.
 
-`#[field(format = "slug")]` und `#[field(format = "email")]` prüfen den Wert serverseitig beim Anlegen und beim PATCH. Ein unbekannter `format`- oder `managed`-Wert ist ein Compile-Fehler. `#[field(min = 1)]` bleibt die Regel für positive Zahlen. `#[field(required)]` lehnt leere Strings ab.
+`#[field(format = "slug")]` and `#[field(format = "email")]` check the value on the server side when creating and PATCH. An unknown `format` or `managed` value is a compile error. `#[field(min = 1)]` remains the rule for positive numbers. `#[field(required)]` rejects empty strings.
 
-JSON ist flach. Ein wiederverwendetes Feld heißt im JSON so wie die Spalte, nicht wie die Feldgruppe.
+JSON is flat. A reused field in JSON is called the column, not the field group.

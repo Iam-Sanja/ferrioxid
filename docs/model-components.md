@@ -1,12 +1,12 @@
-# Wiederverwendbare Modellfelder
+# Reusable model fields
 
-[Zur Übersicht](index.md) · Modelle: [models.md](models.md) · Zeitstempel: [model-timestamps.md](model-timestamps.md)
+[Overview](index.md) · Models: [models.md](models.md) · Timestamps: [model-timestamps.md](model-timestamps.md)
 
-**IST.** Funktionsstand v0.26. Eine Feldgruppe ist keine Tabelle, keine REST-Route und keine Admin-Registrierung.
+**Implemented.** Milestone v0.26. A field group creates no table, REST route or admin registration.
 
-Rust kann die Felder eines anderen Typs in einem Derive nicht zuverlässig nachschlagen. Ferrioxid fügt die Felder deshalb mit einem Makro in die konkrete Struct ein, bevor `FerrioxidModel` sie sieht. Die gespeicherten Spalten sind flach.
+A derive macro cannot reliably inspect another type’s fields. Ferrioxid uses a separate macro to insert fields into a concrete struct before `FerrioxidModel` processes it. The resulting database columns are flat.
 
-## Eigene Feldgruppe
+## Custom field group
 
 ```rust
 use ferrioxid::prelude::*;
@@ -32,20 +32,20 @@ ferrioxid_fields_AuditStamp! {
 }
 ```
 
-`model_fields!` erzeugt die Struct `AuditStamp` ohne Tabelle und das Makro `ferrioxid_fields_AuditStamp!` in derselben Crate. Das Makro kopiert die Felder in `Product`. Eine zweite Struct kann dasselbe Makro verwenden und erhält dieselben Spalten in einer anderen Tabelle.
+`model_fields!` generates an `AuditStamp` struct without a table and a `ferrioxid_fields_AuditStamp!` macro in the same crate. The macro copies fields into `Product`; other structs can reuse it to add the same columns to their own tables.
 
-Gleiche Feldnamen in der konkreten Struct und in der Gruppe lehnt der Compiler ab. Ein unbekannter Attributwert ebenfalls. Die Gruppe selbst hat keine Migration.
+The same field names in the concrete structure and in the group are rejected by the compiler. An unknown attribute value as well. The group itself has no migration.
 
 ## Django
 
 | Django | Ferrioxid |
 |---|---|
-| abstraktes Model | `model_fields!`, ohne Tabelle |
-| Vererbung | Makro, das Felder in die konkrete Struct kopiert |
-| `Model._meta` | `FerrioxidModel::columns` des konkreten Models |
-| eigene Tabelle der Basisklasse | gibt es nicht |
-| Mehrfachvererbung und MRO | nicht vorgesehen |
+| Abstract model | `model_fields!`, without a table |
+| Inheritance | A macro copies fields into the concrete struct |
+| `Model._meta` | `FerrioxidModel::columns` on the concrete model |
+| Separate base-class table | None |
+| Multiple inheritance and MRO | Not supported |
 
-Eine Änderung der Feldgruppe ändert `columns()` jedes konkreten Models. Der Schema-Diff sieht dadurch jede betroffene Tabelle. Bereits angewendete Migrationsdateien bleiben unverändert.
+A change in the field group changes `columns()` of each specific model. The schema diff thus sees each affected table. Already applied migration files remain unchanged.
 
-Das Beispiel liegt in `examples/notes/tests/components.rs`. myshop und seine Migrationen `0001` bis `0005` bleiben unverändert.
+The example is in `examples/notes/tests/components.rs`. myshop and its migrations `0001` to `0005` remain unchanged.

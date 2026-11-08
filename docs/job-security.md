@@ -1,27 +1,27 @@
-# Job-Sicherheit
+# Job security
 
-[Zur Übersicht](index.md) · Jobs: [jobs.md](jobs.md) · Mail: [job-mail-integration.md](job-mail-integration.md)
+[Overview](index.md) · Jobs: [jobs.md](jobs.md) · Mail: [job-mail-integration.md](job-mail-integration.md)
 
-**IST.** Job-Namen und Payloads aus einer HTTP-Anfrage werden nicht ausgeführt. Die Registry enthält nur Typen, die der Worker-Prozess ausdrücklich registriert hat.
+**Implemented.** Job names and payloads from an HTTP request are not executed. The registry only contains types that the Worker process has explicitly registered.
 
-## Grenzen
+## Limitations
 
-- Ein unbekannter Handler bleibt `pending` und wird nicht ausgeführt.
-- Eine andere Payload-Version endet als `failed` mit `job.version`.
-- Kein JSON-Objekt, ein unbekanntes Feld bei `deny_unknown_fields` und mehr als 16 KiB enden vor oder bei der Ausführung als `job.payload.invalid` oder `job.payload.large`.
-- Geheimnis-Schlüssel werden nicht gespeichert.
-- Fehlertexte und Tracing nennen Codes, nicht den Payload und nicht `FERRUM_SMTP_PASSWORD`.
-- Ein Handler-Code mit Leerzeichen, Großbuchstaben oder `password=` wird zu `job.error`. In `_ferrum_jobs.error_code` steht dieser Code, nicht der Detailtext.
-- `JobError::message` hält eine Meldung zurück, wenn sie `password`, `secret`, `token`, `authorization`, `cookie` oder `reset_url` enthält.
-- SQL-Bezeichner kommen aus festen Spaltennamen. Suchspalten sind nur `idempotency_key` und `schedule_key`. Werte sind gebunden.
-- Es gibt keinen Weg, aus einer Job-Zeile ein Shell-Kommando zu machen.
-- `max_attempts` über 20 wird nicht angenommen.
-- Eine verlorene Lease darf den neuen Besitzer nicht überschreiben.
-- Zwei Worker bekommen denselben fälligen Job nicht beide als gültigen Claim.
-- Lesende CLI-Befehle legen keine SQLite-Datei und keine Historie an.
+- An unknown handler remains `pending` and is not executed.
+- A different payload version ends as `failed` with `job.version`.
+- No JSON object, an unknown field at `deny_unknown_fields` and more than 16 KiB end before or upon execution as `job.payload.invalid` or `job.payload.large`.
+- Secret keys are not stored.
+- Error texts and tracing call codes, not the payload and not `FERRUM_SMTP_PASSWORD`.
+- A handler code with spaces, capitals or `password=` becomes `job.error`. In `_ferrum_jobs.error_code` is this code, not the detailed text.
+- `JobError::message` withholds a message if it contains `password`, `secret`, `token`, `authorization`, `cookie` or `reset_url`.
+- SQL identifiers come from fixed column names. Search columns are only `idempotency_key` and `schedule_key`. Values are bound.
+- There is no way to turn a job line into a shell command.
+- `max_attempts` over 20 is not accepted.
+- A lost lease must not overwrite the new owner.
+- Two workers do not get the same due job as a valid claim.
+- Reading CLI commands do not create an SQLite file or a history.
 
-`ferrioxid jobs inspect <id>` zeigt Status, Handler, Version, Versuche, Zeiten und Fehlercode. Die Payload erscheint als `payload [redigiert, N Bytes]`. `--show-payload` gibt das gespeicherte JSON aus und warnt auf stderr mit `job.payload.visible`. Auch diese ausdrücklich angeforderte Payload kann E-Mail-Adressen und andere personenbezogene Daten enthalten, die der Handler als normale Felder gespeichert hat. Das Lease-Token wird in beiden Fällen nicht ausgegeben.
+`ferrioxid jobs inspect <id>` shows status, handler, version, attempts, timestamps and error code. Its preserved localized placeholder is `payload [redigiert, N Bytes]` (“redacted”). `--show-payload` prints the stored JSON and warns on stderr with `job.payload.visible`. This explicitly requested payload may contain email addresses or other personal data stored by the handler. Neither output includes the lease token.
 
-Gewöhnliche Logs und Tracing schreiben die Payload nicht. Der CLI-Worker und der Anwendungs-Worker geben sie nicht aus.
+Ordinary logs and tracing do not write the payload. The CLI worker and the application worker do not output them.
 
-Die Tests liegen in `crates/ferrioxid-jobs/src/tests.rs` und `examples/notes/tests/jobs.rs`.
+The tests are in `crates/ferrioxid-jobs/src/tests.rs` and `examples/notes/tests/jobs.rs`.

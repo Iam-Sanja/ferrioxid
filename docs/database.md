@@ -1,19 +1,19 @@
-# ferrioxid-db – Eine Repository-Schicht für SQLite und PostgreSQL
+# Ferrioxid-db – A repository layer for SQLite and PostgreSQL
 
-[Zur Übersicht](index.md) · **IST-Dateien:** `crates/ferrioxid-db/src/lib.rs`, `crates/ferrioxid-db/src/sql.rs`. Die Repository-Implementierung erzeugt `crates/ferrioxid-macros/src/lib.rs`.
+[Overview](index.md) · **Implemented files:** `crates/ferrioxid-db/src/lib.rs`, `crates/ferrioxid-db/src/sql.rs`. The repository implementation generates `crates/ferrioxid-macros/src/lib.rs`.
 
-## Auth-Tabellen (v0.7)
+## Auth tables (v0.7)
 
-`_ferrum_users`, `_ferrum_sessions`, `_ferrum_roles`, `_ferrum_permissions`, `_ferrum_user_roles` und `_ferrum_role_permissions` liegen in `ferrioxid-auth` und nutzen SeaQuery auf derselben Verbindung. Sie sind keine `FerrioxidModel`-CRUD-Modelle, damit `password_hash` nicht als REST-Ressource erscheint. Zeitstempel sind `i64`. UUID ist in SQLite Text und in PostgreSQL der UUID-Typ. Die Introspektion übergeht Tabellennamen mit Präfix `_ferrum_`.
+`_ferrum_users`, `_ferrum_sessions`, `_ferrum_roles`, `_ferrum_permissions`, `_ferrum_user_roles` and `_ferrum_role_permissions` are in `ferrioxid-auth` and use SeaQuery on the same connection. They are not `FerrioxidModel` CRUD models so that `password_hash` does not appear as a REST resource. Time stamps are `i64`. UUID is the UUID type in SQLite Text and PostgreSQL. The introspection passes table names with prefix `_ferrum_`.
 
-SQLite nutzt `max_connections(1)`. Während einer Schreibtransaktion darf kein Aufruf eine zweite Verbindung aus demselben Pool verlangen. `conclude` und die `*_in`-Methoden stehen in [transactions.md](transactions.md).
+SQLite uses `max_connections(1)`. During a write transaction, no call may request a second connection from the same pool. `conclude` and the `*_in` methods are in [transactions.md](transactions.md).
 
-## Verantwortung (IST)
+## Responsibility (Implemented)
 
-- `connect(url)` öffnet SeaORM. URLs mit `sqlite:` setzen den Pool auf eine Verbindung und aktivieren `PRAGMA foreign_keys=ON`.
-- Ohne gesetzte `DATABASE_URL` verwendet myshop `DEFAULT_SQLITE_URL`: `sqlite://db.sqlite3?mode=rwc`. Der Pfad ist relativ zum Arbeitsverzeichnis des Prozesses.
-- `ModelRepository` bleibt die öffentliche Grenze für `list`, `get`, `create`, `update` und `delete`. Dieselben Methoden gibt es mit `_scoped` und einem `QueryScope`. Handler kennen den Dialekt nicht. Siehe [query-scopes.md](query-scopes.md).
-- Es gibt eine Abfrageimplementierung. SeaQuery rendert SQLite oder PostgreSQL. MySQL wird abgelehnt.
+- `connect(url)` opens SeaORM. URLs with `sqlite:` set the pool to a connection and activate `PRAGMA foreign_keys=ON`.
+- Without set `DATABASE_URL`, myshop uses `DEFAULT_SQLITE_URL`: `sqlite://db.sqlite3?mode=rwc`. The path is relative to the working directory of the process.
+- `ModelRepository` is the public interface for `list`, `get`, `create`, `update` and `delete`. Each method also has a `_scoped` variant accepting a `QueryScope`. Handlers do not need to know the SQL dialect. See [query-scopes.md](query-scopes.md).
+- There is a query implementation. SeaQuery renders SQLite or PostgreSQL. MySQL is rejected.
 
 ```rust
 #[async_trait::async_trait]
@@ -28,49 +28,49 @@ pub trait ModelRepository: FerrioxidModel + Serialize + DeserializeOwned {
 }
 ```
 
-`ListPage<T>` enthält `data: Vec<T>`, `limit: usize`, `truncated: bool`. `DeleteOutcome` ist `Deleted` oder `Missing`. Öffentliche Methoden liefern das Model, kein `serde_json::Value`. Die JSON-Abbildung bleibt innerhalb von `ferrioxid-db`.
+`ListPage<T>` contains `data: Vec<T>`, `limit: usize`, `truncated: bool`. `DeleteOutcome` is `Deleted` or `Missing`. Public methods provide the model, not `serde_json::Value`. The JSON image remains within `ferrioxid-db`.
 
-## Dialekt und Typen (IST)
+## Dialect and Types (Implemented)
 
-`DatabaseKind` ist `Sqlite` oder `Postgres`. `ColumnSpec` beschreibt Name, `ColumnKind`, Nullbarkeit, Primärschlüssel und ein optionales Bool-Default. `ColumnKind` umfasst `Uuid`, `Text`, `BigInt`, `Boolean`, `Date`, `Time` und `DateTime`. SQLite legt die drei Zeittypen als Text ab. PostgreSQL nutzt `DATE`, `TIME` und `TIMESTAMPTZ`. Das Makro legt diese Metadaten fest. `render_schema` baut daraus `CREATE TABLE IF NOT EXISTS`. Details stehen in [date-time-types.md](date-time-types.md).
+`DatabaseKind` is `Sqlite` or `Postgres`. `ColumnSpec` describes the name, `ColumnKind`, nullability, primary-key status and optional Boolean default. `ColumnKind` includes `Uuid`, `Text`, `BigInt`, `Boolean`, `Date`, `Time` and `DateTime`. SQLite stores all three temporal types as text; PostgreSQL uses `DATE`, `TIME` and `TIMESTAMPTZ`. The macro supplies this metadata, and `render_schema` uses it to build `CREATE TABLE IF NOT EXISTS`. See [date-time-types.md](date-time-types.md).
 
-| Modelltyp | PostgreSQL | SQLite | JSON-API |
+| Model type | PostgreSQL | SQLite | JSON-API |
 |---|---|---|---|
 | `Uuid` | `uuid` | `text` | String |
 | `String` | `text` | `text` | String |
-| `i64` | `bigint` | `bigint` | Zahl |
+| `i64` | `bigint` | `bigint` | Number |
 | `bool` | `bool`, Default `TRUE`/`FALSE` | `integer`, Default `1`/`0` | `true`/`false` |
-| `Option<T>` | Spalte ohne `NOT NULL` | Spalte ohne `NOT NULL` | Wert oder `null` |
+| `Option<T>` |Column without `NOT NULL`|Column without `NOT NULL`|Value or `null`|
 
-`DateTime`, `Decimal`, JSON-Spalten und Fremdschlüsselbeziehungen sind nicht implementiert. SeaQuery bestimmt die genaue Schreibweise der Schlüsselwörter. Der Vertrag ist das Typ-Mapping, nicht eine feste DDL-Zeichenkette.
+`Decimal` and JSON model columns are not supported. Date/time types and single-column foreign keys are supported as described above and in [relations.md](relations.md). SeaQuery determines exact SQL keyword spelling; the contract is the type mapping rather than a fixed DDL string.
 
-Parameter kommen von SeaQuery: PostgreSQL `$1`, `$2`, SQLite `?`. Bezeichner stammen nur aus geprüften Makroattributen und werden gequotet. Rückgaben von Insert und Update nutzen `RETURNING`. Die gebündelte SQLite-Bibliothek von sqlx unterstützt das. Zeilen werden spaltenweise gelesen und danach in das Model deserialisiert. Ein leeres PATCH führt kein Update aus, sondern liest die Zeile. Ein nicht leeres PATCH schreibt nur geänderte Spalten.
+SeaQuery binds values using PostgreSQL `$1`, `$2` or SQLite `?` placeholders. Identifiers come only from validated macro attributes and are quoted. Inserts and updates use `RETURNING`, supported by sqlx’s bundled SQLite library. Rows are read column by column and deserialized into models. An empty PATCH reads the current row without updating it; a non-empty PATCH writes only changed columns.
 
-## Abfrageverhalten (IST)
+## Query behavior (implemented)
 
 ### Create
 
-1. DTO aus HTTP oder direktem Rust-Aufruf.
-2. Generierte `required`-, Längen- und `min`-Prüfung.
-3. UUID mit `Uuid::new_v4()`.
-4. SeaQuery-`INSERT` mit gebundenen Werten und `RETURNING`.
-5. Interne Deserialisierung zum Model. Fehler werden `FerrioxidError::Database`.
+1. DTO from HTTP or direct Rust call.
+2. Generated `required`, Length and `min` test.
+3. UUID with `Uuid::new_v4()`.
+4. SeaQuery-`INSERT` with bound values and `RETURNING`.
+5. Internal deserialization to the model. Errors become `FerrioxidError::Database`.
 
 ### Update
 
-1. `PatchField::Missing` lässt die Spalte unverändert.
-2. `PatchField::Null` ist bei `NOT NULL` ein Validierungsfehler und schreibt bei nullable Spalten SQL `NULL`.
-3. `PatchField::Value` prüft und speichert den Originalwert.
-4. Keine geänderte Spalte: `get`. Sonst ein `UPDATE ... WHERE "id" = ... RETURNING`.
-5. Keine Zeile ergibt `NotFound`. Es gibt kein Versionsfeld. Die zuletzt festgeschriebene Anweisung gewinnt.
+1. `PatchField::Missing` leaves the column unchanged.
+2. `PatchField::Null` is a validation error for `NOT NULL` and writes SQL `NULL` for nullable columns.
+3. `PatchField::Value` checks and stores the original value.
+4. With no changed columns, call `get`; otherwise, execute `UPDATE ... WHERE "id" = ... RETURNING`.
+5. A missing row returns `NotFound`. There is no version field; the last write wins.
 
-### Delete, Get, List
+### Delete, Get and List
 
-`DELETE` filtert ausschließlich über die gebundene UUID. `rows_affected() == 0` wird `Missing`. `get` liefert `Ok(None)`, wenn keine Zeile existiert. `list` sortiert nach `"id"` und liest 101 Zeilen. Die Antwort enthält höchstens 100 Objekte. `truncated` ist wahr, wenn mehr Zeilen vorhanden waren. Die UUID-Reihenfolge ist nicht die Erstellungszeit. Es gibt keine Pagination.
+`DELETE` filters by the bound UUID. Zero affected rows produce `Missing`; `get` returns `Ok(None)` when no row exists. `list` orders by `"id"` and reads 101 rows, returning at most 100 objects and setting `truncated` if more exist. UUID ordering does not represent creation time. This endpoint has no pagination.
 
-## Einrichtung
+## Setup
 
-SQLite ist der lokale Standard. Eine Installation und Docker sind dafür nicht nötig. sqlx bringt SQLite mit. Schemaänderungen für Anwendungen laufen über [migrations.md](migrations.md). `render_schema` bleibt der Legacy-Bootstrap mit `IF NOT EXISTS` für leere Testdatenbanken. Migrationen verwenden `CREATE TABLE` ohne `IF NOT EXISTS`.
+SQLite is the local standard. An installation and Docker are not necessary for this. sqlx brings SQLite. Schema changes for applications run through [migrations.md](migrations.md). `render_schema` remains the legacy bootstrap with `IF NOT EXISTS` for empty test databases. Migrations use `CREATE TABLE` without `IF NOT EXISTS`.
 
 ```text
 sqlite://db.sqlite3?mode=rwc
@@ -78,24 +78,24 @@ sqlite::memory:
 postgres://user:password@localhost:5432/ferrioxid
 ```
 
-`sqlite::memory:` ist eine eigene Datenbank je Verbindung. Ferrioxid begrenzt SQLite-Pools auf eine Verbindung, damit Tests und die Anwendung dieselbe Datenbank sehen. Die Datei `db.sqlite3` entsteht im Arbeitsverzeichnis und ist in `.gitignore` enthalten. PostgreSQL bleibt ein unterstütztes Backend und wird über `DATABASE_URL` gewählt. `compose.yaml` kann den Server optional starten. Bootstrap führt nur `CREATE TABLE IF NOT EXISTS` aus, löscht vorhandene Zeilen nicht und ändert bestehende Tabellen nicht. Das ist keine Migrations-Engine.
+`sqlite::memory:` is a separate database for each connection. Ferrioxid limits SQLite pools to one connection so that tests and the application see the same database. The file `db.sqlite3` is created in the working directory and is contained in `.gitignore`. PostgreSQL remains a supported backend and is dialed via `DATABASE_URL`. `compose.yaml` can optionally start the server. Bootstrap only runs `CREATE TABLE IF NOT EXISTS`, does not delete existing rows and does not change existing tables. This is not a migration engine.
 
-## Fehler und Sicherheit (IST)
+## Error and security (Implemented)
 
-Deserialisierungsfehler und unbekannte SQL-Fehler werden `FerrioxidError::Database`. Die HTTP-Schicht antwortet dann mit 500 und einem generischen Text. Das Datenbankdetail geht ins Tracing-Log, nicht in die Antwort. `DATABASE_URL` wird nicht protokolliert. `sqlx::ErrorKind::UniqueViolation` und `ForeignKeyViolation` werden `Validation` und damit 422. SQLite meldet `ON DELETE RESTRICT` als erweiterten Code `1811` mit der festen Meldung `FOREIGN KEY constraint failed`. Auch das wird 422. Fehlende Zeilen bleiben 404, nicht freigegebene Routen 403. SQLite-Fremdschlüssel sind eingeschaltet. Modelle können Unique Indexes, sekundäre Indexes und Foreign Keys erzeugen. Beziehungsmethoden stehen in [relations.md](relations.md). `find_by_column` lädt typisierte Kindzeilen. SQLite prüft Typen schwächer als PostgreSQL. Ferrioxid prüft die unterstützten Werte vor dem Schreiben in Rust.
+Deserialization errors and unknown SQL errors become `FerrioxidError::Database`. The HTTP layer then responds with 500 and a generic text. The database detail goes to the tracing log, not the answer. `DATABASE_URL` is not logged. `sqlx::ErrorKind::UniqueViolation` and `ForeignKeyViolation` are `Validation` and thus 422. SQLite reports `ON DELETE RESTRICT` as extended code `1811` with the fixed message `FOREIGN KEY constraint failed`. This will also be 422. Missing lines remain 404, unreleased routes 403. SQLite foreign keys are on. Models can generate unique indexes, secondary indexes and foreign keys. Relationship methods are in [relations.md](relations.md). `find_by_column` loads typed child lines. SQLite checks types weaker than PostgreSQL. Ferrioxid checks the supported values before writing in Rust.
 
-## Nicht implementiert (SOLL)
+## Not implemented (planned)
 
-- `migrate down` und eine Transaktions-API für mehrere Modelle außerhalb einer einzelnen Migration. Explizite Umbenennung, der geprüfte SQLite-Umbau und die SQLite-Baseline sind in [migrations.md](migrations.md) beschrieben.
-- Eigene Fehlercodes außer den beiden festen Validation-Texten für Unique und Foreign Key.
-- `DateTime`, JSON-Spalten, Many-to-Many, Eager Loading, MySQL.
-- Pool-Größen und Timeouts als Anwendungskonfiguration außer dem festen SQLite-Limit von einer Verbindung.
-- Optimistisches Sperren.
+- `migrate down`. Explicit renames, SQLite table rebuilds and SQLite baselining are described in [migrations.md](migrations.md). Multi-model transactions are described in [transactions.md](transactions.md).
+- Own error codes apart from the two fixed validation texts for Unique and Foreign Key.
+- JSON columns, many-to-many relations, eager loading and MySQL.
+- Pool sizes and timeouts as an application configuration except for the fixed SQLite limit of a connection.
+- Optimistic locking.
 
 ## Tests
 
-`cargo test --workspace` führt `sqlite_http_roundtrip` gegen `sqlite::memory:` aus. Der Test verändert `db.sqlite3` nicht. `postgres_http_roundtrip` bleibt `#[ignore]` und verlangt eine gesetzte `DATABASE_URL`. Ohne laufenden PostgreSQL-Server ist er kein Erfolgsnachweis. `.github/workflows/ci.yml` enthält einen separaten PostgreSQL-Job für die ignorierten Tests. Ein lokaler Workspace-Lauf startet diesen Server nicht. Siehe [testing.md](testing.md).
+`cargo test --workspace` runs `sqlite_http_roundtrip` against `sqlite::memory:` without changing `db.sqlite3`. `postgres_http_roundtrip` remains `#[ignore]` and requires `DATABASE_URL` plus a running PostgreSQL server. `.github/workflows/ci.yml` provides a separate PostgreSQL job for the ignored tests; a local workspace test run does not start that server. See [testing.md](testing.md).
 
-## Admin-Listen
+## Admin lists
 
-`query_admin_page` in `crates/ferrioxid-db/src/sql.rs` nutzt dieselbe SeaQuery-Schicht. Spaltennamen kommen aus dem Deskriptor, Werte sind Parameter. Die Suche ist `LIKE` mit `ESCAPE` und läuft unter SQLite. PostgreSQL erhält denselben Ausdruck, keine dialektspezifische Eingabe aus der Oberfläche. Das öffentliche Listenlimit 100 bleibt. Die Admin-Seite ist höchstens 100 Zeilen, plus eine Zeile zur Erkennung von `has_more`.
+`query_admin_page` in `crates/ferrioxid-db/src/sql.rs` uses the same SeaQuery layer. Column names come from the descriptor, values are parameters. The search is `LIKE` with `ESCAPE` and runs under SQLite. PostgreSQL gets the same expression, no dialect-specific input from the interface. The public list limit remains 100. The admin page is at most 100 lines, plus one line to detect `has_more`.

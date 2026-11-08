@@ -1,20 +1,20 @@
-# Listenkonfiguration
+# List configuration
 
-[Zur Übersicht](admin.md) · Vergleich: [admin-django-parity.md](admin-django-parity.md)
+[Overview](admin.md) · Comparison: [admin-django-parity.md](admin-django-parity.md)
 
-**Stand:** v0.17. Die Cargo-Version bleibt `0.1.0`.
+**Milestone:** v0.17. The Cargo version remains `0.1.0`.
 
-Die Liste liest dieselben `AdminFieldMeta`- und `AdminModelMeta`-Werte wie Formular und JSON-API. Es gibt keine zweite Konfiguration.
+The list reads the same `AdminFieldMeta` and `AdminModelMeta` values as the form and JSON API. There is no second configuration.
 
-| Django-Begriff | Ferrioxid-Attribut | Wirkung |
+| Django concept | Ferrioxid attribute | Effect |
 |---|---|---|
-| `list_display` | `#[admin(list_display)]` | Spalten in Struct-Reihenfolge. `id` bleibt immer eine Spalte. Ohne Markierung: erstes sichtbares Textfeld, sonst ein anderes sichtbares Feld, plus `id` |
-| `list_display_links` | `#[admin(list_link)]` | Diese Spalten verlinken auf das Detail. `list_link` verlangt `list_display`, außer bei `id`. Ohne Markierung verlinkt die erste gelistete Spalte, die nicht `id` ist, sonst `id` |
-| `ordering` | `admin_ordering = "name"` oder `"-name"` | Standard, wenn die Anfrage kein `sort` sendet. Das Minus sortiert absteigend. Die Spalte muss `sortable` oder `id` sein. Ein gesendetes `sort` ersetzt die Vorgabe. Ein unbekannter Name ist 422 |
-| `list_per_page` | `admin_per_page = 25` | HTML-Seitengröße von 1 bis 100. Vorgabe 25. Der Handler deckelt erneut bei 100. Es gibt keinen Parameter `limit` und kein „alle zeigen“ |
-| `list_filter` | `#[admin(filterable)]` | GET-Feld `filter.{spalte}` |
-| `search_fields` | `#[admin(searchable)]` | Parameter `q`, nur String-Spalten |
+| `list_display` | `#[admin(list_display)]` |columns in struct order. `id` always remains a column. Without marking: first visible text field, otherwise another visible field, plus `id`|
+| `list_display_links` | `#[admin(list_link)]` |These columns link to the detail. `list_link` requires `list_display`, except for `id`. Without marking, the first listed column that is not `id` links, otherwise `id`|
+| `ordering` |`admin_ordering = "name"` or `"-name"`|Standard if the request does not send a `sort`. The minus sorts descending. The column must be `sortable` or `id`. A sent `sort` replaces the default. An unknown name is 422|
+| `list_per_page` | `admin_per_page = 25` | HTML page size from 1 to 100, default 25. The handler enforces the upper bound. There is no `limit` parameter or “show all” mode. |
+| `list_filter` | `#[admin(filterable)]` | GET-Field `filter.{spalte}` |
+| `search_fields` | `#[admin(searchable)]` |`q` parameters, string columns only|
 
-`hidden` und sensible Namen fallen aus Anzeige, Suche, Sortierung und Filter. Sortierung und Filter bauen keine SQL-Fragmente aus der Anfrage. Die JSON-Liste bleibt bei höchstens 100 Zeilen und nutzt `admin_per_page` nicht.
+Hidden and sensitive fields are excluded from display, search, sorting and filtering. Request values are bound as parameters rather than SQL fragments. JSON lists retain their maximum of 100 rows and do not use `admin_per_page`.
 
-Gültige Suche und Filter bleiben in den Folgelinks. Ein neuer Filter setzt die Seite zurück, weil `page` nicht mitgeschickt wird.
+Pagination links preserve valid search and filter values. Submitting a new filter omits `page`, returning to the first page.

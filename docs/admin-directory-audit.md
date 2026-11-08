@@ -1,39 +1,39 @@
-# Verzeichnis-Audit
+# Directory audit
 
-[Zur Übersicht](admin.md) · Auth: [auth.md](auth.md) · Transaktionen: [transactions.md](transactions.md) · Historie: [admin-audit-log.md](admin-audit-log.md)
+[Overview](admin.md) · Auth: [auth.md](auth.md) · Transactions: [transactions.md](transactions.md) · History: [admin-audit-log.md](admin-audit-log.md)
 
-**Stand:** v0.20. Die Cargo-Version bleibt `0.1.0`.
+**Milestone:** v0.20. The Cargo version remains `0.1.0`.
 
-HTML und JSON des Verzeichnisses rufen dieselben Funktionen in `ferrioxid-admin` auf. Auth-Schreibvorgang, Sitzungswiderruf und Audit-Zeile teilen sich eine Transaktion. Schlägt das Audit fehl, bleibt der vorherige Auth-Zustand.
+The HTML and JSON directory endpoints call the same functions in `ferrioxid-admin`. Auth changes, session revocation and the audit entry share one transaction. If auditing fails, the previous authentication state is preserved.
 
-## Ablauf
+## Workflow
 
-1. Eingabe prüfen. Argon2id-Hashes entstehen vor `begin`, damit die SQLite-Schreibsperre nicht während des Hashens gehalten wird.
-2. Transaktion starten.
-3. Den ausführenden Benutzer neu lesen. Er muss aktiv, Staff und Superuser sein. Ein zwischenzeitlich entzogenes Superuser-Flag beendet den Vorgang mit `Forbidden`.
-4. Den Zielzustand prüfen: kein Superuser-Ziel für Profil, Passwort, Aktiv und Staff. Keine Selbst-Deaktivierung. Kein Entzug des eigenen Staff-Flags. Ein Berechtigungscode, der `superuser` enthält, wird abgelehnt. Superuser-Vergabe bleibt die CLI.
-5. Schreiben. Passwortänderung und Deaktivierung widerrufen die Sitzungen des Ziels in derselben Transaktion.
-6. Eine Audit-Zeile mit `operation_id` schreiben.
-7. Commit. Jeder Fehler davor rollt Hash, Flags, Rollen, Rechte, Sitzungen und Audit zurück.
+1. Check input. Argon2id hashes are created before `begin` so that the SQLite write lock is not held during hashing.
+2. Begin the transaction.
+3. Reload the acting user. The user must be active, staff and superuser. If superuser access was revoked in the meantime, the operation ends with `Forbidden`.
+4. Check the target state: profile, password, active and staff changes cannot target superusers. Self-deactivation and removal of one's own staff access are blocked. Permission codes containing `superuser` are rejected. Granting superuser access remains a CLI operation.
+5. Apply the change. Password changes and deactivation revoke the target user's sessions in the same transaction.
+6. Write an audit line with `operation_id`.
+7. Commit. Any error before it rolls back hash, flags, roles, permissions, sessions, and audit.
 
-## Ereignisse
+## Events
 
-| Aktion | `action` | Zusammenfassung |
+| Event | `action` | Summary |
 |---|---|---|
-| Benutzer anlegen | `user_create` | E-Mail, darunter die gesetzten Rollennamen |
-| E-Mail, Aktiv, Staff | `user_update` | neue E-Mail, `active`/`inactive` oder `staff`/`not-staff` |
-| Passwort | `password_reset` | leer |
-| Rolle | `role_assign` / `role_revoke` | Rollenname |
-| Recht | `permission_grant` / `permission_revoke` | Berechtigungscode |
+|Creating Users| `user_create` |Email, including the role names set|
+|Email, Active, Staff| `user_update` |new email, `active`/`inactive` or `staff`/`not-staff`|
+| Password | `password_reset` | Empty |
+| Role | `role_assign` / `role_revoke` | Role name |
+| Permission | `permission_grant` / `permission_revoke` | Permission code |
 
-`record_id` ist die Benutzer-UUID oder, bei einem Recht, der Rollenname. `actor_id` ist der ausführende Benutzer. Passwörter, Hashes, Sitzungs- und CSRF-Tokens stehen nicht in der Zusammenfassung.
+`record_id` is the user UUID or, in the case of a right, the role name. `actor_id` is the executing user. Passwords, hashes, session and CSRF tokens are not in the summary.
 
-Die CLI-Methoden `create_user`, `assign_role`, `grant_permission` und `set_user_active` schreiben kein Verzeichnis-Audit. Dort fehlt ein Admin-Actor.
+The CLI methods `create_user`, `assign_role`, `grant_permission` and `set_user_active` do not write a directory audit. There is no admin actor.
 
 ## Migration
 
-`crates/ferrioxid-auth/migrations/0003_audit_operation.json` hängt die nullable Spalte `operation_id` an `_ferrum_admin_audit`. `0001_auth_schema` und `0002_admin_journal` bleiben unverändert. Ältere Zeilen lesen `operation_id` als leer. Die Historie zeigt die ersten acht Zeichen, wenn ein Wert vorhanden ist.
+`crates/ferrioxid-auth/migrations/0003_audit_operation.json` attaches the nullable column `operation_id` to `_ferrum_admin_audit`. `0001_auth_schema` and `0002_admin_journal` remain unchanged. Older lines read `operation_id` as empty. The history shows the first eight characters when a value exists.
 
 ## JSON
 
-Die JSON-Verzeichnis-API nutzt dieselbe Transaktion. Sie verlangt `confirm` weiterhin nicht. Das bleibt offen.
+The JSON directory API uses the same transaction. It still does not require `confirm`. That remains open.

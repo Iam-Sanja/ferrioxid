@@ -1,28 +1,28 @@
-# Speicher
+# Storage
 
-**Stand:** v0.12, IST für lokalen Speicher. S3 ist geplant und nicht implementiert. Die Cargo-Version bleibt `0.1.0`.
+**Milestone:** v0.12, Implemented for local storage. S3 is planned and not implemented. The Cargo version remains `0.1.0`.
 
-## Verantwortlichkeit
+## Responsibility
 
-`ferrioxid-storage` speichert Bytes unter einem Root, den die Anwendung festlegt. Der Client-Dateiname wird nie zum Pfad.
+`ferrioxid-storage` stores bytes under a root that the application sets. The client filename never becomes the path.
 
-## Crates und Dateien
+## Crates and files
 
-- Trait und Typen: `crates/ferrioxid-storage/src/lib.rs`
-- Lokal: `crates/ferrioxid-storage/src/local.rs`
-- HTTP, nur nach ausdrücklichem Einhängen: `crates/ferrioxid-storage/src/http.rs`
+- Trait and types: `crates/ferrioxid-storage/src/lib.rs`
+- Local backend: `crates/ferrioxid-storage/src/local.rs`
+- HTTP, only after explicit attachment: `crates/ferrioxid-storage/src/http.rs`
 
-## Öffentliche API
+## Public API
 
-`Storage` ist asynchron: `save`, `read`, `delete`, `exists`, `metadata`. `LocalStorage::open(root, max_bytes, allow)` legt den Root an. `detect_type` erkennt PNG, JPEG, GIF, WEBP, PDF und einfachen Text anhand der Bytes. `routes` liefert `POST /uploads`, `GET /uploads/{id}` und `DELETE /uploads/{id}`.
+`Storage` is asynchronous: `save`, `read`, `delete`, `exists`, `metadata`. `LocalStorage::open(root, max_bytes, allow)` creates the root. `detect_type` recognizes PNG, JPEG, GIF, WEBP, PDF and simple text based on the bytes. `routes` provides `POST /uploads`, `GET /uploads/{id}` and `DELETE /uploads/{id}`.
 
-Die lokale Implementierung blockiert kurz in `std::fs`. Das ist eine bekannte Grenze, kein zweites Speicher-Laufzeitsystem.
+The local backend performs brief blocking `std::fs` operations. This is a known limitation of the current storage implementation.
 
-## Datenfluss
+## Data flow
 
-`save` prüft Größe und Inhalt, erzeugt eine UUID und schreibt `{root}/{owner}/{id}.partial`. Erst danach wird die Datei exklusiv nach `{id}` verschoben. Metadaten liegen in `{id}.json` daneben. Ein Fehler löscht die unvollständige Datei. Es gibt keine neue SQL-Migration. Die bestehenden Checksummen bleiben gültig.
+`save` checks size and content, creates a UUID and writes `{root}/{owner}/{id}.partial`. Only then will the file be moved exclusively to `{id}`. Metadata is next to it in `{id}.json`. An error deletes the incomplete file. There is no new SQL migration. The existing checksums remain valid.
 
-## Konfiguration
+## Configuration
 
 ```toml
 [storage]
@@ -31,17 +31,17 @@ directory = "media"
 max_upload_size_mb = 10
 ```
 
-`backend` akzeptiert nur `local`. `directory` ist relativ ohne `..`. Die Größe liegt zwischen 1 und 100 MiB. `ferrioxid::web::prepare` setzt das Body-Limit mindestens auf diese Größe. myshop öffnet `examples/myshop/media` mit 1 MiB und der Allowlist `text/plain`, `image/png`, `image/jpeg`, `application/pdf`.
+`backend` only accepts `local`. `directory` is relative without `..`. The size is between 1 and 100 MiB. `ferrioxid::web::prepare` sets the body limit at least to this size. myshop opens `examples/myshop/media` with 1 MiB and the allowlist `text/plain`, `image/png`, `image/jpeg`, `application/pdf`.
 
-## Sicherheit
+## Security
 
-Pfade werden kanonisiert und müssen im Owner-Verzeichnis bleiben. `create_new` verhindert stilles Überschreiben. Der Originalname wird auf ASCII-Buchstaben, Ziffern, Punkt, Bindestrich und Unterstrich gekürzt. HTML, SVG, Skripte, `MZ` und `ELF` werden nicht als Text akzeptiert. Ein anderer Owner erhält 404, nicht 403. Downloads setzen `Content-Disposition: attachment`, `application/octet-stream` und `nosniff`.
+Paths are canonicalized and must stay inside the owner’s directory. `create_new` prevents silent overwrites. The original filename is sanitized to ASCII letters, digits, periods, hyphens and underscores. HTML, SVG, scripts, `MZ` and `ELF` are rejected as text uploads. Requests from another owner return 404. Downloads use `Content-Disposition: attachment`, `application/octet-stream` and `nosniff`.
 
-## Fehlerfälle
+## Error cases
 
-`upload.too_large` ist 413. `upload.type` ist 415. `resource.not_found` ist 404. Speicherfehler sind `request.rejected` mit 500, ohne Pfad und ohne Systemtext.
+`upload.too_large` returns 413, `upload.type` returns 415 and `resource.not_found` returns 404. Storage failures return `request.rejected` with status 500 and expose neither paths nor system error text.
 
-## Beispiel
+## Example
 
 ```rust
 let stored = storage.save(user_id, "notes.txt", b"hello").await?;
@@ -50,12 +50,12 @@ let (_meta, bytes) = storage.read(user_id, stored.id).await?;
 
 ## Tests
 
-`cargo test -p ferrioxid-storage` speichert, liest, löscht, isoliert Owner, lehnt Größe, HTML und Pfadnamen ab und prüft anonyme sowie fremde HTTP-Zugriffe.
+`cargo test -p ferrioxid-storage` stores, reads, deletes, isolates owners, rejects size, HTML and path names, and checks anonymous and third-party HTTP accesses.
 
-## Einschränkungen
+## Limitations
 
-S3 ist nicht implementiert. Malware-Scanning fehlt. Die Inhaltserkennung ersetzt keinen Virenscanner. Metadaten sind Sidecar-JSON, keine Datenbanktabelle.
+S3 is not implemented. Malware scanning is missing. Content recognition does not replace a virus scanner. Metadata is Sidecar JSON, not a database table.
 
-## Erweiterung
+## Extension
 
-Ein weiteres `Storage`-Backend kann dieselben Methoden implementieren. Eine optionale Tabelle kann später über eine neue Migration entstehen. Bestehende `0001`-Dateien werden dafür nicht verändert.
+Other backends can implement the same `Storage` methods. A future metadata table would require a new migration; existing `0001` files must remain unchanged.

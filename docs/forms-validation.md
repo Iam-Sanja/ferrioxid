@@ -1,53 +1,53 @@
-# Formularvalidierung
+# Form validation
 
-**Stand:** v0.19, IST. Die Cargo-Version bleibt `0.1.0`. Zusätzliche Codes: `validation.date`, `validation.time`, `validation.datetime`, `validation.datetime_offset`.
+**Milestone:** v0.19, Implemented. The Cargo version remains `0.1.0`. Additional codes: `validation.date`, `validation.time`, `validation.datetime`, `validation.datetime_offset`.
 
-## Verantwortlichkeit
+## Responsibility
 
-`ferrioxid-core::validation` ist der gemeinsame Regelkern für Formularfelder. `FerrioxidModel` behält die bisher generierten Prüfungen, damit bestehende CRUD-Antworten unverändert bleiben.
+`ferrioxid-core::validation` is the common rule kernel for form fields. `FerrioxidModel` retains the previously generated checks so that existing CRUD responses remain unchanged.
 
-## Crates und Dateien
+## Crates and files
 
 - `crates/ferrioxid-core/src/validation.rs`
-- Aufrufer: `crates/ferrioxid-forms/src/lib.rs`
-- Modellmakro, unverändert: `crates/ferrioxid-macros/src/lib.rs`
+- Caller: `crates/ferrioxid-forms/src/lib.rs`
+- Model macro, unchanged: `crates/ferrioxid-macros/src/lib.rs`
 
-## Öffentliche API
+## Public API
 
-`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` und `is_http_url`. Rückgaben sind stabile Codes, keine übersetzten Sätze. Übersetzung macht `ferrioxid::forms::message`.
+`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` and `is_http_url` return stable codes rather than localized sentences. `ferrioxid::forms::message` translates those codes.
 
-## Datenfluss
+## Data flow
 
 ```text
 FerrioxidModel-Makro → eigene Meldungen (unverändert)
 ferrioxid-forms → text_code / parse_* → Feldcode → message(locale, code)
 ```
 
-Optionale Textfelder behandeln einen leeren Wert als `None`, bevor die Pflichtregel greift. Zahlen und UUIDs ohne Wert bleiben `validation.required`, wenn die Required-Hilfe verwendet wird.
+Optional text fields convert empty input to `None` before required-field validation. Missing numbers and UUIDs produce `validation.required` when the required-field helper is used.
 
-## Konfiguration
+## Configuration
 
-Keine. Grenzen stehen an der Aufrufstelle, zum Beispiel `TextSpec.min_length`.
+None. Boundaries are at the call point, for example `TextSpec.min_length`.
 
-## Sicherheit
+## Security
 
-Regeln sehen nur den bereits dekodierten Feldwert. Sie führen keine SQL- oder Shell-Befehle aus. E-Mail- und URL-Prüfungen sind bewusst eng: ASCII, ein `@`, eine Domain mit Punkt, `http` oder `https`.
+Rules only see the already decoded field value. They do not run SQL or shell commands. Email and URL checks are deliberately narrow: ASCII, a `@`, a domain with point, `http` or `https`.
 
-## Fehlerfälle
+## Error cases
 
-| Code | Bedeutung |
+| Code | Meaning |
 |---|---|
-| `validation.required` | leerer Pflichtwert |
-| `validation.min_length` | zu kurz |
-| `validation.max_length` | zu lang |
-| `validation.min_value` | Zahl zu klein |
-| `validation.max_value` | Zahl zu groß |
-| `validation.email` | keine einfache E-Mail |
-| `validation.url` | kein `http`- oder `https`-URL |
-| `validation.invalid_type` | keine Zahl oder kein Bool |
-| `validation.uuid` | keine UUID |
+| `validation.required` | Required value is empty |
+| `validation.min_length` | Too short |
+| `validation.max_length` | Too long |
+| `validation.min_value` | Number is too small |
+| `validation.max_value` |Number too large|
+| `validation.email` |Not a simple email|
+| `validation.url` |No `http` or `https` URL|
+| `validation.invalid_type` |No number or bool|
+| `validation.uuid` | Invalid UUID |
 
-## Beispiel
+## Example
 
 ```rust
 ferrioxid::core::text_code("a@b", true, None, Some(254), true, false);
@@ -55,12 +55,12 @@ ferrioxid::core::text_code("a@b", true, None, Some(254), true, false);
 
 ## Tests
 
-`ferrioxid-core` prüft die Codes. `ferrioxid-forms` prüft die Zuordnung zu Feldern.
+`ferrioxid-core` checks the codes. `ferrioxid-forms` checks the assignment to fields.
 
-## Einschränkungen
+## Limitations
 
-Das Modellmakro dupliziert die Regeln noch. Internationale E-Mail-Adressen und freie URL-Schemata werden abgelehnt.
+The model macro still duplicates the rules. International email addresses and free URL schemes are rejected.
 
-## Erweiterung
+## Extension
 
-Das Makro kann später `text_code` aufrufen, ohne die öffentlichen Fehlertexte der REST-API zu ändern.
+The macro can later call `text_code` without changing the public error texts of the REST API.

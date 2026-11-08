@@ -1,23 +1,23 @@
-# Tests, Qualität und Continuous Integration
+# Tests, Quality and Continuous Integration
 
-[Zur Übersicht](index.md) · **IST-Dateien:** `.github/workflows/ci.yml`, `examples/myshop/tests/postgres_api.rs`, `examples/myshop/tests/events.rs`, `examples/myshop/tests/orders.rs`, `crates/ferrioxid-db/src/lib.rs`. `events.rs` prüft den SQLite-Roundtrip, die Sortierung, den Bereich, die Jahresgruppe und die blockierte Text-zu-Datum-Änderung. `orders.rs` prüft Commit, Rollback, fremde Kind-IDs, Höchstzahl, Audit-Fehler, `409` und das Formular ohne JavaScript. `admin_dates_use_native_inputs_and_utc_hierarchy` prüft die HTML-Felder und die Hierarchie. Die ignorierten PostgreSQL-Tests gelten nicht als bestanden. Destruktive Tests nutzen temporäre SQLite-Dateien, nicht `target/e2e-admin.sqlite`, `target/v019-admin.sqlite` oder die Datenbanken unter `D:\04_Projekte_Arbeit\Projekte\testprojekt`. `examples/myshop/tests/admin_extensions.rs` prüft eigene Seiten, CSRF, 403, reservierte Namen, Filter, Widgets, XSS und Sammelaktionen gegen eine temporäre SQLite-Datei. `crates/ferrioxid-auth/src/reset_tests.rs` prüft bekannte, unbekannte und deaktivierte Adressen, dieselbe HTTP-Antwort, Rate-Limit, Ablauf, Einmalverwendung, parallelen Abschluss, Versandfehler ohne externen Empfänger, Sitzungswiderruf und ein Audit ohne Token. `ferrioxid-mail` prüft Memory, Header-Injection und geschwärzte SMTP-Debug-Ausgabe. `crates/ferrioxid-cli/tests/diagnostics.rs` prüft Auth- und App-Status, `--strict`, Upgrade, eine fehlende und eine unlesbare SQLite-Datei. Die Bibliothekstests in `inspect` und `upgrade` prüfen Checksum, unbekannte Migration, Lesesperre, Pfadflucht, Junction, Backup und Abbruch. `generator.rs` setzt `CARGO_BUILD_JOBS` nur am Kindprozess und nie höher als 2. rustc 1.98.1 ist bei einem unbegrenzten Release-Build in diesem Test mit `0xc0000005` und `0xc0000409` abgestürzt. Das ist kein behobener Compilerfehler. Ein Lauf mit `CARGO_BUILD_JOBS=2` und `--test-threads=2` war grün. Der anschließende uneingeschränkte `cargo test --workspace --offline` war ebenfalls grün, weil die verschachtelten Release-Builds weiterhin höchstens zwei Jobs nutzen. `--test-threads` begrenzt nur die Threads eines Test-Binaries.
+[Overview](index.md) · **Implemented files:** `.github/workflows/ci.yml`, `examples/myshop/tests/postgres_api.rs`, `examples/myshop/tests/events.rs`, `examples/myshop/tests/orders.rs`, `crates/ferrioxid-db/src/lib.rs`. `events.rs` checks the SQLite round trip, sorting, range, year group, and blocked text-to-date change. `orders.rs` checks commit, rollback, foreign child IDs, maximum number, audit errors, `409` and the form without JavaScript. `admin_dates_use_native_inputs_and_utc_hierarchy` checks the HTML fields and the hierarchy. The ignored PostgreSQL tests are not considered to have passed. Destructive tests use temporary SQLite files, not `target/e2e-admin.sqlite`, `target/v019-admin.sqlite` or the databases under `D:\04_Projekte_Arbeit\Projekte\testprojekt`. `examples/myshop/tests/admin_extensions.rs` checks custom pages, CSRF, 403, reserved names, filters, widgets, XSS and bulk actions against a temporary SQLite file. `crates/ferrioxid-auth/src/reset_tests.rs` checks known, unknown and deactivated addresses, same HTTP response, rate limit, expiration, one-time use, parallel completion, delivery error without external recipients, session revocation and an audit without tokens. `ferrioxid-mail` reviews memory, header injection and redacted SMTP debug output. `crates/ferrioxid-cli/tests/diagnostics.rs` checks auth and app status, `--strict`, upgrade, missing and unreadable SQLite file. The library tests in `inspect` and `upgrade` check for checksum, unknown migration, reading lock, path escape, junction, backup and abort. `generator.rs` sets `CARGO_BUILD_JOBS` only on the child process and never higher than 2. rustc 1.98.1 crashed in an unlimited release build in this test with `0xc0000005` and `0xc0000409`. This is not a fixed compiler error. A run with `CARGO_BUILD_JOBS=2` and `--test-threads=2` was green. The subsequent unrestricted `cargo test --workspace --offline` was also green, because the nested release builds continue to use at most two jobs. `--test-threads` only limits the threads of a test binary.
 
-## Teststufen (IST)
+## Test Levels (Implemented)
 
-1. **Build und Lint:** `cargo fmt`, Clippy mit `-D warnings` und `cargo build --workspace`.
-2. **Workspace-Tests:** `cargo test --workspace` führt Unit-Tests und `sqlite_http_roundtrip` aus.
-3. **SQLite-HTTP:** `sqlite_http_roundtrip` nutzt `sqlite::memory:`, eine Pool-Verbindung und einen Axum-Listener auf einem zufälligen Localhost-Port. Die Datei `db.sqlite3` wird nicht verwendet.
-4. **DDL ohne Server:** `boolean_default_is_emitted_into_postgres_schema` prüft die gerenderte PostgreSQL- und SQLite-Definition von `active`.
-5. **Migrationen:** Snapshot, Diff, SQLite-Kette und `ferrioxid migrate` gegen eine temporäre Datei laufen in `cargo test --workspace`.
-6. **Formulare, Staticfiles, Speicher und Middleware:** `ferrioxid-forms`, `ferrioxid-static`, `ferrioxid-storage` und `ferrioxid-middleware` laufen mit SQLite oder ohne Datenbank. PostgreSQL wird dafür nicht gestartet.
-7. **Auth und Admin:** Passwort-, Sitzungs-, CSRF-, Scope- und Asset-Tests in `ferrioxid-auth`, `examples/myshop/tests/auth.rs`, `examples/myshop/tests/admin_http.rs` und `examples/myshop/tests/admin_html.rs` nutzen SQLite. Sie sind nicht ignoriert. `html_admin_works_without_javascript` prüft Formulare ohne JavaScript, die Abmeldung eines Nicht-Staff einschließlich fehlendem und fremdem CSRF, Superuser ohne Staff, einen inaktiven Staff-Superuser, Standardspalten, explizites `list_display`, Listenzeile, Standardsortierung, Seitengröße, Fieldsets, die drei Speicherziele, erhaltene Formularwerte, die Auswahlseite über 100 Ziele, abgelehnte Fremdschlüssel, die Rollenauswahl als `<select>`, Benutzer anlegen, Passwort und Sitzungswiderruf, Staff-Entzug, `confirm=1`, lesbare Fremdschlüssel und Bool-/Zahlfilter. `admin_v018_drafts_inlines_bulk_and_audit` prüft Formularentwürfe, den erzwungenen Inline-Fremdschlüssel, Sammelaktionen inklusive Rollback, fremde IDs, CSRF und die Historie. `summary_skips_sensitive_values` prüft, dass Hashes nicht in der Zusammenfassung stehen. `ferrioxid-admin` prüft das Kontrasttor der Projektfarbe. `ferrioxid-forms` prüft, dass nur `confirm=1` gilt. `ferrioxid-core` prüft die Fehlercodes. Playwright ist nicht Teil des Workspace-Tests. Ein Browserlauf ist zusätzlich und ersetzt diese Tests nicht.
-8. **PostgreSQL, optional:** `postgres_http_roundtrip` und `postgres_migration_roundtrip` sind `#[ignore]`. Sie laufen nur mit `--ignored` und gesetzter `DATABASE_URL`.
-9. **Jobs:** `ferrioxid-jobs` prüft Erfolg, Retry, dauerhaften Fehler, Verzögerung, ein Intervall, zwei Worker, abgelaufene Leases, Idempotenz, fehlende Migration, Geheimnisse, Mail und eine unangetastete Reset-Outbox. Zusätzlich prüft es `WorkerHost`, eine fehlende SQLite-Datei, einen abgebrochenen Handler nach dem Timeout, einen Retry über eine neue Verbindung und die verdeckte Payload. Die Uhr der Queue-Tests ist `ManualClock`. `examples/notes/tests/jobs.rs` nutzt denselben Weg. `examples/notes/tests/worker.rs` startet `src/bin/worker.rs`, prüft Erfolg, Neustart, einen unbekannten Handler und den Mail-Job. `ferrioxid-cli` prüft `--yes` und dass `generate worker` nichts überschreibt.
-10. **Modellfelder und App-Start:** `examples/notes/tests/components.rs` prüft zwei Models, flache Zeitstempel, abgelehnte Client-Werte, Slug-Validierung, Admin-Readonly, Schema-Diff und REST. `apps.rs` prüft `try_into_router`, fehlendes `seal`, Zyklen, fehlende TOML-Bindung und abweichende Verzeichnisse. `packages.rs` prüft den Vertragsvergleich ohne Datenbank.
-11. **Apps:** `ferrioxid-api` prüft doppelte Apps, reservierte Namen, Pfadkollisionen, Zyklen, versiegelte Registries, Admin-Vorlagennamen, isolierte Vorlagenkonflikte und `/static/{app}`. `pages.rs` prüft `url` und eine fehlende Route ohne Auflistung der Karte. `views.rs` prüft `require_mutation` ohne Auth. `packages.rs` prüft zwei Apps mit `0001_initial`, die Reihenfolge, Zyklen, die Legacy-Zeile und eine Prüfsumme. `project.rs` prüft `[app.shop]` und ein namenloses `[app]`. `examples/notes/tests/reuse.rs` installiert eine externe Crate, ohne eine Historientabelle anzulegen. `ferrioxid-cli` prüft `generate app` ohne Überschreiben.
-12. **Settings, URLs und Views:** `project.rs` prüft Legacy-Dateien, unbekannte Schlüssel, `[custom.shop]`, Produktions-Debug und geschwärzte Geheimnisse. `urls.rs` prüft Namen, Verschachtelung, Parameter, reservierte Pfade und doppelte Pfade. `views.rs` prüft JSON-Problemantworten, HTML-Escaping, lokale Redirects, Staff ohne Sitzung und die Request-ID. **Generator:** `crates/ferrioxid-cli/tests/generator.rs` legt Projekte außerhalb des Workspaces an, prüft `doctor`, `check`, `dev` und `build` und übersetzt beide Vorlagen. `check` darf die Migrationsdatei nicht verändern. Settings- und Vorlagentests liegen in `project.rs` und `pages.rs`. Jeder Kindprozess von `ferrioxid` und `cargo` bekommt eine eigene Datei `ferrioxid-isolated-<pid>-<n>.sqlite` unter dem temporären Verzeichnis. `DATABASE_URL` wird nur an diesem Prozess gesetzt. `FERRUM_E2E_DATABASE` und `FERRUM_PASSWORD` werden für den Kindprozess entfernt. Die Prozessumgebung des Tests bleibt unverändert. Nach dem Test löscht `cleanup_isolated_databases` die Dateien dieser Prozess-ID. Parallele Tests nutzen unterschiedliche Dateinummern.
+1. **Build and Lint:** `cargo fmt`, Clippy with `-D warnings` and `cargo build --workspace`.
+2. **Workspace tests:** `cargo test --workspace` performs unit tests and `sqlite_http_roundtrip`.
+3. **SQLite-HTTP:** `sqlite_http_roundtrip` uses `sqlite::memory:`, a pool connection and an Axum listener on a random localhost port. The `db.sqlite3` file is not used.
+4. **DDL without server:** `boolean_default_is_emitted_into_postgres_schema` checks the rendered PostgreSQL and SQLite definition of `active`.
+5. **Migrations:** Snapshot, Diff, SQLite chain and `ferrioxid migrate` against a temporary file run in `cargo test --workspace`.
+6. **Forms, static files, storage and middleware:** `ferrioxid-forms`, `ferrioxid-static`, `ferrioxid-storage` and `ferrioxid-middleware` run with SQLite or without a database. PostgreSQL is not started for this.
+7. **Auth and Admin:** Password, Session, CSRF, Scope and Asset tests in `ferrioxid-auth`, `examples/myshop/tests/auth.rs`, `examples/myshop/tests/admin_http.rs` and `examples/myshop/tests/admin_html.rs` use SQLite. They are not ignored. `html_admin_works_without_javascript` checks forms without JavaScript, logging out a non-staff including missing and foreign CSRF, superuser without staff, an inactive staff superuser, default columns, explicit `list_display`, list line, standard sorting, page size, field sets that create three save destinations, received form values, the selection page over 100 destinations, rejected foreign keys, the role selection as `<select>`, user, password and session revocation, staff revocation, `confirm=1`, readable foreign keys and bool/number filters. `admin_v018_drafts_inlines_bulk_and_audit` checks form designs, the enforced inline foreign key, bulk actions including rollback, foreign IDs, CSRF and history. `summary_skips_sensitive_values` checks that hashes are not in the summary. `ferrioxid-admin` checks the contrast gate of the project color. `ferrioxid-forms` checks that only `confirm=1` applies. `ferrioxid-core` checks the error codes. Playwright is not part of the workspace test. A browser run is additional and does not replace these tests.
+8. **PostgreSQL, optional:** `postgres_http_roundtrip` and `postgres_migration_roundtrip` are `#[ignore]`. They only run with `--ignored` and set `DATABASE_URL`.
+9. **Jobs:** `ferrioxid-jobs` checks success, retry, permanent failure, delay, intervals, two workers, expired leases, idempotency, missing migrations, secret handling, mail and an untouched reset outbox. It also checks `WorkerHost`, a missing SQLite file, cancellation of a timed-out handler, retry through a new connection and hidden payloads. Queue tests use `ManualClock`. `examples/notes/tests/jobs.rs` exercises the same path. `examples/notes/tests/worker.rs` starts `src/bin/worker.rs` and checks success, restart, an unknown handler and the mail job. `ferrioxid-cli` checks `--yes` and that `generate worker` never overwrites a file.
+10. **Model fields and app launch:** `examples/notes/tests/components.rs` checks two models, flat timestamps, rejected client values, slug validation, admin-readonly, schema diff and REST. `apps.rs` checks `try_into_router`, missing `seal`, cycles, missing TOML binding and deviating directories. `packages.rs` checks the contract comparison without a database.
+11. **Apps:** `ferrioxid-api` checks duplicate apps, reserved names, path collisions, cycles, sealed registries, admin template names, isolated template conflicts, and `/static/{app}`. `pages.rs` checks `url` and a missing route without listing the map. `views.rs` checks `require_mutation` without authentication. `packages.rs` checks two apps with `0001_initial`, the order, cycles, the legacy line and a checksum. `project.rs` checks `[app.shop]` and a nameless `[app]`. `examples/notes/tests/reuse.rs` installs an external crate without creating a history table. `ferrioxid-cli` checks `generate app` without overwriting.
+12. **Settings, URLs and views:** `project.rs` checks legacy files, unknown keys, `[custom.shop]`, production debug and redacted secrets. `urls.rs` checks names, nesting, parameters, reserved paths and duplicate paths. `views.rs` checks JSON problem responses, HTML escaping, local redirects, staff without session, and the request ID. **Generator:** `crates/ferrioxid-cli/tests/generator.rs` creates projects outside the workspace, checks `doctor`, `check`, `dev` and `build` and compiles projects generated from both templates. `check` must not change the migration file. Setting and template tests are in `project.rs` and `pages.rs`. Each child process of `ferrioxid` and `cargo` gets its own file `ferrioxid-isolated-<pid>-<n>.sqlite` under the temporary directory. `DATABASE_URL` is only set to this process. `FERRUM_E2E_DATABASE` and `FERRUM_PASSWORD` are removed for the child process. The process environment of the test remains unchanged. After the test, `cleanup_isolated_databases` deletes the files of this process ID. Parallel tests use different file numbers.
 
-### Lokale Befehle
+### Local commands
 
 ```powershell
 cargo fmt --all
@@ -26,7 +26,7 @@ cargo test --workspace
 cargo build --workspace
 ```
 
-Optionaler PostgreSQL-Lauf, nur gegen eine entbehrliche Datenbank:
+Optional PostgreSQL run, only against a dispensable database:
 
 ```powershell
 docker compose up -d db
@@ -34,50 +34,50 @@ $env:DATABASE_URL="postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrio
 cargo test -p myshop --test postgres_api -- --ignored --nocapture
 ```
 
-Der ignorierte Test verlangt `DATABASE_URL` und bricht ohne sie ab. Er löscht vor und nach dem Lauf die Tabellen `ferrioxid_v01_integration_products`, `ferrioxid_v01_required_only`, `ferrioxid_v01_private_products` und `ferrioxid_v01_notes`. Das ist kein Nachweis, solange kein PostgreSQL-Server erreichbar ist. Ein früherer Lauf ohne Server endete mit `PoolTimedOut`.
+The ignored test requires `DATABASE_URL` and breaks off without it. It deletes the tables `ferrioxid_v01_integration_products`, `ferrioxid_v01_required_only`, `ferrioxid_v01_private_products` and `ferrioxid_v01_notes` before and after the run. This is not proof as long as no PostgreSQL server can be reached. An earlier run without a server ended with `PoolTimedOut`.
 
-## Abgedeckte SQLite-Fälle (IST)
+## SQLite cases covered (Implemented)
 
-Dieselben HTTP-Prüfungen laufen im SQLite-Test:
+The same HTTP checks run in the SQLite test:
 
-- GET-Liste, GET nach UUID, POST, PATCH und DELETE.
-- POST 201 mit UUID, Feldern und Bool-Default `true`.
-- Leerer oder nur aus Leerzeichen bestehender Name und negativer Preis ergeben 422.
-- `#[field(required)]` ohne `min_length`.
-- PATCH nur mit `name`, leeres `{}`, leerer Name, negativer Preis und unbekannte UUID.
-- DELETE 204 ohne Körper, folgendes GET 404 und zweites DELETE 404.
-- Nicht freigegebenes Modell: Liste, Detail, PATCH und DELETE mit 403 und Ferrioxid-JSON.
-- Nullable `note`: fehlender Schlüssel, Wert und JSON-`null`.
-- Nach mehr als 100 Zeilen: `limit` 100, `truncated: true`, genau 100 Objekte.
-- `PRAGMA foreign_keys` ist auf der Testverbindung `1`.
-- `PatchField` unterscheidet fehlend, `null` und Wert. Das Update-DTO lehnt `id` und `readonly` ab.
+- GET list, GET according to UUID, POST, PATCH and DELETE.
+- POST 201 with UUID, fields and bool-default `true`.
+- Empty or only from spaces existing name and negative price result in 422.
+- `#[field(required)]` without `min_length`.
+- PATCH only with `name`, empty `{}`, empty name, negative price and unknown UUID.
+- DELETE 204 without body, following GET 404 and second DELETE 404.
+- Unreleased model: List, detail, PATCH and DELETE with 403 and Ferrioxid JSON.
+- Nullable `note`: missing key, value and JSON-`null`.
+- After more than 100 lines: `limit` 100, `truncated: true`, exactly 100 objects.
+- `PRAGMA foreign_keys` is on the test compound `1`.
+- `PatchField` distinguishes missing, `null` and value. The DTO rejects `id` and `readonly`.
 
-Die JSON-Struktur ist für beide Backends dieselbe, weil die Handler dialektunabhängig sind. Der PostgreSQL-Test führt denselben Ablauf aus, wurde in diesem Arbeitsgang aber nicht gegen einen Server ausgeführt.
+The JSON structure is the same for both backends because the handlers are dialect-independent. The PostgreSQL test runs the same sequence, but was not executed against a server in this operation.
 
-## CI (IST)
+## CI (Implemented)
 
-`.github/workflows/ci.yml` startet rustfmt, Clippy, `cargo test --workspace` und `cargo build --workspace` auf Linux und Windows. Dabei läuft der SQLite-Test. Ein separater Job startet PostgreSQL 16 und die beiden ignorierten Tests. Ein lokaler Workspace-Lauf ohne Server ist kein PostgreSQL-Nachweis.
+`.github/workflows/ci.yml` starts rustfmt, Clippy, `cargo test --workspace` and `cargo build --workspace` on Linux and Windows. The SQLite test is running. A separate job starts PostgreSQL 16 and the two ignored tests. A local workspace run without a server is not a PostgreSQL proof.
 
-Die Migrations-Tests prüfen gleiche Snapshots, deterministische Spaltenreihenfolge, doppelte Namen, unbekannte Versionen, neue Tabelle, neue Spalte, gelöschte Spalte, unterstützte Typ- und Default-Änderung, blockierte Typänderung, leeren Diff, riskante Änderung, Umbenennungsverweigerung, explizite Spalten- und Tabellenumbenennung, erfolgreichen und fehlgeschlagenen SQLite-Umbau, blockiertes `NOT NULL`, passende und abweichende Baseline, destruktive Ketten ohne Baseline, `reseal`, Erstanwendung, zweite Migration mit erhaltenen Zeilen, wiederholtes `up`, manipulierte Datei und vorhandene Tabellen ohne Historie. `tests/constraints.rs` prüft Unique inklusive `NULL` und zusammengesetzter Schlüssel, Index-Anlage, wiederholtes `up`, Index-Entfernen, gültige und ungültige Foreign Keys, `restrict`, `cascade`, `set_null`, abgelehntes `set_null` auf `NOT NULL`, Baseline mit Indizes, zurückgerollte Unique-Migration und blockierte Änderung der Löschregel. Eine Umbenennung einer indizierten Spalte benennt den Index in SQLite um. Der CLI-Test `migrate_make_up_and_status_use_a_temporary_sqlite_database` nutzt eine temporäre SQLite-Datei. `examples/myshop/tests/relations.rs` prüft Belongs-To, Has-Many, leere Kinder, optionales `None`, doppelten Kategorienamen, einen ungültigen Foreign Key und die eingecheckte Kette `0001` plus `0002`.
+The migration tests test the same snapshots, deterministic column order, duplicate names, unknown versions, new table, new column, deleted column, supported type and default change, blocked type change, empty diff, risky change, renaming refusal, explicit column and table renaming, successful and failed SQLite conversion, blocked `NOT NULL`, matching and deviating baseline, destructive chains without baseline, `reseal`, first application, second migration with received rows, repeated `up`, manipulated file and existing tables without history. `tests/constraints.rs` checks Unique including `NULL` and composite key, index attachment, repeated `up`, index removal, valid and invalid foreign keys, `restrict`, `cascade`, `set_null`, rejected `set_null` on `NOT NULL`, baseline with indices, rolled-back Unique migration and blocked erasure rule change. A renaming of an indexed column renames the index to SQLite. The `migrate_make_up_and_status_use_a_temporary_sqlite_database` CLI test uses a temporary SQLite file. `examples/myshop/tests/relations.rs` checks Belongs-To, Has-Many, empty children, optional `None`, duplicate category name, an invalid foreign key and the checked-in chain `0001` plus `0002`.
 
-PostgreSQL-Migrations- und HTTP-Tests bleiben ignoriert, solange kein Server läuft. Ein ignorierter Test zählt nicht als bestanden.
+PostgreSQL migration and HTTP tests remain ignored as long as no server is running. An ignored test does not count as passed.
 
-Die Qualitätsbefehle dieser Umsetzung stehen im Abschlussbericht des Arbeitsgangs. Ignoriert bleiben `postgres_http_roundtrip` und `postgres_migration_roundtrip`, solange kein PostgreSQL-Server läuft. Ein ignorierter Test ist kein Erfolg.
+The quality commands for this implementation are contained in the final report of the operation. `postgres_http_roundtrip` and `postgres_migration_roundtrip` remain ignored as long as no PostgreSQL server is running. An ignored test is not a success.
 
-## Geplanter Ausbau (SOLL)
+## Planned extension (planned)
 
-| Bereich | Tests | Akzeptanz |
+| Area | Tests | Acceptance criteria |
 |---|---|---|
-| Makros | Compile-Fail | Ungültige Attribute erzeugen klare Diagnostics |
-| Migrationen | Diff, Drift, Locks | Kein stiller Datenverlust |
-| DB | Transaktionen, Constraint-Mapping | Gleiche Fehlercodes auf beiden Backends |
-| Auth | 401/403, Session, CSRF | Kein Rechte-Bypass |
-| Admin und Deployment | UI und Container | Policy serverseitig, keine anonyme Produktion |
+| Macros | Compile-Fail |Invalid attributes create clear diagnostics|
+|Migrations| Diff, Drift, Locks |No silent data loss|
+| DB | Transactions, Constraint-Mapping |Same error codes on both backends|
+| Auth | 401/403, sessions and CSRF | No permission bypass |
+|Admin and Deployment|UI and containers|Policy on the server side, no anonymous production|
 
-## Berichtspflicht
+## Reporting requirements
 
-Ausgeführte Befehle, Exit-Codes und relevante Fehler nennen. Nicht ausgeführte Prüfungen als nicht ausgeführt kennzeichnen. Kein pauschales `allow(dead_code)`, wenn der Wert typsicher verwendet werden kann.
+Name executed commands, exit codes and relevant errors. Mark unexecuted tests as unexecuted. No blanket `allow(dead_code)` if the value can be used safely.
 
 ## Admin
 
-SQLite: `cargo test -p myshop --test admin_http` und `cargo test -p myshop --test admin_html`. `seed_file_database_when_requested` tut ohne `FERRUM_E2E_DATABASE` nichts. PostgreSQL-Admin-Tests gibt es nicht. Ein Browserlauf ist kein Ersatz für diese HTTP-Tests.
+SQLite: `cargo test -p myshop --test admin_http` and `cargo test -p myshop --test admin_html`. `seed_file_database_when_requested` does nothing without `FERRUM_E2E_DATABASE`. There are no PostgreSQL admin tests. A browser run is not a substitute for these HTTP tests.

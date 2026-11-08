@@ -1,12 +1,12 @@
-# Objektregeln
+# Object policies
 
-[Zur Übersicht](index.md) · [permissions.md](permissions.md)
+[Overview](index.md) · [permissions.md](permissions.md)
 
-## Zweck
+## Purpose
 
-Eine Objektregel entscheidet anhand von Benutzer und Datensatz. Sie ergänzt die Rollenprüfung und ersetzt sie nicht.
+An object policy decides access using the authenticated user and record. It supplements role-based permissions.
 
-## Architektur
+## Architecture
 
 ```rust
 pub trait ObjectPolicy<T> {
@@ -18,46 +18,46 @@ pub trait ObjectPolicy<T> {
 }
 ```
 
-Das Modell setzt `object_policy = true` und ein `permissions`-Attribut. Die Anwendung registriert die Regel mit `register_policy::<Model, Policy>()` statt mit `register`. `register` allein antwortet auf diesem Modell mit 403 und dem Hinweis, dass die Regel nicht gebunden ist.
+The model sets `object_policy = true` and a `permissions` attribute. The application registers the rule with `register_policy::<Model, Policy>()` instead of with `register`. `register` alone answers with 403 on this model and the indication that the rule is not bound.
 
-Die Regel läuft nach der Sitzungs- und Berechtigungsprüfung. Ein aktiver Superuser überspringt `can_read`, `can_update` und `can_delete`.
+The rule runs after the session and authorization check. An active superuser skips `can_read`, `can_update` and `can_delete`.
 
-## Zuständige Dateien
+## Responsible files
 
 - `crates/ferrioxid-auth/src/policy.rs`
 - `crates/ferrioxid-api/src/lib.rs`
 - `crates/ferrioxid-macros/src/lib.rs`
 
-## Öffentliche API
+## Public API
 
-`ferrioxid::auth::ObjectPolicy` und `App::register_policy`.
+`ferrioxid::auth::ObjectPolicy` and `App::register_policy`.
 
-Für GET, PATCH und DELETE lädt der Handler den Datensatz. Schlägt die Regel fehl, ist die Antwort 404, auch wenn die Zeile existiert. So bestätigt die Schnittstelle die Kennung nicht.
+For GET, PATCH and DELETE, the handler loads the record. If the rule fails, the answer is 404, even if the line exists. Thus, the interface does not confirm the identifier.
 
-POST prüft zuerst das Create-Recht und danach `can_create`. Die Methode erhält den Create-Typ. Der Standard ist `false`. Ein Superuser überspringt sie. Die Prüfung liegt vor dem INSERT. Eine Ablehnung ist 403 mit dem Detail `create policy rejected the record` und legt keine Zeile an.
+POST checks the Create right first and then `can_create`. The method gets the Create type. The standard is `false`. A superuser skips them. The test is before the INSERT. A rejection is 403 with the detail `create policy rejected the record` and does not create a line.
 
-## Datenmodell
+## Data model
 
-Die Regel hat keine eigene Tabelle. Sie sieht das bereits geladene Modell.
+Policies have no separate database table; they inspect the loaded model.
 
-## Sicherheitsmechanismen
+## Security mechanisms
 
-Listen, Zähler und Schreibzugriffe verwenden `QueryScope`. Der Standard ist `None`, also keine Zeile. `All` muss die Regel ausdrücklich liefern. Ein aktiver Superuser erhält `All`. Die SQL-Form steht in [query-scopes.md](query-scopes.md).
+Lists, counts and writes use `QueryScope`. The default is `None`, allowing no rows. A policy must return `All` explicitly to allow every row; active superusers receive `All` automatically. See [query-scopes.md](query-scopes.md) for SQL behavior.
 
-`register` und `register_policy` für denselben Pfad dürfen nicht beide aufgerufen werden. Axum behält sonst beide Routen.
+`register` and `register_policy` for the same path may not both be called. Axum keeps both routes.
 
-## Fehlerfälle
+## Error cases
 
-| Fall | Antwort |
+| Case | Response |
 |---|---|
-| Regel nicht gebunden | 403, `object policy is not bound` |
-| Scope ist `None` oder die Zeile gehört nicht dazu | leere Liste beziehungsweise 404 |
-| Datensatz fehlt oder `can_*` lehnt ab | 404 |
-| Create-Recht fehlt | 403 vor dem Schreiben |
-| `can_create` lehnt die Eingabe ab | 403, keine Zeile |
-| Pflichtfeld fehlt | 422 |
+|Rule not bound| 403, `object policy is not bound` |
+|Scope is `None` or the line does not belong to it|empty list or 404|
+|Dataset missing or `can_*` refuses| 404 |
+| Create permission is missing | 403 before writing |
+| `can_create` rejects the input | 403; no row is written |
+| Required field is missing | 422 |
 
-## Beispiel
+## Example
 
 ```rust
 struct OwnerPolicy;
@@ -80,16 +80,16 @@ impl ferrioxid::auth::ObjectPolicy<SecretNote> for OwnerPolicy {
 let app = App::new(db).with_auth(auth).register_policy::<SecretNote, OwnerPolicy>();
 ```
 
-myshop selbst bindet keine Objektregel. `InternalNote` nutzt nur Rollen, damit Liste und CRUD demonstrativ funktionieren.
+myshop itself does not bind any object rule. `InternalNote` only uses roles so that the list and CRUD work demonstratively.
 
 ## Tests
 
-`examples/myshop/tests/auth.rs` und `admin_http.rs` prüfen eigene Notizen, fremde Besitzer, fehlende Felder und den Superuser. Anonyme Demomodelle bleiben ohne Objektregel.
+`examples/myshop/tests/auth.rs` and `admin_http.rs` check their own notes, foreign owners, missing fields and the superuser. Anonymous demo models remain without an object rule.
 
-## Einschränkungen
+## Limitations
 
-Der Scope kennt `All`, `None` und einen Gleichheitsvergleich. Joins und Oder-Verknüpfungen sind nicht umgesetzt. `can_create` sieht die Eingabe, setzt die Besitzer-ID aber nicht selbst. Dieses serverseitige Setzen ist geplant. Feldweises Ausblenden fehlt.
+The scope knows `All`, `None` and an equality comparison. Joins and OR links are not implemented. `can_create` sees the input, but does not set the owner ID itself. This server-side setting is planned. Field-by-field masking is missing.
 
-## Geplante Erweiterungen
+## Planned extensions
 
-Scopes mit mehreren Spalten oder Joins sind geplant und nicht implementiert. Ein abgelehnter Einzeldatensatz bleibt 404. Superuser erhalten `All` und überspringen `can_*`. Test: `auth.rs` und `admin_http.rs`.
+Scopes with multiple columns or joins are planned and not implemented. A rejected individual record remains 404. Superusers get `All` and skip `can_*`. Test: `auth.rs` and `admin_http.rs`.

@@ -1,9 +1,9 @@
-# Admin-Oberfläche
+# Admin interface
 
-[Zur Übersicht](admin.md) · Nativ: [admin-native.md](admin-native.md) · Wechsel: [admin-migration-from-react.md](admin-migration-from-react.md)
+[Overview](admin.md) · Native: [admin-native.md](admin-native.md) · Migration: [admin-migration-from-react.md](admin-migration-from-react.md)
 
-Die Oberfläche ist HTML aus Tera. Sie liegt in `crates/ferrioxid-admin/templates` und `crates/ferrioxid-admin/static`. Ein Vite-Prozess und `apps/admin-ui` gibt es nicht mehr.
+The interface is HTML from Tera. It is located in `crates/ferrioxid-admin/templates` and `crates/ferrioxid-admin/static`. A Vite process and `apps/admin-ui` no longer exist.
 
-Der Browser lädt `/admin/assets/admin.css` und optional `/admin/assets/admin.js`. CRUD hängt nicht am Script. Sprache und Darstellung wechseln über `POST /admin/preferences`.
+The browser loads `/admin/assets/admin.css` and optionally `/admin/assets/admin.js`. CRUD is not attached to the script. Language and presentation change over `POST /admin/preferences`.
 
-Die frühere React-Anwendung ist in [admin-migration-from-react.md](admin-migration-from-react.md) beschrieben. Die JSON-API bleibt unter `/admin/api` und ist in [admin-backend.md](admin-backend.md) dokumentiert.
+The previous React application is described in [admin-migration-from-react.md](admin-migration-from-react.md). The JSON API remains under `/admin/api` and is documented in [admin-backend.md](admin-backend.md).

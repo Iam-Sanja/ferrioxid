@@ -1,10 +1,10 @@
-# Fehlercodes
+# Error codes
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-core/src/problem.rs`.
+[Overview](index.md) · **Implemented file:** `crates/ferrioxid-core/src/problem.rs`.
 
-## Vertrag
+## Contract
 
-`problem_json` baut die Antwort für API, Auth und Admin:
+`problem_json` builds the answer for API, Auth and Admin:
 
 ```json
 {
@@ -18,15 +18,15 @@
 }
 ```
 
-`field` fehlt, wenn kein `field:<name>:`-Präfix vorliegt. `name` darf nur Buchstaben, Ziffern und `_` enthalten und höchstens 64 Zeichen lang sein. `detail` bleibt für bestehende Clients erhalten. Die Statuscodes sind unverändert.
+`field` is missing if there is no `field:<name>:` prefix. `name` shall contain only letters, numbers and `_` and shall not exceed 64 characters in length. `detail` is retained for existing clients. The status codes are unchanged.
 
 ## Codes
 
-| Code | Bisheriger `detail` |
+| Code | Previous `detail` |
 |---|---|
 | `validation.required` | `Field is required`, `active is required`, `email and role are required` |
 | `validation.password` | `Password must contain 12 to 128 characters` |
-| `validation.field` | anderes `field:<name>:`-Präfix |
+| `validation.field` |Other `field:<name>:` prefix|
 | `auth.invalid_credentials` | `Invalid email or password` |
 | `auth.required` | `Authentication required` |
 | `auth.forbidden` | `Access denied` |
@@ -38,35 +38,35 @@
 | `resource.not_found` | `Resource not found`, `user was not found` |
 | `database.failed` | `Database operation failed` |
 | `server.error` | `Internal server error` |
-| `policy.unbound` | ungebundene Objektregel |
+| `policy.unbound` |Unbound object rule|
 | `policy.create_rejected` | `create policy rejected the record` |
 | `list.sort` | `sort field is not allowed` |
 | `list.filter` | `filter field is not allowed` |
 | `list.search` | `search is not available` |
-| `list.relation` | blockierte Fremdschlüsselauswahl |
-| `directory.self_deactivate` | eigenes Konto deaktivieren |
-| `directory.self_staff` | eigenen Staff-Zugang entziehen |
+| `list.relation` |blocked foreign key selection|
+| `directory.self_deactivate` |Deactivate your own account|
+| `directory.self_staff` |Remove own staff access|
 | `directory.superuser_blocked` | `superuser changes are blocked` |
-| `request.rejected` | verdächtiger oder zu langer Text, ersetzt durch `Request rejected` |
-| `request.failed` | sonstiger kurzer Text |
-| `validation.min_length` | Formularwert zu kurz |
-| `validation.max_length` | Formularwert zu lang |
-| `validation.email` | Formular-E-Mail ungültig |
-| `validation.url` | Formular-URL ungültig |
-| `validation.invalid_type` | Formularzahl oder Bool ungültig |
-| `validation.uuid` | Formular-UUID ungültig |
-| `validation.unknown_field` | zusätzliches Formularfeld |
-| `validation.mismatch` | Kreuzfeldregel |
-| `upload.too_large` | Upload über dem Limit, Status 413 |
-| `upload.type` | Inhalt nicht erlaubt, Status 415 |
-| `resource.not_found` | eigene Datei fehlt oder gehört jemand anderem, Status 404 |
+| `request.rejected` |suspicious or too long text, replaced by `Request rejected`|
+| `request.failed` |Other short text|
+| `validation.min_length` |Form value too short|
+| `validation.max_length` |Form value too long|
+| `validation.email` | Invalid form email address |
+| `validation.url` | Invalid form URL |
+| `validation.invalid_type` |Form number or Bool invalid|
+| `validation.uuid` |Form UUID invalid|
+| `validation.unknown_field` |Additional form field|
+| `validation.mismatch` | Cross-field validation rule |
+| `upload.too_large` |Upload above limit, status 413|
+| `upload.type` |Content not allowed, status 415|
+| `resource.not_found` |own file missing or belongs to someone else, status 404|
 
-Unbekannte Benutzer und falsche Passwörter erzeugen denselben Code und denselben `detail`. Texte mit `SELECT`, `INSERT`, `UPDATE`, `DELETE FROM`, `password_hash` oder `stack backtrace` sowie Texte über 240 Zeichen werden zu `request.rejected`.
+Unknown users and incorrect passwords generate the same code and the same `detail`. Texts with `SELECT`, `INSERT`, `UPDATE`, `DELETE FROM`, `password_hash` or `stack backtrace` as well as texts over 240 characters become `request.rejected`.
 
-## Frontend
+## Client handling
 
-`translateError` sucht `errors.<code>`. Fehlt die Übersetzung, wird `detail` gezeigt, sofern er nicht nach SQL oder Hash aussieht. Sonst gilt `errors.unknown`. Feldfehler bleiben am Eingabefeld, auch wenn der alte `field:<name>:`-Präfix noch im `detail` steht.
+Clients can map stable codes to localized messages and use `detail` as a fallback without displaying SQL or secrets. The former React client used `translateError` and `errors.<code>`; the native admin now localizes errors on the server. Field errors retain their association even when `detail` contains the legacy `field:<name>:` prefix.
 
 ## Tests
 
-`crates/ferrioxid-core/src/problem.rs` prüft gleiche Anmeldungsfehler, den Feldpräfix und unterdrücktes SQL. Die bestehenden Auth- und Admin-Tests lesen weiterhin `detail`.
+`crates/ferrioxid-core/src/problem.rs` checks the same login error, field prefix and suppressed SQL. The existing Auth and Admin tests continue to read `detail`.

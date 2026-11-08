@@ -1,59 +1,64 @@
-# Ferrioxid – Dokumentationsportal
+# Ferrioxid documentation portal
 
-**Projektstand:** Funktionsstand v0.28 gruppiert den nativen Admin nach Apps: [admin-navigation.md](admin-navigation.md). Funktionsstand v0.27.1 ergänzt Anwendungs-Worker und verdeckte Job-Payloads: [workers.md](workers.md), [job-security.md](job-security.md). Funktionsstand v0.27 ergänzt Hintergrundjobs: [jobs.md](jobs.md), [workers.md](workers.md), [job-retries.md](job-retries.md), [job-security.md](job-security.md), [job-mail-integration.md](job-mail-integration.md). Funktionsstand v0.26 ergänzt Modellfelder: [models.md](models.md), [model-components.md](model-components.md), [model-timestamps.md](model-timestamps.md), [model-soft-delete.md](model-soft-delete.md), [app-lifecycle.md](app-lifecycle.md). Funktionsstand v0.25 ergänzt Apps: [apps.md](apps.md), [app-registry.md](app-registry.md), [app-migrations.md](app-migrations.md), [reusable-apps.md](reusable-apps.md), [create-app.md](create-app.md). Funktionsstand v0.24 ergänzt Settings, benannte Routen und Views: [settings.md](settings.md), [custom-settings.md](custom-settings.md), [urls.md](urls.md), [routing.md](routing.md), [views.md](views.md), [project-structure.md](project-structure.md). Funktionsstand v0.23 bleibt gültig. E-Mail: [mail.md](mail.md), [mail-smtp.md](mail-smtp.md), [mail-security.md](mail-security.md). Passwort-Reset: [password-reset.md](password-reset.md). Hinweise: [notifications.md](notifications.md). Funktionsstand v0.22 bleibt gültig. Erweiterung: [admin-extension-api.md](admin-extension-api.md), [admin-custom-views.md](admin-custom-views.md), [admin-custom-filters.md](admin-custom-filters.md), [admin-custom-widgets.md](admin-custom-widgets.md). Diagnose: [migration-diagnostics.md](migration-diagnostics.md). Upgrade: [project-upgrade.md](project-upgrade.md). Manifest: [project-manifest.md](project-manifest.md). Legacy: [legacy-projects.md](legacy-projects.md). v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Der Admin ist serverseitiges HTML: [admin-native.md](admin-native.md). Transaktionen: [transactions.md](transactions.md). Verzeichnis-Audit: [admin-directory-audit.md](admin-directory-audit.md). Eltern-Kind-Formulare: [admin-transactional-inlines.md](admin-transactional-inlines.md). Entwürfe, Inlines, Sammelaktionen und Historie: [admin-form-drafts.md](admin-form-drafts.md), [admin-inlines.md](admin-inlines.md), [admin-bulk-actions.md](admin-bulk-actions.md), [admin-audit-log.md](admin-audit-log.md), [admin-custom-actions.md](admin-custom-actions.md). Datum und Uhrzeit: [date-time-types.md](date-time-types.md). SQLite ist die lokale Standarddatenbank, PostgreSQL das optionale Backend. **Dokumentationssprache:** Deutsch
+Ferrioxid is an experimental Rust framework with a model-first data layer, versioned migrations, authentication, a native admin, typed apps and background jobs. The current feature milestone is v0.28; the Cargo package version remains `0.1.0`. SQLite is the local default, and PostgreSQL is the optional server backend. The documentation is in English; the admin supports German and English.
 
-## Wie dieses Handbuch zu lesen ist
+## How to read this manual
 
-Jedes Dokument trennt **IST** von **SOLL (Entwurf)**. SOLL bezeichnet eine Architekturentscheidung oder einen Vorschlag, **keine implementierte Funktion**. Beispiel-Code und CLI-Aufrufe in SOLL-Abschnitten sind nicht ausführbar, solange die Funktion nicht implementiert wurde. Authentifizierung ist v0.7. Der automatische Admin ist v0.8. Query-Scopes, stabiles CSRF und eingebettete Admin-Assets sind v0.8.1. Settings, Tera-Seiten und die vorbereitete Zweisprachigkeit sind v0.10: [settings.md](settings.md), [templates.md](templates.md), [i18n.md](i18n.md). Vollständige Admin-Übersetzung, Fehlercodes und Branding sind v0.11: [localization.md](localization.md), [error-codes.md](error-codes.md), [admin-directory.md](admin-directory.md). Create-Policies, das Admin-Feature und die Entwickler-CLI sind v0.9: [project-generator.md](project-generator.md), [project-templates.md](project-templates.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md). Formulare, Staticfiles, Uploads und Middleware sind v0.12: [forms.md](forms.md), [forms-validation.md](forms-validation.md), [staticfiles.md](staticfiles.md), [storage.md](storage.md), [uploads.md](uploads.md), [middleware.md](middleware.md), [request-lifecycle.md](request-lifecycle.md). Die Cargo-Version bleibt `0.1.0`.
+**Implemented** describes behavior present in the source. **Planned** describes a proposal or limit to be addressed later, not a completed feature. Code in planned sections is illustrative unless the page explicitly identifies an implemented API. Feature milestone numbers are separate from package versions.
 
-**Zentrale Regel:** Rust-Struct → `FerrioxidModel`-Makro → typisierte Repository-Implementierung und Modelldeskriptor → explizite Registrierung → HTTP-Routen. Schemaänderungen laufen über die Migrations-Engine. `myshop --bootstrap` ist Legacy.
+The main flow is: Rust model → `FerrioxidModel` metadata and repository methods → explicit registration → HTTP routes. Schema changes use the migration engine. `myshop --bootstrap` is a legacy compatibility option and does not create a schema.
 
-## Teilbereiche und ihre Dokumente
+## Documentation by topic
 
-| Modul | Zustand | Dokument | Kernverantwortung |
+| Topic | Status | Pages | Responsibility |
 |---|---|---|---|
-| Gesamtarchitektur | IST + SOLL | [architecture.md](architecture.md) | Grenzen, Abhängigkeiten und Datenfluss |
-| Öffentliche API (`ferrioxid`) | IST | [facade.md](facade.md) | Re-Exports, Prelude, Stabilitätsgrenze |
-| `ferrioxid-core` | IST + SOLL | [core.md](core.md) | Traits, Metadaten, Fehler |
-| `ferrioxid-macros` | IST + SOLL | [macros.md](macros.md) | Parsing, Validierung, Codegenerierung |
-| `ferrioxid-db` | IST + SOLL | [database.md](database.md) | Typisierte Repositories, Connection, SQL |
-| `ferrioxid-api` | IST + SOLL | [api.md](api.md) | Axum-Routing, DTOs, Fehlerbehandlung |
-| `ferrioxid-cli` | IST | [cli.md](cli.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generator, Diagnose, Upgrade, Entwicklungsserver |
-| `myshop` | IST | [example-myshop.md](example-myshop.md) | Integrationsbeispiel und Start |
-| Konfiguration | IST v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrum.toml`, Umgebung, eigene Abschnitte |
-| URLs und Views | IST v0.24 | [urls.md](urls.md), [routing.md](routing.md), [views.md](views.md), [project-structure.md](project-structure.md) | Benannte Axum-Routen, Antworten, Projektlayout |
-| Jobs | IST v0.27.1 | [jobs.md](jobs.md), [workers.md](workers.md), [job-retries.md](job-retries.md), [job-security.md](job-security.md), [job-mail-integration.md](job-mail-integration.md) | Queue, Anwendungs-Worker, verdeckte Payload, Mail ohne Reset-Token |
-| Apps | IST v0.26 | [apps.md](apps.md), [app-registry.md](app-registry.md), [app-migrations.md](app-migrations.md), [app-lifecycle.md](app-lifecycle.md), [reusable-apps.md](reusable-apps.md), [create-app.md](create-app.md) | Typisierte Registrierung, geprüfter Start, App-Migrationen |
-| Modelle | IST v0.26 | [models.md](models.md), [model-components.md](model-components.md), [model-timestamps.md](model-timestamps.md), [model-soft-delete.md](model-soft-delete.md) | Eine Model-Definition, flache Feldgruppen, verwaltete Zeitstempel |
-| Sicherheit | IST + SOLL | [security.md](security.md) | Access Defaults, Bedrohungen, Checks |
-| Datenvalidierung | IST + SOLL | [validation.md](validation.md) | Regeln und Fehlersemantik |
-| Tests & CI | IST + SOLL | [testing.md](testing.md) | SQLite-HTTP im Workspace-Test, PostgreSQL optional |
-| Migrationen | IST, mit benannten Grenzen | [migrations.md](migrations.md) | Snapshots, Constraints, explizite Umbenennung, geprüfter SQLite-Umbau, Baseline |
-| Constraints und Indizes | IST | [constraints.md](constraints.md) | Unique, Index, Foreign Key, SQL und Fehlercodes |
-| Modellbeziehungen | IST, Lazy Loading | [relations.md](relations.md) | Belongs-To, Has-Many, N+1 |
-| Auth & Rechte | IST | [auth.md](auth.md), [password-reset.md](password-reset.md), [sessions.md](sessions.md), [permissions.md](permissions.md), [policies.md](policies.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md) | Benutzer, Sitzungen, Reset, RBAC, Objektregeln, Scopes |
-| E-Mail | IST v0.23 | [mail.md](mail.md), [mail-smtp.md](mail-smtp.md), [notifications.md](notifications.md), [mail-security.md](mail-security.md) | Versand, Vorlagen, Hinweise, keine Zustellgarantie |
-| Formulare | IST v0.12 | [forms.md](forms.md), [forms-validation.md](forms-validation.md) | Typisierte Felder, Tera-HTML, gemeinsamer Regelkern |
-| Staticfiles | IST v0.12 | [staticfiles.md](staticfiles.md) | Projekt-CSS und JavaScript, getrennt vom Admin |
-| Speicher und Uploads | IST v0.12, S3 geplant | [storage.md](storage.md), [uploads.md](uploads.md) | Lokaler Speicher, private Dateien |
-| Middleware | IST v0.12 | [middleware.md](middleware.md), [request-lifecycle.md](request-lifecycle.md) | Request-ID, Log, Limits, Header |
-| Admin | IST v0.22 | [admin.md](admin.md), [admin-native.md](admin-native.md), [admin-extension-api.md](admin-extension-api.md), [transactions.md](transactions.md), [admin-directory-audit.md](admin-directory-audit.md), [admin-transactional-inlines.md](admin-transactional-inlines.md), [admin-form-drafts.md](admin-form-drafts.md), [admin-inlines.md](admin-inlines.md), [admin-bulk-actions.md](admin-bulk-actions.md), [admin-audit-log.md](admin-audit-log.md), [admin-custom-actions.md](admin-custom-actions.md), [admin-django-parity.md](admin-django-parity.md) | HTML-Oberfläche, JSON-API, Rechte, Entwürfe, Inlines, Transaktionen, Sammelaktionen, Historie, registrierte Erweiterungen |
-| OpenAPI | **nur SOLL** | [openapi.md](openapi.md) | Dokumentation aus DTOs |
-| Erweiterungen | **nur SOLL** | [extensions.md](extensions.md) | Hooks, Plugin-Grenzen |
-| Deployment | IST SQLite, optionales Docker-PostgreSQL, SOLL App | [deployment.md](deployment.md) | Lokaler Start, Proxy, Produktion |
-| Umsetzungsprozess | IST + SOLL | [implementation-guide.md](implementation-guide.md) | Arbeitsaufträge, Abnahme, ADR |
-| Roadmap | Planung | [roadmap.md](roadmap.md) | Meilensteine und Reihenfolge |
+| Architecture | Implemented and planned | [architecture.md](architecture.md) | Module boundaries, dependencies and runtime data flow |
+| Public facade | Implemented | [facade.md](facade.md) | Re-exports, prelude and stability limits |
+| Core | Implemented and planned | [core.md](core.md) | Traits, metadata and shared errors |
+| Macros | Implemented and planned | [macros.md](macros.md) | Parsing, validation and code generation |
+| Database | Implemented and planned | [database.md](database.md) | Typed repositories, connections and SQL |
+| CLI | Implemented | [cli.md](cli.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generation, diagnostics, upgrades, builds and development server |
+| Example | Implemented | [example-myshop.md](example-myshop.md) | The myshop integration example |
+| Settings | Implemented, v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrum.toml`, environment overrides and custom sections |
+| URLs and views | Implemented, v0.24 | [urls.md](urls.md), [routing.md](routing.md), [views.md](views.md), [templates.md](templates.md), [project-structure.md](project-structure.md) | Named Axum routes, responses, templates and project layout |
+| Jobs | Implemented, v0.27.1 | [jobs.md](jobs.md), [workers.md](workers.md), [job-retries.md](job-retries.md), [job-security.md](job-security.md), [job-mail-integration.md](job-mail-integration.md) | Persistent queue, application workers, hidden payloads and mail without reset tokens |
+| Apps | Implemented, v0.26 | [apps.md](apps.md), [app-registry.md](app-registry.md), [app-migrations.md](app-migrations.md), [app-lifecycle.md](app-lifecycle.md), [reusable-apps.md](reusable-apps.md), [create-app.md](create-app.md) | Typed registration, startup checks and app migrations |
+| Models | Implemented, v0.26 | [models.md](models.md), [model-components.md](model-components.md), [model-timestamps.md](model-timestamps.md), [model-soft-delete.md](model-soft-delete.md) | Model definitions, reusable fields, managed timestamps and explicit limits |
+| Security | Implemented and planned | [security.md](security.md) | Access defaults, threats, safeguards and open risks |
+| Validation | Implemented and planned | [validation.md](validation.md) | Field rules and error semantics |
+| Tests and CI | Implemented and planned | [testing.md](testing.md) | Workspace checks, SQLite tests and separate PostgreSQL tests |
+| Migrations | Implemented with stated limits | [migrations.md](migrations.md) | Snapshots, diffs, explicit renames, checked rebuilds and baseline |
+| Constraints | Implemented | [constraints.md](constraints.md) | Unique constraints, indexes, foreign keys and error codes |
+| Relations | Implemented, lazy loading | [relations.md](relations.md) | Belongs-to, has-many and N+1 query limits |
+| Auth and permissions | Implemented | [auth.md](auth.md), [password-reset.md](password-reset.md), [sessions.md](sessions.md), [permissions.md](permissions.md), [policies.md](policies.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md) | Users, sessions, reset, role permissions, object policies and query scopes |
+| Email | Implemented, v0.23 | [mail.md](mail.md), [mail-smtp.md](mail-smtp.md), [notifications.md](notifications.md), [mail-security.md](mail-security.md) | Transports, templates, typed notices and delivery limits |
+| Forms | Implemented, v0.12 | [forms.md](forms.md), [forms-validation.md](forms-validation.md) | Typed fields, Tera HTML and shared validation rules |
+| Static files | Implemented, v0.12 | [staticfiles.md](staticfiles.md) | Application CSS and JavaScript, separate from admin assets |
+| Storage and uploads | Local storage implemented; S3 planned | [storage.md](storage.md), [uploads.md](uploads.md) | Local files, metadata and private downloads |
+| Middleware | Implemented, v0.12 | [middleware.md](middleware.md), [request-lifecycle.md](request-lifecycle.md) | Request IDs, logging, limits and security headers |
+| Admin | Implemented through v0.28 | [admin.md](admin.md), [admin-native.md](admin-native.md), [admin-navigation.md](admin-navigation.md), [admin-components.md](admin-components.md), [admin-extension-api.md](admin-extension-api.md), [transactions.md](transactions.md), [admin-directory-audit.md](admin-directory-audit.md), [admin-transactional-inlines.md](admin-transactional-inlines.md), [admin-form-drafts.md](admin-form-drafts.md), [admin-inlines.md](admin-inlines.md), [admin-bulk-actions.md](admin-bulk-actions.md), [admin-audit-log.md](admin-audit-log.md), [admin-custom-actions.md](admin-custom-actions.md), [admin-django-parity.md](admin-django-parity.md) | Native HTML, JSON API, permissions, navigation, forms, transactions, actions, history and extensions |
+| OpenAPI | Planned only | [openapi.md](openapi.md) | API documentation generated from metadata and DTOs |
+| General plugin hooks | Planned only | [extensions.md](extensions.md) | Extension points beyond the implemented admin API |
+| Deployment | Local SQLite and optional Docker PostgreSQL implemented; app container planned | [deployment.md](deployment.md) | Local startup, proxy boundaries and production requirements |
+| Implementation process | Implemented and planned | [implementation-guide.md](implementation-guide.md) | Change scope, acceptance checks and architecture decisions |
+| Roadmap | Planning | [roadmap.md](roadmap.md) | Milestones and remaining work |
 
-## Verbindliche Begriffe
+## Terms
 
-- **Model:** Entwicklerseitige, serialisierbare Rust-Struct mit `#[derive(FerrioxidModel)]`.
-- **Deskriptor:** `ModelDescriptor` mit Name, Tabelle, API-Pfad, `allow_anonymous`, `permission` und `requires_object_policy`. Spalten stehen zusätzlich in `ColumnSpec`.
-- **Repository:** Generierte typisierte Methoden `list`, `get`, `create`, `update` und `delete`. `update` nimmt `{Model}Update` mit `PatchField<T>`.
-- **Migration:** versionierte Datei unter `migrations/`, angewendet über `ferrioxid migrate up`.
-- **Bootstrap:** Legacy-Befehl ohne Schemaänderung. `App::bootstrap_schema` bleibt ein Testhelfer für leere Datenbanken ohne Historie.
-- **Registrierung:** `App::new(db).register::<Product>()`, explizit und typisiert.
-- **SOLL:** Geplante Funktion; wird nicht als fertiges Feature kommuniziert.
+- **Model:** a serializable Rust struct using `#[derive(FerrioxidModel)]`.
+- **Descriptor:** `ModelDescriptor` describes the model name, table, API path, `allow_anonymous`, `permission` and `requires_object_policy`; `ColumnSpec` describes columns.
+- **Repository:** generated typed `list`, `get`, `create`, `update` and `delete` methods. `update` accepts `{Model}Update` with `PatchField<T>`.
+- **Migration:** a versioned file under `migrations/`, applied with `ferrioxid migrate up`.
+- **Bootstrap:** the legacy command makes no schema changes. `App::bootstrap_schema` is a test helper for empty databases without migration history.
+- **Registration:** explicit typed registration such as `App::new(db).register::<Product>()`.
+- **Planned:** work that must not be described as an available feature.
 
-## Verifikationsbasis
+## Verification sources
 
-Dateien: `crates/*/src/*`, `examples/myshop/src/*`, `examples/myshop/tests/postgres_api.rs`, `Cargo.toml`, `.github/workflows/ci.yml`, `compose.yaml`. Der SQLite-HTTP-Test gehört zu `cargo test --workspace`. Der PostgreSQL-Integrationstest bleibt ignoriert und gilt ohne laufenden Server nicht als bestanden.
+Implementation evidence comes from `crates/*/src/*`, `examples/myshop/src/*`, `examples/myshop/tests/postgres_api.rs`, `Cargo.toml`, `.github/workflows/ci.yml` and `compose.yaml`. The workspace test run includes SQLite HTTP tests. Ignored PostgreSQL tests count as passed only when actually run against a disposable server.
+
+## Maintainer records
+
+- [GitHub maintenance](github-maintenance.md)
+- [Historical rename plan and compatibility policy](ferrioxid-rename-plan.md)
+- [Completed translation review](translation-review.md)

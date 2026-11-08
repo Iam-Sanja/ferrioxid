@@ -9,27 +9,30 @@ SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js
 - Governance: [GOVERNANCE.md](GOVERNANCE.md)
 - Conduct: [CODE_OF_CONDUCT.md](CODE_OF_CONDUCT.md)
 - GitHub settings that are not stored in Git: [docs/github-maintenance.md](docs/github-maintenance.md)
-- Product documentation, currently German: [docs/index.md](docs/index.md)
+- Developer documentation: [docs/index.md](docs/index.md)
 
 `LICENSE-MIT` and the workspace `Cargo.toml` currently identify the code as MIT. A dual `MIT OR Apache-2.0` license has not been adopted.
 
-The following paragraph is the German milestone record.
+The milestone numbers below describe implemented features; the Cargo package version remains `0.1.0`.
 
-Funktionsstand v0.27.1 startet Anwendungsjobs über `WorkerHost` und `src/bin/worker.rs`. `ferrioxid jobs inspect` verbirgt die Payload, bis `--show-payload` gesetzt ist. Beschreibung: `docs/workers.md` und `docs/job-security.md`. Funktionsstand v0.27 ergänzt persistente Hintergrundjobs ohne Redis. Beschreibung: `docs/jobs.md` und `docs/workers.md`. Funktionsstand v0.26 ergänzt wiederverwendbare Modellfelder und prüft installierte Apps vor dem Start. Beschreibung: `docs/models.md`, `docs/model-components.md`, `docs/model-timestamps.md` und `docs/app-lifecycle.md`. Soft Delete ist nicht enthalten. Funktionsstand v0.25 ergänzt typisierte Apps über `App::install`. Beschreibung: `docs/apps.md`, `docs/app-registry.md`, `docs/app-migrations.md`, `docs/reusable-apps.md` und `docs/create-app.md`. Eine bestehende `main.rs` muss dafür nicht umgeschrieben werden. `ferrum.toml` lädt keine App-Crate. Funktionsstand v0.24 ergänzt typisierte Settings, benannte Axum-Routen und View-Helfer. Die Beschreibung steht in `docs/settings.md`, `docs/urls.md` und `docs/views.md`. Bestehende `main.rs`-Dateien müssen dafür nicht umgeschrieben werden. Funktionsstand v0.23 bleibt gültig. E-Mail und Passwort-Reset beschreibt `docs/mail.md` und `docs/password-reset.md`. Der öffentliche Reset liegt unter `/auth/password-reset` und verlangt kein Staff. Ohne aktives Mail-Backend wird keine E-Mail versendet. Funktionsstand v0.22 bleibt gültig. Eigene Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen registriert `AdminRegistry` in `ferrioxid::admin`. Die Beschreibung steht in `docs/admin-extension-api.md`. `ferrioxid migrate status`, `check`, `doctor` und `dev` zeigen ausstehende Auth- und App-Migrationen, ohne sie anzuwenden. `ferrioxid upgrade` legt höchstens ein fehlendes Legacy-Manifest an und überschreibt keine Projektdatei. Details: `docs/migration-diagnostics.md` und `docs/project-upgrade.md`. v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Verzeichnisänderungen und ihr Audit sind eine Transaktion. Ein `admin_inline` mit `|form` speichert Elternobjekt und Kinder gemeinsam. Details: `docs/transactions.md`. Der Admin ist serverseitiges HTML mit Axum und Tera. React, Vite und Node.js sind dafür nicht nötig. Die Beschreibung steht in `docs/admin-native.md`. Die Fläche folgt `DESIGN.md` und `docs/admin-design-system.md`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware bleiben aus v0.12. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
+Milestone v0.28 groups the native admin by app. v0.27.1 runs application jobs through `WorkerHost` and `src/bin/worker.rs`; `ferrioxid jobs inspect` hides payloads unless `--show-payload` is supplied. v0.27 adds persistent jobs without Redis. v0.26 adds reusable model fields and validates installed apps before startup; soft delete is not implemented. v0.25 adds typed apps through `App::install` without loading Rust crates from `ferrum.toml`. v0.24 adds typed settings, named Axum routes and view helpers. v0.23 adds email and public password reset at `/auth/password-reset`; mail remains disabled by default. v0.22 adds custom admin pages, actions, filters, widgets and templates through `AdminRegistry` in `ferrioxid::admin`. Migration diagnostics report pending changes without applying them, and `ferrioxid upgrade` creates only a missing legacy manifest. Model and directory changes share transactions with their audits; `admin_inline` with `|form` saves parent and child records together. The admin uses Axum and Tera, supports German and English, and exposes branding through `GET /admin/api/config`. Forms, static files, local uploads and middleware remain available. Runtime settings stay in `ferrum.toml`; production `FERRUM_CSRF_SECRET` values contain 64 hex characters. See the [documentation portal](docs/index.md) for each feature and its limits.
 
-Ein neues Projekt außerhalb dieses Workspaces:
+Create a standalone project outside the framework workspace. Start in the Ferrioxid repository; the CLI is installed from this checkout because the crates are not published:
 
 ```powershell
-cargo run -p ferrioxid-cli -- new demo --template fullstack --ferrioxid-path .
-cd demo
-cargo run --manifest-path ..\Cargo.toml -p ferrioxid-cli -- migrate up
-cargo run --manifest-path ..\Cargo.toml -p ferrioxid-cli -- admin create-user --email admin@example.com --staff --superuser
-cargo run --manifest-path ..\Cargo.toml -p ferrioxid-cli -- dev
+cargo install --path crates/ferrioxid-cli
+$ferrioxidRepo = (Get-Location).Path
+Set-Location ..
+ferrioxid new demo --template fullstack --ferrioxid-path $ferrioxidRepo
+Set-Location demo
+ferrioxid migrate up
+ferrioxid admin create-user --email admin@example.com --staff --superuser
+ferrioxid dev
 ```
 
-Nach `cargo install --path crates/ferrioxid-cli` heißen dieselben Schritte `ferrioxid migrate up`, `ferrioxid admin create-user` und `ferrioxid dev`. Das Passwort wird abgefragt. `FERRUM_PASSWORD` ist nur für Automationen und hat keinen Standardwert.
+The generated project is a sibling of the framework repository, so Cargo does not treat it as an unlisted workspace member. The CLI prompts for a password. `FERRUM_PASSWORD` is an optional automation input with no default value.
 
-Authentifizierung, Sitzungen und Rollen beschreibt `docs/auth.md`. Geschützte myshop-Ressource ist `/api/v1/internal_notes`. Produkte und Kategorien bleiben ausdrücklich öffentliche Demo-Routen.
+[Authentication, sessions and roles](docs/auth.md) protect `/api/v1/internal_notes` in myshop. Products and categories are explicitly public demo routes.
 
 > This is **not** a complete Django replacement. The current milestone covers a Rust derive macro, shared model metadata, one SeaORM/SeaQuery repository for SQLite and PostgreSQL, and generated list, detail, create, patch and delete routes.
 
@@ -40,13 +43,13 @@ SQLite is the default local database. Docker and PostgreSQL are optional.
 Prerequisites: current stable Rust and Cargo. No database server is required.
 
 ```powershell
-cargo run -p myshop -- --bootstrap
+cargo run -p ferrioxid-cli -- migrate up
 cargo run -p myshop
 ```
 
 Unset `DATABASE_URL` uses `sqlite://db.sqlite3?mode=rwc` in the process working directory. The file is created on first connect and is gitignored.
 
-Create and update the schema with migrations, from the workspace root:
+The following commands are a migration-command reference, not a setup script. On a fresh checkout, use the quick start above: `migrate up` is sufficient. Create, rename or baseline migrations only when preparing that specific schema change. The user-creation command below demonstrates model privileges; add `--staff` when the account must also open the admin.
 
 ```powershell
 cargo run -p ferrioxid-cli -- migrate make initial
@@ -82,8 +85,8 @@ curl http://127.0.0.1:3000/api/v1/products
 - `crates/ferrioxid-db/src/sql.rs` — SeaQuery DDL and CRUD for SQLite and PostgreSQL
 - `crates/ferrioxid-api/src/lib.rs` — route registration, handler adapters and bootstrap
 - `crates/ferrioxid/src/lib.rs` — public framework API
-- `crates/ferrioxid-cli/src/main.rs` — experimental informational `ferrioxid doctor` CLI
-- `crates/ferrioxid-admin/` — Admin-API, HTML-Oberfläche, Vorlagen und CSS
+- `crates/ferrioxid-cli/src/main.rs` — project generation, diagnostics, migrations and developer commands
+- `crates/ferrioxid-admin/` — Admin API, HTML interface, templates and CSS
 
 ## Model example
 
@@ -129,13 +132,13 @@ store the original text.
 
 ## Important security notice
 
-Ferrioxid `0.1.0` is pre-release. Do not expose a demo to the public internet. Models deny access unless `allow_anonymous = true`, and that flag is only appropriate for a local demo. Authentication, sessions, CSRF for cookie-authenticated writes, and the server-rendered admin exist and are described in `docs/auth.md` and `docs/admin.md`. The example binds to `127.0.0.1` by default. The sample PostgreSQL password is for local development only. Report vulnerabilities through [SECURITY.md](SECURITY.md), not through a public issue.
+Ferrioxid `0.1.0` is pre-release. Do not expose a demo to the public internet. Models are private by default; protected APIs require configured authentication and permissions. Use `allow_anonymous = true` only for intentional public routes such as local demos. Authentication, sessions, CSRF protection for cookie-authenticated writes and the server-rendered admin are described in [docs/auth.md](docs/auth.md) and [docs/admin.md](docs/admin.md). The example binds to `127.0.0.1` by default. Sample PostgreSQL credentials are for local development only. Report vulnerabilities through [SECURITY.md](SECURITY.md).
 
 ## Scope and limitations
 
-**Included in source:** workspace; macros for `Uuid`, `String`, `i64`, `bool` and `Option` of those types except a nullable `id`; typed create and update DTOs; `PatchField`; trimmed string validation; Boolean defaults rendered per dialect; generated list, read-by-UUID, create, patch and delete; single-column and composite unique constraints; secondary indexes; single-column foreign keys with `restrict`, `cascade` and `set_null`; lazy belongs-to and has-many methods; SeaQuery SQL for SQLite and PostgreSQL; versioned migrations for those objects, explicit renames, checked SQLite rebuilds, explicit destructive drops, and a confirm-only SQLite baseline; SQLite migration, constraint and HTTP tests in `cargo test --workspace`; optional Docker Compose PostgreSQL; the myshop category/product example and CLI.
+**Included in source:** typed models and create/update DTOs; `Uuid`, `String`, `i64`, `bool`, `NaiveDate`, `NaiveTime` and `DateTime<Utc>` fields with supported optional forms; `PatchField`; validation; SQLite and PostgreSQL repositories; generated list, detail, create, patch and delete endpoints; unique constraints, indexes and single-column foreign keys; lazy belongs-to and has-many relations; versioned migrations, explicit renames, checked SQLite rebuilds, destructive-change confirmation and SQLite baseline; authentication, sessions, role permissions, object policies and password reset; the native admin; settings, named routes, views and templates; forms, static files, local storage, middleware, email, jobs, workers and typed apps. See individual documentation pages for limits and test coverage.
 
-**Not included:** many-to-many, eager or batch loading, changing a foreign key on an existing column, heuristic renames, `migrate down`, PostgreSQL baseline, admin UI, auth, RBAC, OpenAPI, pagination beyond 100 rows, optimistic version columns, `DateTime` or JSON columns, MySQL, and a Dockerfile for the API. The ignored PostgreSQL tests are not part of the default run. Do not assume otherwise.
+**Not included:** many-to-many, eager or batch loading, changing foreign keys on existing columns, inferred renames, `migrate down`, PostgreSQL baseline, OpenAPI generation, cursor/offset pagination for generated public REST lists, optimistic version columns, JSON model columns, MySQL, S3, virus scanning, soft delete or an API Dockerfile. The admin has its own paginated lists. PostgreSQL tests are ignored in the default local test run and require a disposable server when run explicitly.
 
 ## Development checks
 
@@ -148,13 +151,13 @@ cargo build --workspace
 
 Contributor workflow, branch names, and migration rules are in [CONTRIBUTING.md](CONTRIBUTING.md). A warm local cache may add `--offline`. GitHub Actions must be allowed to download dependencies.
 
-## Ausführliche Entwicklerdokumentation (Deutsch)
+## Developer documentation
 
-**[Dokumentationsportal: docs/index.md](docs/index.md)** – Architektur, Modulgrenzen, Datenflüsse, Codegenerierung, Datenbank, API, CLI, Konfiguration, Validierung, Sicherheit, Tests und Beispielanwendung. Constraints stehen in [docs/constraints.md](docs/constraints.md), Beziehungen in [docs/relations.md](docs/relations.md), Migrationen in [docs/migrations.md](docs/migrations.md). Authentifizierung, Admin, OpenAPI, Plugins und Deployment bleiben Entwürfe, soweit die jeweilige Seite das so ausweist.
+**[Documentation portal: docs/index.md](docs/index.md)** — Architecture, models, database, APIs, CLI, settings, validation, security, tests and examples. [Constraints](docs/constraints.md), [relations](docs/relations.md) and [migrations](docs/migrations.md) describe the implemented data layer. Authentication and the native admin are implemented. OpenAPI, general plugin hooks and a production app container remain planned where their pages say so.
 
-Jede Seite trennt **IST** von **SOLL (nur geplant)**. Der Funktionsstand dieser Constraints und Beziehungen ist v0.6. Die Cargo-Version bleibt `0.1.0`. Änderungen am Framework müssen auch in der passenden Moduldokumentation nachgetragen werden. Der [Implementierungsleitfaden](docs/implementation-guide.md) definiert dafür einen verbindlichen Änderungs- und Testprozess.
+Each page distinguishes **Implemented** behavior from **Planned** work. Feature milestones are separate from the Cargo version `0.1.0`. Update the relevant module documentation whenever framework behavior changes. The [implementation guide](docs/implementation-guide.md) defines the change and validation workflow.
 
-Siehe außerdem [Architektur](docs/architecture.md), [Roadmap](docs/roadmap.md) und [Tests](docs/testing.md).
+See also [Architecture](docs/architecture.md), [Roadmap](docs/roadmap.md) and [Tests](docs/testing.md).
 
 ## API list response
 
@@ -183,6 +186,6 @@ cargo test -p myshop --test postgres_api -- --ignored --nocapture
 
 The ignored test **requires `DATABASE_URL`** and drops its fixed test tables. Use only a disposable database. `cargo test --workspace` already runs the same HTTP flow against SQLite memory and does not need this step.
 
-`ferrioxid doctor` prints setup hints only. `.env.example` is not loaded automatically.
+`ferrioxid doctor` checks tools, configuration, project files and migration status without applying migrations. `.env.example` is documentation and is not loaded automatically.
 
 `FerrioxidModel::schema_sql` now takes `DatabaseKind` and returns `String`. Callers of the old `schema_sql() -> &'static str` must pass the backend.

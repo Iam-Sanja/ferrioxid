@@ -1,10 +1,10 @@
-# Eigene Admin-Seiten
+# Custom admin pages
 
-[Zur Übersicht](admin-extension-api.md)
+[Overview](admin-extension-api.md)
 
 ## Route
 
-Eine Seite heißt `/admin/pages/{key}`. `key` passt auf `[a-z][a-z0-9_]{0,39}`. Reserviert sind `admin`, `api`, `assets`, `audit`, `directory`, `login`, `logout`, `models`, `pages` und `preferences`. Ein doppelter oder reservierter Name macht `view` zu einem `ExtensionError`. Eine unbekannte Seite ist 404, sobald eine Sitzung mit Staff vorliegt. Ohne Sitzung folgt die Weiterleitung zur Anmeldung.
+A custom page is served at `/admin/pages/{key}`. `key` must match `[a-z][a-z0-9_]{0,39}`. Reserved names are `admin`, `api`, `assets`, `audit`, `directory`, `login`, `logout`, `models`, `pages` and `preferences`. Passing a duplicate or reserved name to `view` returns an `ExtensionError`. An unknown page returns 404 for an authenticated staff user; a request without a session redirects to login.
 
 ## Handler
 
@@ -27,8 +27,8 @@ impl ferrioxid::admin::ViewHandler for OrderReport {
 }
 ```
 
-Ferrioxid prüft vor `handle` die Sitzung, `is_staff` und `AuthService::holds` für den registrierten Code. Ein Superuser besteht `holds`, bleibt aber an `is_staff` gebunden. POST ohne gültiges CSRF ist 403 und ruft den Handler nicht auf. Fehlt `on_post`, ist POST 405.
+Before calling `handle`, Ferrioxid checks the session, `is_staff` and `AuthService::holds` for the registered permission code. Superusers satisfy `holds` but still require `is_staff`. A POST without valid CSRF returns 403 without calling the handler. A page without `on_post` returns 405 for POST.
 
-`ViewPage` liefert Daten für die registrierte Vorlage. `notice` und `alert` werden gekürzt und von Tera escaped. Die Vorlage wählt der Entwickler bei der Registrierung, nicht die Anfrage.
+`ViewPage` provides data for the registered template. `notice` and `alert` are shortened and escaped by Tera. The template is chosen by the developer during registration, not the request.
 
-Die Seitenleiste zeigt `navigation(true)` nur für Codes, die der aktuelle Benutzer hält. Das gilt auf der Übersicht, in Listen, Formularen und auf der eigenen Seite.
+The sidebar includes pages registered with `navigation(true)` only when the current user holds the required permission. This applies to the dashboard, lists, forms and custom pages.

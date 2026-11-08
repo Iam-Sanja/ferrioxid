@@ -1,12 +1,12 @@
 # SMTP
 
-[Zur Übersicht](index.md) · Dienst: [mail.md](mail.md) · Sicherheit: [mail-security.md](mail-security.md)
+[Overview](index.md) · Service: [mail.md](mail.md) · Security: [mail-security.md](mail-security.md)
 
-**Stand:** v0.23. Ein Versandversuch je `send`. Es gibt keinen Klartext-Fallback und keine Wiederholung innerhalb des HTTP-Requests.
+**Milestone:** v0.23. One delivery attempt per `send`. There is no plaintext fallback and no repetition within the HTTP request.
 
-## Verbindung
+## Connection
 
-`security = "starttls"` nutzt `starttls_relay`. `security = "tls"` nutzt `relay` für implizites TLS. Beides prüft das Zertifikat über die rustls-Standardwurzeln. Ein anderer Wert aktiviert SMTP nicht. Der Timeout ist der kleinere Wert aus Konfiguration und 30 Sekunden, mindestens eine Sekunde. Ein abgelaufener Timeout ist `mail.timeout`. Eine abgelehnte oder fehlgeschlagene Übergabe ist `mail.rejected`. Ein nicht baubarer Transport ist `mail.unavailable`. Die Bibliotheksmeldung wird nicht protokolliert, weil sie Zugangsdaten wiederholen kann.
+`security = "starttls"` uses `starttls_relay`. `security = "tls"` uses `relay` for implicit TLS. Both check the certificate on the rustls standard roots. Another value does not activate SMTP. The timeout is the smaller value of configuration and 30 seconds, at least one second. An expired timeout is `mail.timeout`. A rejected or failed handover is `mail.rejected`. A non-constructable transport is `mail.unavailable`. The library message is not logged because it can repeat access data.
 
 ```rust
 use ferrioxid::mail::{MailService, SmtpSecurity, SmtpSettings};
@@ -28,9 +28,9 @@ let mail = MailService::smtp(
 );
 ```
 
-Ein erfolgreiches SMTP-Ergebnis heißt, dass der Server die Nachricht angenommen hat. Es beweist nicht, dass sie im Posteingang liegt.
+A successful SMTP result means that the server has accepted the message. It does not prove that it is in the inbox.
 
-## Konfiguration
+## Configuration
 
 ```toml
 [mail]
@@ -44,6 +44,6 @@ public_origin = "https://shop.example.com"
 reset_ttl_minutes = 30
 ```
 
-Benutzername und Passwort kommen aus `FERRUM_SMTP_USERNAME` und `FERRUM_SMTP_PASSWORD`. Fehlt eines davon, bleibt der Dienst deaktiviert und schreibt `mail.invalid`, ohne das Passwort zu nennen.
+Username and password come from `FERRUM_SMTP_USERNAME` and `FERRUM_SMTP_PASSWORD`. If one of these is missing, the service remains deactivated and writes `mail.invalid` without giving the password.
 
-Der Workspace-Test spricht keinen öffentlichen SMTP-Server an. Ein Fehlerfall gegen `127.0.0.1:9` prüft nur, dass der Token danach nicht verwendbar ist und der Fehlercode kein Geheimnis enthält.
+The workspace test does not address a public SMTP server. An error case against `127.0.0.1:9` only checks that the token is not usable afterwards and that the error code does not contain a secret.

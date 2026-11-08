@@ -1,42 +1,42 @@
-# Formularentwürfe
+# Form drafts
 
-[Zur Übersicht](admin.md) · Sicherheit: [admin-security.md](admin-security.md)
+[Overview](admin.md) · Security: [admin-security.md](admin-security.md)
 
-## Zweck
+## Purpose
 
-Die Fremdschlüssel-Auswahl ist eine eigene GET-Seite. Der Entwurf hält die übrigen, noch nicht gespeicherten Felder auf dem Server, gebunden an die Sitzung. Die URL enthält die Draft-ID und den gewählten Schlüssel, nicht den Formularinhalt.
+The foreign key selection is its own GET page. The draft keeps the remaining, not yet saved fields on the server, bound to the session. The URL contains the draft ID and the selected key, not the form content.
 
-`save=rows` schreibt denselben Entwurf und keine Modellzeile. Schlüssel `inline_*`, `extra_*` und `basis` bleiben erhalten. Passwörter, CSRF und Schlüssel mit `password` werden nicht gespeichert. Grenze bleibt 8 KiB, 30 Minuten und 20 Entwürfe je Sitzung.
+`save=rows` saves a draft without writing a model row. Keys `inline_*`, `extra_*` and `basis` are retained; passwords, CSRF values and keys containing `password` are excluded. Limits are 8 KiB, 30 minutes and 20 drafts per session.
 
-## Speicher
+## Storage
 
-Tabelle `_ferrum_admin_drafts` aus `crates/ferrioxid-auth/migrations/0002_admin_journal.json`.
+The table is `_ferrum_admin_drafts`, created by `crates/ferrioxid-auth/migrations/0002_admin_journal.json`.
 
-| Spalte | Inhalt |
+| Column | Contents |
 |---|---|
-| `id` | Zufällige UUID |
-| `session_id` | Text-UUID der Sitzung, Fremdschlüssel auf `_ferrum_sessions.id` mit `ON DELETE CASCADE` |
-| `user_id` | Text-UUID des Benutzers |
-| `model_key` | Registrierter Modellschlüssel |
-| `record_id` | Leer beim Anlegen, sonst die Datensatz-ID |
-| `purpose` | `form` oder `bulk` |
-| `payload` | JSON, höchstens 8192 Bytes |
-| `expires_at` | 30 Minuten nach dem Anlegen |
+| `id` |Random UUID|
+| `session_id` |Text UUID of the session, foreign key on `_ferrum_sessions.id` with `ON DELETE CASCADE`|
+| `user_id` |Text UUID of the user|
+| `model_key` |Registered model key|
+| `record_id` |Empty when created, otherwise the record ID|
+| `purpose` |`form` or `bulk`|
+| `payload` |JSON, not more than 8192 bytes|
+| `expires_at` | 30 minutes after creation |
 
-Höchstens 20 Entwürfe je Sitzung. Abgelaufene und danach die ältesten werden gelöscht. Jeder Aufruf legt eine neue ID an. Zwei Tabs überschreiben sich nicht.
+A session may have at most 20 drafts. Cleanup removes expired drafts first, then the oldest. Every save creates a new ID, so two tabs never overwrite each other.
 
-## Was nicht gespeichert wird
+## What is not stored
 
-Passwortfelder, Namen mit `password`, `token`, `secret`, `csrf` oder Endungen `_hash` und `_secret`, das CSRF-Feld, `next`, `save` und unbekannte Schlüssel. Ein lesender Zugriff prüft Sitzung, Benutzer, Modell, Zweck und Ablauf. Ein fremder Benutzer erhält keinen Entwurf.
+Excluded values are password fields, names containing `password`, `token`, `secret` or `csrf`, names ending in `_hash` or `_secret`, the CSRF field, `next`, `save` and unknown keys. Reading a draft checks session, user, model, purpose and flow. Another user cannot read it.
 
-## Ablauf
+## Workflow
 
-1. `POST /admin/models/{model}/draft` oder `POST /admin/models/{model}/{id}/draft` speichert die erlaubten Felder und antwortet 303 auf die Auswahlseite mit `?draft=`.
-2. Die Auswahl verlinkt zurück mit `draft` und dem gewählten Fremdschlüssel.
-3. Das Formular setzt `_use_draft`, füllt fehlende Felder aus dem Entwurf und lässt Query-Auswahlen gewinnen.
-4. Ein Validierungsfehler rendert die gesendeten Werte und behält die Draft-ID. Er setzt `_use_draft` nicht.
-5. Ein erfolgreiches Speichern löscht den Entwurf. Abbrechen ist GET und wartet auf den Ablauf.
+1. `POST /admin/models/{model}/draft` or `POST /admin/models/{model}/{id}/draft` stores the allowed fields and responds 303 to the selection page with `?draft=`.
+2. The selection links back to `draft` and the selected foreign key.
+3. The form sets `_use_draft`, fills missing fields from the draft and gives explicit query selections precedence.
+4. A validation error renders the submitted values and keeps the draft ID without setting `_use_draft`.
+5. A successful save deletes the draft. Cancel is a GET; the draft remains until expiration.
 
-Der endgültige POST prüft Felder, Relationen und Policies erneut. Der Entwurf ist keine Schreibfreigabe.
+The final POST rechecks fields, relations and policies. A draft never grants permission to write.
 
-Code: `crates/ferrioxid-admin/src/drafts.rs`, Handler in `html.rs`. Test: `admin_v018_drafts_inlines_bulk_and_audit`.
+Code: `crates/ferrioxid-admin/src/drafts.rs`, handler in `html.rs`. Test: `admin_v018_drafts_inlines_bulk_and_audit`.

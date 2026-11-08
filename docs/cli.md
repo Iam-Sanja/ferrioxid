@@ -1,10 +1,10 @@
-# ferrioxid-cli – Entwicklerkommandos
+# ferrioxid-cli – developer commands
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-cli/src/main.rs`.
+[Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/main.rs`.
 
-## Tatsächlicher Funktionsumfang (IST)
+## Actual Functionality (Implemented)
 
-`ferrioxid doctor` und `ferrioxid check` prüfen Werkzeuge, Dateien, beide Migrationsbereiche, `settings.runtime` und die Mail-Form. Die Laufzeitprüfung öffnet keine Verbindung. `settings.runtime` wird `ERROR`, wenn Produktion und Debug zusammenfallen, `FERRUM_DEBUG` weder `true` noch `false` ist oder `BIND_ADDRESS` mit `0.0.0.0` beginnt. `disabled` erwartet keinen SMTP-Server. `console` und `memory` bleiben lokal. `smtp` wird nicht verbunden. Fehlt `FERRUM_SMTP_PASSWORD`, entsteht die Warnung `mail.credentials`, ohne den Wert zu zeigen. Details stehen in [cli-doctor.md](cli-doctor.md) und [migration-diagnostics.md](migration-diagnostics.md). `ferrioxid upgrade` beschreibt [project-upgrade.md](project-upgrade.md). Generator, Vorlagen und der Entwicklungsserver stehen in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) und [development-server.md](development-server.md).
+`ferrioxid doctor` and `ferrioxid check` check tools, files, both migration areas, `settings.runtime` and the mail form. The runtime test does not open a connection. `settings.runtime` becomes `ERROR` when production and debug coincide, `FERRUM_DEBUG` is neither `true` nor `false`, or `BIND_ADDRESS` begins with `0.0.0.0`. `disabled` does not expect an SMTP server. `console` and `memory` remain local. `smtp` is not connected. If `FERRUM_SMTP_PASSWORD` is missing, the `mail.credentials` warning arises without showing the value. Details are available in [cli-doctor.md](cli-doctor.md) and [migration-diagnostics.md](migration-diagnostics.md). `ferrioxid upgrade` describes [project-upgrade.md](project-upgrade.md). Generator, templates and the development server are available in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) and [development-server.md](development-server.md).
 
 ```powershell
 cargo run -p ferrioxid-cli -- new myproject --template fullstack --ferrioxid-path .
@@ -29,7 +29,7 @@ cargo run -p ferrioxid-cli -- upgrade --dry-run
 cargo run -p ferrioxid-cli -- upgrade --yes
 ```
 
-`migrate` liest `ferrum.toml` oder die Flags `--schema-file`, `--migrations-dir` und `--database-url`. Die Ausführung beschreibt [migrations.md](migrations.md). `--bootstrap` gehört zur `myshop`-Binary, ist Legacy und führt keine Migration aus.
+`migrate` reads `ferrum.toml` or the flags `--schema-file`, `--migrations-dir` and `--database-url`. The execution describes [migrations.md](migrations.md). `--bootstrap` belongs to the `myshop` binary, is legacy and does not perform a migration.
 
 ```powershell
 cargo run -p ferrioxid-cli -- admin create-user --email admin@example.com --superuser
@@ -39,15 +39,15 @@ cargo run -p ferrioxid-cli -- auth grant-permission notes.read --role editor
 cargo run -p ferrioxid-cli -- auth assign-role --email admin@example.com --role editor
 ```
 
-`create-user` liest das Passwort verdeckt und verlangt die Wiederholung. Es akzeptiert kein Passwortargument. Ist `FERRUM_PASSWORD` gesetzt, muss der Wert mindestens 12 Zeichen haben. Es gibt kein Standardpasswort. `migrate up` wendet zuerst die Auth-Migrationen an. Schreibende Auth-Befehle legen die Auth-Tabellen ebenfalls an, wenn sie fehlen. `list-users` zeigt keine Hashes.
+`create-user` prompts for a password without echoing it and asks for confirmation. It accepts no password argument. `FERRUM_PASSWORD` can supply a password of at least 12 characters for automation; there is no default. `migrate up` applies auth migrations first. Auth commands that write data also create missing auth tables. `list-users` never prints hashes.
 
-`generate worker` schreibt `src/bin/worker.rs` und überschreibt eine vorhandene Datei nicht. `jobs inspect` verbirgt die Payload. `--show-payload` zeigt sie und weist darauf hin, dass sie personenbezogene Daten enthalten kann. Das Lease-Token bleibt in beiden Ausgaben weg. `ferrioxid worker` führt weiterhin nur den Mail-Handler aus.
+`generate worker` writes `src/bin/worker.rs` without overwriting an existing file. `jobs inspect` hides the payload unless `--show-payload` is supplied, which warns that it may contain personal data. Neither output includes the lease token. `ferrioxid worker` runs only the mail handler.
 
-Nicht existent: `ferrioxid migrate down`. `ferrioxid dev` startet keinen Worker. Vite startet `ferrioxid dev` nicht mit. Der Generator-Integrationstest begrenzt eigene Cargo-Builds auf zwei Jobs, weil ein unbegrenzter Release-Build auf Windows rustc 1.98.1 abstürzen ließ. Das Produktkommando `ferrioxid build` bleibt ein Release-Build. `ferrioxid dev` warnt vor ausstehenden Migrationen und wendet sie nicht an.
+`ferrioxid migrate down` is not implemented. `ferrioxid dev` starts neither a worker nor Vite, and warns about pending migrations without applying them. Generator integration tests limit nested Cargo builds to two jobs after unrestricted release builds crashed rustc 1.98.1 on Windows. The product command `ferrioxid build` still performs a release build.
 
-Exitcodes der Prüfung: `0` ohne Fehler, Warnungen eingeschlossen. `1` bei Konflikten, einer nicht lesbaren vorhandenen Datenbank oder einem fehlgeschlagenen `cargo check`. `migrate status` nutzt `1` auch, wenn die SQLite-Datei fehlt, und legt sie nicht an. `check --strict` nutzt `2`, wenn nur Warnungen bleiben. `upgrade` nutzt `1` bei Dateikonflikten und schreibt dann nichts.
+Exit codes of the test: `0` without error, warnings included. `1` for conflicts, an unreadable existing database or a failed `cargo check`. `migrate status` also uses `1` if the SQLite file is missing and does not create it. `check --strict` uses `2` if only warnings remain. `upgrade` uses `1` for file conflicts and then does not write anything.
 
-## SOLL: CLI-Kommandostruktur
+## Planned CLI structure
 
 ```text
 ferrioxid
@@ -66,21 +66,21 @@ ferrioxid
 └─ build                       Definierter Release-Build
 ```
 
-### Implementierungsrichtlinien (SOLL)
+### Implementation guidelines (planned)
 
-- Parsing mit `clap`-Subcommands; Exit-Code 0 nur bei Erfolg.
-- `new`, `generate model`, `doctor`, `check`, `dev` und `build` sind implementiert. `new` überschreibt kein vorhandenes Verzeichnis.
-- `doctor` prüft Cargo und das URL-Schema und legt keine Datenbankdatei an.
-- `dev` beendet den Kindprozess bei Strg+C. Ein Absturz startet nicht von selbst neu.
-- Migrationen sind **kein** Alias von `--bootstrap`.
-- CLI-Ausgaben mit präzisen Pfaden und reparierbaren Fehlermeldungen.
+- Parsing with `clap` subcommands; Exit code 0 only if successful.
+- `new`, `generate model`, `doctor`, `check`, `dev` and `build` are implemented. `new` does not overwrite an existing directory.
+- `doctor` checks Cargo and the URL scheme without creating a database file.
+- `dev` ends the child process at Ctrl+C. A crash does not restart itself.
+- Migrations are not aliases of `--bootstrap`.
+- CLI outputs with precise paths and repairable error messages.
 
-## Testmatrix (SOLL)
+## Planned test matrix
 
-- `--help` und `--version` funktionieren.
-- unbekannter Command: Exit != 0.
-- Projektziel bereits vorhanden: kein Überschreiben.
-- Doctor ohne DB: relevante Diagnose statt Erfolg vortäuschen.
-- Datenbankfehler enthalten keine Passwörter.
+- `--help` and `--version` work.
+- Unknown Command: Exit != 0.
+- Existing project directory: refuse to overwrite it.
+- Doctor without a database: report the relevant diagnostic rather than claiming success.
+- Database errors do not contain passwords.
 
-Für Migrationen siehe [migrations.md](migrations.md).
+For migrations see [migrations.md](migrations.md).

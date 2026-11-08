@@ -1,22 +1,22 @@
-# Vorlagen
+# Templates
 
-[Zur Übersicht](index.md) · **IST-Dateien:** `crates/ferrioxid-api/src/pages.rs`, `crates/ferrioxid-cli/src/scaffold.rs`.
+[Overview](index.md) · **Implemented files:** `crates/ferrioxid-api/src/pages.rs`, `crates/ferrioxid-cli/src/scaffold.rs`.
 
-## Aufgabe
+## Purpose
 
-Normale Seiten außerhalb des Admins werden serverseitig mit Tera gerendert. Die Admin-Vorlagen liegen getrennt in `crates/ferrioxid-admin/templates` und werden nicht aus dem Projektordner geladen. Siehe [admin-templates.md](admin-templates.md). Tera entspricht dem Jinja- und Django-Modell: Vererbung über `extends`, Bausteine über `include`, Variablen in `{{ }}`. Formular-HTML aus `ferrioxid::forms::render_form` ist zusätzlich verfügbar und escaped Feldwerte. Die Kontaktseite des Generators und von myshop nutzt diesen Weg. Das Stylesheet liegt unter `/static/css/app.css`.
+Normal pages outside the admin are rendered on the server side with Tera. The admin templates are separate in `crates/ferrioxid-admin/templates` and are not loaded from the project folder. See [admin-templates.md](admin-templates.md). Tera corresponds to the Jinja and Django model: inheritance via `extends`, building blocks via `include`, variables in `{{ }}`. Form HTML from `ferrioxid::forms::render_form` is additionally available and escaped field values. The contact side of the generator and myshop uses this path. The style sheet is under `/static/css/app.css`.
 
-## Zuständige Dateien
+## Responsible files
 
 - `crates/ferrioxid-api/src/pages.rs`
 - `crates/ferrioxid/src/lib.rs`
-- `templates/` im generierten Projekt
+- `templates/` in the generated project
 
-## Öffentliche Schnittstelle
+## Public interface
 
-`ferrioxid::pages::Site::open` lädt `**/*.html`. `render` erzeugt eine Seite. `home_context` füllt Projektname, Sprache, Admin-Flag und die kurzen Standardtexte. `mount_pages` hängt `/` und eine 404-Antwort an den Router, wenn `templates.enabled` wahr ist. Pro Anfrage wählt `negotiate_locale` die Sprache. `message` liefert die vorbereiteten Texte für `de` und `en`, darunter Willkommen, 404 und 500. Eine unbekannte Locale fällt auf Englisch zurück und wird nicht als Pfad verwendet.
+`ferrioxid::pages::Site::open` loads `**/*.html`, and `render` renders a template. `home_context` supplies the project name, locale, admin flag and standard text. When `templates.enabled` is true, `mount_pages` adds `/` and an HTML 404 fallback. `negotiate_locale` selects the language for each request. `message` provides German and English text, including welcome, 404 and 500 messages. Unknown locales fall back to English and never become file paths.
 
-## Konfiguration
+## Configuration
 
 ```toml
 [templates]
@@ -25,23 +25,23 @@ engine = "tera"
 templates_dir = "templates"
 ```
 
-## Datenfluss
+## Data flow
 
-Die Anwendung lädt die Einstellungen, öffnet das Vorlagenverzeichnis und rendert bei jedem Aufruf neu. Eine fehlende Startseite verhindert den Start. Schlägt das Rendern fehl, wird `errors/500.html` versucht.
+The application loads the settings, opens the template directory and renders again every time it is called. A missing start page prevents the start. If the rendering fails, `errors/500.html` is attempted.
 
-## Fehlerfälle
+## Error cases
 
-| Fall | Verhalten |
+| Case | Behavior |
 |---|---|
-| `index.html` fehlt | Start mit Fehlermeldung |
-| unbekannte Engine | `ferrum.toml` wird abgelehnt |
-| unbekannte Route | 404 aus `errors/404.html` |
+| Missing `index.html` | Startup fails with an error message |
+| Unknown template engine | Reject `ferrum.toml` |
+| Unknown route | 404 rendered from `errors/404.html` |
 
-## Sicherheitsregeln
+## Security rules
 
-`primary_color` darf nur ein Hex-Wert sein, damit er in das CSS der Vorlage eingesetzt werden kann. Vorlagenpfade bleiben relativ und ohne `..`.
+`primary_color` must only be a hex value so that it can be inserted into the CSS of the template. Template paths remain relative and without `..`.
 
-## Beispiel
+## Example
 
 ```html
 {% extends "base.html" %}
@@ -53,8 +53,8 @@ Die Anwendung lädt die Einstellungen, öffnet das Vorlagenverzeichnis und rende
 
 ## Tests
 
-`index_template_renders_the_project_name` rendert ein temporäres Projekt. Der Generator legt `templates/base.html`, `index.html` und `errors/` an. Ein generiertes Projekt muss mit `cargo check` übersetzen.
+`index_template_renders_the_project_name` renders a temporary project. The generator writes `templates/base.html`, `index.html` and `errors/`. Generated projects must compile with `cargo check`.
 
-## Einschränkungen
+## Limitations
 
-Panics werden nicht automatisch zur 500-Seite. `ferrioxid dev` lädt Vorlagen beim Prozessstart neu, nicht bei jedem Speichern ohne Neustart. Eine Änderung einer Rust-Datei startet den Prozess neu und lädt die Vorlagen damit erneut. `include` für Partials ist möglich, der Generator legt aber noch keine eigene Partial-Datei an. Die Basisvorlage ist das gemeinsame Layout.
+Panics do not automatically become the 500 page. `ferrioxid dev` reloads templates at process start, not every time you save without restart. Changing a Rust file restarts the process and reloads the templates. `include` for partials is possible, but the generator does not yet create its own partial file. The basic template is the common layout.

@@ -1,12 +1,12 @@
-# Eigene Settings
+# Custom settings
 
-[Zur Übersicht](index.md) · Gemeinsame Datei: [settings.md](settings.md) · **IST-Datei:** `crates/ferrioxid-migrations/src/project.rs`.
+[Overview](index.md) · Shared file: [settings.md](settings.md) · **Implemented file:** `crates/ferrioxid-migrations/src/project.rs`.
 
-## Aufgabe
+## Purpose
 
-Anwendungswerte stehen unter `[custom.<name>]`. Ferrioxid speichert sie am gelesenen `ProjectConfig` und wandelt einen Abschnitt in eine Struktur um, die `serde::Deserialize` implementiert. Es gibt keinen zweiten Parser und kein Singleton.
+Application values are under `[custom.<name>]`. Ferrioxid stores it on the read `ProjectConfig` and converts a section into a structure that implements `serde::Deserialize`. There is no second parser and no singleton.
 
-## Datei
+## File
 
 ```toml
 [custom.shop]
@@ -15,9 +15,9 @@ items_per_page = 25
 open = true
 ```
 
-`shop` und jeder Schlüssel sind Kleinbuchstaben, Ziffern und Unterstriche, höchstens 32 Zeichen, und beginnen mit einem Buchstaben. Schlüssel, die `password`, `secret`, `token` oder `credential` enthalten, werden abgelehnt. Die Fehlermeldung enthält den Wert nicht.
+`shop` and each key are lower case, numerals and underscores, maximum 32 characters, and begin with one letter. Keys containing `password`, `secret`, `token` or `credential` are rejected. The error message does not contain the value.
 
-## Lesen
+## Reading
 
 ```rust
 #[derive(serde::Deserialize)]
@@ -31,18 +31,18 @@ let settings = ferrioxid::migrations::Settings::discover(std::path::Path::new(".
 let shop: ShopSettings = settings.project().custom_settings("shop")?;
 ```
 
-`custom_settings` liefert `custom.shop ist nicht konfiguriert.`, wenn der Abschnitt fehlt. Passt ein Feld nicht, lautet die Meldung `custom.shop passt nicht zur erwarteten Struktur.` Der Rohwert steht darin nicht.
+`custom_settings` delivers `custom.shop ist nicht konfiguriert.` if the section is missing. If a field does not fit, the message is `custom.shop passt nicht zur erwarteten Struktur.`.
 
-## Typen
+## Types
 
-Der Parser kennt in dieser Familie nur drei Formen:
+The parser knows only three forms in this family:
 
-- `true` und `false` werden boolesch.
-- Eine nicht leere Ziffernfolge wird `u64`.
-- Jeder andere Wert bleibt eine Zeichenkette.
+- `true` and `false` become Boolean.
+- A non-empty digit sequence becomes `u64`.
+- Any other value remains a string.
 
-Dezimalzahlen, negative Zahlen und Listen gibt es hier nicht. Dafür bleiben die bestehenden typisierten Abschnitte zuständig.
+There are no decimal numbers, negative numbers and lists here. The existing typed sections remain responsible for this.
 
-## Grenzen
+## Limitations
 
-Ein Abschnitt ersetzt keine Framework-Einstellung. `custom.server` ist ein eigener Name und ändert `server.port` nicht. Unbekannte Abschnitte außerhalb von `custom.*` bleiben Fehler. Bestehende Dateien ohne `custom` bleiben gültig.
+A section does not replace a framework setting. `custom.server` is its own name and does not change `server.port`. Unknown sections outside of `custom.*` remain errors. Existing files without `custom` remain valid.

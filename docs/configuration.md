@@ -1,48 +1,48 @@
-# Konfiguration und Laufzeitumgebung
+# Configuration and runtime environment
 
-[Zur Übersicht](index.md) · **IST:** `examples/myshop/src/main.rs`, `crates/ferrioxid-db/src/lib.rs`, `.env.example`, `compose.yaml`.
+[Overview](index.md) · **Implemented:** `examples/myshop/src/main.rs`, `crates/ferrioxid-db/src/lib.rs`, `.env.example`, `compose.yaml`.
 
-`FERRUM_LOCALE` darf `de` oder `en` sein und steuert die zentralen CLI-Texte. Die Admin-Sprache speichert der Browser unter `ferrioxid-locale`. Öffentliche Branding-Werte beschreibt [settings.md](settings.md). `[static]` und `[storage]` stehen in derselben Datei. `media/` enthält Uploads und gehört nicht in Git.
+`FERRUM_LOCALE` accepts `de` or `en` for central CLI messages. The admin stores language in the HttpOnly `ferrioxid_locale` cookie. Public branding, `[static]` and `[storage]` settings are described in [settings.md](settings.md). Uploads in `media/` do not belong in Git.
 
-## Tatsächliche Variablen (IST)
+## Actual variables (Implemented)
 
-| Name | Einleser | Default | Verwendung |
+| Name | Reader | Default | Purpose |
 |---|---|---|---|
-| `DATABASE_URL` | `myshop/src/main.rs` | `sqlite://db.sqlite3?mode=rwc` | Verbindung. Der Dateipfad ist relativ zum Arbeitsverzeichnis. |
+| `DATABASE_URL` | `myshop/src/main.rs` | `sqlite://db.sqlite3?mode=rwc` |Connection. The file path is relative to the working directory.|
 | `BIND_ADDRESS` | `myshop/src/main.rs` | `127.0.0.1:3000` | TCP-Listener |
-| `POSTGRES_PASSWORD` | Docker Compose | `ferrioxid_dev_only` | Nur der optionale Postgres-Container |
-| `RUST_LOG` | Tracing-Subscriber über die Umgebungsfilter-Voreinstellung `info` | `info` in `.env.example` | Log-Niveau, wenn der Prozess es exportiert sieht |
-| `FERRUM_ENV` | `AuthConfig::from_env` | `development` | `production` setzt `Secure` als Default und leert erlaubte Origins, wenn keine Liste gesetzt ist |
-| `FERRUM_COOKIE_SECURE` | `AuthConfig::from_env` | nur in Produktion wahr | `1` oder `true` erzwingt `Secure`. Nicht von `BIND_ADDRESS` abgeleitet |
-| `FERRUM_ALLOWED_ORIGINS` | `AuthConfig::from_env` | Loopback der Bind-Adresse | kommagetrennte Origins. Ist die Variable gesetzt, ersetzt sie die Liste vollständig. Sonst setzt `apply_bound_address` `http://127.0.0.1:{port}` und `http://localhost:{port}` aus `BIND_ADDRESS` oder `ferrum.toml`. Der Host-Header wird nicht übernommen. |
-| `FERRUM_TRUST_PROXY` | `AuthConfig::from_env` | falsch | nur dann gilt der erste `X-Forwarded-For`-Hop |
+| `POSTGRES_PASSWORD` | Docker Compose | `ferrioxid_dev_only` |Only the optional Postgres container|
+| `RUST_LOG` |Tracing subscriber via the environment filter preset `info`| `info` in `.env.example` |Log level when the process sees it exported|
+| `FERRUM_ENV` | `AuthConfig::from_env` | `development` |`production` sets `Secure` as default and empties permitted origins if no list is set|
+| `FERRUM_COOKIE_SECURE` | `AuthConfig::from_env` |Only true in production|`1` or `true` enforces `Secure`. Not derived from `BIND_ADDRESS`|
+| `FERRUM_ALLOWED_ORIGINS` | `AuthConfig::from_env` |Loopback of the bind address|comma separated origins. If the variable is set, it replaces the list completely. Otherwise, `apply_bound_address` puts `http://127.0.0.1:{port}` and `http://localhost:{port}` from `BIND_ADDRESS` or `ferrum.toml`. The host header is not taken over.|
+| `FERRUM_TRUST_PROXY` | `AuthConfig::from_env` | false |only then applies the first `X-Forwarded-For` hop|
 
-`.env.example` wird nicht automatisch geladen. Werte müssen in der Shell gesetzt sein. Eine gesetzte `DATABASE_URL` ersetzt SQLite:
+`.env.example` is not automatically loaded. Values must be set in the shell. A set `DATABASE_URL` replaces SQLite:
 
 ```text
 DATABASE_URL=postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid
 ```
 
-Tests können `sqlite::memory:` verwenden. Diese URL erzeugt eine private Speicherdatenbank. `connect` setzt für jede `sqlite:`-URL `max_connections(1)` und `PRAGMA foreign_keys=ON`. Dadurch bleiben Bootstrap, Repository und HTTP-Handler auf derselben Verbindung. Das Beispielpasswort gilt nur für lokale PostgreSQL-Entwicklung. `DATABASE_URL` niemals vollständig protokollieren.
+Tests can use `sqlite::memory:` to create a private in-memory database. For every `sqlite:` URL, `connect` sets `max_connections(1)` and `PRAGMA foreign_keys=ON`, keeping bootstrap, repository and HTTP operations on the same connection. The example PostgreSQL password is for local development only. Never log the complete `DATABASE_URL`.
 
-Die SQLite-Datei `db.sqlite3` sowie Journal-, WAL- und SHM-Dateien sind von Git ausgeschlossen. Wer myshop aus einem anderen Arbeitsverzeichnis startet, erhält eine andere Datei.
+The SQLite file `db.sqlite3` as well as journal, WAL and SHM files are excluded from Git. Anyone who starts myshop from another working directory will receive a different file.
 
-Die vollständige Settings-Beschreibung steht in [settings.md](settings.md). `ferrum.toml` ist keine Geheimnisdatei. Die Workspace-Datei nennt weiterhin nur `migrations_dir` und `schema_command`. Generierte Projekte dürfen zusätzlich `[project]`, `[database]`, `[server]` und `[admin]` enthalten. Unbekannte Abschnitte und Schlüssel sind Fehler. `database.url` ist standardmäßig `sqlite://db.sqlite3?mode=rwc`, `server.host` ist `127.0.0.1`, `server.port` ist 3000. `DATABASE_URL` ersetzt die Datei-URL zur Laufzeit und wird von `migrate status` nicht gedruckt. Die CLI startet `schema_command` im Verzeichnis der TOML-Datei und liest das Schema von stdout.
+The full Settings description is in [settings.md](settings.md). `ferrum.toml` is not a secret file. The workspace file continues to name only `migrations_dir` and `schema_command`. Generated projects may additionally contain `[project]`, `[database]`, `[server]` and `[admin]`. Unknown sections and keys are errors. `database.url` is standard `sqlite://db.sqlite3?mode=rwc`, `server.host` is `127.0.0.1`, `server.port` is 3000. `DATABASE_URL` replaces the file URL at runtime and is not printed by `migrate status`. The CLI starts `schema_command` in the directory of the TOML file and reads the schema of stdout.
 
-`migrate baseline` liest dieselbe URL. Ohne `--confirm` schreibt der Befehl nichts. Für PostgreSQL endet er mit einer Unsupported-Meldung. Spalten- und Tabellennamen für `rename-column` und `rename-table` kommen von den CLI-Argumenten und werden als Bezeichner geprüft. Sie werden nicht aus HTTP-Anfragen übernommen.
+`migrate baseline` reads the same URL. Without `--confirm`, the command does not write anything. For PostgreSQL, it ends with an unsupported message. Column and table names for `rename-column` and `rename-table` come from the CLI arguments and are tested as identifiers. They are not taken from HTTP requests.
 
-## Nicht implementiert (SOLL)
+## Not implemented (planned)
 
-- Zentraler typisierter `FerrioxidConfig`.
-- Feste Quellenreihenfolge aus Defaults, Datei, Umgebung und CLI.
-- Produktionsstart, der fehlende Secrets ablehnt.
-- Profile `development` und `production`.
-- Einstellbare Pool-Größe, Timeouts und Read-Replicas.
+- A general configuration API beyond the implemented typed `ProjectConfig` and `Settings` sections.
+- General CLI overrides for all typed settings; current precedence is documented in [settings.md](settings.md).
+- Production start that rejects missing secrets.
+- Profiles `development` and `production`.
+- Adjustable pool size, timeouts and read replicas.
 
-## Abnahme
+## Acceptance criteria
 
-Der Localhost-Default bleibt `127.0.0.1:3000`. `0.0.0.0` ist keine produktionsreife Bind-Adresse. Vergleiche [deployment.md](deployment.md) und [security.md](security.md).
+The localhost default remains `127.0.0.1:3000`. `0.0.0.0` is not a production-ready bind address. Compare [deployment.md](deployment.md) and [security.md](security.md).
 
 ## Admin
 
-`FERRUM_ADMIN_DIST` wird nicht mehr gelesen. CSS und Vorlagen kommen aus dem Binary. `FERRUM_CSRF_SECRET` ist optional und muss 64 Hex-Zeichen lang sein. Ohne die Variable verwendet Ferrioxid `.ferrum/csrf.key`. `FERRUM_COOKIE_SECURE` und `FERRUM_ENV=production` gelten für das Admin-Cookie genauso wie für die übrige Sitzung. Theme und Sprache liegen in den Cookies `ferrioxid_theme` und `ferrioxid_locale`.
+`FERRUM_ADMIN_DIST` is no longer read; CSS and templates are embedded in the binary. `FERRUM_CSRF_SECRET` is optional but must contain 64 hex characters when set. Otherwise, Ferrioxid uses `.ferrum/csrf.key`. `FERRUM_COOKIE_SECURE` and `FERRUM_ENV=production` apply to the admin session too. Theme and locale use `ferrioxid_theme` and `ferrioxid_locale` cookies.

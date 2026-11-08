@@ -1,48 +1,48 @@
-# Benutzer- und Rollenverzeichnis
+# User and role directory
 
-[Zur Übersicht](index.md) · Sicherheit: [admin-security.md](admin-security.md)
+[Overview](index.md) · Security: [admin-security.md](admin-security.md)
 
-**Stand:** v0.16. Nur ein angemeldeter Staff-Superuser erreicht die Endpunkte. Die Prüfung bleibt auf dem Server. Die HTML-Bestätigung `confirm=1` gilt nicht für die JSON-API.
+**Milestone:** v0.16. Only an authenticated staff superuser can access these endpoints. Authorization is checked on the server. The HTML confirmation requirement `confirm=1` does not apply to the JSON API.
 
 ## API
 
-| Methode | Pfad | Wirkung |
+| Method | Path | Effect |
 |---|---|---|
-| `GET` | `/admin/api/directory/users` | Benutzer ohne `password_hash`, mit sortierten Rollennamen |
-| `POST` | `/admin/api/directory/users/{id}/active` | aktivieren oder deaktivieren |
-| `POST` | `/admin/api/directory/users/{id}/staff` | Staff-Flag setzen |
-| `GET`/`POST` | `/admin/api/directory/roles` | Rollen lesen oder anlegen |
-| `GET` | `/admin/api/directory/roles/{role}/permissions` | Codes der Rolle |
-| `POST`/`DELETE` | `/admin/api/directory/roles/{role}/permissions/{code}` | Recht geben oder entziehen |
-| `POST`/`DELETE` | `/admin/api/directory/assignments` | Rolle an E-Mail binden oder lösen |
+| `GET` | `/admin/api/directory/users` |User without `password_hash`, with sorted role names|
+| `POST` | `/admin/api/directory/users/{id}/active` |Activate or deactivate|
+| `POST` | `/admin/api/directory/users/{id}/staff` | Set the staff flag |
+| `GET`/`POST` | `/admin/api/directory/roles` |Read or create roles|
+| `GET` | `/admin/api/directory/roles/{role}/permissions` |Role codes|
+| `POST`/`DELETE` | `/admin/api/directory/roles/{role}/permissions/{code}` | Grant or revoke a permission |
+| `POST`/`DELETE` | `/admin/api/directory/assignments` | Assign or revoke a role using the user's email |
 
-`GET /auth/me` bleibt das kleine `PublicUser` ohne Rollen. Die Rollen stehen nur in der Verzeichnisantwort. Sie entstehen aus `_ferrum_roles` und `_ferrum_user_roles`, ohne das Passwort-Hash zu lesen.
+`GET /auth/me` remains the small `PublicUser` without roles. The roles are only in the directory response. They arise from `_ferrum_roles` and `_ferrum_user_roles` without reading the password hash.
 
-Eigenes Deaktivieren und der Entzug des eigenen Staff-Zugangs antworten 422. Änderungen an Superusern und Berechtigungscodes mit `superuser` antworten 403. Es gibt keinen Endpunkt, der einen Benutzer zum Superuser macht.
+Your own deactivation and withdrawal of your own staff access answer 422. Changes to superusers and permission codes with `superuser` respond 403. There is no endpoint that makes a user a superuser.
 
-## Oberfläche
+## User interface
 
-`/admin/directory/users` sucht die E-Mail serverseitig, sortiert sie und zeigt 25 Zeilen je Seite. Status und Rollen stehen in der Tabelle. Deaktivieren, Staff ändern, Rechte vergeben und Rollen zuweisen sind POST-Formulare mit CSRF. Abbrechen ist der Link zurück, kein Dialog.
+`/admin/directory/users` searches email addresses on the server, sorts results and shows 25 rows per page. Status and roles are displayed in the table. Deactivation, staff changes, permission changes and role assignment use POST forms with CSRF. Cancel is a link back, not a dialog.
 
-Die HTML-Sperre für die eigene Deaktivierung und für Superuser antwortet 403, auch ohne Bestätigung. Superuser-Vergabe bleibt die CLI. Der Admin hat dafür kein Feld und lehnt `is_superuser` ab.
+The HTML lock for your own deactivation and for superusers answers 403, even without confirmation. Superuser allocation remains the CLI. The admin has no field for this and rejects `is_superuser`.
 
-Aktiv, Staff und Superuser stehen in getrennten Spalten. Die Liste verlinkt Anzeigen, Bearbeiten und Rollen, wenn die Zeile kein Superuser ist. Aktivieren und Staff sind nur für andere, nicht geschützte Benutzer Formulare. Eine neue Rolle entsteht nur über das Rollenformular.
+Active, Staff and Superuser have separate columns. Non-superuser rows link to detail, edit and role-assignment views. Active and Staff can be changed only for other, unprotected users. Roles can be created only through the role form.
 
-| Methode | Pfad | Wirkung |
+| Method | Path | Effect |
 |---|---|---|
-| `GET`/`POST` | `/admin/directory/users/new` | E-Mail, Passwort, Wiederholung, Aktiv, Staff, optionale vorhandene Rollen |
-| `GET` | `/admin/directory/users/{id}` | E-Mail, Flags, Rollen, Berechtigungscodes |
-| `GET`/`POST` | `/admin/directory/users/{id}/edit` | E-Mail, Aktiv, Staff. Rollen über die bestehende Zuweisung |
-| `POST` | `/admin/directory/users/{id}/password` | Neues Passwort, danach Sitzungswiderruf |
+| `GET`/`POST` | `/admin/directory/users/new` |Email, password, repetition, active, staff, optional existing roles|
+| `GET` | `/admin/directory/users/{id}` |Email, flags, roles, permission codes|
+| `GET`/`POST` | `/admin/directory/users/{id}/edit` |Email, Active, Staff. Roles on the existing allocation|
+| `POST` | `/admin/directory/users/{id}/password` |New password, then session revocation|
 
-Diese Wege sind keine Modell-CRUD-Routen. Passwort-Hashes und Klartextpasswörter stehen nicht im HTML, in Logs oder in der Weiterleitung. Ein Superuser ohne Staff betritt den Admin nicht. Benutzer werden deaktiviert, nicht gelöscht.
+These paths are separate from model CRUD routes. Password hashes and plaintext passwords never appear in HTML, logs or redirect URLs. A superuser still needs staff status to enter the admin. Users are deactivated rather than deleted.
 
-v0.28 trennt die Navigation: Benutzerliste und Rollenliste sind eigene Einträge unter „Benutzer und Zugang“. „Rolle anlegen“ steht nur auf `/admin/directory/roles`. Die Benutzerliste weist vorhandene Rollen zu. Ein physisches Löschen ist nicht vorhanden. Es würde Sitzungen, Rollenbindungen und die Historie betreffen und bleibt einem eigenen Funktionsstand vorbehalten. Die Oberfläche bietet es nicht an.
+v0.28 separates the user and role lists into entries under "Users and access". Roles are created only on `/admin/directory/roles`; the user list assigns existing roles. Physical user deletion is not available. Its effects on sessions, role assignments and history require a separate milestone.
 
-Schreibende HTML-Aktionen des Verzeichnisses prüfen in dieser Reihenfolge: CSRF, Staff-Superuser, betroffene Zeile, Superuser- und Selbstsperre, dann `confirm`. Nur der Wert `1` gilt. Fehlt er, ist die Antwort 422 und der Datensatz bleibt. `true`, `on` oder ein leerer Wert gelten nicht. Die Bestätigung ersetzt keine Berechtigung.
+Check writing HTML actions of the directory in this order: CSRF, staff superuser, affected line, superuser and self-lock, then `confirm`. Only the value `1` applies. If it is missing, the answer is 422 and the record remains. `true`, `on` or an empty value do not apply. The confirmation does not replace any authorization.
 
-Passwortänderung und Deaktivierung widerrufen alle Sitzungen des Ziels. Ändert ein Superuser sein eigenes Passwort, endet auch seine Sitzung und die Antwort führt zur Anmeldung. Staff-Entzug löscht die Sitzung nicht. Die nächste Anfrage liest `is_staff` neu und erhält 403.
+Password change and deactivation revoke all target sessions. If a superuser changes his own password, his session also ends and the response leads to login. Staff withdrawal does not delete the session. The next request reads `is_staff` again and receives 403.
 
 ## Tests
 
-`examples/myshop/tests/admin_html.rs` sucht einen Benutzer, legt eine Rolle an, vergibt und entzieht eine Berechtigung, weist die Rolle zu, legt einen Benutzer an, setzt das Passwort, prüft die ungültige alte Sitzung, den Staff-Entzug, die Bestätigung, CSRF, die Superuser-Sperre und einen Nicht-Superuser. `examples/myshop/tests/admin_http.rs` prüft die JSON-Sperren. Die JSON-API verlangt das Häkchen nicht.
+`examples/myshop/tests/admin_html.rs` locates a user, creates a role, assigns and revokes a permission, assigns the role, creates a user, sets the password, checks the invalid old session, staff revocation, confirmation, CSRF, superuser lock and a non-superuser. `examples/myshop/tests/admin_http.rs` checks the JSON locks. The JSON API does not require the check mark.

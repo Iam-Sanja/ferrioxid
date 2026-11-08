@@ -1,6 +1,6 @@
 # Ferrioxid rename implementation plan
 
-Tracking: #9. **This document is planning only; the Rust crates and CLI are still named Ferrum until implementation passes CI.**
+Tracking: #9. **Historical implementation plan:** the framework and CLI rename was merged in PR #18. The crates and executable are now named Ferrioxid. The checklist below records the original scope and compatibility policy; it is not a claim that the rename is still pending.
 
 ## Identity
 
@@ -40,4 +40,4 @@ Tracking: #9. **This document is planning only; the Rust crates and CLI are stil
 - Legacy config / persisted schema compatibility tests.
 - GitHub CI on both Windows and Ubuntu, PostgreSQL and the complete guarded Security audit.
 
-Implement on `feat/framework-rename` and propose one PR against `main`; merge only after all checks pass and a code review.
+The rename was implemented on `feat/framework-rename` and merged into `main` through PR #18. Subsequent fixes must continue to preserve legacy configuration and persisted data.

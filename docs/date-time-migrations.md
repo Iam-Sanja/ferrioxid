@@ -1,22 +1,22 @@
-# Migrationen für Datum und Uhrzeit
+# Migrations for date and time
 
-**Stand:** v0.19.
+**Milestone:** v0.19.
 
-`LogicalType` hat `date`, `time` und `date_time`. Der Snapshot und die Checksum behandeln sie wie die bisherigen Typen.
+`LogicalType` has `date`, `time` and `date_time`. The snapshot and the checksum treat them like the previous types.
 
 | Backend | Date | Time | DateTime |
 |---|---|---|---|
 | SQLite | `TEXT` | `TEXT` | `TEXT` |
 | PostgreSQL | `DATE` | `TIME` | `TIMESTAMPTZ` |
 
-SQLite speichert die kanonische Zeichenkette. Sortierung und Präfixfilter folgen der ISO-Reihenfolge. PostgreSQL bindet die Chrono-Werte typisiert. Die Abbildung ist im Schema-Renderer vorhanden. Ein PostgreSQL-Laufzeittest dieser Version wurde nicht ausgeführt.
+SQLite stores canonical strings, so sorting and prefix filters follow ISO ordering. PostgreSQL binds typed chrono values, and the schema renderer maps them to the types above. The original v0.19 verification did not include a PostgreSQL runtime test.
 
-## Neue Spalten
+## New columns
 
-Eine neue nullable oder Pflichtspalte entsteht über `ferrioxid migrate make`. myshop hängt `events` als `migrations/0004_events.json` an `0003_internal_notes`. Die Dateien `0001_initial.json`, `0002_categories_and_product_relations.json`, `0003_internal_notes.json` und `crates/ferrioxid-auth/migrations/0002_admin_journal.json` sind unverändert.
+A new nullable or mandatory column is created via `ferrioxid migrate make`. myshop attaches `events` as `migrations/0004_events.json` to `0003_internal_notes`. The files `0001_initial.json`, `0002_categories_and_product_relations.json`, `0003_internal_notes.json` and `crates/ferrioxid-auth/migrations/0002_admin_journal.json` are unchanged.
 
-## Blockierte Umwandlung
+## Blocked conversion
 
-`String` und `I64` bleiben die einzige unterstützte Typänderung. `String` nach `Date`, `Time` oder `DateTime` erzeugt eine Ablehnung in `plan_change`. Es gibt keine stille Reparatur ungültiger Bestandszeilen. Ein späterer, ausdrücklich geprüfter Datenumbau ist nicht Teil von v0.19.
+Type conversion is supported only between `String` and `I64`. Converting `String` to `Date`, `Time` or `DateTime` is rejected by `plan_change`; existing rows are not silently repaired. Explicit temporal data conversion remains unimplemented.
 
-Nullable und Defaults folgen den bisherigen Regeln. Ein Bool-Default gilt nicht für Datumsfelder.
+Nullable and defaults follow the previous rules. A bool default does not apply to date fields.

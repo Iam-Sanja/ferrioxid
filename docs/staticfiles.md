@@ -1,27 +1,27 @@
-# Statische Dateien
+# Static files
 
-**Stand:** v0.12, IST. Die Cargo-Version bleibt `0.1.0`.
+**Milestone:** v0.12, Implemented. The Cargo version remains `0.1.0`.
 
-## Verantwortlichkeit
+## Responsibility
 
-`ferrioxid-static` liefert CSS, JavaScript, Bilder und Schriften aus einem ausdrücklich konfigurierten Verzeichnis. Eingebettete Admin-Assets unter `/admin` bleiben getrennt.
+`ferrioxid-static` provides CSS, JavaScript, images and fonts from an explicitly configured directory. Embedded admin assets under `/admin` remain separate.
 
-## Crates und Dateien
+## Crates and files
 
 - `crates/ferrioxid-static/src/lib.rs`
-- Einhängen: `ferrioxid::web::prepare` in `crates/ferrioxid-api/src/web.rs`
-- Beispiel: `examples/myshop/static/`
-- Generator: `static/css/app.css` und `static/js/app.js`
+- Install: `ferrioxid::web::prepare` in `crates/ferrioxid-api/src/web.rs`
+- Example: `examples/myshop/static/`
+- Generator: `static/css/app.css` and `static/js/app.js`
 
-## Öffentliche API
+## Public API
 
-`StaticOptions` und `mount`. Der Pfad ist `{url_prefix}/{*path}`. `serve` setzt `Content-Type`, `Content-Length`, `Cache-Control`, `ETag` und `X-Content-Type-Options: nosniff`. `If-None-Match` kann 304 liefern.
+The public API consists of `StaticOptions` and `mount`. The route is `{url_prefix}/{*path}`. `serve` sets `Content-Type`, `Content-Length`, `Cache-Control`, `ETag` and `X-Content-Type-Options: nosniff`. A matching `If-None-Match` may produce 304.
 
-## Datenfluss
+## Data flow
 
-Die Route entfernt das Präfix, prüft jedes Segment und kanonisiert Root und Datei. Nur Dateien, deren kanonischer Pfad im Root beginnt, werden gelesen. Die Antwort enthält die Bytes und den ETag aus SHA-256.
+The route strips its prefix, validates every path segment and canonicalizes the root and file paths. It serves only files inside the canonical root and derives the ETag from SHA-256.
 
-## Konfiguration
+## Configuration
 
 ```toml
 [static]
@@ -31,28 +31,28 @@ directory = "static"
 cache_seconds = 3600
 ```
 
-Neue Projekte setzen `enabled = true`. Die bestehende Workspace-Datei ohne Abschnitt lässt `enabled` auf `false`. `directory` ist relativ und darf `..` nicht enthalten. `url_prefix` darf `/admin`, `/api`, `/auth`, `/healthz` und `/uploads` nicht überdecken. `cache_seconds` ist höchstens 2592000. Die maximale Dateigröße ist 5 MiB.
+New projects set `enabled = true`. The existing workspace file without a section leaves `enabled` on `false`. `directory` is relative and must not contain `..`. `url_prefix` shall not overlap `/admin`, `/api`, `/auth`, `/healthz` and `/uploads`. `cache_seconds` is not more than 2592000. The maximum file size is 5 MiB.
 
-## Sicherheit
+## Security
 
-Verboten sind leere Segmente, `\`, NUL, `.`, `..`, Punkt-Dateien, `.env`, SQLite-Dateien und `.pem`. Ein Symlink, der nach der Kanonisierung außerhalb des Roots liegt, wird nicht ausgeliefert. Verzeichnisse werden nicht aufgelistet. HTML ist kein erlaubter Typ. SVG aus dem Static-Root ist erlaubt, Upload-SVG nicht. Der Root muss existieren, sonst ist die Datei nicht erreichbar.
+Empty path segments, `\`, NUL, `.`, `..`, dotfiles, `.env`, SQLite files and `.pem` files are rejected. Symlinks resolving outside the root are not served, and directories have no listings. HTML is disallowed. SVG is allowed in the trusted static root but not as an upload. The root must already exist.
 
-## Fehlerfälle
+## Error cases
 
-Fehlende, versteckte oder ausbrechende Pfade sind 404. Unbekannte Endungen sind 415. Zu große Dateien sind 413.
+Missing, hidden or escaping paths return 404. Unknown file extensions return 415; oversized files return 413.
 
-## Beispiel
+## Example
 
-`GET /static/css/app.css` nach `ferrioxid::static_files::mount(router, StaticOptions::new("static"))`.
+After mounting with `ferrioxid::static_files::mount(router, StaticOptions::new("static"))`, request `GET /static/css/app.css`.
 
 ## Tests
 
-`cargo test -p ferrioxid-static` prüft CSS, JavaScript, PNG, MIME, 404, Cache, ETag, Traversal, versteckte Dateien und, wenn Windows den Symlink anlegen darf, einen Symlink nach außen.
+`cargo test -p ferrioxid-static` checks CSS, JavaScript, PNG, MIME, 404, Cache, ETag, Traversal, hidden files and, if Windows is allowed to create the symlink, a symlink to the outside.
 
-## Einschränkungen
+## Limitations
 
-Es gibt keine Manifest-Fingerprints, kein Brotli und kein CDN. Der Entwicklungs- und der Produktionsmodus nutzen denselben Reader. Nur `cache_seconds` unterscheidet die Cache-Dauer.
+There are no manifest fingerprints, no Brotli and no CDN. The development and production modes use the same reader. Only `cache_seconds` distinguishes the cache duration.
 
-## Erweiterung
+## Extension
 
-Ein späterer Build-Schritt kann gehashte Dateinamen erzeugen. Die Route bleibt am konfigurierten Präfix.
+A later build step can create hashed filenames. The route remains on the configured prefix.

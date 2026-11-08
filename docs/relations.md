@@ -1,8 +1,8 @@
-# Typisierte Modellbeziehungen
+# Typed model relationships
 
-[Zur Übersicht](index.md) · **IST** für Belongs-To und Has-Many. Many-to-Many, Eager Loading und Batch Loading sind nicht implementiert.
+[Overview](index.md) · **Implemented** for Belongs-To and Has-Many. Many-to-Many, Eager Loading and Batch Loading are not implemented.
 
-Eine Beziehung existiert nicht nur in Rust. Das Feld trägt einen Foreign Key, und die Datenbank prüft ihn. Die Methoden laden typisierte Modelle. Sie geben kein `serde_json::Value` zurück.
+A relationship does not only exist in Rust. The field carries a foreign key, and the database checks it. The methods load typed models. You do not return a `serde_json::Value`.
 
 ## Belongs-To
 
@@ -15,22 +15,22 @@ Eine Beziehung existiert nicht nur in Rust. Das Feld trägt einen Foreign Key, u
 pub category_id: Option<Uuid>,
 ```
 
-`belongs_to` ist der Rust-Pfad des Elternmodells. Das Makro kann diesen Typ nicht aus dem Foreign-Key-Text ableiten, weil es andere Module nicht sieht. Der Methodenname ist der Feldname ohne `_id`. `category_id` wird zu `category`.
+`belongs_to` is the Rust path of the parent model. The macro cannot derive this type from the foreign key text because it does not see other modules. The method name is the field name without `_id`. `category_id` becomes `category`.
 
 ```rust
 let category = product.category(&db).await?;
 ```
 
-| Feld | Rückgabe |
+| Field |Return|
 |---|---|
 | `Option<Uuid>` | `Result<Option<Category>, FerrioxidError>` |
 | `Uuid` | `Result<Category, FerrioxidError>` |
 
-Ist der optionale Schlüssel `None`, kommt `Ok(None)` und es gibt keine zweite Abfrage. Ist ein Schlüssel gesetzt und die Elternzeile fehlt, kommt `NotFound`. Bei einem wirksamen Foreign Key tritt das nur auf, wenn die Datenbank den Constraint nicht enthält. Ein ungültiger Schlüssel wird schon beim Schreiben abgelehnt.
+If the optional key is `None`, `Ok(None)` comes and there is no second query. If a key is set and the parent line is missing, `NotFound` comes. With an effective foreign key, this only occurs if the database does not contain the constraint. An invalid key is already rejected when writing.
 
 ## Has-Many
 
-Die Gegenrichtung muss explizit sein. Das Makro sieht die Kindmodelle nicht.
+The opposite direction must be explicit. The macro does not see the child models.
 
 ```rust
 #[ferrioxid(
@@ -47,40 +47,40 @@ pub struct Category {
 }
 ```
 
-Die Form ist `methode=Typpfad.spalte`. Die Spalte muss auf dem Kindmodell existieren. `find_by_column` lehnt eine unbekannte Spalte ab.
+The attribute syntax is `methode=Typpfad.spalte` (method name, type path and column). The column must exist on the child model; `find_by_column` rejects unknown columns.
 
 ```rust
 let products = category.products(&db).await?;
 ```
 
-Die Rückgabe ist `Result<Vec<Product>, FerrioxidError>`. Keine Kinder ergeben einen leeren Vektor, keinen Fehler. Die Zeilen sind nach `id` aufsteigend sortiert.
+The return is `Result<Vec<Product>, FerrioxidError>`. No children make an empty vector, no error. The lines are sorted ascending according to `id`.
 
-Gegenseitige Modulverweise sind zulässig, weil die Typen nur in Methodensignaturen stehen. `myshop` trennt `category.rs` und `product.rs`.
+Mutual module references are allowed because the types are only in method signatures. `myshop` separates `category.rs` and `product.rs`.
 
-## Laden
+## Loading
 
-Jede Beziehungsmethode führt eine Abfrage aus, wenn sie aufgerufen wird. Das ist Lazy Loading. Eine Schleife über Produkte, die jeweils `product.category(&db)` aufruft, erzeugt eine Abfrage pro Produkt. Das ist das N+1-Problem: eine Abfrage für die Liste und N weitere für die Eltern.
+Each relationship method performs a query when it is called. This is lazy loading. A loop about products that calls `product.category(&db)` each creates one query per product. This is the N+1 problem: one query for the list and N more for the parents.
 
-Eager Loading und ein `WHERE id IN (...)` für viele Eltern sind nicht implementiert. Wer viele Kinder lädt, sollte das vorerst mit einer eigenen Abfrage tun, statt in einer Schleife `products()` aufzurufen.
+Eager loading and batched parent queries with `WHERE id IN (...)` are not implemented. To load many child collections, use a custom query rather than calling `products()` in a loop.
 
-Die Repository-Methoden `list`, `get`, `create`, `update` und `delete` bleiben unverändert. Die Beziehungsmethoden sind eigene Methoden am Modell, keine neuen Repository-Methoden.
+The repository methods `list`, `get`, `create`, `update` and `delete` remain unchanged. The relationship methods are separate methods on the model, not new repository methods.
 
 ## HTTP
 
-Es gibt keine zusätzlichen Routen für Beziehungen. `GET /categories/{id}/products` existiert nicht. Die CRUD-Routen der registrierten Modelle bleiben. Unique- und Foreign-Key-Verletzungen werden zu `FerrioxidError::Validation` und damit zu HTTP 422. Die Antwort enthält den festen englischen Text `unique constraint violated` oder `foreign key constraint violated`, nicht das SQL und nicht die Datenbankmeldung. Eine fehlende Einzelzeile bleibt 404. Eine nicht freigegebene Route bleibt 403. Ein unbekannter Datenbankfehler bleibt 500.
+There are no additional routes for relationships. `GET /categories/{id}/products` does not exist. The CRUD routes of the registered models remain. Unique and foreign key violations become `FerrioxidError::Validation` and thus HTTP 422. The answer contains the fixed English text `unique constraint violated` or `foreign key constraint violated`, not the SQL and not the database message. A missing single line remains 404. An unreleased route remains 403. An unknown database error remains 500.
 
-`DELETE` einer Elternzeile mit `on_delete = "restrict"` und vorhandenen Kindern antwortet 422.
+`DELETE` of a parent line with `on_delete = "restrict"` and existing children answers 422.
 
 ## myshop
 
-`Category.name` ist eindeutig. `Product.name` hat einen Index. `Product.category_id` ist optional und verweist mit `restrict` auf `categories.id`. `0001_initial.json` bleibt unverändert. `0002_categories_and_product_relations.json` legt `categories` an, fügt `category_id` samt Foreign Key hinzu und erzeugt `ix_products_name`.
+`Category.name` is unique. `Product.name` has an index. `Product.category_id` is optional and references `restrict` to `categories.id`. `0001_initial.json` remains unchanged. `0002_categories_and_product_relations.json` creates `categories`, adds `category_id` and Foreign Key and creates `ix_products_name`.
 
-Bestehende Produktzeilen bleiben gültig, weil die neue Spalte nullable ist und keinen Default braucht.
+Existing product lines remain valid because the new column is nullable and does not need a default.
 
-## Nicht implementiert
+## Not implemented
 
-- Many-to-Many und Join-Tabellen
-- Eager Loading, `prefetch` und Batch Loading
-- Automatisches Entdecken der Gegenrichtung
-- Verschachtelte HTTP-Routen
-- Laden einer Beziehung innerhalb von `list`
+- Many-to-many and join tables
+- Eager Loading, `prefetch` and Batch Loading
+- Automatic detection of the opposite direction
+- Nested HTTP routes
+- Loading a relationship within `list`

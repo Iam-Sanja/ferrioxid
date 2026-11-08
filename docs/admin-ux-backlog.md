@@ -1,167 +1,160 @@
-# Admin-Backlog: Fehler, Gestaltung, Verzeichnis
+# Admin backlog: errors, design and directory
 
-[Zur Übersicht](index.md) · Roadmap: [roadmap.md](roadmap.md) · Vergleich: [admin-django-parity.md](admin-django-parity.md)
+[Overview](index.md) · Roadmap: [roadmap.md](roadmap.md) · Comparison: [admin-django-parity.md](admin-django-parity.md)
 
-**Stand der Umsetzung:** v0.22. Eigene Seiten, Aktionen, Filter und Widgets sind registrierbar. Die bekannten Abstände und Farben des bestehenden Admins bleiben unverändert. Abmelden ohne Staff, die Flag-Hinweise, die Standardspalten, die Design-Tokens, die Rollenauswahl, die Benutzerpflege, die serverseitige Bestätigung, lesbare Fremdschlüssel, die Filterauswahl, die Listenkonfiguration, Fieldsets, die Speicherziele, die Auswahlseite, Formularentwürfe, Has-Many-Inlines, das opt-in Eltern-Kind-Formular, Sammelaktionen, die Historie, die UTC-Datumshierarchie und das atomare Verzeichnis-Audit sind umgesetzt. Abbrechen löscht einen Entwurf nicht sofort. Many-to-Many und verschachtelte Inlines fehlen.
+**Implementation status:** v0.22. Custom pages, actions, filters and widgets can be registered. Logout for non-staff sessions, separate status flags, metadata-based columns, design tokens, role selection, user management, server-side confirmation, readable relations, filters, list configuration, fieldsets, save destinations, selection pages, drafts, has-many inlines, opt-in parent-child forms, bulk actions, history, UTC date hierarchy and transactional directory auditing are implemented. Cancel leaves drafts until expiration. Many-to-many and nested inlines remain unavailable.
 
-Impeccable 4.8.0 liegt unter `.cursor/skills/impeccable/`. Für v0.15 wurden Kontext, Critique, Audit, Layout und Feinschliff ausgeführt. Der Bericht steht im Arbeitsgang. Die visuelle Welt bleibt „Die Nachtschicht“ aus `DESIGN.md`.
+The v0.15 design work used the locally installed Impeccable 4.8.0 skill at `.cursor/skills/impeccable/` for context, criteria, auditing, layout and polish. The visual direction remains “The Night Shift” from `DESIGN.md`.
 
-## P0 – Abmelden ohne Staff-Recht
+## P0 – Logout without staff access
 
-Umgesetzt in v0.14. `require_get` rendert für eine Sitzung ohne Staff `error.html` mit `staff_required`, CSRF und ohne Seitenleiste. `POST /admin/logout` ist unverändert an `authenticate_csrf` gebunden und verlangt kein `is_staff`.
+Implemented in v0.14. For a valid non-staff session, `require_get` renders `error.html` with `staff_required`, CSRF and no sidebar. `POST /admin/logout` uses `authenticate_csrf` without requiring `is_staff`.
 
-### Abnahme
+### Acceptance criteria
 
-- Jede Antwort an eine gültige Sitzung enthält eine Abmeldung, auch 403 und 404 im Admin.
-- Die Abmeldung ist ein POST mit Sitzungs-CSRF, nicht ein GET und nicht ein Link ohne Token.
-- `is_staff` entscheidet nicht über das Recht, die eigene Sitzung zu beenden.
-- Nach Erfolg ist die Sitzung widerrufen, das Session-Cookie geleert, Antwort 303 auf `/admin/login`.
-- Ein Nicht-Staff erreicht danach keine Modell- oder Verzeichnisroute.
-- Ein POST ohne oder mit falschem CSRF ändert die Sitzung nicht und antwortet 403.
-- Die Abmeldung hebt keine Modellrechte auf und öffnet keine fremde Sitzung.
+- Every admin response for a valid session, including 403 and 404, offers logout.
+- Logout is a CSRF-protected POST, never a GET or tokenless link.
+- `is_staff` does not determine whether a user may end their own session.
+- Success revokes the session, clears its cookie and redirects with 303 to `/admin/login`.
+- A non-staff user cannot access model or directory routes.
+- Missing or invalid CSRF returns 403 without changing the session.
+- Logout changes neither model permissions nor another user's session.
 
 ### Tests
 
-In `examples/myshop/tests/admin_html.rs`:
+`examples/myshop/tests/admin_html.rs` checks:
 
-1. Benutzer mit `is_staff = false` lädt `GET /admin`. Die Antwort ist HTML, enthält ein Logout-Formular und nicht nur den Klartext.
-2. `POST /admin/logout` mit gültigem CSRF liefert 303. Ein folgendes `GET /admin` mit dem alten Cookie führt zur Anmeldung.
-3. `POST /admin/logout` ohne CSRF liefert 403. `GET /auth/me` oder ein erneuter geschützter Abruf zeigt, dass die Sitzung noch gilt.
-4. Derselbe Benutzer kann `GET /admin/models/...` nicht lesen, weder vor noch nach einem fehlgeschlagenen Logout.
-5. Ein Staff-Benutzer kann sich weiter über die bestehende Kopfzeile abmelden.
+1. A user with `is_staff = false` receives an HTML 403 from `GET /admin`, including a logout form.
+2. `POST /admin/logout` with valid CSRF returns 303; the old cookie then redirects to login.
+3. Logout without CSRF returns 403, and the session remains valid for `GET /auth/me` or another protected request.
+4. The user cannot read `GET /admin/models/...`, including after a failed logout.
+5. Staff users can still log out from the header.
 
-### Dateien
+### Files
 
 `html.rs` (`require_get`, `error_page`, `logout`), `templates/errors/error.html`, `templates/base.html`, `examples/myshop/tests/admin_html.rs`, `docs/admin-security.md`.
 
-## P0 – Staff und Superuser
+## P0 – Staff and Superuser
 
-Umgesetzt in v0.14. Die drei Flags bleiben getrennt. Die CLI druckt sie nach dem Anlegen. Die Benutzerliste hat eigene Spalten.
+Implemented in v0.14. Active, Staff and Superuser are independent flags. The CLI reports them after creation; the user list gives each its own column.
 
-### Abnahme
+### Acceptance criteria
 
-Die drei Flags bleiben getrennt. Kein Login und kein Admin-Aufruf setzt `is_staff` still nach.
+- Neither login nor an admin request silently sets `is_staff`.
+- `ferrioxid admin create-user --superuser` without `--staff` reports that staff access is required for the admin while preserving the requested flags.
+- The 403 page explains the missing staff flag without revealing whether other accounts exist.
+- Active, Staff and Superuser are expressed in words rather than color alone.
+- [auth.md](auth.md) documents the combinations.
 
-- `ferrioxid admin create-user --superuser` ohne `--staff` weist auf der Konsole darauf hin, dass der Admin `is_staff` verlangt, und legt den Benutzer trotzdem so an, wie die Flags gesetzt wurden.
-- Die 403-Seite eines angemeldeten Superusers ohne Staff nennt, dass der Admin-Zugang das Staff-Flag braucht. Sie verrät nicht, ob andere Benutzer existieren.
-- Die Verzeichniszeile trennt Staff, Superuser und Aktiv als eigene Wörter. Farbe allein trägt den Status nicht.
-- Dokumentation der Kombinationen in `docs/auth.md` und hier.
-
-| aktiv | Staff | Superuser | Admin-Modelle | Verzeichnis |
+| Active | Staff | Superuser | Admin models | Directory |
 |---|---|---|---|---|
-| nein | beliebig | beliebig | keine Sitzung | keine Sitzung |
-| ja | nein | nein | 403, abmelden möglich | 403 |
-| ja | nein | ja | 403, abmelden möglich | 403 |
-| ja | ja | nein | nur mit Modellrecht | 403 |
-| ja | ja | ja | alle registrierten Modelle | ja |
+| no | either | either | No session | No session |
+| yes | no | no | 403; logout available | 403 |
+| yes | no | yes | 403; logout available | 403 |
+| yes | yes | no | Model permissions required | 403 |
+| yes | yes | yes | All registered models | yes |
 
 ### Tests
 
-CLI-Test: Superuser ohne Staff erzeugt eine Hinweiszeile und `is_staff = false`. HTML-Test: derselbe Benutzer sieht die erklärende 403-Seite und kann sich abmelden. Ein Staff-Superuser sieht das Verzeichnis. Ein Staff ohne Superuser sieht es nicht.
+The CLI reports that a superuser without staff cannot enter the admin and preserves `is_staff = false`. HTML tests cover the explanatory 403 and logout. A staff superuser sees the directory; ordinary staff do not.
 
-### Dateien
+### Files
 
 `crates/ferrioxid-cli/src/main.rs`, `crates/ferrioxid-cli/src/text.rs`, `html.rs`, `templates/directory/users.html`, `templates/errors/error.html`, `docs/auth.md`.
 
-## P0 – Listenspalten
+## P0 – List columns
 
-Umgesetzt in v0.14. Die Reihenfolge steht in [admin-native.md](admin-native.md). Ein Modell ohne String-Feld fällt auf das erste andere sichtbare Feld zurück. `name` ist keine Voraussetzung.
+Implemented in v0.14. The current column rules are in [admin-native.md](admin-native.md); models do not require a `name` field.
 
-### Abnahme
+### Acceptance criteria
 
-- Standardspalten kommen aus den Metadaten, nicht aus dem Literal `name`.
-- Kandidaten für die erste lesbare Spalte, in dieser Reihenfolge: ein String-Feld mit `list_display`, sonst das erste nicht sensible String-Feld, das nicht verborgen ist, sonst nur `id`.
-- `#[admin(list_display)]` bleibt die ausdrückliche Liste und bestimmt die Reihenfolge der markierten Felder. `id` bleibt verfügbar, muss aber nicht die einzige Spalte sein, wenn ein Bezeichner existiert.
-- Nicht markierte Felder erscheinen nicht zusätzlich, sobald mindestens ein Feld außer `id` markiert ist. So bleibt eine bewusste Liste stabil.
-- Hat kein Feld außer `id` eine Markierung, gilt der Fallback oben. Bestehende myshop-Modelle mit Markierung ändern ihre Spalten nicht.
-- Schreibgeschützte Spalten tragen ein sichtbares Kennzeichen, ändern den Wert aber nicht.
-- `hidden` und sensible Felder bleiben unsichtbar, auch im Fallback.
-- Felder ohne Modellrecht oder außerhalb des Scopes erscheinen nicht. Die Zeile eines unsichtbaren Datensatzes bleibt 404, wie bisher.
-- Kein Modell muss `name` besitzen. `title`, `email` oder ein anderes String-Feld können der Bezeichner sein.
+- Columns come from metadata, not a hard-coded `name` field.
+- Explicit `#[admin(list_display)]` annotations define the list in struct order. Once any non-ID field is marked, unmarked fields are not added by fallback.
+- Without explicit non-ID columns, choose the first visible, non-sensitive text field; use the documented fallback when no text field exists. `id` remains available.
+- Read-only fields may label records without being editable.
+- Hidden and sensitive fields never appear, including through fallback.
+- Permissions and query scopes still apply. Inaccessible records return 404.
+- `title`, `email` or another text field can label a record.
 
 ### Tests
 
-1. Modell nur mit `id` und einem String ohne `list_display`: die Liste zeigt den String und die UUID.
-2. Modell mit `list_display` auf einem Feld: genau diese Spalten plus die bestehende Aktion. Kein zusätzlicher Fallback.
-3. Modell ohne String-Feld: nur `id` und Aktion, kein Panic und kein leerer Header.
-4. `password_hash` mit `hidden` erscheint weder in der Liste noch im Fallback.
-5. myshop-Produktliste enthält den Namen.
+1. An unmarked text field appears beside the UUID.
+2. Explicit columns appear without extra fallback fields.
+3. A model without a text field has a valid ID/action list without a panic or empty header.
+4. Hidden `password_hash` never appears.
+5. The myshop product list includes its name.
 
-### Dateien
+### Files
 
 `crates/ferrioxid-macros/src/lib.rs`, `crates/ferrioxid-admin/src/registry.rs`, `crates/ferrioxid-admin/src/html.rs`, `templates/models/list.html`, `crates/ferrioxid-cli/src/scaffold.rs`, `examples/myshop/tests/admin_html.rs`.
 
-Der Generator setzt bei neuen Fullstack-Projekten weiter `list_display` auf das Namensfeld, damit die ausdrückliche Liste und der Fallback dasselbe zeigen.
+The generator marks the name field with `list_display` in new fullstack projects so explicit selection and fallback agree.
 
-## P1 – Gestaltung
+## P1 – Design
 
-Umgesetzt in v0.15. Quelle: `static/css/admin.css`, `templates/`, `docs/admin-design-system.md`.
+Sources: `static/css/admin.css`, `templates/`, [admin-design-system.md](admin-design-system.md).
 
-### Abnahme
+### Acceptance criteria
 
-| Thema | Stand |
+| Topic | Status |
 |---|---|
-| Spacing-Tokens `--space-1` bis `--space-6` | umgesetzt, Vielfache von 0.25rem |
-| Eingaben gleicher Höhe, Fehler unter dem Feld | umgesetzt |
-| Formulargruppen, Karte höchstens 40rem | umgesetzt, Partial `field.html` |
-| Buttons primär, ruhig, Gefahr | umgesetzt |
-| Tabellenaktionen mit Abstand | umgesetzt, Details, Bearbeiten, Löschen |
-| Suche und Filter als eigene Zone | umgesetzt, serverseitig |
-| Fokus sichtbar, auch auf der Tür | umgesetzt, `:focus-visible` |
-| Rollenauswahl | umgesetzt, `<select>`, unbekannte Rolle wird nicht angelegt |
-| Leere, Fehler, Erfolg | umgesetzt |
-| Aktuelle Navigation ohne Script-Menü | umgesetzt |
-| Kontrast und Projektfarbe | umgesetzt, Tor bei 4,5:1, dunkle Tür ohne Projektfarbe |
+| Spacing tokens `--space-1` through `--space-6` | Implemented; multiples of 0.25rem |
+| Equal-height controls with errors below fields | Implemented |
+| Field groups and a maximum 40rem form width | Implemented, shared `field.html` partial |
+| Primary, quiet and danger buttons | Implemented |
+| Separated detail, edit and delete actions | Implemented |
+| Search and filters in a separate toolbar group | Implemented, server-side |
+| Visible focus, including the sidebar | Implemented, `:focus-visible` |
+| Role selection | Implemented, `<select>`; assignment never creates an unknown role |
+| Empty, error and success states | Implemented |
+| Current-page navigation without a script-only menu | Implemented |
+| Contrast and branding | Implemented, 4.5:1 text contrast gate; dark sidebar keeps its own color |
 
-### Ist, das bleibt
+### Existing behavior
 
-Eine Spalte aus Seitenleiste und Inhalt, Umbruch unter 800 Pixel, Tabellen mit horizontalem Scroll, Tokens für hell, dunkel und `system`, Fokus-Outline, Mindesthöhe 2,5 rem, Sprunglink, `lang`, Labels, `role="status"` und `role="alert"`. Quelle: `static/css/admin.css`, `templates/base.html`.
+The layout has a sidebar and content area, stacking below 800 pixels, with horizontally scrolling tables. Light, dark and `system` themes share tokens. Controls provide visible focus and a minimum height of 2.5rem. The page includes a skip link, `lang`, labels, `role="status"` and `role="alert"`. Sources: `static/css/admin.css`, `templates/base.html`.
 
-### Vertrag
+### Contract
 
-Die Abnahme oben ist dieser Vertrag. Er ist erfüllt.
+These design requirements are implemented. The v0.15 phase did not add data fields, auditing, permission-flag changes or a mandatory JavaScript menu; later milestones added the separately documented features.
 
-### Nicht in v0.15
+## P1 – User management
 
-Keine neuen Datenfelder, kein Audit-Log, keine Änderung der Rechteflags, kein JavaScript-Menü als einziger Weg.
+The v0.16 directory uses dedicated admin write routes backed by `AuthService`, not generic CRUD endpoints for auth tables.
 
-## P1 – Benutzerverwaltung
+### Implemented
 
-Phase v0.16. Die heutigen Verzeichnisrouten bleiben. Neue Schreibwege sind eigene Admin-Routen, nicht das generische Modell-CRUD der Auth-Tabellen.
+Email search and sorting, 25-row pagination, Active and Staff controls, role display and assignment, permission changes, user creation, detail, profile and password forms are implemented. Self-deactivation and removal of one's own staff access are blocked. Superuser records cannot be changed through the directory. Hashes never leave the server. The server requires `confirm=1`; password changes and deactivation revoke target sessions.
 
-### Ist
+### Acceptance criteria
 
-Suche über E-Mail, Sortierung, 25 Zeilen je Seite, Aktiv und Staff umschalten, Rollen anzeigen, Rolle per Auswahl zuweisen oder entziehen, Rechte geben und nehmen. Eigenes Deaktivieren und eigener Staff-Entzug sind blockiert. Superuser-Zeilen sind nicht veränderbar. Es gibt keinen Admin-Weg, jemanden zum Superuser zu machen. Passwort-Hashes verlassen den Server nicht. Anlegen, Detail, E-Mail, Aktiv, Staff, Rollen und Passwort sind HTML-Routen auf `AuthService`. `confirm=1` ist serverseitig Pflicht. Passwortänderung und Deaktivierung widerrufen die Zielsitzungen.
-
-### Soll
-
-| Funktion | Abnahme |
+| Feature | Requirement |
 |---|---|
-| Anlegen | E-Mail, Passwort zweimal, Staff optional. Superuser ist nicht wählbar. Passwort 12 bis 128 Zeichen, Argon2id |
-| Bearbeiten | E-Mail ändern, eindeutig, dieselbe Prüfung wie die CLI |
-| Aktiv und Staff | Bestehende Sperren bleiben |
-| Rollen | Auswahl, nicht Freitext. Anzeige der aktuellen Rollen. In v0.15 umgesetzt |
-| Rechte | Weiter nur für Staff-Superuser. Kein Code, der `superuser` enthält |
-| Passwort | Setzen widerruft alle Sitzungen des Ziels. Das Formular zeigt nie den Hash und nie das neue Passwort nach dem Redirect |
-| Sitzungen | Sicherheitsrelevante Änderung widerruft die Zielsitzungen. Die eigene Sitzung bleibt nur erhalten, wenn das Ziel ein anderer Benutzer ist und die eigene Rolle sich nicht ändert |
-| Suche, Sortierung, Filter, Seiten | Weiter in SQL, Seitengröße gedeckelt |
-| Detail | Eine Seite je Benutzer ohne Hash, ohne Token |
-| Selbstsperre | Man kann das eigene Aktiv-Flag, das eigene Staff-Flag und das eigene letzte Superuser-Recht nicht entfernen |
-| HTML | Kein `password_hash`, kein Session-Token, kein CSRF-Wert in sichtbarem Text oder in der URL |
+| Creation | Email, password twice, optional staff; no superuser selector. Passwords contain 12–128 characters and use Argon2id. |
+| Editing | Email validation matches the CLI. |
+| Active and Staff | Existing target and self-lockout checks remain. |
+| Roles | Select existing roles rather than entering free text; show current assignments. |
+| Permissions | Staff superusers only; reject codes containing `superuser`. |
+| Password | Revoke target sessions; never display the hash or echo the password after redirect. |
+| Sessions | Revoke target sessions for security-sensitive changes; do not affect an unrelated acting user. |
+| Search and pagination | Server-side queries with a capped page size. |
+| Detail | One page per user without hashes or tokens. |
+| Self-lockout | Do not remove the actor's active or staff flag; superuser changes remain a CLI operation. |
+| HTML | No `password_hash`, session token or visible/URL CSRF value. |
 
 ### Tests
 
-Anlegen, doppelte E-Mail, zu kurzes Passwort, E-Mail ändern, Passwort ändern und danach alte Sitzung ungültig, Selbstsperre, Superuser-Flag nicht setzbar, Nicht-Superuser erhält 403, Hash nicht im HTML. `html_admin_works_without_javascript` deckt Anlegen, Passwort, alte Sitzung, Staff-Entzug, Bestätigung, CSRF, Superuser-Sperre und Nicht-Superuser ab. Doppelte E-Mail und zu kurzes Passwort laufen über dieselben Service-Fehler, sind in diesem HTML-Lauf aber nicht als eigene Fälle behauptet.
+`html_admin_works_without_javascript` covers creation, password changes, invalidation of the old session, staff revocation, confirmation, CSRF, superuser protection and non-superuser access. Duplicate email and weak-password checks use the same service validation; they are not claimed as separate cases in this HTML test.
 
-### Vertrag
+### Contract
 
-Die Benutzer-, Passwort-, Sitzungs- und Bestätigungsabnahme ist erfüllt. Entwürfe, Inlines, Sammelaktionen und Historie sind in v0.18 umgesetzt und in `admin_v018_drafts_inlines_bulk_and_audit` geprüft.
+User, password, session and confirmation requirements are implemented. Drafts, inlines, bulk actions and history were added in v0.18 and tested by `admin_v018_drafts_inlines_bulk_and_audit`.
 
-### Dateien
+### Files
 
-`html.rs`, `templates/directory/`, `ferrioxid-auth` Service-Methoden, die es schon für die CLI gibt, `admin_html.rs`, `admin_http.rs`. Keine neue Migration, solange die Auth-Tabellen reichen.
+`html.rs`, `templates/directory/`, the `ferrioxid-auth` service methods used by the CLI, `admin_html.rs`, `admin_http.rs`. No migration is needed while the existing auth tables suffice.
 
-## Abhängigkeiten
+## Dependencies
 
 ```text
 v0.14 Abmelden, Flags, Spalten
@@ -171,4 +164,4 @@ v0.14 Abmelden, Flags, Spalten
         → v0.18 Entwürfe, Inlines, Aktionen, Historie   umgesetzt
 ```
 
-v0.16 darf die Passwortregeln der CLI nicht duplizieren, sondern `AuthService` rufen. Das Audit-Ziel ist `_ferrum_admin_audit`. Die Vorlagennamen bleiben fest.
+The historical diagram is retained verbatim. v0.16 uses `AuthService` rather than duplicating CLI password rules. Audit records use `_ferrum_admin_audit`; template names remain fixed.

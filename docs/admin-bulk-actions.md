@@ -1,32 +1,32 @@
-# Sammelaktionen
+# Bulk actions
 
-[Zur Übersicht](admin.md) · Eigene Aktionen: [admin-custom-actions.md](admin-custom-actions.md)
+[Overview](admin.md) · Custom actions: [admin-custom-actions.md](admin-custom-actions.md)
 
-## Oberfläche
+## User interface
 
-Die Modellliste zeigt, wenn mindestens eine erlaubte Aktion existiert:
+The model list shows if at least one permitted action exists:
 
-- eine Checkbox `ids` je Zeile
-- eine Checkbox `scope=page` für die aktuelle Seite
-- ein `select` mit dem Aktionsnamen
-- einen Submit
+- One `ids` checkbox per row
+- a checkbox `scope=page` for the current page
+- a `select` with the action name
+- A submit button
 
-`scope=page` ist keine Skript-Auswahl. Der Server liest die Seite mit dem Schreib-Scope erneut und ignoriert gesendete IDs. Die Seitengröße bleibt 1 bis 100. Die ganze Tabelle wird nicht gewählt.
+`scope=page` is a server-side selection. The server reloads the current page with the write scope and ignores submitted IDs. Page size remains between 1 and 100; the action never selects the entire table.
 
-## Ablauf
+## Workflow
 
-1. `POST /admin/models/{model}/bulk` prüft CSRF, den registrierten Namen, UUID-IDs, die Obergrenze und für jede ID Lesezugriff plus Objektregel. Ein Fehlschlag speichert keinen Entwurf und ändert keine Zeile.
-2. Die erlaubte Auswahl wird als Entwurf mit Zweck `bulk` gespeichert. Die Antwort ist 303 auf `GET /admin/models/{model}/bulk/{draft}`. Dieses GET schreibt nicht.
-3. `POST` derselben Adresse ohne `confirm=1` zeigt die Bestätigung erneut und schreibt nicht.
-4. Mit `confirm=1` prüft der Server das Recht erneut. Ein inzwischen entzogenes Recht ist 403 und ändert nichts.
-5. Eine Transaktion liest jede ID erneut, führt die Operation aus, schreibt je Zeile ein Audit und committet. Danach wird der Entwurf gelöscht.
+1. `POST /admin/models/{model}/bulk` checks CSRF, the registered action name, UUID syntax, the selection limit, and read access plus object-policy checks for each ID. Failure neither saves a draft nor changes a row.
+2. The permitted selection is stored in a draft with purpose `bulk`. The response redirects with 303 to `GET /admin/models/{model}/bulk/{draft}`. This GET does not write.
+3. `POST` of the same address without `confirm=1` shows the confirmation again and does not write.
+4. With `confirm=1`, the server checks permissions again. A permission revoked since selection returns 403 without changing data.
+5. A transaction reloads every selected ID, applies the action and writes an audit entry per row. The draft is deleted after commit.
 
-## Atomarität
+## Atomicity
 
-`Delete` und `SetBool` sind atomar: jede ausgewählte Zeile wird geändert oder keine. Ein Datenbankfehler, einschließlich `ON DELETE RESTRICT`, rollt die Transaktion zurück. Die Fehlerseite entsteht erst nach dem Ende der Transaktion, damit die einzige SQLite-Verbindung nicht blockiert.
+`Delete` and `SetBool` are atomic: either every selected row changes or none does. Database errors, including `ON DELETE RESTRICT`, roll back the transaction. The error page is rendered after the transaction ends so SQLite's single connection is available.
 
-Doppelte IDs zählen einmal. Eine unbekannte Aktion, eine Nicht-UUID oder eine überschrittene Grenze ist 422. Fehlendes CSRF ist 403. Eine fremde oder fehlende ID verweigert die ganze Auswahl.
+Duplicate IDs count once. An unknown action, invalid UUID or exceeded selection limit returns 422. Missing CSRF returns 403. A missing or inaccessible ID rejects the entire selection.
 
-`App::bootstrap_schema` erzeugt keine Fremdschlüssel. Der Rollback-Test baut die Produkt-Tabelle deshalb mit `ON DELETE RESTRICT` neu. Produktiv gelten die Fremdschlüssel der Migration.
+`App::bootstrap_schema` does not create foreign keys. The rollback test therefore rebuilds its product table with `ON DELETE RESTRICT`. In applications, foreign keys come from migrations.
 
-Code: `crates/ferrioxid-admin/src/actions.rs`, `html.rs` `stage_bulk`, `show_bulk`, `apply_bulk`. Vorlage: `templates/models/bulk.html`.
+Code: `crates/ferrioxid-admin/src/actions.rs` and the `stage_bulk`, `show_bulk`, `apply_bulk` functions in `html.rs`. Template: `templates/models/bulk.html`.

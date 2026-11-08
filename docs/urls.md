@@ -1,24 +1,24 @@
 # URLs
 
-[Zur Übersicht](index.md) · Einbindung: [routing.md](routing.md) · Views: [views.md](views.md) · **IST-Datei:** `crates/ferrioxid-api/src/urls.rs`.
+[Overview](index.md) · Integration: [routing.md](routing.md) · Views: [views.md](views.md) · **Implemented file:** `crates/ferrioxid-api/src/urls.rs`.
 
-## Aufgabe
+## Purpose
 
-`UrlSet` sammelt Axum-Routen und stabile Namen. Axum bleibt der Router. Eine zweite Routing-Engine gibt es nicht. Namen haben die Form `bereich.name`, zum Beispiel `shop.list` oder `site.home`.
+`UrlSet` collects Axum routes and stable names. Axum remains the router. There is no second routing engine. Names have the form `bereich.name`, for example `shop.list` or `site.home`.
 
-Das entspricht konzeptionell Djangos `urls.py` und `reverse`. Ferrioxid versteckt `Router<AppState>` dabei nicht.
+This corresponds conceptually to Django’s `urls.py` and `reverse`. Ferrioxid does not hide `Router<AppState>`.
 
-Eine App hängt ihr `UrlSet` über `Registration::routes` ein. Der Namensraum muss der App-Name sein. Ein schon belegter Pfad, auch ein Modellpfad, ist `url.duplicate`. `App::merge` eines rohen Routers sieht diese Namen nicht.
+An app mounts your `UrlSet` via `Registration::routes`. The namespace must be the app name. An already occupied path, also a model path, is `url.duplicate`. `App::merge` of a raw router does not see these names.
 
-In einer App-Vorlage löst Tera den Namen auf:
+In an app template, Tera resolves the name:
 
 ```text
 <a href="{{ url(name="shop.detail", id=product.id) }}">Produkt</a>
 ```
 
-Tera kodiert das Ergebnis. Ein Schrägstrich erscheint als `&#x2F;`. In einem `href` bleibt das ein relativer Pfad. Die Funktion ist nicht als HTML-sicher markiert. Fehlt die Route oder ein Parameter, nennt der Fehler nur den angeforderten Namen und nicht die übrigen Routen. Parameter bleiben bei Buchstaben, Ziffern, `-` und `_`.
+Tera HTML-escapes the result, so `/` appears as `&#x2F;` in the markup and remains a slash in an `href`. The function is not marked HTML-safe. Missing routes or parameters report only the requested name, not the route catalog. Parameters allow letters, digits, `-` and `_`.
 
-## Registrieren
+## Registration
 
 ```rust
 use axum::routing::get;
@@ -40,9 +40,9 @@ async fn detail() -> axum::response::Response {
 }
 ```
 
-`nest("/catalog", shop)` hängt die Kindpfade unter das Präfix. `/{id}` wird dadurch `/catalog/{id}`. Der Name bleibt `shop.detail`.
+`nest("/catalog", shop)` hangs the child paths under the prefix. `/{id}` thus becomes `/catalog/{id}`. The name remains `shop.detail`.
 
-Die Anwendung übergibt das Ergebnis an `App::urls`:
+The application passes the result to `App::urls`:
 
 ```rust
 let app = ferrioxid::App::new(db)
@@ -50,11 +50,11 @@ let app = ferrioxid::App::new(db)
     .urls(routes()?)?;
 ```
 
-`merge` bleibt für Routen ohne Namen gültig. Bestehende `main.rs`-Dateien, die nur `register` und `merge` nutzen, kompilieren weiter.
+`merge` remains valid for routes without names. Existing `main.rs` files that only use `register` and `merge` continue to compile.
 
-## Namen auflösen
+## Name resolution
 
-Nach `into_router` liegt die Karte als `Extension<Arc<ferrioxid::urls::RouteMap>>`.
+After `into_router`, the route map is available as `Extension<Arc<ferrioxid::urls::RouteMap>>`.
 
 ```rust
 use std::sync::Arc;
@@ -80,20 +80,20 @@ async fn go(Extension(names): Extension<Arc<RouteMap>>) -> axum::response::Respo
 }
 ```
 
-`path` ersetzt `{id}` nur durch 1 bis 80 Zeichen aus Buchstaben, Ziffern, `-` und `_`. `..` ist kein gültiger Parameter. Ein unbekannter Name ist `url.unknown`. Ein fehlender oder überzähliger Parameter ist `url.parameter`.
+`path` replaces `{id}` with only 1 to 80 characters of letters, numbers, `-` and `_`. `..` is not a valid parameter. An unknown name is `url.unknown`. A missing or excess parameter is `url.parameter`.
 
-## Regeln
+## Rules
 
-Pfade beginnen mit `/`, sind höchstens 256 Zeichen lang und enthalten kein `//`, `\`, `..`, `://`, `?`, `#`, Leerzeichen oder Steuerzeichen.
+Paths start with `/`, are at most 256 characters long and do not contain `//`, `\`, `..`, `://`, `?`, `#`, spaces or control characters.
 
-Diese Pfade und jeder Pfad unter `/admin` oder `/auth` sind `url.reserved`: `/healthz`, `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/csrf`, `/auth/change-password`, `/auth/password-reset`, `/auth/password-reset/confirm`, `/auth/password-reset/choose`, `/admin`, `/admin/login`.
+The following paths, and all paths under `/admin` or `/auth`, are rejected with `url.reserved`: `/healthz`, `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/csrf`, `/auth/change-password`, `/auth/password-reset`, `/auth/password-reset/confirm`, `/auth/password-reset/choose`, `/admin` and `/admin/login`.
 
-Ein zweiter Name oder ein zweiter Pfad in derselben `UrlSet` oder beim Zusammenführen in `App::urls` ist `url.duplicate`. `/` bleibt der Startseite von `mount_pages` vorbehalten, wenn Vorlagen aktiv sind. Die Fullstack-Vorlage legt die eigene Seite deshalb auf `/home`.
+A second name or path in the same `UrlSet` or when merging into `App::urls` is `url.duplicate`. `/` is reserved for the start page of `mount_pages` when templates are active. The fullstack template therefore places its own page on `/home`.
 
 ## Tests
 
 `names_nests_and_reserved_paths_are_rejected` in `urls.rs`.
 
-## Einschränkungen
+## Limitations
 
-Tera erhält die Namen nicht automatisch als Globale. Eine Vorlage ruft `reverse` nicht von selbst auf. Der Handler löst den Pfad auf und legt ihn in den Kontext. `require_user` prüft eine GET-Sitzung und kein CSRF. Schreibende Views rufen weiterhin `AuthService::authenticate_csrf` auf.
+Templates can call `url(name=...)` once the route map is supplied to `Site::set_routes`; handlers can also resolve paths and add them to the context. `require_user` checks a GET session without CSRF. State-changing views must call `AuthService::authenticate_csrf`.

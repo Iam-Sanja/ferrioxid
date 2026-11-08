@@ -1,77 +1,77 @@
-# Admin-Sicherheit
+# Admin security
 
-[Zur Übersicht](admin.md) · Auth: [auth.md](auth.md) · Policies: [policies.md](policies.md)
+[Overview](admin.md) · Auth: [auth.md](auth.md) · Policies: [policies.md](policies.md)
 
-## Zweck
+## Purpose
 
-Der Admin ist eine zweite Tür vor denselben Benutzern, Sitzungen und Rechten. Er lockert keine öffentliche Route und übernimmt keine anonyme Freigabe. `GET /admin/api/config` ist die einzige Admin-Route ohne Staff-Prüfung und enthält keine Secrets. Farben und Texte werden vor der Ausgabe geprüft. Das Verzeichnis bleibt Staff und Superuser. Passwort-Hashes verlassen den Server nicht. Fehlercodes ersetzen keine Statuscodes und machen falsche E-Mail und falsches Passwort nicht unterscheidbar.
+The admin uses the existing users, sessions and permissions with an additional staff-access check. It does not weaken public-route policies or accept anonymous admin access. `GET /admin/api/config` is the only admin endpoint without a staff check and contains no secrets. Branding colors and text are validated before output. The directory requires both staff and superuser access. Password hashes never leave the server. Stable error codes supplement HTTP status codes; invalid email and invalid password responses remain indistinguishable.
 
-Eine Kind-ID aus dem POST gilt nur, wenn der Datensatz in der Transaktion zum Elternobjekt gehört. Ein fremder oder manipulierter Fremdschlüssel wird ersetzt oder abgelehnt. Rechte werden in der Transaktion erneut gelesen. Siehe [admin-transactional-inlines.md](admin-transactional-inlines.md).
+A child ID from the POST only applies if the record in the transaction belongs to the parent object. A foreign or manipulated foreign key is replaced or rejected. Rights are read again in the transaction. See [admin-transactional-inlines.md](admin-transactional-inlines.md).
 
-## Prüfung je Request
+## Test per request
 
-1. Sitzung über `AuthService::authenticate`.
-2. Aktiver Benutzer.
+1. Session about `AuthService::authenticate`.
+2. Active user.
 3. `is_staff`.
-4. Modellrecht `ressource.read|create|update|delete`.
-5. Gebundene Objektregel für einen einzelnen Datensatz.
-6. CSRF bei jeder Schreibmethode.
-7. Bei `/admin/pages/{key}` zusätzlich der registrierte Code über `AuthService::holds`, bevor der Handler läuft.
-8. Bei einer eigenen Sammelaktion das Modellrecht `update`, die Objektregel und die deklarierte Spaltenliste, bevor ein Wert geschrieben wird.
+4. Model permission `ressource.read|create|update|delete`.
+5. Bound object rule for a single record.
+6. CSRF at any writing method.
+7. With `/admin/pages/{key}` additionally the registered code via `AuthService::holds` before the handler runs.
+8. For a separate bulk action, the model right `update`, the object rule and the declared column list before a value is written.
 
-Ein aktiver Superuser überspringt Modellrechte, wenn die Ressource gesetzt ist. Ist `admin_permission` und `permissions` leer, lässt `permit` nur Superuser zu. Das Staff-Flag bleibt in beiden Fällen Pflicht.
+An active superuser skips model permissions when the resource is set. If `admin_permission` and `permissions` are empty, `permit` only allows superusers. The staff flag remains mandatory in both cases.
 
-## CSRF-Bootstrap
+## CSRF bootstrap
 
-`GET /auth/csrf` funktioniert nur mit gültiger Sitzung. Origin oder Referer müssen erlaubt sein, wenn sie gesendet werden. Ein fehlender Origin ist erlaubt, weil keine offene CORS-Policy existiert. Der Aufruf berechnet dasselbe HMAC-Token erneut. Sitzungstoken und Ablauf bleiben. Gleichzeitige Tabs bleiben gültig. Details stehen in [csrf.md](csrf.md).
+`GET /auth/csrf` requires a valid session. If present, Origin or Referer must be allowed. A missing origin is accepted without enabling CORS. The endpoint returns the same HMAC token without changing the session token or expiry, so other tabs remain valid. See [csrf.md](csrf.md).
 
-Die HTML-Anmeldung prüft zusätzlich `ferrioxid_login_csrf` gegen das Formularfeld. Die erlaubten Origins folgen der Bind-Adresse und nicht einem fest verdrahteten Port 3000. Der Host-Header wird dafür nicht gelesen. Logs enthalten den Grundcode, nicht das Cookie und nicht das Token.
+The HTML login additionally checks `ferrioxid_login_csrf` against the form field. The permitted origins follow the bind address and not a hardwired port 3000. The host header is not read for this. Logs contain the basic code, not the cookie and not the token.
 
-Das Token steht nicht in `localStorage` und nicht in der URL. Das Sitzungscookie bleibt `HttpOnly`.
+The token is not in `localStorage` and not in the URL. The session cookie remains `HttpOnly`.
 
-## Listen und Fremdschlüssel
+## Lists and foreign keys
 
-Sortier-, Such- und Filterfelder stammen aus `AdminModelMeta`. Bezeichner müssen zusätzlich `^[A-Za-z_][A-Za-z0-9_]*$` und einer echten Spalte entsprechen. Werte sind gebundene Parameter.
+Sort, search and filter fields are from `AdminModelMeta`. In addition, identifiers must correspond to `^[A-Za-z_][A-Za-z0-9_]*$` and a real column. Values are bound parameters.
 
-Eine gebundene Objektregel filtert Liste, Detail, PATCH, DELETE, das Formular-Select und die Auswahlseite über `QueryScope`. `total` verwendet denselben Filter. Ein einzelner abgelehnter Datensatz ist 404. Eine ungebundene Regel bleibt 403 mit `object policy is not bound`. Das Select lädt höchstens 100 Zeilen. Die Auswahlseite nutzt `admin_per_page` des Ziels, gedeckelt bei 100. Eine UUID, die der Benutzer am registrierten Ziel nicht lesen darf, wird vor dem Schreiben abgelehnt. `save` darf nur `detail`, `edit` oder `new` sein. Die Zieladresse baut der Server. Siehe [query-scopes.md](query-scopes.md) und [admin-relational-widgets.md](admin-relational-widgets.md).
+A bound object rule filters List, Detail, PATCH, DELETE, Form Select, and Selection Page via `QueryScope`. `total` uses the same filter. A single rejected record is 404. An unbound rule remains 403 with `object policy is not bound`. The select loads a maximum of 100 lines. The selection page uses `admin_per_page` of the target, capped at 100. A UUID that the user is not allowed to read at the registered destination is rejected before writing. `save` can only be `detail`, `edit` or `new`. The destination address is built by the server. See [query-scopes.md](query-scopes.md) and [admin-relational-widgets.md](admin-relational-widgets.md).
 
-## Privilegieneskalation
+## Privilege escalation
 
-Normale Modellrechte öffnen das Verzeichnis nicht. Superuser-Vergabe ist blockiert. Ein Benutzer kann die eigenen Schutzflags nicht entfernen. Sensible Namen (`password`, `password_hash`, `token`, `token_hash`, `secret`, `csrf_token`, `csrf_token_hash`) müssen im Admin verborgen sein und werden aus Antworten entfernt.
+Model permissions do not grant directory access, and the directory cannot grant or modify superuser status. Self-deactivation and removal of one’s own staff status are blocked. Sensitive names (`password`, `password_hash`, `token`, `token_hash`, `secret`, `csrf_token`, `csrf_token_hash`) must be hidden in the admin and excluded from responses.
 
-## Abmelden
+## Logout
 
-`POST /admin/logout` prüft die Sitzung und das CSRF-Feld. `is_staff` ist dafür keine Bedingung. Die Sitzung wird widerrufen und das Session-Cookie geleert. Die Antwort ist 303 auf `/admin/login`. Ein fehlendes oder fremdes Token lässt die Sitzung bestehen.
+`POST /admin/logout` checks the session and CSRF field without requiring `is_staff`. It revokes the session, clears the cookie and redirects with 303 to `/admin/login`. A missing or incorrect CSRF token rejects logout and leaves the session valid.
 
-`require_get` unterscheidet:
+`require_get` distinguishes the following cases:
 
-- keine Sitzung: Weiterleitung zur Anmeldung
-- Sitzung ohne Staff: HTML 403 mit dem Text „Die Verwaltung verlangt einen Staff-Zugang.“ und Abmeldeformular, ohne Seitenleiste und ohne Modelldaten
-- Staff: die angeforderte Seite
-- Staff ohne Modellrecht oder ohne Superuser für das Verzeichnis: HTML 403 „Diese Aktion ist nicht erlaubt.“ mit Abmeldung
+- No session: redirect to the login page.
+- Session without staff: HTML 403 with the text “Management requires staff access.” and logout form, without sidebar and without model data
+- Staff: the requested page
+- Staff without model permissions or without superuser for the directory: HTML 403 “This action is not allowed.”
 
-Die JSON-API unter `/admin/api` antwortet weiter mit Klartext und ist kein Logout-Formular. `html_admin_works_without_javascript` prüft die HTML-Fälle.
+The JSON API under `/admin/api` returns error responses rather than HTML logout forms. `html_admin_works_without_javascript` covers the HTML behavior.
 
-Fehlerseiten mit Sitzung lösen `is_superuser` über dieselbe Authentifizierung wie die übrige Fläche. Die Navigation leitet daraus keine Rechte ab. Ein Staff-Superuser sieht den Verzeichnislink auch auf einer 403-Seite. Ein Staff ohne Superuser sieht ihn nicht. Ohne Staff bleibt die Seitenleiste weg, das Abmeldeformular bleibt.
+Error pages obtain `is_superuser` through the same authentication checks as the rest of the admin. Navigation grants no permissions. Staff superusers see the directory link even on a 403 page; other staff do not. Users without staff status receive a logout form without a sidebar.
 
-HTML-Verzeichnisaktionen, die das Häkchen zeigen, rufen `require_confirmation` auf. Gültig ist nur `confirm=1`. Die JSON-Verzeichnis-API hat dieses Feld nicht. Sie bleibt an Sitzung, Staff-Superuser und CSRF gebunden.
+HTML directory actions requiring confirmation call `require_confirmation` and accept only `confirm=1`. The JSON directory API has no confirmation field; it still requires a session, staff superuser status and CSRF.
 
 ## Tests
 
-Der JSON-Test prüft anonyme Admin-Anfrage, fehlendes Staff, unbekanntes Modell, falsche Sortierung, falschen Filter, schreibgeschütztes `id`, Objekt-Scope, fehlendes CSRF, dasselbe Token in zwei Abrufen, ein sitzungsfremdes Token und die Superuser-Sperre. `admin_html.rs` prüft dieselben Regeln über Formulare, dazu offene Weiterleitungen und escaptes HTML. Assets prüft `admin_assets_reject_traversal_and_keep_the_api`.
+JSON tests cover anonymous requests, missing staff status, unknown models, invalid sorting and filters, read-only `id`, object scopes, missing CSRF, repeated CSRF retrieval, invalid tokens and blocked superuser changes. `admin_html.rs` checks the equivalent form flows, redirect validation and HTML escaping. `admin_assets_reject_traversal_and_keep_the_api` covers asset handling.
 
-## Grenzen
+## Limitations
 
-Das Login-Limit ist prozesslokal. Anonyme Demo-Schreibrouten außerhalb des Admins bleiben ohne CSRF, wie in v0.7 dokumentiert. Die Filterdekodierung ist nicht vollständig UTF-8.
+The login limit is process-local. Anonymous demo writing routes outside the admin remain without CSRF, as documented in v0.7. The filter decoding is not completely UTF-8.
 
-## Entwürfe, Sammelaktionen und Historie
+## Drafts, bulk actions and history
 
-Ein Formularentwurf gehört zu `session_id` und `user_id`. Die ID ist eine UUID. Der Payload enthält nur erlaubte Modellfelder, nie Passwort, Hash, Token oder CSRF. Ein fremder Benutzer und eine abgelaufene ID lesen nichts. Der endgültige POST validiert und prüft die Policy erneut.
+A draft form belongs to `session_id` and `user_id`. The ID is a UUID. The payload contains only allowed model fields, never password, hash, token or CSRF. A foreign user and an expired ID do not read anything. The final POST validates and re-checks the policy.
 
-Eine Sammelaktion akzeptiert nur einen registrierten Namen. Die erste POST-Anfrage speichert die IDs und schreibt keine Modellzeile. `confirm=1` fehlt: keine Änderung. Vor dem Schreiben liest die Transaktion jede ID mit Schreib-Scope und Objektregel. Eine fehlende, fremde oder doppelt verweigerte ID bricht die ganze Auswahl ab. `delete` und `SetBool` laufen in derselben Transaktion wie ihre Audit-Zeilen. Ein Fremdschlüsselfehler rollt alles zurück. Die Auswahl ist auf `max_ids` gedeckelt, eingebaute Aktionen auf 100. `scope=page` ignoriert gesendete IDs und liest die aktuelle Seite erneut.
+A bulk action accepts only one registered name. The first POST request saves the IDs and does not write a model line. `confirm=1` is missing: no change. Before writing, the transaction reads each ID with write scope and object rule. A missing, foreign or double-rejected ID cancels the entire selection. `delete` and `SetBool` run in the same transaction as their audit lines. A foreign key error rolls everything back. The selection is capped on `max_ids`, built-in actions on 100. `scope=page` ignores sent IDs and reads the current page again.
 
-Die Historie speichert keine sensiblen Werte. Ein Staff ohne Superuser sieht nur Ereignisse mit der eigenen `actor_id`. Verzeichnisereignisse entstehen nach dem Auth-Schreibvorgang und teilen sich keine Transaktion mit ihm, weil der Auth-Dienst den Pool nutzt.
+History does not store sensitive values. A staff without a superuser only sees events with their own `actor_id`. Directory events occur after the Auth writing process and do not share a transaction with it because the Auth service uses the pool.
 
-## Später
+## Later
 
-Ein vom Superuser getrennter Verzeichnis-Administrator. OAuth, MFA und einzeln widerrufbare CSRF-Tokens je Tab sind geplant und nicht implementiert.
+A directory administrator separate from the superuser. OAuth, MFA and individually revocable CSRF tokens per tab are planned and not implemented.

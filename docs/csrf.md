@@ -1,18 +1,18 @@
-# CSRF für mehrere Admin-Tabs
+# CSRF for multiple admin tabs
 
-[Zur Übersicht](index.md) · [sessions.md](sessions.md) · [admin-security.md](admin-security.md)
+[Overview](index.md) · [sessions.md](sessions.md) · [admin-security.md](admin-security.md)
 
-## Zweck
+## Purpose
 
-Schreibende Cookie-Anfragen brauchen ein CSRF-Token, das an die gültige Sitzung gebunden ist. Ein Abruf in einem zweiten Browser-Tab darf die Schreibberechtigung des ersten Tabs nicht entziehen.
+Writing cookie requests need a CSRF token that is tied to the valid session. A retrieval in a second browser tab must not revoke the write permission of the first tab.
 
-## Architektur
+## Architecture
 
-Das Token ist ein HMAC-SHA256 über den festen Präfix `ferrioxid-csrf-v1`, die Sitzungs-ID und den SHA-256-Hex des Session-Tokens. Der Schlüssel ist 32 Byte. Dieselbe Sitzung ergibt deshalb immer dasselbe Token. `GET /auth/csrf` schreibt die Datenbank nicht. Seit v0.12 akzeptiert `authenticate_csrf` dasselbe Token aus einem HTML-Feld. `authenticate` liest weiter nur `x-csrf-token`. Eine Anfrage ohne Sitzungscookie bleibt für öffentliche Formulare ohne diese Prüfung.
+The token is an HMAC-SHA256 via the fixed prefix `ferrioxid-csrf-v1`, the session ID and the SHA-256 hex of the session token. The key is 32 bytes. Therefore, the same session always results in the same token. `GET /auth/csrf` does not write the database. Since v0.12, `authenticate_csrf` accepts the same token from an HTML field. `authenticate` continues to read only `x-csrf-token`. A request without a session cookie remains for public forms without this check.
 
-Logout, Passwortwechsel und Ablauf widerrufen oder verwerfen die Sitzung. Danach schlägt die Prüfung fehl, bevor das Token überhaupt verglichen wird. Ein Token einer anderen Sitzung passt nicht, weil ID und Token-Hash in den HMAC eingehen.
+Logout, password change and expiration revoke or discard the session. After that, the check fails before the token is even compared. A token of another session does not fit because ID and token hash enter the HMAC.
 
-## Verantwortliche Dateien
+## Responsible file
 
 - `crates/ferrioxid-auth/src/service.rs`
 - `crates/ferrioxid-auth/src/config.rs`
@@ -20,43 +20,45 @@ Logout, Passwortwechsel und Ablauf widerrufen oder verwerfen die Sitzung. Danach
 - `crates/ferrioxid-auth/src/cookie.rs`
 - `crates/ferrioxid-admin/src/html.rs`
 
-## Öffentliche APIs
+## Public APIs
 
 - `AuthConfig.csrf_secret`
 - `AuthService::refresh_csrf`
-- `GET /auth/csrf` liefert `{ "csrf_token": "..." }`
-- Header `x-csrf-token` bei unsicheren JSON-Methoden
-- HTML-Feld `csrf_token` mit demselben HMAC
-- Cookie `ferrioxid_login_csrf` nur für `POST /admin/login`, bevor eine Sitzung existiert. Es ist 64 Hex-Zeichen, HttpOnly, `Path=/`, SameSite aus der Auth-Konfiguration, `Secure` nur bei `cookie_secure` und `Max-Age=600`. Ein gültiges Cookie wird für weitere Tabs wiederverwendet.
+- `GET /auth/csrf` returns `{ "csrf_token": "..." }`
+- Header `x-csrf-token` for unsafe JSON methods
+- HTML field `csrf_token` with the same HMAC
+- Cookie `ferrioxid_login_csrf` only for `POST /admin/login` before a session exists. It is 64 Hex characters, HttpOnly, `Path=/`, SameSite from the Auth configuration, `Secure` only at `cookie_secure` and `Max-Age=600`. A valid cookie is reused for other tabs.
 
-## Datenfluss
+## Data flow
 
-1. Login legt die Sitzung an und berechnet das Token.
-2. Die Datenbank speichert nur `digest(token)` in `csrf_token_hash`, nicht das rohe Token.
-3. Jeder weitere Abruf berechnet dasselbe Token neu.
-4. `authenticate` öffnet die Sitzung und vergleicht den Header in konstanter Zeit.
+1. Login creates the session and calculates the token.
+2. The database stores only `digest(token)` in `csrf_token_hash`, not the raw token.
+3. Each retrieval recalculates the same token.
+4. `authenticate` opens the session and compares the header in constant time.
 
-## Sicherheitsregeln
+## Security rules
 
-- Tokens stehen nicht in URLs und werden nicht geloggt. Eine abgelehnte HTML-Anmeldung nennt intern nur `origin_rejected`, `form_token_missing`, `login_csrf_missing` oder `login_csrf_mismatch`.
-- Sendet der Browser `Origin` oder `Referer`, muss der Wert exakt zu den erlaubten Origins passen. Die Liste kommt aus `FERRUM_ALLOWED_ORIGINS` oder aus der Loopback-Bind-Adresse, nicht aus dem Host-Header. `http://127.0.0.1:3000` gilt nur, wenn der Prozess wirklich an Port 3000 gebunden ist oder die Variable ihn nennt.
-- `Referrer-Policy: no-referrer` lässt Browser bei einem HTML-Formular-POST `Origin: null` senden, auch wenn die Seite same-origin ist. Das gilt nur, wenn zusätzlich `Sec-Fetch-Site: same-origin` steht. Diesen Header kann eine Seite nicht selbst setzen. `null` mit `cross-site`, `same-site` oder ohne diesen Header bleibt abgelehnt. `null` steht nicht auf der Allowlist.
-- Das Session-Cookie bleibt `HttpOnly`.
-- Der Vergleich nutzt `constant_eq`.
-- Entwicklung verwendet den festen Schlüssel `ferrioxid-dev-csrf-secret-32-bytes!`.
-- `FERRUM_CSRF_SECRET` ist 64 Hex-Zeichen. Sonst liest Ferrioxid `.ferrum/csrf.key` und legt die Datei einmal an, wenn sie fehlt. Produktion soll die Umgebungsvariable setzen, damit ein Neustart nicht alle Sitzungen ungültig macht.
-- Anonyme Demo-Schreibrouten prüfen kein CSRF. Sie hängen nicht am Cookie.
+- Tokens are not in URLs and are not logged. A rejected HTML login internally only calls `origin_rejected`, `form_token_missing`, `login_csrf_missing` or `login_csrf_mismatch`.
+- If the browser sends `Origin` or `Referer`, the value must match exactly the permitted origins. The list comes from `FERRUM_ALLOWED_ORIGINS` or the loopback bind address, not the host header. `http://127.0.0.1:3000` only applies if the process is really tied to port 3000 or the variable calls it.
+- `Referrer-Policy: no-referrer` allows browsers to send `Origin: null` to an HTML form POST, even if the page is same-origin. This only applies if `Sec-Fetch-Site: same-origin` is additionally available. One side cannot set this header itself. `null` with `cross-site`, `same-site` or without this header remains rejected. `null` is not on the Allowlist.
+- The session cookie remains `HttpOnly`.
+- The comparison uses `constant_eq`.
+- Development uses the fixed key `ferrioxid-dev-csrf-secret-32-bytes!`.
+- `FERRUM_CSRF_SECRET` is 64 hex characters. Otherwise, Ferrioxid reads `.ferrum/csrf.key` and creates the file once if it is missing. Production should set the environment variable so that a restart does not invalidate all sessions.
+- Anonymous demo writing routes do not check CSRF. They are not attached to the cookie.
 
-## Fehlerfälle
+## Error cases
 
-| Fall | Antwort |
+| Case | Response |
 |---|---|
-| Header fehlt oder Token ist falsch | 403, `csrf token is missing or invalid` |
-| Token einer anderen Sitzung | 403 |
-| Sitzung abgelaufen, widerrufen oder Benutzer inaktiv | 401 |
-| Logout ohne Token | 403, die Sitzung bleibt |
+|Header missing or token is wrong| 403, `csrf token is missing or invalid` |
+|Token of another session| 403 |
+|Session expired, revoked or user inactive| 401 |
+|Logout without tokens|403, the session remains|
 
-## Beispiel
+## Example
+
+The preserved HTTP example uses `ferrioxid_session` as a placeholder. Send the default `ferrum_session` cookie or your configured cookie name instead; it is not an alias.
 
 ```rust
 let token = auth.refresh_csrf(&session_token).await?;
@@ -75,8 +77,8 @@ x-csrf-token: ...
 
 ## Tests
 
-`examples/myshop/tests/admin_http.rs` prüft zwei Abrufe, einen erfolgreichen JSON-Schreibzugriff, ein gefälschtes Token und einen sitzungsfremden Token. `examples/myshop/tests/admin_html.rs` prüft das Login-Cookie, ein falsches Token, das Sitzungsfeld, Logout und eine abgelaufene Sitzung. `html_login_csrf_respects_the_bound_port` prüft `127.0.0.1` und `localhost` am gebundenen Port, den alten Port 3000 als fremde Origin, fehlendes und manipuliertes Cookie, fehlendes und falsches Formularfeld, eine fremde Origin, zwei Tabs, Login, Logout und erneuten Login. `examples/myshop/tests/auth.rs` prüft den JSON-Logout. JSON `POST /auth/login` verlangt weiter kein CSRF-Cookie.
+`examples/myshop/tests/admin_http.rs` checks two retrievals, a successful JSON write access, a fake token and a non-session token. `examples/myshop/tests/admin_html.rs` checks the login cookie, a wrong token, the session field, logout and an expired session. `html_login_csrf_respects_the_bound_port` checks `127.0.0.1` and `localhost` on the bound port, the old port 3000 as a foreign origin, missing and manipulated cookie, missing and incorrect form field, a foreign origin, two tabs, login, logout and login again. `examples/myshop/tests/auth.rs` checks the JSON logout. JSON `POST /auth/login` does not require a CSRF cookie.
 
-## Einschränkungen
+## Limitations
 
-Alle Tabs einer Sitzung teilen sich ein Token. Logout beendet deshalb alle Tabs dieser Sitzung. Es gibt keine Token-Liste mit einzelnem Widerruf. Der Schlüssel in `.ferrum/csrf.key` liegt im Arbeitsverzeichnis und ist nur die Entwicklungsquelle, wenn keine Umgebungsvariable gesetzt ist.
+All tabs in a session share a token. Logout therefore ends all tabs of this session. There is no token list with single revocation. The key in `.ferrum/csrf.key` is in the working directory and is only the development source if no environment variable is set.

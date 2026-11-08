@@ -1,18 +1,18 @@
-# Projektgenerator
+# Project generator
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-cli/src/scaffold.rs`.
+[Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/scaffold.rs`.
 
-## Aufgabe
+## Purpose
 
-`ferrioxid new` legt ein eigenständiges Ferrioxid-Projekt an. Es kompiliert außerhalb des Ferrioxid-Workspaces, nutzt SQLite und registriert ein Beispielmodell. Fullstack-Projekte übergeben Branding und Währung an `AdminRegistry::with_branding` und brauchen für den Admin kein Node.js. Die Startseite enthält feste Sprachlinks und einen lokalisierten 500-Text. Bereits erzeugte Projekte übernehmen das nicht automatisch. Seit v0.12 legt der Generator `static/css/app.css`, `static/js/app.js` und `media/.gitkeep` an. `media/*` ist ignoriert. `ferrum.toml` enthält `[static]` und `[storage]`. Fullstack-Projekte haben `/contact`. Die API-Vorlage montiert das Formular nicht.
+`ferrioxid new` creates an independent Ferrioxid project. It compiles outside the Ferrioxid workspace, uses SQLite and registers an example model. Fullstack projects transfer branding and currency to `AdminRegistry::with_branding` and do not need Node.js for the admin. The homepage contains fixed language links and a localized 500 text. Already created projects do not automatically take over. Since v0.12, the generator is `static/css/app.css`, `static/js/app.js` and `media/.gitkeep`. `media/*` is ignored. `ferrum.toml` contains `[static]` and `[storage]`. Fullstack projects have `/contact`. The API template does not mount the form.
 
-## Zuständige Dateien
+## Responsible files
 
 - `crates/ferrioxid-cli/src/scaffold.rs`
 - `crates/ferrioxid-cli/src/main.rs`
 - `crates/ferrioxid-cli/tests/generator.rs`
 
-## Öffentliche Schnittstelle
+## Public interface
 
 ```powershell
 ferrioxid new myproject
@@ -20,34 +20,34 @@ ferrioxid new myapi --template api
 ferrioxid new myshop --template fullstack --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
 ```
 
-Das Standardtemplate ist `fullstack`. `--ferrioxid-path` zeigt auf das lokale Ferrioxid-Repository, solange die Crates nicht veröffentlicht sind. Ohne das Argument verwendet die CLI den Pfad, der beim Übersetzen von `ferrioxid-cli` bekannt war.
+The default template is `fullstack`. Until the crates are published, `--ferrioxid-path` points to the local Ferrioxid repository. Without that argument, the CLI uses the repository path recorded when `ferrioxid-cli` was compiled.
 
-## Konfiguration
+## Configuration
 
-Das erzeugte `ferrum.toml` enthält Projekt, Datenbank, Server, Admin, Auth, Vorlagen und Branding. Dazu kommt `templates/` mit `base.html`, `index.html` und `errors/`. Die Datenbank-URL ist `sqlite://db.sqlite3?mode=rwc`. Der Server ist `127.0.0.1:3000`. Secrets stehen nicht in der Datei. `.env.example` nennt `DATABASE_URL`, `BIND_ADDRESS` und auskommentierte Hinweise auf `FERRUM_CSRF_SECRET` und `FERRUM_PASSWORD`.
+Generated `ferrum.toml` files configure project, database, server, admin, auth, templates and branding. Templates include `base.html`, `index.html` and `errors/`. The database defaults to `sqlite://db.sqlite3?mode=rwc` and the server to `127.0.0.1:3000`. Secrets are not stored in this file. `.env.example` lists `DATABASE_URL`, `BIND_ADDRESS`, and commented guidance for `FERRUM_CSRF_SECRET` and `FERRUM_PASSWORD`.
 
-## Datenfluss
+## Data flow
 
-1. Der Projektname wird geprüft.
-2. Das Zielverzeichnis darf noch nicht existieren.
-3. Der Ferrioxid-Pfad wird kanonisiert und muss `crates/ferrioxid/Cargo.toml` enthalten.
-4. Unter Windows entfernt die CLI das Präfix `\\?\`, damit Cargo den Pfad als Abhängigkeit akzeptiert.
-5. Dateien werden neu geschrieben. Eine vorhandene Datei wird nicht ersetzt.
-6. `0001_initial.json` entsteht über denselben Siegelweg wie andere Migrationen.
+1. The project name is checked.
+2. The target directory must not already exist.
+3. Canonicalize the Ferrioxid path and require `crates/ferrioxid/Cargo.toml`.
+4. On Windows, the CLI removes the prefix `\\?\` in order for Cargo to accept the path as a dependency.
+5. Write the generated files without replacing existing files.
+6. Create `0001_initial.json` using the same sealing procedure as other migrations.
 
-## Fehlerfälle
+## Error cases
 
-| Fall | Verhalten |
+| Case | Behavior |
 |---|---|
-| Name beginnt nicht mit einem Buchstaben, enthält Pfad- oder Shellzeichen oder ist reserviert | Abbruch, nichts wird angelegt |
-| Zielverzeichnis existiert | Abbruch, Inhalt bleibt |
-| `--ferrioxid-path` enthält kein Ferrioxid-Crate | Abbruch |
+| Invalid or reserved project name, including path or shell characters | Reject without creating a project |
+| Target directory already exists | Reject; existing contents remain unchanged |
+| `--ferrioxid-path` does not contain the Ferrioxid crate | Abort generation |
 
-## Sicherheitsregeln
+## Security rules
 
-Keine Shell-Interpolation des Namens. Kein `0.0.0.0`. Kein eingebautes Passwort. Kein Überschreiben. Der Abhängigkeitspfad zeigt auf `crates/ferrioxid`, nicht auf einzelne interne Dateien.
+No shell interpolation of the name. No `0.0.0.0`. No built-in password. No overwriting. The dependency path points to `crates/ferrioxid`, not individual internal files.
 
-## Beispiel
+## Example
 
 ```powershell
 ferrioxid new demo --template fullstack --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
@@ -57,12 +57,12 @@ ferrioxid admin create-user --email admin@example.com --staff --superuser
 ferrioxid dev
 ```
 
-`create-user` fragt das Passwort verdeckt ab. Für Automationen liest die CLI `FERRUM_PASSWORD`, mindestens 12 Zeichen. Es gibt keinen Standardwert.
+`create-user` prompts for a password without echoing it. For automation, set `FERRUM_PASSWORD` to a password of at least 12 characters. There is no default password.
 
 ## Tests
 
-`crates/ferrioxid-cli/tests/generator.rs` erzeugt API- und Fullstack-Projekte in einem temporären Verzeichnis, lehnt `../escape` und ein vorhandenes Ziel ab und prüft `cargo check`.
+`crates/ferrioxid-cli/tests/generator.rs` generates API and fullstack projects in a temporary directory, rejects `../escape` and an existing target, and verifies `cargo check`.
 
-## Einschränkungen
+## Limitations
 
-Versionierte crates.io-Abhängigkeiten sind geplant und nicht der Standard. `Cargo.lock` schreibt Cargo beim ersten Übersetzen, nicht der Generator. Ein generiertes Modell nach `ferrioxid generate model` erhält keine eigene Migration. Die legt `ferrioxid migrate make` an.
+Versioned crates.io dependencies are planned; generated projects currently use a local path dependency. Cargo writes `Cargo.lock` during the first build, not during generation. After `ferrioxid generate model`, create the model's migration with `ferrioxid migrate make`.

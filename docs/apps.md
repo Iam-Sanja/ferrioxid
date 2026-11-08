@@ -1,23 +1,23 @@
 # Apps
 
-[Zur Übersicht](index.md) · Registry: [app-registry.md](app-registry.md) · Migrationen: [app-migrations.md](app-migrations.md) · Wiederverwendung: [reusable-apps.md](reusable-apps.md) · Generator: [create-app.md](create-app.md)
+[Overview](index.md) · Registry: [app-registry.md](app-registry.md) · Migrations: [app-migrations.md](app-migrations.md) · Reuse: [reusable-apps.md](reusable-apps.md) · Generator: [create-app.md](create-app.md)
 
-**IST.** Funktionsstand v0.25. Die Cargo-Version bleibt `0.1.0`. Die Template-Version neuer Projekte bleibt `0.24`. Eine App ist ein Rust-Typ, der Modelle, Routen, Admin, Migrationen, Vorlagen und Staticfiles an die vorhandenen Engines übergibt. Es gibt keine zweite Router-, Auth-, Model- oder Admin-Engine und kein Nachladen unbekannter Crates.
+**Implemented.** Milestone v0.25. The Cargo version remains `0.1.0`. The template version of new projects remains `0.24`. An app is a Rust type that passes models, routes, admins, migrations, templates, and static files to the existing engines. There is no second router, auth, model or admin engine and no reloading of unknown crates.
 
-## Django und Ferrioxid
+## Django and Ferrioxid
 
 | Django | Ferrioxid |
 |---|---|
-| `INSTALLED_APPS` | `App::install` mit einem Typ, der `FerrioxidApplication` implementiert |
+| `INSTALLED_APPS` |`App::install` with a type that implements `FerrioxidApplication`|
 | `AppConfig` | `AppConfig::new("shop").label(...).prefix(...).depends_on(...)` |
-| `apps.py` und dynamischer Import | Rust-Code im Binary. `ferrum.toml` lädt keinen Code |
-| `shop.Product` und `inventory.Product` | getrennte Tabellennamen. Ein App-Name ändert weder SQL noch API-Pfade |
-| `migrations/` je App | dasselbe Verzeichnis, Historien-ID `shop:0001_initial` |
+| `apps.py` and dynamic imports | Rust code compiled into the binary; `ferrum.toml` does not load code |
+| `shop.Product` and `inventory.Product` | Separate table names; the app name does not change SQL or API paths. |
+| `migrations/` per app | Shared migration engine; history ID `shop:0001_initial` |
 | `{% url "shop:product_detail" id=product.id %}` | `{{ url(name="shop.detail", id=product.id) }}` |
-| App-Templates | Dateien unter `{app}/`, zum Beispiel `shop/list.html` |
-| App-Staticfiles | `/static/{app}/...` über die vorhandene Staticfiles-Auslieferung |
+| App-Templates |Files under `{app}/`, for example `shop/list.html`|
+| App-Staticfiles |`/static/{app}/...` on the existing Staticfiles delivery|
 
-## Registrieren
+## Registration
 
 ```rust
 use axum::routing::get;
@@ -54,37 +54,37 @@ let app = ferrioxid::App::new(database)
 let router = app.into_router();
 ```
 
-`install` prüft den Namen, lehnt Duplikate und reservierte Namen ab und ruft `contribute` auf. `seal` prüft den Migrationsgraphen, die Übereinstimmung mit `[app.<name>]` und, falls vorhanden, `AdminRegistry::seal`. `seal` wendet keine Migration an. `try_into_router` führt diese Prüfung aus, wenn sie noch fehlt. `into_router` bleibt ohne `Result` und startet bei einem Fehler nicht. Ohne Apps und ohne `[app.<name>]` ändert sich der Start nicht. Der Lebenszyklus steht in [app-lifecycle.md](app-lifecycle.md).
+`install` checks the name, rejects duplicates and reserved names and calls `contribute`. `seal` checks the migration graph, the match with `[app.<name>]` and, if available, `AdminRegistry::seal`. `seal` does not apply migration. `try_into_router` performs this check if it is still missing. `into_router` remains without `Result` and does not start in case of an error. Without apps and without `[app.<name>]`, the start does not change. The life cycle is in [app-lifecycle.md](app-lifecycle.md).
 
-Ohne `install` bleiben `App::new`, `register`, `urls` und `merge` gültig. `FerrioxidApplication::register_jobs` hat eine leere Standardmethode. `install`, `seal` und `into_router` rufen sie nicht auf und starten keinen Worker. Das Worker-Binary der Anwendung ruft `register_jobs` auf derselben `JobRegistry` auf. Ein Beispiel ist `examples/notes`. Siehe [jobs.md](jobs.md) und [workers.md](workers.md).
+`App::new`, `register`, `urls` and `merge` remain valid without `install`. `FerrioxidApplication::register_jobs` has an empty default implementation; `install`, `seal` and `into_router` do not call it or start workers. The application’s worker binary calls `register_jobs` with the shared `JobRegistry`, as shown in `examples/notes`. See [jobs.md](jobs.md) and [workers.md](workers.md).
 
-## Was eine App anmelden kann
+## What an app can register
 
-- `routes`: ein `UrlSet`. Der Namensraum vor dem Punkt muss der App-Name sein. Ein Präfix wird davorgeschrieben. `/` wird zum Präfix selbst.
-- `model`: das bestehende `FerrioxidModel`-Repository. Eine schon belegte Tabelle ist `app.model.duplicate`.
-- `admin_model`, `admin_view`, `admin_action`, `admin_filter`, `admin_widget`: die vorhandene `AdminRegistry`.
-- `migrations`: ein relatives Verzeichnis ohne `..`.
-- `templates`: HTML unter `{app}/`. `TemplateMode::Isolated` lehnt eine gleichnamige Projektdatei ab. `ProjectOverride` liest sie stattdessen.
-- `static_files`: Dateien unter `/static/{app}`.
-- `project`: die `ProjectConfig` aus `with_settings`. Eigene Werte kommen aus `[custom.shop]` über `custom_settings`.
+- `routes`: a `UrlSet` with names prefixed by the app name and a period. A URL prefix is required; `/` maps to that prefix.
+- `model`: the existing `FerrioxidModel` repository. An already occupied table is `app.model.duplicate`.
+- `admin_model`, `admin_view`, `admin_action`, `admin_filter`, `admin_widget`: the existing `AdminRegistry`.
+- `migrations`: a relative directory without `..`.
+- `templates`: HTML under `{app}/`. `TemplateMode::Isolated` rejects a project file of the same name. `ProjectOverride` reads them instead.
+- `static_files`: files under `/static/{app}`.
+- `project`: the `ProjectConfig` supplied by `with_settings`. Read app-specific `[custom.shop]` values through `custom_settings`.
 
-Die Registrierung vergibt kein Staff, keinen Superuser und kein Modellrecht.
+Registration grants no staff status, superuser status or model permissions.
 
-## Namen
+## Names
 
-Ein App-Name beginnt mit einem Kleinbuchstaben und enthält danach nur Kleinbuchstaben, Ziffern und `_`. Höchstens 32 Zeichen. `admin`, `auth`, `api`, `static`, `healthz` und `uploads` sind reserviert.
+An app name begins with a lowercase letter and then contains only lowercase letters, numbers and `_`. Not more than 32 characters. `admin`, `auth`, `api`, `static`, `healthz` and `uploads` are reserved.
 
-Ein URL-Präfix darf nicht `/admin` oder `/auth` sein und darf nicht aus dem Pfad ausbrechen.
+A URL prefix must not be `/admin` or `/auth` and must not break out of the path.
 
-## Lebenszyklus
+## Lifecycle
 
-1. `App::new` und optional `with_settings` sowie `with_admin`.
-2. `install` je App, in der gewünschten Reihenfolge.
-3. `contribute` meldet Modelle, Routen und die übrigen Bestandteile.
-4. Konflikte bei Namen, Pfaden, Tabellen und Vorlagen beenden `install`.
-5. `seal` prüft Abhängigkeiten und die Admin-Registry. Die Registry nimmt danach keine weitere App an.
-6. `ferrioxid migrate up` wendet ausstehende Migrationen an. Das ist ein eigener Schritt.
-7. `into_router` hängt Staticfiles, die Vorlagen und die `RouteMap` an.
-8. Der Server startet.
+1. `App::new` and optionally `with_settings` and `with_admin`.
+2. `install` per app, in the desired order.
+3. `contribute` reports models, routes and the other components.
+4. Conflicts on names, paths, tables and templates end `install`.
+5. `seal` checks dependencies and the admin registry. The registry will not accept another app afterwards.
+6. `ferrioxid migrate up` applies pending migrations. This is a step of its own.
+7. `into_router` attaches static files, templates and the `RouteMap`.
+8. The server starts.
 
-`with_admin` ersetzt die Admin-Registry. Apps, die Admin-Erweiterungen anmelden, kommen danach oder die Erweiterungen werden nach `with_admin` erneut angemeldet.
+`with_admin` replaces the admin registry. Apps that register admin extensions come afterwards or the extensions are re-registered after `with_admin`.

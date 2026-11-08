@@ -1,16 +1,16 @@
-# Benachrichtigungen
+# Notifications
 
-[Zur Übersicht](index.md) · E-Mail: [mail.md](mail.md) · Passwort: [password-reset.md](password-reset.md)
+[Overview](index.md) · E-Mail: [mail.md](mail.md) · Password: [password-reset.md](password-reset.md)
 
-**Stand:** v0.23. Das ist eine interne, typisierte Schnittstelle. Es gibt kein Benachrichtigungscenter im Admin und keine Ereignisnamen aus HTTP-Parametern.
+**Milestone:** v0.23. This is an internal, typed interface. There is no notification center in the admin and no event names from HTTP parameters.
 
-## Ereignisse
+## Events
 
-`ferrioxid::mail::Notice` kennt `PasswordResetRequested`, `PasswordChanged`, `AccountDeactivated` und `SecurityNotice`. Jede Variante trägt die Zieladresse und `de` oder `en`. Ein unbekannter Sprachwert wird Deutsch. `PasswordResetRequested` trägt zusätzlich die Reset-URL und die Minuten. `SecurityNotice` trägt eine Zusammenfassung von höchstens 200 Zeichen ohne Steuerzeichen. Keine Variante trägt ein Passwort, einen Hash oder einen Token als eigenes Feld. Die Reset-URL enthält den Token, weil die E-Mail ihn zustellen muss. Sie wird nicht ins Tracing geschrieben.
+`ferrioxid::mail::Notice` provides `PasswordResetRequested`, `PasswordChanged`, `AccountDeactivated` and `SecurityNotice`. Each variant contains the recipient address and a `de` or `en` locale; unknown locales fall back to German. `PasswordResetRequested` includes the reset URL and validity in minutes. `SecurityNotice` accepts a summary of at most 200 characters with no control characters. No variant has a dedicated password, hash or token field. The reset URL necessarily contains the token for delivery, but is never written to tracing logs.
 
-`MailService::notify` rendert Text und HTML mit Tera und ruft `send` auf. HTML-Vorlagen escapen eingefügte Werte. Betreffzeilen sind fest je Art und Sprache: „Passwort zurücksetzen“, „Passwort geändert“, „Konto deaktiviert“, „Sicherheitshinweis“ und die englischen Gegenstücke.
+`MailService::notify` renders text and HTML with Tera, then calls `send`. HTML templates escape inserted values. Subject lines are fixed by notice type and locale, covering password reset, password change, account deactivation and security notices in German and English.
 
-Der Reset-Ablauf sendet `PasswordResetRequested` und nach dem Commit `PasswordChanged`. `AccountDeactivated` und `SecurityNotice` sind aufrufbar und noch nicht an `set_user_active` oder das Verzeichnis gehängt. Das vermeidet eine zusätzliche E-Mail in bestehenden Admin-Tests.
+The reset sequence sends `PasswordResetRequested` and after the commit `PasswordChanged`. `AccountDeactivated` and `SecurityNotice` are callable and not yet attached to `set_user_active` or the directory. This avoids an additional email in existing admin tests.
 
 ```rust
 use ferrioxid::mail::{MailService, Notice};
@@ -24,4 +24,4 @@ mail.notify(Notice::SecurityNotice {
 assert_eq!(inbox.messages()[0].subject, "Security notice");
 ```
 
-Dieselbe Methode kann später ein Hintergrundprogramm aufrufen. Sie startet selbst keine Warteschlange.
+The same method can be called by a background worker; it does not start a queue itself.

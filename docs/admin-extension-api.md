@@ -1,14 +1,14 @@
-# Admin-Erweiterung
+# Admin extensions
 
-[Zur Übersicht](admin.md) · Seiten: [admin-custom-views.md](admin-custom-views.md) · Aktionen: [admin-custom-actions.md](admin-custom-actions.md) · Filter: [admin-custom-filters.md](admin-custom-filters.md) · Widgets: [admin-custom-widgets.md](admin-custom-widgets.md)
+[Overview](admin.md) · Pages: [admin-custom-views.md](admin-custom-views.md) · Actions: [admin-custom-actions.md](admin-custom-actions.md) · Filters: [admin-custom-filters.md](admin-custom-filters.md) · Widgets: [admin-custom-widgets.md](admin-custom-widgets.md)
 
-## IST
+## Implemented
 
-Die öffentliche API liegt in `ferrioxid::admin`. Sie hängt an derselben `AdminRegistry` wie die Modelle. Es gibt keine zweite Admin-Engine und keine globale Registrierung. myshop zeigt sie in `examples/myshop/src/admin.rs`.
+The public extension API is in `ferrioxid::admin` and uses the same `AdminRegistry` as the models. There is no second admin engine or global registration. The myshop example is in `examples/myshop/src/admin.rs`.
 
-`seal` prüft Seiten, Filter, Widgets und eigene Aktionen gegen die schon registrierten Modelle. Ohne `seal` beantwortet Ferrioxid eine eigene Seite mit einem Fehler und wendet die Erweiterung nicht als Erfolg an.
+`seal` validates pages, filters, widgets and custom actions against the registered models. If the registry is not sealed, custom-page requests return an error rather than running an unvalidated extension.
 
-## Beispiel
+## Example
 
 ```rust
 use ferrioxid::admin::{AdminFilter, AdminRegistry, AdminView, AdminWidget, FilterOption};
@@ -51,13 +51,13 @@ let registry = AdminRegistry::new()
     .seal()?;
 ```
 
-`OrderReport` und `MarkProcessed` stehen in [admin-custom-views.md](admin-custom-views.md) und [admin-custom-actions.md](admin-custom-actions.md). Der Modellschlüssel ist der Tabellenname.
+`OrderReport` and `MarkProcessed` are available in [admin-custom-views.md](admin-custom-views.md) and [admin-custom-actions.md](admin-custom-actions.md). The model key is the table name.
 
-## Grenzen
+## Limitations
 
-- Der Namespace ist `ferrioxid::admin`, nicht `ferrioxid::prelude`.
-- Eine eigene Aktion nutzt das Modellverb `update`. Eine Seite nutzt einen vollständigen Code wie `orders.read`.
-- Vorlagen können `base.html` nicht ersetzen.
-- Ein Widget öffnet kein verstecktes oder sensibles Feld und ersetzt kein Fremdschlüssel-Select.
-- Der Handler einer Seite erhält die Verbindung erst nach Staff- und Rechteprüfung. Er darf das Verzeichnis nicht nachbauen. Die Verzeichnisrouten prüfen Superuser weiterhin selbst.
-- Die Navigation der eigenen Seiten erscheint auf der Übersicht, in Modelllisten, Formularen und auf der eigenen Seite, nur wenn `holds` den Code bestätigt.
+- The namespace is `ferrioxid::admin`, not `ferrioxid::prelude`.
+- A custom action requires the model permission `update`. A page uses a complete permission code such as `orders.read`.
+- Templates cannot replace `base.html`.
+- A widget does not open a hidden or sensitive field and does not replace a foreign key select.
+- Page handlers receive the connection only after staff and permission checks. They must not bypass the query scope or object policy. Directory routes continue to check superuser access separately.
+- Custom-page navigation appears on the dashboard, model lists, forms and custom pages only when `holds` confirms the required permission.

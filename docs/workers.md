@@ -1,10 +1,10 @@
 # Worker
 
-[Zur Übersicht](index.md) · Jobs: [jobs.md](jobs.md) · Sicherheit: [job-security.md](job-security.md)
+[Overview](index.md) · Jobs: [jobs.md](jobs.md) · Security: [job-security.md](job-security.md)
 
-**IST.** Funktionsstand v0.27.1. `ferrioxid worker` startet keinen Webserver und führt nur den Mail-Handler aus. `ferrioxid dev` startet keinen Worker. Eine installierte App führt durch `App::install` keine Jobs aus. Anwendungs-Handler starten über `WorkerHost` im Projekt-Binary.
+**Implemented.** Milestone v0.27.1. `ferrioxid worker` does not start a web server and only runs the mail handler. `ferrioxid dev` does not start a worker. An installed app does not perform jobs through `App::install`. Application handlers start via `WorkerHost` in the project binary.
 
-## Öffentliche Start-API
+## Public launch API
 
 ```rust
 let project = ferrioxid::migrations::discover_project(&root)?;
@@ -14,13 +14,13 @@ NotesApp.register_jobs(host.registry_mut())?;
 host.run_until_ctrl_c()?;
 ```
 
-`WorkerHost::new` nimmt eine `WorkerConfig`. `from_project` liest `[jobs]` und die aufgelöste Datenbank-URL. `register` und `registry_mut` tragen Handler in dieselbe `JobRegistry` ein. Ein zweiter Handler mit demselben `NAME` liefert `job.handler`. `with_mail` ergänzt `ferrioxid_mail_notice`, wenn dieser Name noch fehlt. `prepare` prüft die SQLite-Datei und `_ferrum_jobs` und gibt den vorhandenen `Worker` zurück. `run_until_ctrl_c` legt die Tokio-Laufzeit an und beendet die Schleife nach Ctrl+C.
+`WorkerHost::new` accepts a `WorkerConfig`; `from_project` reads `[jobs]` and the resolved database URL. `register` and `registry_mut` add handlers to the shared `JobRegistry`; duplicate `NAME` values return `job.handler`. `with_mail` adds `ferrioxid_mail_notice` if absent. `prepare` checks the SQLite file and `_ferrum_jobs`, then returns a `Worker`. `run_until_ctrl_c` creates the Tokio runtime and runs until Ctrl+C.
 
-Die API migriert nicht und öffnet keinen Router. Fehlt die SQLite-Datei, entsteht `job.database` und es wird keine Datei angelegt. Fehlt die Tabelle, entsteht `job.migration.missing`. `jobs.enabled = false` ergibt `job.disabled`.
+The API neither migrates the database nor mounts a router. A missing SQLite file returns `job.database` without creating a file. A missing jobs table returns `job.migration.missing`; `jobs.enabled = false` returns `job.disabled`.
 
-SQLite nutzt den vorhandenen Pool mit einer Verbindung. `effective_concurrency` ist dann 1, auch wenn `[jobs].concurrency` höher steht. Bei PostgreSQL bleibt die Obergrenze 4. Die Schleife beansprucht diese Anzahl nacheinander auf derselben Verbindung. Gleichzeitige Worker sind getrennte Prozesse.
+SQLite uses the existing pool with a connection. `effective_concurrency` is then 1, even if `[jobs].concurrency` is higher. For PostgreSQL, the upper limit remains 4. The loop claims this number successively on the same connection. Simultaneous workers are separate processes.
 
-`ferrioxid generate worker` schreibt `src/bin/worker.rs`. Die Datei enthält ein kompilierbares Beispiel `app_example`, das durch `register_jobs` der eigenen App ersetzt wird. Eine vorhandene Datei wird nicht überschrieben. Windows und Linux nutzen denselben Quelltext und `tokio::signal::ctrl_c`. Ein Worker kann auch von Hand auf `WorkerHost` aufsetzen, ohne den Generator.
+`ferrioxid generate worker` writes `src/bin/worker.rs`. The file contains a compilable example `app_example`, which is replaced by `register_jobs` of its own app. An existing file is not overwritten. Windows and Linux use the same source code and `tokio::signal::ctrl_c`. A worker can also set up on `WorkerHost` by hand, without the generator.
 
 ## Start
 
@@ -29,44 +29,44 @@ ferrioxid worker
 ferrioxid worker --concurrency 2 --poll-ms 500
 ```
 
-Der CLI-Worker registriert nur `ferrioxid_mail_notice`. Handler einer App starten `src/bin/worker.rs`. Die CLI lädt dafür keinen Rust-Code und keine unbekannte Crate.
+The CLI worker only registers `ferrioxid_mail_notice`. Handlers of an app start `src/bin/worker.rs`. The CLI does not load any Rust code and no unknown Crate.
 
-Fehlt die SQLite-Datei, wird sie nicht angelegt. Fehlt `_ferrum_jobs`, endet der Prozess mit Exitcode 2 und `job.migration.missing`. `jobs.enabled = false` beendet den Worker ebenfalls mit Exitcode 2. Ein sauberes Stoppsignal endet mit 0. Ein Datenbankfehler endet mit 1.
+If the SQLite file is missing, it is not created. If `_ferrum_jobs` is missing, the process ends with Exitcode 2 and `job.migration.missing`. `jobs.enabled = false` also terminates the worker with Exitcode 2. A clean stop signal ends with 0. A database error ends with 1.
 
-Ctrl+C setzt auf Windows und Linux ein Stopp-Flag. Der Worker beansprucht danach keinen neuen Job und beendet die aktuelle Ausführung. Ein Handler wird dadurch nicht mitten in einem externen Effekt zurückgerollt.
+Ctrl+C sets a stop flag on Windows and Linux. The worker does not claim a new job afterwards and ends the current execution. A handler is not rolled back in the middle of an external effect.
 
 ## Lease
 
-Der Claim ist ein bedingtes `UPDATE`. Die neue Zeile erhält `lease_owner`, ein neues `lease_token` und `lease_expires_at`. Nur das Update, das genau eine Zeile trifft, besitzt den Job. Ein zweiter Worker erhält dieselbe Zeile erst, wenn die Lease abgelaufen ist. Dann steigt `attempts`.
+The claim is a conditional `UPDATE`. The new line gets `lease_owner`, a new `lease_token` and `lease_expires_at`. Only the update that hits exactly one line owns the job. A second worker will not receive the same line until the lease has expired. Then `attempts` increases.
 
-Der Abschluss prüft `lease_token`, `status = running` und `lease_expires_at >= now`. Trifft das nicht zu, bleibt `Finish::LostLease`. Der alte Worker setzt den Job nicht auf `succeeded`. Die Lease ist mindestens das Handler-Zeitlimit plus fünf Sekunden und höchstens 600 Sekunden. Das Handler-Limit liegt zwischen 1 und 120 Sekunden.
+Job completion checks `lease_token`, `status = running` and `lease_expires_at >= now`. A mismatch returns `Finish::LostLease`, preventing the old worker from marking the job `succeeded`. A lease lasts at least the handler timeout plus five seconds, up to 600 seconds. Handler timeouts range from 1 to 120 seconds.
 
-SQLite serialisiert Schreibzugriffe. Ein gesperrter Schreibversuch liefert `job.locked`. Der Worker versucht den nächsten Durchlauf, statt den Job als Erfolg zu speichern. Die Parallelität eines SQLite-Workers bleibt 1. PostgreSQL akzeptiert 1 bis 4 aufeinanderfolgende Claims je Durchlauf. Der Standard ist 1.
+SQLite serializes write accesses. A locked write attempt provides `job.locked`. The worker tries the next run instead of saving the job as a success. The parallelism of a SQLite worker remains 1. PostgreSQL accepts 1 to 4 consecutive claims per pass. The standard is 1.
 
-## Grenzen der Ausführung
+## Limitations of execution
 
-Ein Handler-Timeout verwirft die Future am nächsten `.await`. Code hinter diesem Await läuft nicht. Ein Effekt, der vor dem Await schon passiert ist, bleibt bestehen. SMTP, das der Server bereits angenommen hat, wird nicht zurückgenommen. `JobHandler` erhält kein Abbruch-Signal. Eine vom Handler selbst gestartete Aufgabe läuft weiter.
+A handler timeout drops its future at a yield point. Code that would run after that point is not executed, but earlier external effects remain. Accepted SMTP messages cannot be recalled. `JobHandler` receives no cancellation signal, and independently spawned tasks may continue.
 
-Nach dem Timeout speichert der Worker `retry` mit `job.timeout`. Sind die Versuche aufgebraucht, wird der Job `failed` mit `job.attempts`.
+After the timeout, the worker saves `retry` with `job.timeout`. If the attempts are exhausted, the job `failed` with `job.attempts`.
 
-Verliert der Worker die Lease, liefert `finish_success` `Finish::LostLease`. Der alte Token setzt den Job nicht auf `succeeded`. Der Handler kann den externen Effekt schon ausgeführt haben. Der neue Besitzer führt ihn erneut aus.
+If the worker loses the lease, `finish_success` provides `Finish::LostLease`. The old token does not set the job on `succeeded`. The handler may have already executed the external effect. The new owner executes it again.
 
-Ctrl+C setzt das Stopp-Flag zwischen zwei Claims. Der aktuelle `run_once` läuft bis zum Ergebnis oder bis zum Timeout. Der laufende Effekt wird nicht zurückgerollt.
+Ctrl+C sets the stop flag between two claims. The current `run_once` runs until the result or until the timeout. The current effect is not rolled back.
 
-Die Zustellung ist at least once. Eine Exactly-once-Garantie stellt Ferrioxid nicht bereit. Zwei Prozesse können denselben fälligen Job nicht beide als gültigen Claim besitzen. Nach einer abgelaufenen Lease kann ein zweiter Lauf denselben Effekt wiederholen.
+Delivery is at least once. An Exactly-once guarantee does not provide Ferrioxid. Two processes cannot have the same due job both as a valid claim. After an expired lease, a second run can repeat the same effect.
 
-## Einstellungen
+## Configuration
 
-`[jobs]` in `ferrum.toml` ist optional.
+`[jobs]` in `ferrum.toml` is optional.
 
-| Schlüssel | Standard | Grenze |
+| Key | Default | Limit |
 |---|---|---|
-| `enabled` | `true` | schaltet nur den Worker, nicht den Webserver |
-| `poll_ms` | `1000` | 50 bis 60000 |
-| `concurrency` | `1` | 1 bis 4; bei SQLite bleibt der Worker bei 1 |
-| `lease_secs` | `60` | 5 bis 600 |
-| `max_attempts` | `5` | 1 bis 20 |
-| `retention_hours` | `168` | 1 bis 2160 |
-| `jitter` | `true` | streut den Backoff |
+| `enabled` | `true` |Switches only the worker, not the web server|
+| `poll_ms` | `1000` | 50 to 60000 |
+| `concurrency` | `1` |1 to 4; for SQLite, the worker remains at 1|
+| `lease_secs` | `60` | 5 to 600 |
+| `max_attempts` | `5` | 1 to 20 |
+| `retention_hours` | `168` | 1 to 2160 |
+| `jitter` | `true` | Add jitter to retry backoff |
 
-Ein Projekt ohne `[jobs]` und ohne Worker startet wie bisher.
+A project without `[jobs]` and without Worker starts as before.

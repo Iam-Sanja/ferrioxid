@@ -1,28 +1,28 @@
-# Projektvorlagen
+# Project templates
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-cli/src/scaffold.rs`.
+[Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/scaffold.rs`.
 
-## Aufgabe
+## Purpose
 
-Zwei Vorlagen unterscheiden eine reine API von einer Anwendung mit Authentifizierung und Admin. Beide erhalten Staticfiles und einen leeren Medienordner. Nur Fullstack registriert `/contact` und den Admin. Uploads werden nicht automatisch öffentlich gemacht.
+The API template provides a minimal API application; the fullstack template adds authentication and admin registration. Both include static files and an empty media directory. Only fullstack projects register `/contact` and the admin. Uploads are not made public automatically.
 
-## Zuständige Dateien
+## Responsible files
 
 - `crates/ferrioxid-cli/src/scaffold.rs`
 - `crates/ferrioxid-cli/src/models.rs`
 - `crates/ferrioxid/Cargo.toml` (`admin-ui`)
 - `crates/ferrioxid-admin/Cargo.toml` (`embedded-admin`)
 
-## Öffentliche Schnittstelle
+## Public interface
 
-| Befehl | Inhalt |
+| Command | Contents |
 |---|---|
-| `--template api` | Registry, CRUD, SQLite, Migration, kein Admin-Feature |
-| `--template fullstack` | zusätzlich Auth, Admin-Registry, Feature `admin-ui` |
+| `--template api` | Registry, CRUD, SQLite and migrations; no admin feature |
+| `--template fullstack` |Additional Auth, Admin Registry, Feature `admin-ui`|
 
-Standard ist `fullstack`.
+The standard is `fullstack`.
 
-## Struktur
+## Structure
 
 ```text
 meinprojekt/
@@ -47,27 +47,27 @@ meinprojekt/
 └── tests/api.rs
 ```
 
-`src/views/` und `templates/home.html` schreibt nur `--template fullstack`. Die API-Vorlage registriert `api.ping` und behält die HTML-Startseite. Die genaue Liste steht in [project-structure.md](project-structure.md). Die Template-Version ist `0.24`.
+Only `--template fullstack` generates `src/views/` and `templates/home.html`. The API template registers `api.ping` and retains the HTML homepage. See [project-structure.md](project-structure.md) for the exact file list. The template version is `0.24`.
 
-`Cargo.lock` entsteht beim ersten Cargo-Lauf.
+`Cargo.lock` is created in the first cargo run.
 
-## Konfiguration
+## Configuration
 
-Beide Vorlagen aktivieren Tera und eine Startseite. API: `admin.enabled` und `embedded_assets` sind falsch, der Admin-Link fehlt. Fullstack: Admin und Auth sind wahr. Das Produktmodell der API ist anonym. Das Fullstack-Modell ist zusätzlich im Admin sichtbar. Die generierte Binary lehnt eine Bind-Adresse ab, die mit `0.0.0.0` beginnt.
+Both templates enable Tera and a homepage. In the API template, `admin.enabled` and `embedded_assets` are `false`, and there is no admin link. In fullstack projects, admin and auth are enabled. Both include an anonymous product API; fullstack projects also expose the model in the admin. The generated binary rejects bind addresses starting with `0.0.0.0`.
 
-## Datenfluss
+## Data flow
 
-`ferrioxid generate model Customer` schreibt `src/models/customer.rs` und ergänzt Zeilen vor den Markierungen `ferrum:models`, `ferrioxid:uses`, `ferrioxid:schema`, `ferrioxid:registry` und, falls vorhanden, `ferrioxid:admin`. Die Tabelle heißt `customers`. Ein zweiter Aufruf desselben Namens ändert nichts und endet mit einem Fehler.
+`ferrioxid generate model Customer` writes `src/models/customer.rs` and inserts lines before the `ferrum:models`, `ferrioxid:uses`, `ferrioxid:schema`, `ferrioxid:registry` and, when present, `ferrioxid:admin` markers. The table is named `customers`. Repeating the command for the same name returns an error without replacing the existing model.
 
-## Fehlerfälle
+## Error cases
 
-Ein ungültiger Modellname, eine fehlende Markierung oder ein bereits registriertes Modell bricht ab. Die übrigen Dateien bleiben dann unverändert, sofern der Schreibvorgang noch nicht begonnen hat. Der Generator ersetzt keine beliebigen Rust-Dateien außerhalb dieser Markierungen.
+An invalid model name, missing marker or duplicate registration aborts generation. Files remain unchanged if writing has not started. The generator does not modify Rust code outside the designated marker locations.
 
-## Sicherheitsregeln
+## Security rules
 
-Die API-Vorlage verlangt das Admin-Feature nicht und hängt keine Admin-Routen ein. Fullstack-Projekte aktivieren das leere Feature `admin-ui` und registrieren den Admin. Beide Vorlagen kompilieren ohne Node.js. Das Frontend-Verzeichnis `apps/admin-ui` gibt es nicht mehr.
+The API template does not require the admin feature and does not include admin routes. Fullstack projects activate the empty feature `admin-ui` and register the admin. Both templates compile without Node.js. The frontend directory `apps/admin-ui` no longer exists.
 
-## Beispiel
+## Example
 
 ```powershell
 ferrioxid new shop --template api --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
@@ -77,8 +77,8 @@ ferrioxid generate model Customer
 
 ## Tests
 
-`generator.rs` prüft beide Vorlagen mit `cargo check`, die Modellregistrierung durch einen zweiten `cargo check` und die Ablehnung eines doppelten Namens.
+`generator.rs` checks both templates with `cargo check`, the model registration by a second `cargo check` and the rejection of a duplicate name.
 
-## Einschränkungen
+## Limitations
 
-Besitzerfelder werden nicht automatisch aus der Sitzung gesetzt. Das ist geplant. Die Vorlage enthält ein anonymes Produktbeispiel, keine Objektregel. Authentifizierung im Fullstack-Projekt muss der Entwickler mit `ferrioxid admin create-user` und Rollen vervollständigen.
+Owner fields are not assigned from the session automatically. The example product API is anonymous and has no object policy. Configure users and roles for a fullstack project, starting with `ferrioxid admin create-user`.

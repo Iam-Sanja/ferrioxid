@@ -1,18 +1,18 @@
 # Soft Delete
 
-[Zur Übersicht](index.md) · Modelle: [models.md](models.md)
+[Overview](index.md) · Models: [models.md](models.md)
 
-**Offen.** v0.26 setzt kein Soft Delete um.
+**Open.** v0.26 does not implement soft delete.
 
-Ein optionales `deleted_at` allein würde gelöschte Zeilen in Listen, REST, Admin, Fremdschlüsseln und Sammelaktionen weiter anzeigen. Gleichzeitig müssten Löschen, Wiederherstellen, Audit, Query-Scopes und Unique-Constraints dieselbe Bedeutung haben. Das ist mit dem heutigen `delete_record` nicht abgeschlossen, ohne die vorhandene Löschsemantik still zu ändern.
+An optional `deleted_at` alone would further display deleted lines in lists, REST, admin, foreign keys and bulk actions. At the same time, deletion, restoration, audit, query scopes and unique constraints would have to have the same meaning. This is not complete with today’s `delete_record` without silently changing the existing erasure semantics.
 
-`#[field(managed = "deleted")]` ist deshalb ein Compile-Fehler. Erlaubte Werte sind nur `"created"` und `"updated"`.
+`#[field(managed = "deleted")]` is therefore a compile error. Allowed values are only `"created"` and `"updated"`.
 
-Ein späterer Baustein braucht:
+A later building block needs:
 
-- Standardabfragen ohne gelöschte Zeilen
-- Delete setzt den Zeitpunkt statt `DELETE`
-- Restore mit derselben Berechtigungsprüfung wie die übrigen Schreibwege
-- Audit-Einträge, die Delete und Restore unterscheiden
-- unveränderte Unique-Constraints, ausdrücklich dokumentiert
-- Fremdschlüssel, die gelöschte Ziele nicht als vorhanden behandeln
+- Standard queries without deleted lines
+- Delete sets time instead of `DELETE`
+- Restore with the same authorization check as the other writing paths
+- Audit records that distinguish Delete and Restore
+- Unchanged Unique Constraints, expressly documented
+- Foreign keys that do not treat deleted targets as existing

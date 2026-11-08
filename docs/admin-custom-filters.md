@@ -1,12 +1,12 @@
-# Eigene Admin-Filter
+# Custom admin filters
 
-[Zur Übersicht](admin-extension-api.md)
+[Overview](admin-extension-api.md)
 
-## IST
+## Implemented
 
-`AdminFilter::equals` und `AdminFilter::choice` hängen ein GET-Feld `filter.{name}` an die Modellliste. Der Name darf kein Modellfeld sein. Die Spalte ist ein `'static`-Name aus der Registrierung und muss zum Modell gehören. Sie darf nicht der Primärschlüssel und nicht verborgen oder sensibel sein.
+`AdminFilter::equals` and `AdminFilter::choice` attach a GET field `filter.{name}` to the model list. The name must not be a model field. The column is a `'static` name from the registry and must belong to the model. It must not be the primary key and must not be hidden or sensitive.
 
-Ein leerer Wert lässt den Filter weg. Ein Choice-Wert muss einer der festen Optionen entsprechen, sonst ist die Liste 422. Ein Equals-Wert wird nach dem Spaltentyp gebunden. Er wird nicht als SQL-Text eingesetzt. Suche, Sortierung, Datumshierarchie, Seitengröße und der Query-Scope der Objektregel bleiben zusätzlich aktiv.
+An empty value omits the filter. A choice value must correspond to one of the fixed options, otherwise the list is 422. An equals value is bound by the column type. It is not used as SQL text. Search, sorting, date hierarchy, page size and the query scope of the object rule remain additionally active.
 
 ```rust
 const STATUS: &[ferrioxid::admin::FilterOption] = &[
@@ -20,4 +20,4 @@ registry.filter(
 )?;
 ```
 
-Die Auswahl braucht kein JavaScript. Höchstens 20 Optionen sind erlaubt. Ein Datumsbereich als eigener Filtertyp ist nicht umgesetzt. Die vorhandene Datumshierarchie bleibt davon getrennt.
+The selection does not need JavaScript. A maximum of 20 options are allowed. A date range as its own filter type is not implemented. The existing date hierarchy remains separate from this.

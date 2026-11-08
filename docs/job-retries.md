@@ -1,20 +1,20 @@
-# Job-Retries
+# Job retries
 
-[Zur Übersicht](index.md) · Jobs: [jobs.md](jobs.md) · Worker: [workers.md](workers.md)
+[Overview](index.md) · Jobs: [jobs.md](jobs.md) · Worker: [workers.md](workers.md)
 
-**IST.** Versuche sind begrenzt. Eine unbegrenzte Wiederholung wird abgelehnt.
+**Implemented.** Attempts are limited. An unlimited repetition is rejected.
 
-## Fehlerklassen
+## Error categories
 
-`JobError::retry("code")` setzt den Job auf `retry`, solange `attempts < max_attempts`. Danach wird er `failed` mit `job.attempts`. `JobError::permanent("code")` setzt sofort `failed`. Ein Handler-Zeitlimit ist ein Retry mit `mail.timeout` oder `job.timeout`.
+`JobError::retry("code")` sets `retry` while `attempts < max_attempts`; exhausted attempts produce `failed` with `job.attempts`. `JobError::permanent("code")` fails immediately. Handler timeouts are retryable and use `mail.timeout` or `job.timeout`.
 
-Der gespeicherte Code besteht aus Kleinbuchstaben, Ziffern, Punkt und Unterstrich und hat höchstens 64 Zeichen. Alles andere wird `job.error`. Der Code enthält keinen Payload.
+Stored codes contain only lowercase letters, digits, periods and underscores, up to 64 characters. Invalid codes become `job.error`. Codes contain no payload.
 
 ## Backoff
 
-Die Wartezeit in Sekunden ist `min(300, 2^(attempt-1))`. Der erste Fehlversuch wartet eine Sekunde, der zweite zwei, danach vier, bis 300 Sekunden. `jobs.jitter = true` addiert einen Anteil aus der UTC-Sekunde. Tests setzen `JobPolicy.jitter` auf `false` und schieben `ManualClock` vor. Es gibt keine echte Wartezeit im Test.
+The waiting time in seconds is `min(300, 2^(attempt-1))`. The first failed attempt waits one second, the second two, then four, until 300 seconds. `jobs.jitter = true` adds a portion from the UTC second. Tests set `JobPolicy.jitter` to `false` and advance `ManualClock`. There is no real waiting time in the test.
 
-`next_attempt_at` und `available_at` müssen beide erreicht sein, bevor der Job wieder beansprucht wird.
+`next_attempt_at` and `available_at` must both be reached before the job is claimed again.
 
 ## Operator
 
@@ -25,10 +25,10 @@ ferrioxid jobs retry <job-id> --yes
 ferrioxid jobs cancel <job-id> --yes
 ```
 
-`list` und `inspect` öffnen SQLite mit `mode=ro` und schreiben nicht. `retry` gilt für `failed` und `cancelled`. Es setzt `pending`, `attempts = 0` und löscht Lease und Fehlercode. `cancel` gilt für `pending` und `retry`. Ein `running` Job bleibt unangetastet und liefert `job.running`.
+`list` and `inspect` open SQLite with `mode=ro` and do not write. `retry` applies to `failed` and `cancelled`. It sets `pending`, `attempts = 0` and deletes lease and error code. `cancel` applies to `pending` and `retry`. A `running` job remains untouched and delivers `job.running`.
 
-Ohne `--yes` ist der Exitcode 2 und die Datenbank bleibt unverändert. Die Berechtigung ist die des lokalen Operators, dieselbe Vertrauensgrenze wie `ferrioxid migrate up`. Es gibt keinen HTTP-Endpunkt dafür.
+Without `--yes`, the command exits with code 2 and leaves the database unchanged. Authorization relies on the local operator’s access, the same trust boundary as `ferrioxid migrate up`. There is no HTTP endpoint.
 
-## Intervalle
+## Intervals
 
-Nur ein erfolgreicher Abschluss plant die nächste Fälligkeit. Ein dauerhaft fehlgeschlagenes Intervall erzeugt keine weiteren Zeilen. `ferrioxid jobs retry --yes` öffnet dieselbe Zeile wieder. Zwei Einträge mit demselben `schedule_key` liefert der zweite Aufruf als `EnqueueOutcome::Existing`.
+Only successful completion schedules the next interval. A permanently failed recurring job creates no further rows. `ferrioxid jobs retry --yes` reopens the same row. Enqueuing twice with the same `schedule_key` returns `EnqueueOutcome::Existing` on the second call.

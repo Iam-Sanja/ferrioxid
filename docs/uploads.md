@@ -1,38 +1,38 @@
 # Uploads
 
-**Stand:** v0.12, IST für ausdrücklich registrierte Routen. Die Cargo-Version bleibt `0.1.0`.
+**Milestone:** v0.12, Implemented for expressly registered routes. The Cargo version remains `0.1.0`.
 
-## Verantwortlichkeit
+## Responsibility
 
-Die Upload-Routen sind standardmäßig nicht montiert. Eine Anwendung ruft `ferrioxid::storage::routes` auf und hängt den Router mit `App::merge` ein. Ohne Auth-Service antworten die Routen mit 403.
+The upload routes are not mounted by default. An application calls `ferrioxid::storage::routes` and mounts the router with `App::merge`. Without auth service, the routes answer with 403.
 
-## Crates und Dateien
+## Crates and files
 
 - `crates/ferrioxid-storage/src/http.rs`
-- Beispiel: `examples/myshop/src/main.rs`
-- Speicherdetails: [storage.md](storage.md)
+- Example: `examples/myshop/src/main.rs`
+- Storage details: [storage.md](storage.md)
 
-## Öffentliche API
+## Public API
 
-`POST /uploads` nimmt entweder den rohen Body mit `x-original-name` und `x-csrf-token` oder `multipart/form-data` mit den Feldern `csrf_token` und `file`. Die JSON-Antwort enthält `id`, `original_name`, `content_type` und `size`. Sie enthält keinen Dateisystempfad. `GET /uploads/{id}` lädt nur die eigene Datei. `DELETE /uploads/{id}` verlangt Sitzung und CSRF-Header.
+`POST /uploads` takes either the raw body with `x-original-name` and `x-csrf-token` or `multipart/form-data` with the fields `csrf_token` and `file`. The JSON response contains `id`, `original_name`, `content_type` and `size`. It does not contain a file system path. `GET /uploads/{id}` only loads its own file. `DELETE /uploads/{id}` requires session and CSRF headers.
 
-## Datenfluss
+## Data flow
 
-Der Body wird bis `max_bytes + 1` gelesen und bei Überschreitung verworfen. Der Inhalt bestimmt den Typ, nicht der Client-Header. Danach prüft `authenticate_csrf` die bestehende Sitzung. `save` schreibt die UUID-Datei. Download und Löschen filtern über die User-ID aus der Sitzung.
+The body is read until `max_bytes + 1` and discarded when exceeded. The content determines the type, not the client header. After that, `authenticate_csrf` reviews the existing session. `save` writes the UUID file. Download and delete filter via the user ID from the session.
 
-## Konfiguration
+## Configuration
 
-Die Größe kommt von `[storage]`. Die erlaubten Typen setzt der Aufrufer von `LocalStorage::open`. Sie sind keine zusätzlichen TOML-Schlüssel, damit eine Allowlist nicht versehentlich alles öffnet.
+The size comes from `[storage]`. The allowed types are set by the caller of `LocalStorage::open`. They are not additional TOML keys so that an allowlist does not accidentally open everything.
 
-## Sicherheit
+## Security
 
-Deny-by-default. Authentifizierung ist erforderlich. Die Datei-ID ist eine UUID, kein Pfad. Fremde IDs sind 404. Löschen ohne CSRF ist 403. Unvollständige Dateien werden entfernt. Hochgeladene Dateien werden nicht ausgeführt und nicht als HTML oder SVG ausgeliefert. `media/` steht in der Projekt-`.gitignore`.
+Deny by default. Authentication is required. The file ID is a UUID, not a path. Foreign IDs are 404. Deletion without CSRF is 403. Incomplete files are removed. Uploaded files are not executed and are not shipped as HTML or SVG. `media/` is in the project `.gitignore`.
 
-## Fehlerfälle
+## Error cases
 
-401 ohne Sitzung, 403 ohne CSRF oder ohne Auth-Service, 404 für fremde oder fehlende Dateien, 413 über dem Limit, 415 bei unerlaubtem Inhalt, 500 bei einem Speicherfehler ohne Systemdetail.
+Responses are 401 for a missing session, 403 for missing CSRF or auth service, 404 for another owner’s or missing files, 413 for oversized uploads, 415 for disallowed content and 500 for storage failures without system details.
 
-## Beispiel
+## Example
 
 ```rust
 let storage = ferrioxid::storage::LocalStorage::open("media", 1024 * 1024, &["text/plain"])?;
@@ -41,12 +41,12 @@ let app = app.merge(ferrioxid::storage::routes(std::sync::Arc::new(storage)));
 
 ## Tests
 
-Der HTTP-Test legt zwei Benutzer in SQLite an, lädt eine Textdatei, verweigert den anonymen Zugriff, liefert einem zweiten Benutzer 404 und löscht nur mit dem CSRF-Token des Eigentümers.
+The HTTP test creates two users in SQLite, loads a text file, denies anonymous access, delivers a second user 404, and deletes only with the owner’s CSRF token.
 
-## Einschränkungen
+## Limitations
 
-Es gibt keinen Virenscanner, keine Bildverarbeitung und keine öffentliche Upload-URL. Multipart erwartet einen quoted Boundary und höchstens wenige Teile.
+There is no virus scanner, no image processing and no public upload URL. Multipart expects a quoted boundary and at most few parts.
 
-## Erweiterung
+## Extension
 
-Ein Virenscanner kann nach `detect_type` und vor `save` eingehängt werden. Er ist nicht enthalten.
+A virus scanner can be mounted after `detect_type` and before `save`. It is not included.

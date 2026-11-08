@@ -1,25 +1,25 @@
-# Deployment und Betrieb
+# Deployment and operation
 
-[Zur Übersicht](index.md) · **IST:** lokaler Prozess mit SQLite. Docker ist optional und startet nur PostgreSQL. **SOLL:** App-Container und Reverse Proxy.
+[Overview](index.md) · **Implemented:** local process with SQLite. Docker is optional and only launches PostgreSQL. **Planned:** App container and reverse proxy.
 
-## Lokale Entwicklung (IST)
+## Local Development (Implemented)
 
-SQLite ist die Standarddatenbank. Rust und Cargo reichen aus. Docker und PostgreSQL müssen nicht installiert sein.
+SQLite is the standard database. Rust and Cargo are enough. Docker and PostgreSQL do not have to be installed.
 
 ```powershell
 cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-Ein generiertes Projekt startet mit `ferrioxid dev` im Projektverzeichnis. Windows und Linux nutzen denselben Befehl. Der Server startet ohne automatische Migration. Zuerst `ferrioxid migrate up` ausführen. Generierte Anwendungen binden nicht an `0.0.0.0`. `myshop --bootstrap` ändert die Datei nicht. Die Datei `db.sqlite3` liegt im Arbeitsverzeichnis. Eine ältere Bootstrap-Datei ohne `_ferrum_migrations` wird nicht übernommen und nicht gelöscht.
+A generated project starts with `ferrioxid dev` in the project directory. Windows and Linux use the same command. The server starts without automatic migration. First run `ferrioxid migrate up`. Generated applications do not bind to `0.0.0.0`. `myshop --bootstrap` does not change the file. The file `db.sqlite3` is in the working directory. An older bootstrap file without `_ferrum_migrations` is not taken over and not deleted.
 
-Der Admin braucht keinen Node-Prozess. `cargo build` genügt. `FERRUM_CSRF_SECRET` in Produktion setzen. Die Datei `.ferrum/csrf.key` ist nur die lokale Quelle.
+The admin does not need a node process. `cargo build` is sufficient. Put `FERRUM_CSRF_SECRET` into production. The `.ferrum/csrf.key` file is only the local source.
 
-Eine abweichende `BIND_ADDRESS`, insbesondere `0.0.0.0:3000`, kann den Dienst auf weiteren Netzwerken erreichbar machen. Mit dem anonymen Demo-Modell ist das kein Internetdeployment.
+A different `BIND_ADDRESS`, in particular `0.0.0.0:3000`, can make the service accessible on other networks. With the anonymous demo model, this is not an Internet deployment.
 
-## Optionales PostgreSQL (IST)
+## Optional PostgreSQL (Implemented)
 
-`compose.yaml` startet `postgres:16-alpine` mit Datenbank, User, Volume und `pg_isready`. Der Port ist auf `127.0.0.1:5432:5432` beschränkt. Das Repository enthält kein Dockerfile für den API-Server.
+`compose.yaml` starts `postgres:16-alpine` with database, user, volume and `pg_isready`. The port is limited to `127.0.0.1:5432:5432`. The repository does not contain a Dockerfile for the API server.
 
 ```powershell
 docker compose up -d db
@@ -28,35 +28,35 @@ cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-Dieselbe registrierte Anwendung spricht danach PostgreSQL. Die Handler bleiben unverändert. Docker ist ein optionales Werkzeug für diesen Server, nicht die Voraussetzung für Ferrioxid.
+The same registered application then speaks PostgreSQL. The handlers remain unchanged. Docker is an optional tool for this server, not the prerequisite for Ferrioxid.
 
-## Produktionsarchitektur (SOLL, nicht implementiert)
+## Production architecture (planned, not implemented)
 
 ```text
 TLS-Client → Reverse Proxy → Ferrioxid-App → PostgreSQL
                                   └→ Log-/Metrics-Ziel
 ```
 
-1. Multi-Stage-Image mit Non-Root-User.
-2. Ein App-Container und ein getrennt verwaltetes PostgreSQL.
-3. Readiness inklusive Datenbank. `/healthz` prüft derzeit nur, dass der Prozess antwortet.
-4. Graceful Shutdown, Timeouts und einstellbare Connection-Limits.
-5. Forwarded-Header nur von vertrauenswürdigen Proxies.
-6. HTTPS am Proxy. Sessions und CSRF erst zusammen mit Authentifizierung.
-7. Secrets über die Einsatzumgebung, nicht im Image oder Repository.
-8. Schemaänderungen bleiben ein eigener Schritt über `ferrioxid migrate up`, nicht beim Prozessstart. `down` ist nicht Teil dieses Schritts.
-9. Kein produktives `allow_anonymous=true` ohne Sicherheitsreview.
+1. Multi-stage image with non-root user.
+2. An app container and a separately managed PostgreSQL.
+3. Readiness including database. `/healthz` currently only checks that the process responds.
+4. Graceful shutdown, timeouts and adjustable connection limits.
+5. Forwarded headers only from trusted proxies.
+6. HTTPS on the proxy. Sessions and CSRF together with authentication.
+7. Secrets about the operational environment, not in the image or repository.
+8. Schema changes remain a separate step via `ferrioxid migrate up`, not at the start of the process. `down` is not part of this step.
+9. No productive `allow_anonymous=true` without security review.
 
-SQLite kann lokale Entwicklung und Tests tragen. Für mehrere App-Prozesse ist es nicht die vorgesehene Produktionsdatenbank: der Pool hat eine Verbindung, und Schreibzugriffe serialisieren sich über die Datei. PostgreSQL bleibt dafür das unterstützte Server-Backend, sobald es betrieben wird.
+SQLite can carry local development and testing. For several app processes, it is not the intended production database: the pool has a connection, and write accesses serialize through the file. PostgreSQL remains the supported server backend as soon as it is operated.
 
-## Docker, Portainer und Nginx Proxy Manager (SOLL)
+## Docker, Portainer and Nginx Proxy Manager (Planned)
 
-Ein internes Compose-Netz und Nginx Proxy Manager sind nicht implementiert. Eine spätere Anleitung muss TLS, Proxy-Header und die beabsichtigte Erreichbarkeit einzeln beschreiben.
+An internal Compose network and Nginx Proxy Manager are not implemented. Subsequent guidance must describe TLS, proxy headers and intended accessibility individually.
 
-## Abnahme
+## Acceptance criteria
 
-Der lokale SQLite-Start braucht keinen Datenbankserver. Ein optionales PostgreSQL-Setup bleibt auf localhost beschränkt. Secrets erscheinen nicht im Log. Es gibt keinen App-Container und keine automatische Migration.
+The local SQLite startup does not need a database server. An optional PostgreSQL setup remains limited to localhost. Secrets do not appear in the log. There is no app container and no automatic migration.
 
-## Admin ausliefern
+## Serving the admin
 
-`/admin` rendert HTML aus dem Binary. Unbekannte Asset-Pfade sind 404. `/admin/api` bleibt die JSON-API. Pfade mit `..` werden nicht als Dateien gelesen.
+`/admin` renders HTML from the binary. Unknown asset paths are 404. `/admin/api` remains the JSON API. Paths with `..` are not read as files.

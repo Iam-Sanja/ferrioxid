@@ -1,18 +1,18 @@
-# Jobs und Mail
+# Jobs and Mail
 
-[Zur Übersicht](index.md) · Mail: [mail.md](mail.md) · Reset: [password-reset.md](password-reset.md) · Jobs: [jobs.md](jobs.md)
+[Overview](index.md) · Mail: [mail.md](mail.md) · Reset: [password-reset.md](password-reset.md) · Jobs: [jobs.md](jobs.md)
 
-**IST.** Die Outbox `_ferrum_mail_outbox` aus `0004_password_reset` bleibt unverändert. Der Passwort-Reset versendet weiter genau einmal nach dem Commit und speichert den Roh-Token nur im Speicher und in der Nachricht.
+**Implemented.** The `_ferrum_mail_outbox` from `0004_password_reset` remains unchanged. Password reset makes one delivery attempt after commit, keeping the raw token only in memory and in the message.
 
-## Was der Worker nicht wiederholt
+## What the worker does not repeat
 
-Der Reset-Token steht nicht in der Outbox und nicht in `_ferrum_jobs`. `enqueue_notice` lehnt `Notice::PasswordResetRequested` mit `job.mail.reset_refused` ab. Der eingebaute Handler `ferrioxid_mail_notice` versendet `password_reset` nicht, auch wenn eine Zeile diesen Kind-Namen trägt.
+Reset tokens are stored in neither the outbox nor `_ferrum_jobs`. `enqueue_notice` rejects `Notice::PasswordResetRequested` with `job.mail.reset_refused`. The built-in `ferrioxid_mail_notice` handler refuses `password_reset`, even if a job payload requests that notice type.
 
-Bestehende Outbox-Zeilen liest der Worker nicht. `sweep` in `ferrioxid-auth` markiert veraltete Reset-Zeilen weiter als `mail.expired` und verbraucht den Token. Ein stiller Worker erzeugt daraus keine zweite E-Mail.
+The worker does not read existing outbox rows. `sweep` in `ferrioxid-auth` marks stale reset rows as `mail.expired` and consumes their tokens. A stopped worker cannot cause a second reset email.
 
-## Gewöhnliche Hinweise
+## Typed notifications
 
-`PasswordChanged`, `AccountDeactivated` und `SecurityNotice` können nach einem erfolgreichen Commit als Job eingetragen werden:
+`PasswordChanged`, `AccountDeactivated` and `SecurityNotice` can be registered as a job after a successful commit:
 
 ```rust
 ferrioxid::jobs::enqueue_notice(
@@ -25,6 +25,6 @@ ferrioxid::jobs::enqueue_notice(
 ).await?;
 ```
 
-Der Payload enthält Art, Empfänger, Sprache und bei einer Sicherheitsnotiz eine kurze Zusammenfassung. Keinen Reset-Link und kein SMTP-Passwort. `mail.timeout` und `mail.unavailable` sind Wiederholungen. `mail.disabled`, `mail.invalid` und `mail.rejected` sind endgültig. Erfolg heißt: das konfigurierte Backend hat die Nachricht angenommen. Das ist keine Zustellbestätigung.
+The payload contains the notice type, recipient, locale and optional short security summary, with no reset link or SMTP password. `mail.timeout` and `mail.unavailable` are retryable; `mail.disabled`, `mail.invalid` and `mail.rejected` are permanent failures. Success means the configured backend accepted the message, not that it reached the inbox.
 
-Tests nutzen `MailService::memory` und öffnen keine SMTP-Verbindung.
+Tests use `MailService::memory` and do not open an SMTP connection.
