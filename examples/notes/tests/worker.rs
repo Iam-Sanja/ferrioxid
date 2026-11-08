@@ -229,12 +229,7 @@ async fn fetch(url: &str, id: ferrum::uuid::Uuid) -> ferrum::jobs::JobRecord {
     panic!("Die Job-Zeile blieb gesperrt.");
 }
 
-async fn wait_for(
-    url: &str,
-    id: ferrum::uuid::Uuid,
-    status: JobStatus,
-    child: &mut Child,
-) {
+async fn wait_for(url: &str, id: ferrum::uuid::Uuid, status: JobStatus, child: &mut Child) {
     // CI machines can be busy running the rest of the workspace in parallel.
     // A deadline avoids turning slow worker startup into an arbitrary fixed
     // number of polls while keeping a bounded failure time.
