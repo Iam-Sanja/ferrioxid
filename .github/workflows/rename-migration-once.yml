@@ -1,0 +1,51 @@
+name: One-time Ferrioxid workspace rename
+
+on:
+  push:
+    branches:
+      - work/framework-rename-implementation
+    paths:
+      - .github/workflows/rename-migration-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  rename:
+    if: github.ref == 'refs/heads/work/framework-rename-implementation'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout the isolated implementation branch
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: true
+          fetch-depth: 1
+
+      - name: Install stable Rust and rustfmt
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+          components: rustfmt
+
+      - name: Rename all Rust crates and sources
+        run: python3 .github/scripts/ferrioxid_rename_once.py
+
+      - name: Check workspace metadata
+        run: cargo metadata --no-deps --format-version 1 > /tmp/ferrioxid-metadata.json
+
+      - name: Apply Rust formatting
+        run: cargo fmt --all
+
+      - name: Remove the temporary migration automation
+        run: |
+          rm .github/scripts/ferrioxid_rename_once.py
+          rm .github/workflows/rename-migration-once.yml
+
+      - name: Commit only to the isolated implementation branch
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -A
+          git diff --cached --check
+          git commit -m "refactor: rename Ferrum workspace and CLI to Ferrioxid"
+          git push origin HEAD:refs/heads/work/framework-rename-implementation
