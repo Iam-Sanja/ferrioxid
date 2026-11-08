@@ -1,4 +1,4 @@
-//! Erzeugt eine App im Projekt. Vorhandene Dateien bleiben unangetastet.
+//! Generates an app in the project without changing existing files.
 
 use crate::models::insert_line;
 use ferrioxid_migrations::discover_project;
@@ -14,13 +14,13 @@ pub(crate) fn generate_worker_into(root: &Path) -> Result<PathBuf, String> {
     let path = root.join("src/bin/worker.rs");
     write_new(&path, WORKER_SOURCE)?;
     println!(
-        "ferrioxid dev startet diesen Worker nicht. Handler der App trägst du in register_jobs ein."
+        "ferrioxid dev does not start this worker. Register app handlers in register_jobs."
     );
     Ok(path)
 }
 
-const WORKER_SOURCE: &str = r#"//! Anwendungs-Worker. Er startet keinen Webserver und wendet keine Migration an.
-//! ferrioxid dev ruft diese Datei nicht auf.
+const WORKER_SOURCE: &str = r#"//! Application worker. Does not start a web server or apply migrations.
+//! ferrioxid dev does not run this file.
 
 use ferrioxid::jobs::{JobContext, JobError, JobHandler};
 use ferrioxid::serde::{Deserialize, Serialize};
@@ -53,8 +53,8 @@ fn main() {
     }
 }
 
-/// Beispiel, solange die App noch keinen eigenen Handler hat.
-/// Ersetze die Registrierung durch `AppName.register_jobs(host.registry_mut())`.
+/// Example handler until the app provides its own handler.
+/// Replace the registration with `AppName.register_jobs(host.registry_mut())`.
 #[derive(Debug, Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
 struct ExamplePayload {
@@ -90,7 +90,7 @@ pub(crate) fn generate_into(root: &Path, name: &str) -> Result<PathBuf, String> 
     let app_dir = root.join("src/apps").join(name);
     if app_dir.exists() {
         return Err(format!(
-            "Die App `{name}` existiert bereits und wird nicht überschrieben."
+            "App `{name}` already exists and will not be overwritten."
         ));
     }
     std::fs::create_dir_all(app_dir.join("migrations")).map_err(|error| error.to_string())?;
@@ -104,7 +104,7 @@ pub(crate) fn generate_into(root: &Path, name: &str) -> Result<PathBuf, String> 
     write_new(&app_dir.join("admin.rs"), "pub fn attach() {}\n")?;
     write_new(
         &app_dir.join("models.rs"),
-        "// Modelle bleiben beim bestehenden FerrioxidModel-Derive.\n",
+        "// Models continue to use the FerrioxidModel derive macro.\n",
     )?;
     write_new(
         &app_dir.join(format!("templates/{name}/index.html")),
@@ -136,19 +136,19 @@ pub(crate) fn generate_into(root: &Path, name: &str) -> Result<PathBuf, String> 
             )?;
         } else {
             println!(
-                "Die App ist noch nicht in main.rs eingetragen. Ergänze .install({name}::{pascal}App)? vor dem Start.",
+                "The app is not registered in main.rs yet. Add .install({name}::{pascal}App)? before startup.",
                 pascal = pascal(name)
             );
         }
     }
-    println!("Migrationen der App gehören nach [app.{name}] in ferrum.toml. Der Eintrag lädt keinen Rust-Code.");
+    println!("Declare app migrations under [app.{name}] in ferrum.toml. This entry does not load Rust code.");
     Ok(app_dir)
 }
 
 fn write_new(path: &Path, contents: &str) -> Result<(), String> {
     if path.exists() {
         return Err(format!(
-            "{} existiert bereits und wird nicht überschrieben.",
+            "{} already exists and will not be overwritten.",
             path.display()
         ));
     }
@@ -169,10 +169,10 @@ pub(crate) fn validate_app_name(name: &str) -> Result<(), String> {
             "admin" | "auth" | "api" | "static" | "healthz" | "uploads"
         )
     {
-        return Err(format!("`{name}` ist kein zulässiger App-Name."));
+        return Err(format!("`{name}` is not a valid app name."));
     }
     if name.contains('/') || name.contains('\\') || name.contains("..") {
-        return Err("Der App-Name darf kein Pfad sein.".to_owned());
+        return Err("The app name cannot be a filesystem path.".to_owned());
     }
     Ok(())
 }
