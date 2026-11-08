@@ -1,4 +1,4 @@
-//! Wendet Operationen auf einen Snapshot an. Das ersetzt die Annahme, der automatische Diff sei die einzige gültige Operationsliste.
+//! Applies operations to a snapshot instead of assuming the automatic diff is the only valid operation list.
 
 use crate::diff::MigrationOperation;
 use crate::error::MigrationError;
@@ -29,7 +29,7 @@ fn apply_one(
                 .any(|candidate| candidate.name == table.name)
             {
                 return Err(MigrationError::new(format!(
-                    "Tabelle `{}` existiert im Ausgangsschema bereits.",
+                    "Table `{}` already exists in the original schema.",
                     table.name
                 )));
             }
@@ -40,7 +40,7 @@ fn apply_one(
             schema.tables.retain(|table| table.name != *name);
             if schema.tables.len() == length {
                 return Err(MigrationError::new(format!(
-                    "Tabelle `{name}` fehlt im Ausgangsschema."
+                    "Table `{name}` is missing from the original schema."
                 )));
             }
         }
@@ -56,7 +56,7 @@ fn apply_one(
                 .any(|candidate| candidate.name == column.name)
             {
                 return Err(MigrationError::new(format!(
-                    "Spalte `{table}.{}` existiert bereits.",
+                    "Column `{table}.{}` already exists.",
                     column.name
                 )));
             }
@@ -71,14 +71,14 @@ fn apply_one(
             target.columns.retain(|column| column.name != *name);
             if target.columns.len() == length {
                 return Err(MigrationError::new(format!(
-                    "Spalte `{table}.{name}` fehlt im Ausgangsschema."
+                    "Column `{table}.{name}` is missing from the original schema."
                 )));
             }
         }
         MigrationOperation::AlterColumn { table, from, to } => {
             if from.name != to.name {
                 return Err(MigrationError::new(
-                    "AlterColumn darf den Namen nicht ändern. Dafür gibt es RenameColumn.",
+                    "AlterColumn cannot change column names. Use RenameColumn.",
                 ));
             }
             let target = table_mut(schema, table)?;
@@ -87,11 +87,11 @@ fn apply_one(
                 .iter_mut()
                 .find(|candidate| candidate.name == from.name)
                 .ok_or_else(|| {
-                    MigrationError::new(format!("Spalte `{table}.{}` fehlt.", from.name))
+                    MigrationError::new(format!("Column `{table}.{}` is missing.", from.name))
                 })?;
             if column != from {
                 return Err(MigrationError::new(format!(
-                    "AlterColumn erwartet für `{table}.{}` genau die gespeicherte Ausgangsspalte.",
+                    "AlterColumn expects the exact original stored column for `{table}.{}`.",
                     from.name
                 )));
             }
@@ -105,7 +105,7 @@ fn apply_one(
                 let target = table_mut(schema, table)?;
                 if target.columns.iter().any(|column| column.name == *to) {
                     return Err(MigrationError::new(format!(
-                        "Zielspalte `{table}.{to}` existiert bereits."
+                        "Target column `{table}.{to}` already exists."
                     )));
                 }
                 let column = target
@@ -113,7 +113,7 @@ fn apply_one(
                     .iter_mut()
                     .find(|column| column.name == *from)
                     .ok_or_else(|| {
-                        MigrationError::new(format!("Quellspalte `{table}.{from}` fehlt."))
+                        MigrationError::new(format!("Source column `{table}.{from}` is missing."))
                     })?;
                 column.name.clone_from(to);
                 for unique in &mut target.unique_constraints {
@@ -146,11 +146,11 @@ fn apply_one(
             require_ident(to)?;
             if schema.tables.iter().any(|table| table.name == *to) {
                 return Err(MigrationError::new(format!(
-                    "Zieltabelle `{to}` existiert bereits."
+                    "Target table `{to}` already exists."
                 )));
             }
             let Some(position) = schema.tables.iter().position(|table| table.name == *from) else {
-                return Err(MigrationError::new(format!("Quelltabelle `{from}` fehlt.")));
+                return Err(MigrationError::new(format!("Source table `{from}` is missing.")));
             };
             schema.tables[position].name.clone_from(to);
             for table in &mut schema.tables {
@@ -173,7 +173,7 @@ fn apply_one(
             target.unique_constraints.retain(|item| item.name != *name);
             if target.unique_constraints.len() == length {
                 return Err(MigrationError::new(format!(
-                    "Unique-Constraint `{name}` fehlt."
+                    "Unique constraint `{name}` is missing."
                 )));
             }
         }
@@ -185,7 +185,7 @@ fn apply_one(
             let length = target.indexes.len();
             target.indexes.retain(|item| item.name != *name);
             if target.indexes.len() == length {
-                return Err(MigrationError::new(format!("Index `{name}` fehlt.")));
+                return Err(MigrationError::new(format!("Index `{name}` is missing.")));
             }
         }
         MigrationOperation::AddForeignKey { table, foreign_key } => {
@@ -199,7 +199,7 @@ fn apply_one(
             target.foreign_keys.retain(|item| item.name != *name);
             if target.foreign_keys.len() == length {
                 return Err(MigrationError::new(format!(
-                    "Fremdschlüssel `{name}` fehlt."
+                    "Foreign key `{name}` is missing."
                 )));
             }
         }
@@ -253,7 +253,7 @@ fn table_mut<'a>(
         .tables
         .iter_mut()
         .find(|table| table.name == name)
-        .ok_or_else(|| MigrationError::new(format!("Tabelle `{name}` fehlt im Schema.")))
+        .ok_or_else(|| MigrationError::new(format!("Table `{name}` is missing from the schema.")))
 }
 
 fn require_ident(name: &str) -> Result<(), MigrationError> {
@@ -261,7 +261,7 @@ fn require_ident(name: &str) -> Result<(), MigrationError> {
         Ok(())
     } else {
         Err(MigrationError::new(format!(
-            "Ungültiger SQL-Bezeichner `{name}`."
+            "Invalid SQL identifier `{name}`."
         )))
     }
 }
