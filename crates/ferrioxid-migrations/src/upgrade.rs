@@ -419,7 +419,7 @@ fn write_new_file(root: &Path, relative: &str, contents: &str) -> Result<(), Mig
     let partial = contained_target(root, &partial_relative)?;
     if let Some(parent) = partial.parent() {
         std::fs::create_dir_all(parent).map_err(|error| {
-            MigrationError::new(format!("upgrade.conflict: Verzeichnis fehlt: {error}"))
+            MigrationError::new(format!("upgrade.conflict: Directory is missing: {error}"))
         })?;
     }
     if partial.exists() {
