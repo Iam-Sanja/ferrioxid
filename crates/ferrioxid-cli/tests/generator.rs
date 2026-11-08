@@ -1,4 +1,4 @@
-//! Der Generator wird außerhalb des Ferrioxid-Workspaces ausgeführt.
+//! The generator runs outside the Ferrioxid workspace.
 
 use std::path::PathBuf;
 use std::process::Command;
@@ -9,7 +9,7 @@ fn ferrioxid() -> Command {
     command
 }
 
-/// Kindprozesse bekommen eine eigene SQLite-Datei. Die geerbte `DATABASE_URL` des Testprozesses wird dabei ersetzt, nicht global verändert.
+/// Child processes use their own SQLite file. Their inherited `DATABASE_URL` is overridden per process, not globally.
 fn seal(command: &mut Command) -> &mut Command {
     static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(1);
     let path = std::env::temp_dir().join(format!(
@@ -28,7 +28,7 @@ fn seal(command: &mut Command) -> &mut Command {
         .env_remove("FERRUM_PASSWORD")
 }
 
-/// Deckt verschachtelte Cargo-Builds ab. rustc 1.98.1 ist hier bei einem unbegrenzten Release-Build mit 0xc0000005 und 0xc0000409 abgestürzt. Die Ursache ist nicht aufgeklärt. Mit höchstens zwei Jobs bestanden der begrenzte und der anschließende uneingeschränkte Workspace-Lauf. Ein bereits kleineres Limit bleibt erhalten.
+/// Limits nested Cargo builds. rustc 1.98.1 previously crashed during unrestricted release builds (0xc0000005 and 0xc0000409). The root cause is unresolved. Builds passed with two jobs; preserve any lower caller-specified limit.
 fn nested_build_jobs() -> String {
     let configured = std::env::var("CARGO_BUILD_JOBS")
         .ok()
@@ -118,7 +118,7 @@ fn generated_api_and_fullstack_projects_compile() {
     let root = std::env::temp_dir().join(format!("ferrioxid-gen-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&root);
     std::fs::create_dir_all(&root).unwrap();
-    // Ein Target nur für diesen Prozess. Die Builds laufen nacheinander, nicht parallel.
+    // A target directory scoped to this process. Builds run sequentially.
     let target = root.join("shared-target");
     let repo = repository();
     assert!(create(&root, "demo_api", "api", &repo).status.success());
