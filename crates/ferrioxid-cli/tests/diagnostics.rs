@@ -76,7 +76,7 @@ fn cli_help_is_english_without_a_locale_override() {
     assert!(result.status.success());
     let help = String::from_utf8_lossy(&result.stdout);
     assert!(
-        help.contains("Creates a standalone Ferrioxid project."),
+        help.contains("Creates a standalone Ferrioxid project"),
         "{help}"
     );
     assert!(!help.contains("Erzeugt"), "{help}");
@@ -229,7 +229,7 @@ fn upgrade_check_dry_run_and_yes_keep_unknown_files() {
         dry_text.contains("upgrade.plan.add .ferrum/project.json"),
         "{dry_text}"
     );
-    assert!(dry_text.contains("Planned file changes"), "{dry_text}");
+    assert!(dry_text.contains("Geplante Dateiänderungen"), "{dry_text}");
     assert!(!directory.join(".ferrum").exists());
 
     let applied = output(ferrioxid(&directory).args(["upgrade", "--yes"]));
