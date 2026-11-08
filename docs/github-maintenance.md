@@ -1,70 +1,84 @@
 # GitHub maintenance
 
-This page documents repository settings, the contributor workflow, and CI maintenance. Settings must be verified in the GitHub UI or API; documentation alone cannot enable them.
+This page records repository settings, contributor workflow and CI maintenance for [Iam-Sanja/ferrioxid](https://github.com/Iam-Sanja/ferrioxid). Settings were checked through GitHub's API on **2026-11-08** against main at `5c9bd7c438179b53d02f36130871ac42f313ef5e`. They may change independently of Git; Markdown cannot enforce them.
 
-The repository has been pushed to GitHub. The local development checkout uses `origin` to track its GitHub remote. GitHub settings and CI results can change independently of this document.
+The repository is already **public**. Use the [public release security checklist](public-release-checklist.md) to distinguish completed configuration from unresolved historical-secret, licensing, policy and contributor-flow reviews. Public source availability does not imply a stable crates.io release: Cargo `0.1.0` remains pre-release; use the workspace/path dependency as documented in the [README](../README.md).
 
-The repository is <https://github.com/Iam-Sanja/ferrioxid>. The framework is Ferrioxid, with the local facade crate `ferrioxid`. Until publication, use the workspace or a path dependency; do not assume a stable crates.io release.
+## Tracked policies and workflows
 
-## Repository files
+- [CI](../.github/workflows/ci.yml) validates main and PRs on Ubuntu and Windows, with a separate disposable PostgreSQL 16 job. PostgreSQL runs fresh framework initialization first, then HTTP and migration roundtrips.
+- [Security audit](../.github/workflows/security.yml) runs cargo-audit 0.22.2, preserves an unfiltered report and guards the existing RSA exception with an all-target enabled-dependency check.
+- [Dependabot](../.github/dependabot.yml) proposes weekly Cargo and GitHub Actions updates; it does not merge them.
+- [CODEOWNERS](../.github/CODEOWNERS) routes changes to `@Iam-Sanja`; it grants no permissions and the current ruleset does not require code-owner approval.
+- [Issue forms](../.github/ISSUE_TEMPLATE/config.yml) disallow blank issues and link to the security policy; the [PR template](../.github/pull_request_template.md) requests validation and security considerations.
+- [CONTRIBUTING](../CONTRIBUTING.md), [SECURITY](../SECURITY.md), [Code of Conduct](../CODE_OF_CONDUCT.md), [Governance](../GOVERNANCE.md) and [MIT license](../LICENSE-MIT) are present. Presence is not a complete accuracy, third-party-license or usable-contact audit. Known stale contributor/security wording is listed in the [open checklist tasks](public-release-checklist.md#1-publication-and-historical-exposure).
 
-These files are tracked on GitHub's default branch:
+The former `.github/workflows/rust.yml` is historical; current instructions refer to `ci.yml` and `security.yml`. Current framework setup uses `ferrioxid.toml`, `.ferrioxid/`, `FERRIOXID_*` and `_ferrioxid_*`; see [legacy-name removal](ferrum-legacy-removal.md) for historical mappings and the intentional fresh-database requirement.
 
-- `.github/workflows/ci.yml` validates `main` and pull requests on Linux and Windows, and runs a separate PostgreSQL job.
-- `.github/workflows/security.yml` runs `cargo audit`.
-- `.github/dependabot.yml` opens weekly Cargo and GitHub Actions update requests. It does not merge them.
-- `.github/CODEOWNERS` names `@Iam-Sanja`. It does not require that review.
-- `.github/ISSUE_TEMPLATE/` and `.github/pull_request_template.md` supply forms after they are on the default branch.
-- `SECURITY.md` describes disclosure. It does not turn on Private Vulnerability Reporting.
+## Verified settings snapshot
 
-The previous workflow file `.github/workflows/rust.yml` is replaced by `ci.yml`. It checked only Ubuntu, used an incorrect `cargo fmt` invocation, and did not start PostgreSQL.
+| Setting | Observed state on 2026-11-08 |
+| --- | --- |
+| Visibility / default branch | Public / `main` |
+| Issues / Discussions | Both enabled; moderation capacity not established by the setting |
+| Merge methods | Squash enabled; merge commits and rebase disabled |
+| Head-branch cleanup | Automatic deletion enabled |
+| Main protection | Active `protect-main`, ID `26812021`, targeting the default branch; effective main rules confirmed |
+| Bypass | No bypass actors; API reports current user cannot bypass |
+| Required PR | Required; squash only, resolved review threads and linear history |
+| Required checks | `Rust (ubuntu-latest)`, `Rust (windows-latest)`, `PostgreSQL`, `Cargo audit`; strict up-to-date policy, integration ID `15368` |
+| Approval counts | Zero required approving reviews; code-owner and last-push approval not required |
+| Main deletion / force pushes | Blocked by deletion and non-fast-forward rules |
+| Private Vulnerability Reporting | Enabled; [private report form](https://github.com/Iam-Sanja/ferrioxid/security/advisories/new) |
+| Dependabot alerts / security updates | Alerts enabled; updates enabled and not paused |
+| Dependency graph completeness | Separate UI/data coverage review still open |
+| Secret Scanning / Push Protection | Both enabled |
+| Additional secret coverage | Non-provider patterns and validity checks disabled; assess separately |
+| CodeQL | Default setup configured; weekly, default query suite, remote threat model; Rust, Actions and JavaScript/TypeScript language groups |
+| CodeQL required for merge | Not in the four required status-check contexts; review its results separately |
+| Repository Actions token | Read-only default; cannot approve PR reviews |
+| Checked-in workflow permissions | Both workflows explicitly use `contents: read`; no `pull_request_target` execution or repository-secret references |
+| Fork approval policy | `first_time_contributors`; not approval of every outside contributor's execution |
+| Allowed Actions / global SHA policy | All Actions allowed; SHA pinning not required globally. The two checked-in workflows pin third-party Actions to full SHAs |
 
-## Settings to configure manually
+The single-maintainer approval configuration avoids requiring a nonexistent independent reviewer. It does not remove the need for the owner's final review. Add stronger reviewer requirements when a real independent reviewer is available; do not weaken checks or add bypasses as a workaround.
 
-| Setting | Intended value | Status in Git |
-|---|---|---|
-| Default branch | `main` | Verify in GitHub |
-| Issues | Enabled | Verify in GitHub |
-| Discussions | Enabled, if the plan allows it | Verify in GitHub |
-| Pull requests | Allowed into `main` | Verify in GitHub |
-| Merge method | Squash merge only | Verify in GitHub |
-| Merge commits and rebase merge | Disabled | Verify in GitHub |
-| Delete head branches | Enabled after merge | Verify in GitHub |
-| Branch protection for `main` | Enabled | Verify in GitHub |
-| Required pull request review | At least one review, including code owners if desired | Verify in GitHub |
-| Required status checks | `Rust (ubuntu-latest)`, `Rust (windows-latest)`, `PostgreSQL`, and `Cargo audit` after they have run once | Verify in GitHub |
-| Force pushes to `main` | Disabled | Verify in GitHub |
-| Branch deletion of `main` | Disabled | Verify in GitHub |
-| Private Vulnerability Reporting | Enabled | Not enabled by `SECURITY.md` |
-| Secret scanning | Enabled when GitHub offers it | Verify in GitHub |
-| Dependabot alerts | Enabled | The Dependabot config file does not enable alerts by itself |
-| Visibility | Private until a public release is intentional | Private at initial setup; verify before publishing |
-| ChatGPT GitHub integration | Grant access only if that integration should read this repository | Verify in GitHub |
+The normal merge of main into a topic branch does not violate main's squash-only/linear-history rule: the final PR merge into main must use the permitted method. No direct push or merge action on main is authorized by this document.
 
-Required status checks should use the exact names reported by GitHub Actions. Select them only after GitHub has recorded the checks; resolve failures before requiring them for merge.
+## Repeatable verification
 
-## Access
+Read these authenticated REST endpoints under `/repos/Iam-Sanja/ferrioxid`; follow pagination where the response is a list:
 
-`@Iam-Sanja` is the current maintainer. Adding another maintainer requires both a GitHub permission change and an update to `GOVERNANCE.md` and `.github/CODEOWNERS`.
+| Endpoint | Evidence |
+| --- | --- |
+| Repository root and `/branches/main` | Visibility, merge settings, security metadata and protected branch flag |
+| `/rulesets?includes_parents=true`, `/rulesets/26812021`, `/rules/branches/main` | Enforcement, target refs, bypasses and actual required contexts |
+| `/vulnerability-alerts` | HTTP 204 confirms Dependabot alerts enabled |
+| `/automated-security-fixes` | Security-update enablement and pause state |
+| `/private-vulnerability-reporting` | Private reporting enablement |
+| `/code-scanning/default-setup` | Query suite, languages and schedule |
+| `/actions/permissions`, `/actions/permissions/workflow` | Allowed Actions, default token and PR-review approval settings |
+| `/actions/permissions/fork-pr-contributor-approval` | Public-fork contributor approval policy |
+| `/commits/{sha}/check-runs`, `/actions/runs/{id}/jobs` | Exact latest-head checks, step execution and conclusions |
+| `/code-scanning/analyses` with the relevant ref | Actual analyzed commit and categories; PR-diff analysis is not a full-history secret scan |
 
-## Labels
+An unavailable endpoint is not proof of enablement or disablement. The private-repository fork-workflow settings endpoint rejects public repositories, so it cannot establish this repository's public-fork permissions. A successful configuration read does not replace a controlled failing-check exercise, signed-out visitor check or real fork-PR test. Those remain open in the checklist. Do not test protection by actually merging a failing change.
 
-Issue forms do not assign labels. Create `dependencies` before expecting Dependabot to apply it. Missing labels do not block the update itself.
+## Security and contributor boundaries
 
-## What this repository does not do
+Vulnerabilities go to the [private report form](https://github.com/Iam-Sanja/ferrioxid/security/advisories/new), not public issues, discussions or PRs. `SECURITY.md` still uses conditional wording about the feature; this snapshot supplies the verified route. A GitHub username alone is not proof of a private messaging channel. Finish the policy/contact review before treating every published contact instruction as tested.
 
-- It does not create the GitHub repository, push commits, or change visibility.
-- It does not publish crates.
-- It does not turn milestone labels such as v0.27.1 into releases.
-- It does not rewrite Git history. A secret already present in history would remain after `.gitignore` changes.
+Public visibility grants no write access. Fork PRs must not receive privileged credentials or run outsider-controlled code through `pull_request_target`. Review workflow edits, artifact handling and dependency updates deliberately. The read-only default and source-level SHA pins do not establish a repository-wide Actions allowlist. Review returning contributors as well as first-time contributors; inspect the current approval policy rather than assuming all external builds require approval.
 
-## Branch protection availability
+`@Iam-Sanja` is the maintainer recorded by Governance and CODEOWNERS. Adding a maintainer requires both permission changes and policy updates. Periodically audit collaborators, apps, repository/environment secrets, runner usage and security alerts. Discussions require moderation. Issue forms do not assign labels; maintain labels such as `dependencies` for Dependabot without assuming a label changes security enforcement.
 
-The repository is currently private. GitHub API queries during the initial setup returned a plan restriction: private-repository rulesets require an eligible paid GitHub plan. GitHub Free supports branch protection on public repositories; paid plans also support private repositories. Do **not** change repository visibility just to satisfy a branch-protection checklist.
+## Integrated security and naming changes
 
-Track eligibility and eventual enforcement in [issue #12](https://github.com/Iam-Sanja/ferrioxid/issues/12). Until protection is available, maintainers should voluntarily use pull requests and avoid direct pushes or force pushes to `main`. Once eligible, configure protection in GitHub Settings and verify it actually applies; documentation is not enforcement.
+[PR #27](https://github.com/Iam-Sanja/ferrioxid/pull/27) removed the environment-selected external database seeder. [PR #25](https://github.com/Iam-Sanja/ferrioxid/pull/25) preserved that removal and its regression for both historical/current environment names while completing the Ferrioxid rename. Both are merged into the source baseline above. Do not restore known privileged fixture credentials in a persistent database. Reused databases touched by an earlier seeder need operator review; removing code cannot revoke existing accounts or sessions.
 
-Avoid requiring another person's approval in a single-maintainer repository unless a separate reviewer is available. CI and review rules should be enabled only when the corresponding checks and reviewers exist.
+The [CodeQL review](security/codeql-review.md) and [94-alert ledger](security/codeql-alerts.csv) are pinned historical evidence with per-alert reasoning, including the PR #25 follow-up for false positive #95. They must not be interpreted as a current count, blanket suppression list or complete secrets audit. PR #25's final head passed the four required checks and CodeQL; each new PR still needs results for its own latest head.
+
+The repository was private and unprotected during the original GitHub Free setup; that restriction is historical. Main is now protected by the active ruleset. [Issue #12](https://github.com/Iam-Sanja/ferrioxid/issues/12) still reports open despite the observed enforcement configuration; its administrative closure is separate from this documentation PR. The old private Actions billing blockage no longer describes current execution: public PR jobs have run successfully.
 
 ## Issue-to-pull-request workflow
 
@@ -89,19 +103,18 @@ A local Cursor agent and a GitHub-connected assistant do **not** automatically s
 
 ## CI troubleshooting baseline
 
-The CI workflow runs formatting first. A formatting error causes the subsequent Clippy, tests, and build steps in that job to be skipped; a failed job does **not** mean the skipped Rust tests failed.
-
-Use the job steps and logs to identify the first failure. Reproduce locally with:
+Formatting runs first. A formatting failure skips later Clippy/tests/build steps; a skipped test step is not a failed Rust test. Inspect actual steps and logs, including rerun attempts, and reproduce the first relevant failure:
 
 ```bash
 cargo fmt --all -- --check
-cargo clippy --workspace --all-targets -- -D warnings
-cargo test --workspace
-cargo build --workspace
+cargo check --workspace --all-targets --locked
+cargo clippy --workspace --all-targets --locked -- -D warnings
+cargo test --workspace --locked
+cargo build --workspace --locked
 ```
 
-The PostgreSQL integration job runs separately against a disposable database. A green PostgreSQL job does not prove that the whole CI workflow passed.
+The PostgreSQL job runs all three integration tests against its disposable database. Its success does not prove the Ubuntu or Windows jobs passed. Branch rules require the exact four names above; if workflow names change, maintainers must review the corresponding ruleset contexts rather than removing checks to bypass failures.
 
-The Security audit uses `cargo audit` on `Cargo.lock`. Advisory matches can involve transitive or lockfile-only packages; investigate the dependency and feature tree before removing packages or considering a documented exception. Do not hide findings merely to turn a check green.
+The unfiltered cargo-audit report can match optional lockfile packages. The sole existing `RUSTSEC-2023-0071` exception is tracked in [issue #8](https://github.com/Iam-Sanja/ferrioxid/issues/8), which remains open. The workflow must fail if RSA becomes reachable in the enabled workspace graph on any target, and every other advisory remains gated. Reassess the exception when features or SQLx change; never broaden it simply to obtain a green check.
 
-As of the initial GitHub setup, see the independent tracking issues for [admin formatting](https://github.com/Iam-Sanja/ferrioxid/issues/7) and [RSA dependency audit](https://github.com/Iam-Sanja/ferrioxid/issues/8). These links are historical references; check their current status rather than assuming they are still open.
+Current CI does not prove complete secret-history scanning, third-party asset licensing, successful fork moderation or safety of all production deployments. Follow the remaining checklist items and report validation limits explicitly. This documentation update changes no security setting, workflow permission, dependency exception or protection rule.

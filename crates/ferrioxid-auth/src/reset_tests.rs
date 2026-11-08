@@ -7,6 +7,7 @@ use ferrioxid_mail::{MailService, SmtpSecurity, SmtpSettings};
 use http_body_util::BodyExt;
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
 use std::time::Duration;
+use tokio::io::AsyncWriteExt;
 use tower::ServiceExt;
 
 async fn setup(attempts: u32) -> (AuthService, MailService, ferrioxid_mail::MemoryInbox) {
@@ -212,14 +213,24 @@ async fn rate_limit_parallel_replay_and_failed_delivery_stay_closed() {
     auth.create_user("known@example.com", "correct-horse-battery", false, false)
         .await
         .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    // A closed port can time out; this case needs a definitive SMTP rejection.
+    let rejection = tokio::spawn(async move {
+        let (mut connection, _) = listener.accept().await.unwrap();
+        connection
+            .write_all(b"554 Service unavailable\r\n")
+            .await
+            .unwrap();
+    });
     let failing = MailService::smtp(
         SmtpSettings {
             host: "127.0.0.1".into(),
-            port: 9,
+            port,
             security: SmtpSecurity::Starttls,
             username: "mailer".into(),
             password: "super-secret-value".into(),
-            timeout: Duration::from_secs(1),
+            timeout: Duration::from_secs(10),
         },
         "noreply@example.com",
         None,
@@ -234,6 +245,10 @@ async fn rate_limit_parallel_replay_and_failed_delivery_stay_closed() {
         "de",
     )
     .await;
+    tokio::time::timeout(Duration::from_secs(10), rejection)
+        .await
+        .unwrap()
+        .unwrap();
     let usable = auth
         .database()
         .query_one(Statement::from_string(
@@ -257,7 +272,7 @@ async fn rate_limit_parallel_replay_and_failed_delivery_stay_closed() {
         .unwrap()
         .try_get::<String>("", "error_code")
         .unwrap();
-    assert!(code.starts_with("mail."));
+    assert_eq!(code, "mail.rejected");
     assert!(!code.contains("super-secret-value"));
 }
 
