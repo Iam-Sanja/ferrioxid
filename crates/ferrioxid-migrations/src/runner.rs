@@ -45,7 +45,7 @@ impl StatusReport {
             for line in &self.lines {
                 text.push_str(&format!(
                     "  {}  {}  checksum {}\n",
-                    line.id, line.state, line.checksum
+                    line.id, match line.state.as_str() { "angewendet" => "applied", "ausstehend" => "pending", other => other }, line.checksum
                 ));
             }
         }
@@ -259,7 +259,7 @@ fn pending_files<'a>(
         })?;
         if file.id != entry.id {
             return Err(MigrationError::new(format!(
-                "History expects migration {} at position {}, but found {}.",
+                "History expects position {} to contain migration {}, but found {}.",
                 index + 1,
                 entry.id,
                 file.id
