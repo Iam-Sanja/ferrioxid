@@ -1,6 +1,5 @@
-//! Zentrale CLI-Texte. Befehlsnamen und skriptbare Migrationszeilen bleiben Englisch beziehungsweise stabil.
-
-use ferrioxid_migrations::discover_project;
+//! Central CLI messages. English is the default developer-facing language.
+//! German is an explicit legacy locale override, not inferred from app content.
 
 pub fn line(key: &str) -> &'static str {
     line_for(&locale(), key)
@@ -52,13 +51,8 @@ pub fn locale() -> String {
             return locale;
         }
     }
-    if let Ok(cwd) = std::env::current_dir() {
-        if let Ok(project) = discover_project(&cwd) {
-            if let Some(locale) = supported(&project.default_locale) {
-                return locale;
-            }
-        }
-    }
+    // CLI messages must not inherit the application's UI language.
+    // A project with default_locale = "de" still gets English CLI output.
     "en".to_owned()
 }
 
