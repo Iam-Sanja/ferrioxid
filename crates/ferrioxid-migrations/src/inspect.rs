@@ -373,13 +373,27 @@ fn line_diagnostics(scope: MigrationScope, report: &StatusReport) -> Vec<Diagnos
 }
 
 fn conflict_code(text: &str) -> &'static str {
-    if text.contains("Checksum") {
+    let normalized = text.to_ascii_lowercase();
+    if normalized.contains("checksum") {
         "migration.checksum_mismatch"
-    } else if text.contains("no file") {
+    } else if normalized.contains("no file") {
         "migration.unknown"
     } else {
         "migration.order"
     }
+}
+
+#[cfg(test)]
+#[test]
+fn translated_conflicts_preserve_machine_readable_codes() {
+    assert_eq!(
+        conflict_code("Stored checksum does not match file"),
+        "migration.checksum_mismatch"
+    );
+    assert_eq!(
+        conflict_code("Applied migration has no file"),
+        "migration.unknown"
+    );
 }
 
 fn pending_lines(report: &StatusReport) -> usize {
