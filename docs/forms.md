@@ -4,22 +4,22 @@
 
 ## Verantwortlichkeit
 
-`ferrum-forms` prüft URL-kodierte Eingaben und liefert ein typisiertes Rust-Objekt oder Feldfehler. Formulare sind nicht an eine Datenbanktabelle gebunden. Kontakt, Suche und Filter können damit beschrieben werden, ohne ein `FerrumModel` anzulegen.
+`ferrioxid-forms` prüft URL-kodierte Eingaben und liefert ein typisiertes Rust-Objekt oder Feldfehler. Formulare sind nicht an eine Datenbanktabelle gebunden. Kontakt, Suche und Filter können damit beschrieben werden, ohne ein `FerrioxidModel` anzulegen.
 
 ## Crates und Dateien
 
-- `crates/ferrum-forms/src/lib.rs`
-- Gemeinsame Regeln: `crates/ferrum-core/src/validation.rs`
+- `crates/ferrioxid-forms/src/lib.rs`
+- Gemeinsame Regeln: `crates/ferrioxid-core/src/validation.rs`
 - Beispiel: `examples/myshop/src/contact.rs`
-- Generator: `crates/ferrum-cli/src/scaffold.rs`, Funktion `contact_handlers`
+- Generator: `crates/ferrioxid-cli/src/scaffold.rs`, Funktion `contact_handlers`
 
-Die Fassade exportiert das Modul als `ferrum::forms`.
+Die Fassade exportiert das Modul als `ferrioxid::forms`.
 
 ## Öffentliche API
 
-`FerrumForm::from_form` nimmt `FormValues` entgegen. `ContactForm` ist die mitgelieferte Referenz. Hilfen heißen `required_text`, `optional_text`, `required_i64`, `optional_i64`, `required_bool`, `optional_bool`, `required_uuid` und `optional_uuid`. `render_form` und `render_page` erzeugen HTML. `message` liefert deutsche und englische Texte zu stabilen Codes. `FormValues::parse_urlencoded` begrenzt den Body auf 65536 Byte und lehnt unbekannte Felder über `reject_unknown` ab. `csrf_token` ist erlaubt und kein Datenfeld.
+`FerrioxidForm::from_form` nimmt `FormValues` entgegen. `ContactForm` ist die mitgelieferte Referenz. Hilfen heißen `required_text`, `optional_text`, `required_i64`, `optional_i64`, `required_bool`, `optional_bool`, `required_uuid` und `optional_uuid`. `render_form` und `render_page` erzeugen HTML. `message` liefert deutsche und englische Texte zu stabilen Codes. `FormValues::parse_urlencoded` begrenzt den Body auf 65536 Byte und lehnt unbekannte Felder über `reject_unknown` ab. `csrf_token` ist erlaubt und kein Datenfeld.
 
-Ein `#[derive(FerrumForm)]` ist nicht implementiert. Die Trait-Form ist die kompilierbare API.
+Ein `#[derive(FerrioxidForm)]` ist nicht implementiert. Die Trait-Form ist die kompilierbare API.
 
 ## Datenfluss
 
@@ -27,7 +27,7 @@ Der Handler liest den Body, baut `FormValues` und ruft `from_form` auf. Gültige
 
 ## Konfiguration
 
-Formulare haben keinen eigenen `ferrum.toml`-Abschnitt. Die maximale URL-kodierte Größe steht in `FormValues::parse_urlencoded`. Größere Requests werden vorher von der Body-Limit-Middleware abgelehnt, wenn `ferrum::web::prepare` oder `ferrum::middleware::apply` verwendet wird.
+Formulare haben keinen eigenen `ferrum.toml`-Abschnitt. Die maximale URL-kodierte Größe steht in `FormValues::parse_urlencoded`. Größere Requests werden vorher von der Body-Limit-Middleware abgelehnt, wenn `ferrioxid::web::prepare` oder `ferrioxid::middleware::apply` verwendet wird.
 
 ## Sicherheit
 
@@ -40,14 +40,14 @@ HTML wird escaped. Unbekannte Felder ergeben `validation.unknown_field` und werd
 ## Beispiel
 
 ```rust
-let values = ferrum::forms::FormValues::parse_urlencoded(&body)?;
-let form = ferrum::forms::ContactForm::from_form(&values)?;
+let values = ferrioxid::forms::FormValues::parse_urlencoded(&body)?;
+let form = ferrioxid::forms::ContactForm::from_form(&values)?;
 let _checked = form.name;
 ```
 
 ## Tests
 
-`cargo test -p ferrum-forms`. Abgedeckt sind Pflichtfelder, Länge, E-Mail, URL, Zahl, UUID, optionale Felder, Kreuzvalidierung, unbekannte Felder und Escaping.
+`cargo test -p ferrioxid-forms`. Abgedeckt sind Pflichtfelder, Länge, E-Mail, URL, Zahl, UUID, optionale Felder, Kreuzvalidierung, unbekannte Felder und Escaping.
 
 ## Einschränkungen
 
@@ -55,4 +55,4 @@ Es gibt kein Formset, keine Dateifelder in der Form-API und kein Proc-Macro. Das
 
 ## Erweiterung
 
-Ein späteres Derive kann dieselben Funktionen aus `ferrum-core` aufrufen. Datei- und Formset-Felder bleiben geplant.
+Ein späteres Derive kann dieselben Funktionen aus `ferrioxid-core` aufrufen. Datei- und Formset-Felder bleiben geplant.

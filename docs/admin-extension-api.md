@@ -4,14 +4,14 @@
 
 ## IST
 
-Die öffentliche API liegt in `ferrum::admin`. Sie hängt an derselben `AdminRegistry` wie die Modelle. Es gibt keine zweite Admin-Engine und keine globale Registrierung. myshop zeigt sie in `examples/myshop/src/admin.rs`.
+Die öffentliche API liegt in `ferrioxid::admin`. Sie hängt an derselben `AdminRegistry` wie die Modelle. Es gibt keine zweite Admin-Engine und keine globale Registrierung. myshop zeigt sie in `examples/myshop/src/admin.rs`.
 
-`seal` prüft Seiten, Filter, Widgets und eigene Aktionen gegen die schon registrierten Modelle. Ohne `seal` beantwortet Ferrum eine eigene Seite mit einem Fehler und wendet die Erweiterung nicht als Erfolg an.
+`seal` prüft Seiten, Filter, Widgets und eigene Aktionen gegen die schon registrierten Modelle. Ohne `seal` beantwortet Ferrioxid eine eigene Seite mit einem Fehler und wendet die Erweiterung nicht als Erfolg an.
 
 ## Beispiel
 
 ```rust
-use ferrum::admin::{AdminFilter, AdminRegistry, AdminView, AdminWidget, FilterOption};
+use ferrioxid::admin::{AdminFilter, AdminRegistry, AdminView, AdminWidget, FilterOption};
 use std::sync::Arc;
 
 const STATUS: &[FilterOption] = &[
@@ -35,7 +35,7 @@ let registry = AdminRegistry::new()
             .on_post(OrderReport),
     )?
     .try_action(
-        ferrum::admin::AdminAction::custom(
+        ferrioxid::admin::AdminAction::custom(
             "orders",
             "mark_processed",
             Arc::new(MarkProcessed),
@@ -55,7 +55,7 @@ let registry = AdminRegistry::new()
 
 ## Grenzen
 
-- Der Namespace ist `ferrum::admin`, nicht `ferrum::prelude`.
+- Der Namespace ist `ferrioxid::admin`, nicht `ferrioxid::prelude`.
 - Eine eigene Aktion nutzt das Modellverb `update`. Eine Seite nutzt einen vollständigen Code wie `orders.read`.
 - Vorlagen können `base.html` nicht ersetzen.
 - Ein Widget öffnet kein verstecktes oder sensibles Feld und ersetzt kein Fremdschlüssel-Select.

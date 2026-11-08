@@ -9,7 +9,7 @@ Ohne `admin_fieldset` bleibt das Formular eine einzelne unbenannte Gruppe.
 Ein Modell deklariert die Abschnitte. Jedes sichtbare Feld nennt genau einen davon.
 
 ```rust
-#[ferrum(
+#[ferrioxid(
     admin = true,
     admin_fieldset = "Allgemein|Name und Kategorie",
     admin_fieldset = "Preis und Verfügbarkeit",

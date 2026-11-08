@@ -1,6 +1,6 @@
 # Validierung – Regeln, Typen und Fehler
 
-[Zur Übersicht](index.md) · **IST:** Regel-Generierung in `crates/ferrum-macros/src/lib.rs`; Fehler in `crates/ferrum-core/src/lib.rs`.
+[Zur Übersicht](index.md) · **IST:** Regel-Generierung in `crates/ferrioxid-macros/src/lib.rs`; Fehler in `crates/ferrioxid-core/src/lib.rs`.
 
 ## Aktuelle Regeln (IST)
 
@@ -22,7 +22,7 @@ Keine allgemeine Validator-Registry, keine Regex- und keine E-Mail-Prüfung. Rus
 
 ### PATCH-Null-Semantik
 
-`ferrum::db::PatchField<T>` steht auf jedem änderbaren Update-Feld, mit `#[serde(default)]`.
+`ferrioxid::db::PatchField<T>` steht auf jedem änderbaren Update-Feld, mit `#[serde(default)]`.
 
 | JSON | Zustand | `NOT NULL`-Spalte | nullable Spalte (`Option<T>`) |
 |---|---|---|---|

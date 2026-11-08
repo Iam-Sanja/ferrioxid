@@ -1,0 +1,22 @@
+[package]
+name = "ferrioxid-jobs"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+async-trait.workspace = true
+ferrioxid-core = { path = "../ferrioxid-core" }
+ferrioxid-db = { path = "../ferrioxid-db" }
+ferrioxid-mail = { path = "../ferrioxid-mail" }
+ferrioxid-migrations = { path = "../ferrioxid-migrations" }
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+ferrioxid-auth = { path = "../ferrioxid-auth" }

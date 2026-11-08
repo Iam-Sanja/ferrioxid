@@ -24,13 +24,13 @@ Die Regel läuft nach der Sitzungs- und Berechtigungsprüfung. Ein aktiver Super
 
 ## Zuständige Dateien
 
-- `crates/ferrum-auth/src/policy.rs`
-- `crates/ferrum-api/src/lib.rs`
-- `crates/ferrum-macros/src/lib.rs`
+- `crates/ferrioxid-auth/src/policy.rs`
+- `crates/ferrioxid-api/src/lib.rs`
+- `crates/ferrioxid-macros/src/lib.rs`
 
 ## Öffentliche API
 
-`ferrum::auth::ObjectPolicy` und `App::register_policy`.
+`ferrioxid::auth::ObjectPolicy` und `App::register_policy`.
 
 Für GET, PATCH und DELETE lädt der Handler den Datensatz. Schlägt die Regel fehl, ist die Antwort 404, auch wenn die Zeile existiert. So bestätigt die Schnittstelle die Kennung nicht.
 
@@ -62,17 +62,17 @@ Listen, Zähler und Schreibzugriffe verwenden `QueryScope`. Der Standard ist `No
 ```rust
 struct OwnerPolicy;
 
-impl ferrum::auth::ObjectPolicy<SecretNote> for OwnerPolicy {
-    fn can_read(user: &ferrum::auth::AuthUser, object: &SecretNote) -> bool {
+impl ferrioxid::auth::ObjectPolicy<SecretNote> for OwnerPolicy {
+    fn can_read(user: &ferrioxid::auth::AuthUser, object: &SecretNote) -> bool {
         object.owner == user.id.to_string()
     }
-    fn can_update(user: &ferrum::auth::AuthUser, object: &SecretNote) -> bool {
+    fn can_update(user: &ferrioxid::auth::AuthUser, object: &SecretNote) -> bool {
         object.owner == user.id.to_string()
     }
-    fn can_delete(user: &ferrum::auth::AuthUser, object: &SecretNote) -> bool {
+    fn can_delete(user: &ferrioxid::auth::AuthUser, object: &SecretNote) -> bool {
         object.owner == user.id.to_string()
     }
-    fn can_create(user: &ferrum::auth::AuthUser, input: &SecretNoteCreate) -> bool {
+    fn can_create(user: &ferrioxid::auth::AuthUser, input: &SecretNoteCreate) -> bool {
         input.owner == user.id.to_string()
     }
 }

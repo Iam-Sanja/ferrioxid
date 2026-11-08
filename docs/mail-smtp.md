@@ -9,7 +9,7 @@
 `security = "starttls"` nutzt `starttls_relay`. `security = "tls"` nutzt `relay` für implizites TLS. Beides prüft das Zertifikat über die rustls-Standardwurzeln. Ein anderer Wert aktiviert SMTP nicht. Der Timeout ist der kleinere Wert aus Konfiguration und 30 Sekunden, mindestens eine Sekunde. Ein abgelaufener Timeout ist `mail.timeout`. Eine abgelehnte oder fehlgeschlagene Übergabe ist `mail.rejected`. Ein nicht baubarer Transport ist `mail.unavailable`. Die Bibliotheksmeldung wird nicht protokolliert, weil sie Zugangsdaten wiederholen kann.
 
 ```rust
-use ferrum::mail::{MailService, SmtpSecurity, SmtpSettings};
+use ferrioxid::mail::{MailService, SmtpSecurity, SmtpSettings};
 use std::time::Duration;
 
 let mail = MailService::smtp(

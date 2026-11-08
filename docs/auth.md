@@ -4,13 +4,13 @@
 
 ## Zweck
 
-Ferrum prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferrum-auth` hängt nicht an der HTML-Oberfläche. Der Admin ruft dieselben Methoden auf. Generierte CRUD-Routen nutzen dieselbe Prüfung. Auth-Fehler laufen über `problem_json`. `Invalid email or password` bleibt für unbekannte Benutzer und falsche Passwörter gleich und trägt `auth.invalid_credentials`. Das Verzeichnis hängt Rollennamen an, ohne `PublicUser` von `/auth/me` zu verändern.
+Ferrioxid prüft Benutzer, Passwörter und Sitzungen serverseitig. Die Crate `ferrioxid-auth` hängt nicht an der HTML-Oberfläche. Der Admin ruft dieselben Methoden auf. Generierte CRUD-Routen nutzen dieselbe Prüfung. Auth-Fehler laufen über `problem_json`. `Invalid email or password` bleibt für unbekannte Benutzer und falsche Passwörter gleich und trägt `auth.invalid_credentials`. Das Verzeichnis hängt Rollennamen an, ohne `PublicUser` von `/auth/me` zu verändern.
 
 Admin-Änderungen an Benutzern, Rollen und Rechten laufen über `*_on` in einer Transaktion mit dem Audit. Sitzungswiderruf bei Passwort und Deaktivierung gehört dazu. Die CLI-Methoden bleiben ohne dieses Audit. Siehe [admin-directory-audit.md](admin-directory-audit.md). Ein vergessenes Passwort setzt der Benutzer selbst zurück: [password-reset.md](password-reset.md). Der Versand liegt in [mail.md](mail.md).
 
 ## Architektur
 
-`ferrum-auth` hängt von `ferrum-core`, `ferrum-db` und `ferrum-migrations` ab, nicht von `ferrum-api`. `ferrum-api` hängt von `ferrum-auth` und registriert die Auth-Routen zusammen mit den Modellrouten. Die CLI ruft dieselben Service-Methoden auf.
+`ferrioxid-auth` hängt von `ferrioxid-core`, `ferrioxid-db` und `ferrioxid-migrations` ab, nicht von `ferrioxid-api`. `ferrioxid-api` hängt von `ferrioxid-auth` und registriert die Auth-Routen zusammen mit den Modellrouten. Die CLI ruft dieselben Service-Methoden auf.
 
 Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Die CLI liest sie verdeckt oder aus `FERRUM_PASSWORD`. Sitzungstoken werden nur als SHA-256-Hex gespeichert. Objektregeln prüfen Create-Eingaben über `can_create`, bevor eine Zeile entsteht. Das Setzen der Besitzer-ID aus der Sitzung ist geplant. Das CSRF-Token wird bei Bedarf aus dem Schlüssel und der Sitzung berechnet; gespeichert wird ebenfalls nur der Hash. HTML-Formulare übergeben dasselbe Token als Feld `csrf_token` an `authenticate_csrf`. Ein zweiter CSRF-Mechanismus existiert nicht. Rollen und Berechtigungen liest jede Prüfung erneut aus der Datenbank.
 
@@ -18,15 +18,15 @@ Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Di
 
 | Datei | Aufgabe |
 |---|---|
-| `crates/ferrum-auth/src/password.rs` | Argon2id, PHC-String, Prüfung |
-| `crates/ferrum-auth/src/service.rs` | Benutzer, Login, Rechte, Rate-Limit |
-| `crates/ferrum-auth/src/store.rs` | SeaQuery gegen die Auth-Tabellen |
-| `crates/ferrum-auth/src/schema.rs` | Snapshot und Migration |
-| `crates/ferrum-auth/src/routes.rs` | `/auth/*` |
-| `crates/ferrum-auth/src/recovery.rs` | Reset-Anforderung, Austausch und Abschluss |
-| `crates/ferrum-auth/migrations/0004_password_reset.json` | Token-Hash, Austausch-Hash, Outbox |
-| `crates/ferrum-auth/migrations/0001_auth_schema.json` | Versiegeltes Schema |
-| `crates/ferrum-api/src/lib.rs` | Guard vor generierten Routen |
+| `crates/ferrioxid-auth/src/password.rs` | Argon2id, PHC-String, Prüfung |
+| `crates/ferrioxid-auth/src/service.rs` | Benutzer, Login, Rechte, Rate-Limit |
+| `crates/ferrioxid-auth/src/store.rs` | SeaQuery gegen die Auth-Tabellen |
+| `crates/ferrioxid-auth/src/schema.rs` | Snapshot und Migration |
+| `crates/ferrioxid-auth/src/routes.rs` | `/auth/*` |
+| `crates/ferrioxid-auth/src/recovery.rs` | Reset-Anforderung, Austausch und Abschluss |
+| `crates/ferrioxid-auth/migrations/0004_password_reset.json` | Token-Hash, Austausch-Hash, Outbox |
+| `crates/ferrioxid-auth/migrations/0001_auth_schema.json` | Versiegeltes Schema |
+| `crates/ferrioxid-api/src/lib.rs` | Guard vor generierten Routen |
 
 ## Öffentliche API
 
@@ -42,7 +42,7 @@ Passwörter werden mit Argon2id gehasht und müssen 12 bis 128 Zeichen haben. Di
 
 ## Datenmodell
 
-Siehe [sessions.md](sessions.md) und [permissions.md](permissions.md). Zeitstempel sind Unix-Sekunden (`i64`), weil Ferrum keinen eigenen Datumstyp hat.
+Siehe [sessions.md](sessions.md) und [permissions.md](permissions.md). Zeitstempel sind Unix-Sekunden (`i64`), weil Ferrioxid keinen eigenen Datumstyp hat.
 
 E-Mail wird getrimmt und in Kleinbuchstaben gespeichert. Sie ist eindeutig, höchstens 254 Zeichen lang und braucht genau ein `@` sowie einen Punkt in der Domain.
 
@@ -73,9 +73,9 @@ Ein neues Passwort hat 12 bis 128 Zeichen. Der Hash nutzt Argon2id, Version `0x1
 ## Beispiel
 
 ```powershell
-cargo run -p ferrum-cli -- migrate up
-cargo run -p ferrum-cli -- admin create-user --email admin@example.com --superuser
-cargo run -p ferrum-cli -- auth list-users
+cargo run -p ferrioxid-cli -- migrate up
+cargo run -p ferrioxid-cli -- admin create-user --email admin@example.com --superuser
+cargo run -p ferrioxid-cli -- auth list-users
 ```
 
 `create-user` fragt das Passwort verdeckt ab und bestätigt es. Es gibt kein `--password` und kein voreingestelltes Admin-Passwort.
@@ -85,11 +85,11 @@ POST /auth/login
 {"email":"admin@example.com","password":"example-password"}
 ```
 
-Die Antwort setzt `Set-Cookie: ferrum_session=...` und liefert `user` plus `csrf_token`. Das Session-Token steht nicht im JSON.
+Die Antwort setzt `Set-Cookie: ferrioxid_session=...` und liefert `user` plus `csrf_token`. Das Session-Token steht nicht im JSON.
 
 ## Tests
 
-`crates/ferrum-auth/src/password.rs`, `crates/ferrum-auth/src/sqlite_tests.rs` und `examples/myshop/tests/auth.rs` laufen mit SQLite. PostgreSQL ist dafür nicht erforderlich.
+`crates/ferrioxid-auth/src/password.rs`, `crates/ferrioxid-auth/src/sqlite_tests.rs` und `examples/myshop/tests/auth.rs` laufen mit SQLite. PostgreSQL ist dafür nicht erforderlich.
 
 ## Einschränkungen
 
@@ -98,7 +98,7 @@ Die Antwort setzt `Set-Cookie: ferrum_session=...` und liefert `user` plus `csrf
 - `is_active` ist nötig für eine Sitzung. Ein inaktives Konto wird bei der Anmeldung abgelehnt.
 - `is_staff` öffnet die Verwaltung und umgeht keine Modellrechte.
 - `is_superuser` umgeht Rollen und Objektregeln, ersetzt `is_staff` aber nicht. Ein Superuser ohne Staff erhält im Admin 403 und kann sich dort abmelden.
-- `ferrum admin create-user` setzt nur die übergebenen Flags und druckt Aktiv, Staff und Superuser. `--superuser` ohne `--staff` weist auf den geschlossenen Admin hin.
+- `ferrioxid admin create-user` setzt nur die übergebenen Flags und druckt Aktiv, Staff und Superuser. `--superuser` ohne `--staff` weist auf den geschlossenen Admin hin.
 
 ## Geplante Erweiterungen
 

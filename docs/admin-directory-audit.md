@@ -4,7 +4,7 @@
 
 **Stand:** v0.20. Die Cargo-Version bleibt `0.1.0`.
 
-HTML und JSON des Verzeichnisses rufen dieselben Funktionen in `ferrum-admin` auf. Auth-Schreibvorgang, Sitzungswiderruf und Audit-Zeile teilen sich eine Transaktion. Schlägt das Audit fehl, bleibt der vorherige Auth-Zustand.
+HTML und JSON des Verzeichnisses rufen dieselben Funktionen in `ferrioxid-admin` auf. Auth-Schreibvorgang, Sitzungswiderruf und Audit-Zeile teilen sich eine Transaktion. Schlägt das Audit fehl, bleibt der vorherige Auth-Zustand.
 
 ## Ablauf
 
@@ -32,7 +32,7 @@ Die CLI-Methoden `create_user`, `assign_role`, `grant_permission` und `set_user_
 
 ## Migration
 
-`crates/ferrum-auth/migrations/0003_audit_operation.json` hängt die nullable Spalte `operation_id` an `_ferrum_admin_audit`. `0001_auth_schema` und `0002_admin_journal` bleiben unverändert. Ältere Zeilen lesen `operation_id` als leer. Die Historie zeigt die ersten acht Zeichen, wenn ein Wert vorhanden ist.
+`crates/ferrioxid-auth/migrations/0003_audit_operation.json` hängt die nullable Spalte `operation_id` an `_ferrum_admin_audit`. `0001_auth_schema` und `0002_admin_journal` bleiben unverändert. Ältere Zeilen lesen `operation_id` als leer. Die Historie zeigt die ersten acht Zeichen, wenn ein Wert vorhanden ist.
 
 ## JSON
 

@@ -1,16 +1,16 @@
 //! HTML-Admin ohne JavaScript: Formulare, Links und Sitzungen über echtes HTTP.
 
-use ferrum::admin::{ActionOperation, AdminAction, AdminRegistry};
-use ferrum::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
-use ferrum::core::{QueryScope, ScopeValue};
-use ferrum::db::ModelRepository;
-use ferrum::prelude::*;
-use ferrum::sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+use ferrioxid::admin::{ActionOperation, AdminAction, AdminRegistry};
+use ferrioxid::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
+use ferrioxid::core::{QueryScope, ScopeValue};
+use ferrioxid::db::ModelRepository;
+use ferrioxid::prelude::*;
+use ferrioxid::sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_categories",
     api = "/api/v1/html_categories",
     has_many = "items=HtmlProduct.category_id",
@@ -27,8 +27,8 @@ struct HtmlCategory {
     name: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_products",
     api = "/api/v1/html_products",
     admin = true,
@@ -49,8 +49,8 @@ struct HtmlProduct {
     category_id: Option<Uuid>,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_secrets",
     api = "/api/v1/html_secrets",
     permissions = "secrets",
@@ -68,8 +68,8 @@ struct HtmlSecret {
     title: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_payroll",
     api = "/api/v1/html_payroll",
     admin = true,
@@ -82,8 +82,8 @@ struct HtmlPayroll {
     amount: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_titles",
     api = "/api/v1/html_titles",
     admin = true,
@@ -96,8 +96,8 @@ struct HtmlTitle {
     title: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_counts",
     api = "/api/v1/html_counts",
     admin = true,
@@ -112,8 +112,8 @@ struct HtmlCount {
     active: bool,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_vaults",
     api = "/api/v1/html_vaults",
     admin = true,
@@ -128,8 +128,8 @@ struct HtmlVault {
     password_hash: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_links",
     api = "/api/v1/html_links",
     admin = true,
@@ -144,8 +144,8 @@ struct HtmlLink {
     secret_id: Option<Uuid>,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_codes",
     api = "/api/v1/html_codes",
     admin = true,
@@ -161,8 +161,8 @@ struct HtmlCode {
     note: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_offers",
     api = "/api/v1/html_offers",
     admin = true,
@@ -198,8 +198,8 @@ struct HtmlOffer {
     active: bool,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_bins",
     api = "/api/v1/html_bins",
     has_many = "notes=HtmlOwnedNote.bin_id",
@@ -216,8 +216,8 @@ struct HtmlBin {
     name: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_owned_notes",
     api = "/api/v1/html_owned_notes",
     permissions = "notes",
@@ -297,8 +297,8 @@ struct Reply {
     body: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "html_appointments",
     api = "/api/v1/html_appointments",
     admin = true,
@@ -324,8 +324,8 @@ struct HtmlAppointment {
 
 #[tokio::test]
 async fn html_admin_works_without_javascript() {
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
     let staff = auth
         .create_user("staff@example.com", "correct-horse-battery", true, false)
@@ -384,7 +384,7 @@ async fn html_admin_works_without_javascript() {
         .add::<HtmlCode>()
         .add::<HtmlLink>()
         .add::<HtmlOffer>();
-    let app = ferrum::App::new(db.clone())
+    let app = ferrioxid::App::new(db.clone())
         .with_auth(auth.clone())
         .with_admin(registry)
         .register::<HtmlCategory>()
@@ -507,14 +507,14 @@ async fn html_admin_works_without_javascript() {
     assert_eq!(login.status, 200);
     assert!(login.body.contains("Anmelden"));
     assert!(!login.body.contains("evil.example"));
-    let login_csrf = cookie_value(&login.headers, "ferrum_login_csrf");
+    let login_csrf = cookie_value(&login.headers, "ferrioxid_login_csrf");
     assert_eq!(login_csrf, field_value(&login.body, "csrf_token"));
     assert_eq!(login_csrf.len(), 64);
     let again = call(
         "GET",
         "/admin/login".into(),
         None,
-        format!("Cookie: ferrum_login_csrf={login_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={login_csrf}\r\n"),
     )
     .await
     .unwrap();
@@ -529,7 +529,7 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={login_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={login_csrf}\r\n"),
     )
     .await
     .unwrap();
@@ -542,7 +542,7 @@ async fn html_admin_works_without_javascript() {
             ("password", "wrong-horse-battery-1"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={login_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={login_csrf}\r\n"),
     )
     .await
     .unwrap();
@@ -559,7 +559,7 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={login_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={login_csrf}\r\n"),
     )
     .await
     .unwrap();
@@ -567,7 +567,7 @@ async fn html_admin_works_without_javascript() {
     assert!(missing_login_csrf
         .body
         .contains("Die Sicherheitsprüfung ist fehlgeschlagen."));
-    let foreign = call("POST", "/admin/login".into(), Some(form(&[("csrf_token", &login_csrf), ("email", "staff@example.com"), ("password", "correct-horse-battery"), ("next", "/admin")])), "Cookie: ferrum_login_csrf=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\n".into()).await.unwrap();
+    let foreign = call("POST", "/admin/login".into(), Some(form(&[("csrf_token", &login_csrf), ("email", "staff@example.com"), ("password", "correct-horse-battery"), ("next", "/admin")])), "Cookie: ferrioxid_login_csrf=aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\r\n".into()).await.unwrap();
     assert_eq!(foreign.status, 403);
 
     let signed = call(
@@ -579,13 +579,13 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "https://evil.example/phish"),
         ])),
-        format!("Cookie: ferrum_login_csrf={login_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={login_csrf}\r\n"),
     )
     .await
     .unwrap();
     assert_eq!(signed.status, 303);
     assert_eq!(location(&signed.headers), "/admin");
-    let session = cookie_value(&signed.headers, "ferrum_session");
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
     assert!(!session.is_empty());
 
     let home = call("GET", "/admin".into(), None, cookie_header(&session))
@@ -617,7 +617,7 @@ async fn html_admin_works_without_javascript() {
     let plain_login = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let plain_csrf = cookie_value(&plain_login.headers, "ferrum_login_csrf");
+    let plain_csrf = cookie_value(&plain_login.headers, "ferrioxid_login_csrf");
     let plain_in = call(
         "POST",
         "/admin/login".into(),
@@ -627,12 +627,12 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={plain_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={plain_csrf}\r\n"),
     )
     .await
     .unwrap();
     assert_eq!(plain_in.status, 303);
-    let plain_session = cookie_value(&plain_in.headers, "ferrum_session");
+    let plain_session = cookie_value(&plain_in.headers, "ferrioxid_session");
     let plain_home = call("GET", "/admin".into(), None, cookie_header(&plain_session))
         .await
         .unwrap();
@@ -650,7 +650,7 @@ async fn html_admin_works_without_javascript() {
         "GET",
         "/admin".into(),
         None,
-        format!("Cookie: ferrum_session={plain_session}; ferrum_locale=en\r\n"),
+        format!("Cookie: ferrioxid_session={plain_session}; ferrioxid_locale=en\r\n"),
     )
     .await
     .unwrap();
@@ -707,7 +707,7 @@ async fn html_admin_works_without_javascript() {
     let power_login = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let power_csrf = cookie_value(&power_login.headers, "ferrum_login_csrf");
+    let power_csrf = cookie_value(&power_login.headers, "ferrioxid_login_csrf");
     let power_in = call(
         "POST",
         "/admin/login".into(),
@@ -717,12 +717,12 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={power_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={power_csrf}\r\n"),
     )
     .await
     .unwrap();
     assert_eq!(power_in.status, 303);
-    let power_session = cookie_value(&power_in.headers, "ferrum_session");
+    let power_session = cookie_value(&power_in.headers, "ferrioxid_session");
     let power_home = call("GET", "/admin".into(), None, cookie_header(&power_session))
         .await
         .unwrap();
@@ -762,7 +762,7 @@ async fn html_admin_works_without_javascript() {
     let idle_login = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let idle_csrf = cookie_value(&idle_login.headers, "ferrum_login_csrf");
+    let idle_csrf = cookie_value(&idle_login.headers, "ferrioxid_login_csrf");
     let idle_in = call(
         "POST",
         "/admin/login".into(),
@@ -772,7 +772,7 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={idle_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={idle_csrf}\r\n"),
     )
     .await
     .unwrap();
@@ -849,7 +849,9 @@ async fn html_admin_works_without_javascript() {
         "GET",
         "/admin".into(),
         None,
-        format!("Cookie: ferrum_session={session}; ferrum_locale=en; ferrum_theme=dark\r\n"),
+        format!(
+            "Cookie: ferrioxid_session={session}; ferrioxid_locale=en; ferrioxid_theme=dark\r\n"
+        ),
     )
     .await
     .unwrap();
@@ -1189,7 +1191,7 @@ async fn html_admin_works_without_javascript() {
     let root_login = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let root_csrf_login = cookie_value(&root_login.headers, "ferrum_login_csrf");
+    let root_csrf_login = cookie_value(&root_login.headers, "ferrioxid_login_csrf");
     let root_in = call(
         "POST",
         "/admin/login".into(),
@@ -1199,11 +1201,11 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={root_csrf_login}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={root_csrf_login}\r\n"),
     )
     .await
     .unwrap();
-    let root_session = cookie_value(&root_in.headers, "ferrum_session");
+    let root_session = cookie_value(&root_in.headers, "ferrioxid_session");
     let root_link_form = call(
         "GET",
         "/admin/models/html_links/new".into(),
@@ -1599,7 +1601,7 @@ async fn html_admin_works_without_javascript() {
     let clerk_login_page = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let clerk_csrf = cookie_value(&clerk_login_page.headers, "ferrum_login_csrf");
+    let clerk_csrf = cookie_value(&clerk_login_page.headers, "ferrioxid_login_csrf");
     let clerk_in = call(
         "POST",
         "/admin/login".into(),
@@ -1609,12 +1611,12 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={clerk_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={clerk_csrf}\r\n"),
     )
     .await
     .unwrap();
     assert_eq!(clerk_in.status, 303, "{}", clerk_in.body);
-    let clerk_session = cookie_value(&clerk_in.headers, "ferrum_session");
+    let clerk_session = cookie_value(&clerk_in.headers, "ferrioxid_session");
     let clerk_home = call("GET", "/admin".into(), None, cookie_header(&clerk_session))
         .await
         .unwrap();
@@ -1642,7 +1644,7 @@ async fn html_admin_works_without_javascript() {
     let old_password = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let old_csrf = cookie_value(&old_password.headers, "ferrum_login_csrf");
+    let old_csrf = cookie_value(&old_password.headers, "ferrioxid_login_csrf");
     let old_in = call(
         "POST",
         "/admin/login".into(),
@@ -1652,7 +1654,7 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={old_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={old_csrf}\r\n"),
     )
     .await
     .unwrap();
@@ -1660,7 +1662,7 @@ async fn html_admin_works_without_javascript() {
     let fresh_login = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let fresh_csrf = cookie_value(&fresh_login.headers, "ferrum_login_csrf");
+    let fresh_csrf = cookie_value(&fresh_login.headers, "ferrioxid_login_csrf");
     let fresh_in = call(
         "POST",
         "/admin/login".into(),
@@ -1670,12 +1672,12 @@ async fn html_admin_works_without_javascript() {
             ("password", "replacement-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={fresh_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={fresh_csrf}\r\n"),
     )
     .await
     .unwrap();
     assert_eq!(fresh_in.status, 303, "{}", fresh_in.body);
-    let fresh_session = cookie_value(&fresh_in.headers, "ferrum_session");
+    let fresh_session = cookie_value(&fresh_in.headers, "ferrioxid_session");
     let staff_removed = call(
         "POST",
         format!("/admin/directory/users/{clerk_id}/edit"),
@@ -1778,7 +1780,7 @@ async fn html_admin_works_without_javascript() {
     let inactive_page = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let inactive_csrf = cookie_value(&inactive_page.headers, "ferrum_login_csrf");
+    let inactive_csrf = cookie_value(&inactive_page.headers, "ferrioxid_login_csrf");
     let inactive = call(
         "POST",
         "/admin/login".into(),
@@ -1788,7 +1790,7 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={inactive_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={inactive_csrf}\r\n"),
     )
     .await
     .unwrap();
@@ -1798,7 +1800,7 @@ async fn html_admin_works_without_javascript() {
     let gone_page = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let gone_csrf = cookie_value(&gone_page.headers, "ferrum_login_csrf");
+    let gone_csrf = cookie_value(&gone_page.headers, "ferrioxid_login_csrf");
     let gone_in = call(
         "POST",
         "/admin/login".into(),
@@ -1808,11 +1810,11 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={gone_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={gone_csrf}\r\n"),
     )
     .await
     .unwrap();
-    let gone_session = cookie_value(&gone_in.headers, "ferrum_session");
+    let gone_session = cookie_value(&gone_in.headers, "ferrioxid_session");
     auth.set_user_active("gone@example.com", false)
         .await
         .unwrap();
@@ -2122,7 +2124,7 @@ async fn html_admin_works_without_javascript() {
     let fresh_login = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let fresh_csrf = cookie_value(&fresh_login.headers, "ferrum_login_csrf");
+    let fresh_csrf = cookie_value(&fresh_login.headers, "ferrioxid_login_csrf");
     let fresh = call(
         "POST",
         "/admin/login".into(),
@@ -2132,11 +2134,11 @@ async fn html_admin_works_without_javascript() {
             ("password", "correct-horse-battery"),
             ("next", "/admin/directory/roles"),
         ])),
-        format!("Cookie: ferrum_login_csrf={fresh_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={fresh_csrf}\r\n"),
     )
     .await
     .unwrap();
-    let fresh_session = cookie_value(&fresh.headers, "ferrum_session");
+    let fresh_session = cookie_value(&fresh.headers, "ferrioxid_session");
     let roles = call(
         "GET",
         "/admin/directory/roles".into(),
@@ -2169,8 +2171,8 @@ async fn html_login_csrf_respects_the_bound_port() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     assert_ne!(port, 3000);
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let mut config = AuthConfig::development();
     assert!(config.with_loopback_address(&format!("127.0.0.1:{port}")));
     assert_eq!(
@@ -2184,7 +2186,7 @@ async fn html_login_csrf_respects_the_bound_port() {
     auth.create_user("staff@example.com", "correct-horse-battery", true, false)
         .await
         .unwrap();
-    let app = ferrum::App::new(db)
+    let app = ferrioxid::App::new(db)
         .with_auth(auth)
         .with_admin(AdminRegistry::new());
     let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
@@ -2200,10 +2202,10 @@ async fn html_login_csrf_respects_the_bound_port() {
         .headers
         .to_ascii_lowercase()
         .contains("cache-control: no-store"));
-    let token = cookie_value(&first.headers, "ferrum_login_csrf");
+    let token = cookie_value(&first.headers, "ferrioxid_login_csrf");
     assert_eq!(token, field_value(&first.body, "csrf_token"));
     assert_eq!(token.len(), 64);
-    let issued = set_cookie_line(&first.headers, "ferrum_login_csrf");
+    let issued = set_cookie_line(&first.headers, "ferrioxid_login_csrf");
     assert!(issued.contains("HttpOnly"));
     assert!(issued.contains("Path=/"));
     assert!(issued.contains("SameSite=Lax"));
@@ -2215,7 +2217,7 @@ async fn html_login_csrf_respects_the_bound_port() {
         "GET",
         "/admin/login".into(),
         None,
-        format!("Cookie: ferrum_login_csrf={token}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={token}\r\n"),
     )
     .await
     .unwrap();
@@ -2245,7 +2247,7 @@ async fn html_login_csrf_respects_the_bound_port() {
         "/admin/login".into(),
         Some(login_body.clone()),
         format!(
-            "Origin: http://127.0.0.1:{port}\r\nCookie: ferrum_login_csrf={}\r\n",
+            "Origin: http://127.0.0.1:{port}\r\nCookie: ferrioxid_login_csrf={}\r\n",
             "b".repeat(64)
         ),
     )
@@ -2261,7 +2263,7 @@ async fn html_login_csrf_respects_the_bound_port() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Origin: http://127.0.0.1:{port}\r\nCookie: ferrum_login_csrf={token}\r\n"),
+        format!("Origin: http://127.0.0.1:{port}\r\nCookie: ferrioxid_login_csrf={token}\r\n"),
     )
     .await
     .unwrap();
@@ -2276,7 +2278,7 @@ async fn html_login_csrf_respects_the_bound_port() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Origin: http://127.0.0.1:{port}\r\nCookie: ferrum_login_csrf={token}\r\n"),
+        format!("Origin: http://127.0.0.1:{port}\r\nCookie: ferrioxid_login_csrf={token}\r\n"),
     )
     .await
     .unwrap();
@@ -2286,7 +2288,7 @@ async fn html_login_csrf_respects_the_bound_port() {
         "POST",
         "/admin/login".into(),
         Some(login_body.clone()),
-        format!("Origin: http://evil.example\r\nCookie: ferrum_login_csrf={token}\r\n"),
+        format!("Origin: http://evil.example\r\nCookie: ferrioxid_login_csrf={token}\r\n"),
     )
     .await
     .unwrap();
@@ -2296,7 +2298,7 @@ async fn html_login_csrf_respects_the_bound_port() {
         "POST",
         "/admin/login".into(),
         Some(login_body.clone()),
-        format!("Origin: null\r\nCookie: ferrum_login_csrf={token}\r\n"),
+        format!("Origin: null\r\nCookie: ferrioxid_login_csrf={token}\r\n"),
     )
     .await
     .unwrap();
@@ -2306,7 +2308,7 @@ async fn html_login_csrf_respects_the_bound_port() {
         "/admin/login".into(),
         Some(login_body.clone()),
         format!(
-            "Origin: null\r\nSec-Fetch-Site: cross-site\r\nCookie: ferrum_login_csrf={token}\r\n"
+            "Origin: null\r\nSec-Fetch-Site: cross-site\r\nCookie: ferrioxid_login_csrf={token}\r\n"
         ),
     )
     .await
@@ -2317,7 +2319,7 @@ async fn html_login_csrf_respects_the_bound_port() {
         "/admin/login".into(),
         Some(login_body.clone()),
         format!(
-            "Origin: null\r\nSec-Fetch-Site: same-site\r\nCookie: ferrum_login_csrf={token}\r\n"
+            "Origin: null\r\nSec-Fetch-Site: same-site\r\nCookie: ferrioxid_login_csrf={token}\r\n"
         ),
     )
     .await
@@ -2328,7 +2330,7 @@ async fn html_login_csrf_respects_the_bound_port() {
         "POST",
         "/admin/login".into(),
         Some(login_body.clone()),
-        format!("Origin: http://127.0.0.1:3000\r\nCookie: ferrum_login_csrf={token}\r\n"),
+        format!("Origin: http://127.0.0.1:3000\r\nCookie: ferrioxid_login_csrf={token}\r\n"),
     )
     .await
     .unwrap();
@@ -2339,7 +2341,7 @@ async fn html_login_csrf_respects_the_bound_port() {
         "/admin/login".into(),
         Some(login_body.clone()),
         format!(
-            "Referer: http://evil.example/admin/login\r\nCookie: ferrum_login_csrf={token}\r\n"
+            "Referer: http://evil.example/admin/login\r\nCookie: ferrioxid_login_csrf={token}\r\n"
         ),
     )
     .await
@@ -2351,13 +2353,13 @@ async fn html_login_csrf_respects_the_bound_port() {
         "/admin/login".into(),
         Some(login_body),
         format!(
-            "Origin: null\r\nSec-Fetch-Site: same-origin\r\nCookie: ferrum_login_csrf={token}\r\n"
+            "Origin: null\r\nSec-Fetch-Site: same-origin\r\nCookie: ferrioxid_login_csrf={token}\r\n"
         ),
     )
     .await
     .unwrap();
     assert_eq!(nulled.status, 303, "{}", nulled.body);
-    let nulled_session = cookie_value(&nulled.headers, "ferrum_session");
+    let nulled_session = cookie_value(&nulled.headers, "ferrioxid_session");
     let nulled_home = call("GET", "/admin".into(), None, cookie_header(&nulled_session))
         .await
         .unwrap();
@@ -2375,7 +2377,7 @@ async fn html_login_csrf_respects_the_bound_port() {
     let rebound = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let rebound_token = cookie_value(&rebound.headers, "ferrum_login_csrf");
+    let rebound_token = cookie_value(&rebound.headers, "ferrioxid_login_csrf");
     let rebound_body = form(&[
         ("csrf_token", &rebound_token),
         ("email", "staff@example.com"),
@@ -2389,7 +2391,7 @@ async fn html_login_csrf_respects_the_bound_port() {
             "/admin/login",
             Some(&rebound_body),
             &format!(
-                "Origin: http://127.0.0.1:{port}\r\nCookie: ferrum_login_csrf={rebound_token}\r\n"
+                "Origin: http://127.0.0.1:{port}\r\nCookie: ferrioxid_login_csrf={rebound_token}\r\n"
             ),
             "evil.example",
         )
@@ -2398,7 +2400,7 @@ async fn html_login_csrf_respects_the_bound_port() {
     .unwrap();
     assert_eq!(signed.status, 303, "{}", signed.body);
     assert_eq!(location(&signed.headers), "/admin");
-    let session = cookie_value(&signed.headers, "ferrum_session");
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
     assert!(!session.is_empty());
 
     let home = call("GET", "/admin".into(), None, cookie_header(&session))
@@ -2419,7 +2421,7 @@ async fn html_login_csrf_respects_the_bound_port() {
     let again = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let again_token = cookie_value(&again.headers, "ferrum_login_csrf");
+    let again_token = cookie_value(&again.headers, "ferrioxid_login_csrf");
     let relogin = call(
         "POST",
         "/admin/login".into(),
@@ -2429,20 +2431,22 @@ async fn html_login_csrf_respects_the_bound_port() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Origin: http://localhost:{port}\r\nCookie: ferrum_login_csrf={again_token}\r\n"),
+        format!(
+            "Origin: http://localhost:{port}\r\nCookie: ferrioxid_login_csrf={again_token}\r\n"
+        ),
     )
     .await
     .unwrap();
     assert_eq!(relogin.status, 303);
-    assert!(!cookie_value(&relogin.headers, "ferrum_session").is_empty());
+    assert!(!cookie_value(&relogin.headers, "ferrioxid_session").is_empty());
 
     server.abort();
 }
 
 #[tokio::test]
 async fn admin_v018_drafts_inlines_bulk_and_audit() {
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
     let staff = auth
         .create_user("staff@example.com", "correct-horse-battery", true, false)
@@ -2494,7 +2498,7 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
                 value: true,
             },
         });
-    let app = ferrum::App::new(db.clone())
+    let app = ferrioxid::App::new(db.clone())
         .with_auth(auth.clone())
         .with_admin(registry)
         .register::<HtmlCategory>()
@@ -2656,7 +2660,7 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
         let login = call("GET", "/admin/login".into(), None, String::new())
             .await
             .unwrap();
-        let token = cookie_value(&login.headers, "ferrum_login_csrf");
+        let token = cookie_value(&login.headers, "ferrioxid_login_csrf");
         let signed = call(
             "POST",
             "/admin/login".into(),
@@ -2666,12 +2670,12 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
                 ("password", "correct-horse-battery"),
                 ("next", "/admin"),
             ])),
-            format!("Cookie: ferrum_login_csrf={token}\r\n"),
+            format!("Cookie: ferrioxid_login_csrf={token}\r\n"),
         )
         .await
         .unwrap();
         assert_eq!(signed.status, 303, "{}", signed.body);
-        let session = cookie_value(&signed.headers, "ferrum_session");
+        let session = cookie_value(&signed.headers, "ferrioxid_session");
         if email.starts_with("root") {
             root_session = session;
         } else {
@@ -3256,8 +3260,8 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
 async fn admin_dates_use_native_inputs_and_utc_hierarchy() {
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let mut config = AuthConfig::development();
     config.with_loopback_address(&format!("127.0.0.1:{port}"));
     let auth = AuthService::new(db.clone(), config);
@@ -3265,7 +3269,7 @@ async fn admin_dates_use_native_inputs_and_utc_hierarchy() {
         .await
         .unwrap();
     let registry = AdminRegistry::new().add::<HtmlAppointment>();
-    let app = ferrum::App::new(db)
+    let app = ferrioxid::App::new(db)
         .with_auth(auth)
         .with_admin(registry)
         .register::<HtmlAppointment>();
@@ -3277,7 +3281,7 @@ async fn admin_dates_use_native_inputs_and_utc_hierarchy() {
     let login_page = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let token = cookie_value(&login_page.headers, "ferrum_login_csrf");
+    let token = cookie_value(&login_page.headers, "ferrioxid_login_csrf");
     let signed = call(
         "POST",
         "/admin/login".into(),
@@ -3287,12 +3291,12 @@ async fn admin_dates_use_native_inputs_and_utc_hierarchy() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Origin: http://127.0.0.1:{port}\r\nCookie: ferrum_login_csrf={token}\r\n"),
+        format!("Origin: http://127.0.0.1:{port}\r\nCookie: ferrioxid_login_csrf={token}\r\n"),
     )
     .await
     .unwrap();
-    let session = cookie_value(&signed.headers, "ferrum_session");
-    let cookie = format!("Cookie: ferrum_session={session}\r\n");
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
+    let cookie = format!("Cookie: ferrioxid_session={session}\r\n");
     let form_page = call(
         "GET",
         "/admin/models/html_appointments/new".into(),
@@ -3505,7 +3509,7 @@ fn cookie_value(headers: &str, name: &str) -> String {
 }
 
 fn cookie_header(token: &str) -> String {
-    format!("Cookie: ferrum_session={token}\r\n")
+    format!("Cookie: ferrioxid_session={token}\r\n")
 }
 
 fn location(headers: &str) -> String {

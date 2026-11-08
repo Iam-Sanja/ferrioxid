@@ -1,12 +1,12 @@
 //! Transaktionale Bestellung und Positionen auf einer temporären SQLite-Datei.
 
-use ferrum::admin::{
+use ferrioxid::admin::{
     fail_next_insert, inline_form_groups, save_with_children, AdminRegistry, SaveResult,
 };
-use ferrum::auth::{AuthConfig, AuthService, AuthUser};
-use ferrum::db::ModelRepository;
-use ferrum::migrations::apply_directory;
-use ferrum::sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+use ferrioxid::auth::{AuthConfig, AuthService, AuthUser};
+use ferrioxid::db::ModelRepository;
+use ferrioxid::migrations::apply_directory;
+use ferrioxid::sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
 use myshop::models::order::Order;
 use myshop::models::order_line::OrderLine;
 use serde_json::{Map, Value};
@@ -17,9 +17,13 @@ fn registry() -> AdminRegistry {
     AdminRegistry::new().add::<Order>().add::<OrderLine>()
 }
 
-async fn ready() -> (ferrum::sea_orm::DatabaseConnection, AuthService, AuthUser) {
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+async fn ready() -> (
+    ferrioxid::sea_orm::DatabaseConnection,
+    AuthService,
+    AuthUser,
+) {
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
     apply_directory(&db, &directory, false).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
@@ -349,7 +353,7 @@ async fn a_stale_form_conflicts_and_keeps_the_stored_quantity() {
 #[tokio::test]
 async fn the_order_form_adds_a_row_without_javascript_or_a_write() {
     let (db, auth, _actor) = ready().await;
-    let app = ferrum::App::new(db.clone())
+    let app = ferrioxid::App::new(db.clone())
         .with_auth(auth)
         .with_admin(registry());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -361,7 +365,7 @@ async fn the_order_form_adds_a_row_without_javascript_or_a_write() {
     let login_page = ask("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let login_csrf = cookie_value(&login_page.headers, "ferrum_login_csrf");
+    let login_csrf = cookie_value(&login_page.headers, "ferrioxid_login_csrf");
     let signed = ask(
         "POST",
         "/admin/login".into(),
@@ -371,13 +375,13 @@ async fn the_order_form_adds_a_row_without_javascript_or_a_write() {
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={login_csrf}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={login_csrf}\r\n"),
     )
     .await
     .unwrap();
     assert_eq!(signed.status, 303);
-    let session = cookie_value(&signed.headers, "ferrum_session");
-    let cookie = format!("Cookie: ferrum_session={session}\r\n");
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
+    let cookie = format!("Cookie: ferrioxid_session={session}\r\n");
     let page = ask(
         "GET",
         "/admin/models/orders/new".into(),

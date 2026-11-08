@@ -1,12 +1,12 @@
 mod admin;
 mod contact;
 
-use ferrum::core::FerrumModel;
-use ferrum::middleware::{apply, Standard};
-use ferrum::migrations::{history_exists, table_exists, RegisteredModel, SchemaSnapshot};
-use ferrum::static_files::{mount, StaticOptions};
-use ferrum::storage::LocalStorage;
-use ferrum::App;
+use ferrioxid::core::FerrioxidModel;
+use ferrioxid::middleware::{apply, Standard};
+use ferrioxid::migrations::{history_exists, table_exists, RegisteredModel, SchemaSnapshot};
+use ferrioxid::static_files::{mount, StaticOptions};
+use ferrioxid::storage::LocalStorage;
+use ferrioxid::App;
 use myshop::models::category::Category;
 use myshop::models::event::Event;
 use myshop::models::internal_note::InternalNote;
@@ -62,23 +62,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         return Ok(());
     }
     tracing_subscriber::fmt().with_env_filter("info").init();
-    let url =
-        std::env::var("DATABASE_URL").unwrap_or_else(|_| ferrum::db::DEFAULT_SQLITE_URL.to_owned());
-    let db = ferrum::db::connect(&url).await?;
+    let url = std::env::var("DATABASE_URL")
+        .unwrap_or_else(|_| ferrioxid::db::DEFAULT_SQLITE_URL.to_owned());
+    let db = ferrioxid::db::connect(&url).await?;
     // register::<Product>() exposes GET, GET /{id}, POST, PATCH /{id} and DELETE /{id}.
     let address = std::env::var("BIND_ADDRESS").unwrap_or_else(|_| "127.0.0.1:3000".to_owned());
-    let mut auth_config = ferrum::auth::AuthConfig::from_env();
+    let mut auth_config = ferrioxid::auth::AuthConfig::from_env();
     auth_config.apply_bound_address(&address);
     tracing::info!(
         bound = %address,
         origin_count = auth_config.allowed_origins.len(),
         "Login-Origins aus der Bind-Adresse vorbereitet."
     );
-    let auth = ferrum::auth::AuthService::new(db.clone(), auth_config);
-    let project = ferrum::migrations::discover_project(std::path::Path::new(".")).ok();
+    let auth = ferrioxid::auth::AuthService::new(db.clone(), auth_config);
+    let project = ferrioxid::migrations::discover_project(std::path::Path::new(".")).ok();
     let branding = project
         .as_ref()
-        .map(|project| ferrum::admin::AdminBranding {
+        .map(|project| ferrioxid::admin::AdminBranding {
             site_title: project.site_title.clone(),
             site_header: project.site_header.clone(),
             app_name: project.app_name.clone(),
@@ -90,10 +90,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .unwrap_or_default();
     let mail = project
         .as_ref()
-        .map(ferrum::mail_for)
-        .unwrap_or_else(ferrum::mail::MailService::disabled);
+        .map(ferrioxid::mail_for)
+        .unwrap_or_else(ferrioxid::mail::MailService::disabled);
     let admin = admin::extend(
-        ferrum::admin::AdminRegistry::new()
+        ferrioxid::admin::AdminRegistry::new()
             .with_branding(branding)
             .add::<Category>()
             .add::<Event>()
@@ -120,7 +120,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     axum::routing::get(contact::show).post(contact::submit),
                 ),
         )
-        .merge(ferrum::storage::routes(Arc::new(storage)))
+        .merge(ferrioxid::storage::routes(Arc::new(storage)))
         .register::<Category>()
         .register::<Event>()
         .register::<Order>()
@@ -132,11 +132,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         eprintln!(
             "--bootstrap ist Legacy und legt weder Tabellen noch eine Migrationshistorie an."
         );
-        eprintln!("Verwende im Projektroot: ferrum migrate make initial");
-        eprintln!("Danach: ferrum migrate up");
+        eprintln!("Verwende im Projektroot: ferrioxid migrate make initial");
+        eprintln!("Danach: ferrioxid migrate up");
         if history_exists(&db).await? {
             return Err(
-                "Die Migrationshistorie existiert bereits. ferrum migrate status zeigt den Stand."
+                "Die Migrationshistorie existiert bereits. ferrioxid migrate status zeigt den Stand."
                     .into(),
             );
         }
@@ -146,12 +146,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             );
         }
         return Err(
-            "Die Datenbank enthält das Modell noch nicht. ferrum migrate make und ferrum migrate up erzeugen das Schema.".into(),
+            "Die Datenbank enthält das Modell noch nicht. ferrioxid migrate make und ferrioxid migrate up erzeugen das Schema.".into(),
         );
     }
 
     let listener = tokio::net::TcpListener::bind(&address).await?;
-    println!("Ferrum myshop at http://{address}");
+    println!("Ferrioxid myshop at http://{address}");
     let static_root = std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("static");
     let router = mount(app.into_router(), StaticOptions::new(static_root));
     let router = apply(

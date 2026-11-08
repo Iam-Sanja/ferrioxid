@@ -1,10 +1,10 @@
 # Routing
 
-[Zur Übersicht](index.md) · Namen: [urls.md](urls.md) · **IST-Dateien:** `crates/ferrum-api/src/lib.rs`, `crates/ferrum-api/src/urls.rs`, `crates/ferrum-auth/src/routes.rs`.
+[Zur Übersicht](index.md) · Namen: [urls.md](urls.md) · **IST-Dateien:** `crates/ferrioxid-api/src/lib.rs`, `crates/ferrioxid-api/src/urls.rs`, `crates/ferrioxid-auth/src/routes.rs`.
 
 ## Aufgabe
 
-Der Anwendungscode gruppiert Routen in Rust-Modulen. Ferrum bindet sie an denselben `AppState` und dieselbe Middleware wie Admin, Auth und die Modell-API. Es gibt keinen zweiten Router.
+Der Anwendungscode gruppiert Routen in Rust-Modulen. Ferrioxid bindet sie an denselben `AppState` und dieselbe Middleware wie Admin, Auth und die Modell-API. Es gibt keinen zweiten Router.
 
 ## Zustand
 
@@ -17,8 +17,8 @@ Ein Handler, der Settings liest, braucht deshalb `with_settings`. Ohne diesen Au
 `App::into_router` hängt zuerst die Auth-Routen und danach den Admin an die Anwendungsrouten. `/healthz` kommt zuletzt. `pages::mount_pages` und `web::prepare` liegen außerhalb von `App` und bleiben die Stellen für die Startseite, Staticfiles und die Standard-Middleware. Die Request-ID ist `x-request-id`.
 
 ```rust
-let router = ferrum::pages::mount_pages(app.into_router(), &settings)?;
-let router = ferrum::web::prepare(router, &settings);
+let router = ferrioxid::pages::mount_pages(app.into_router(), &settings)?;
+let router = ferrioxid::web::prepare(router, &settings);
 ```
 
 ## Konflikte
@@ -29,7 +29,7 @@ let router = ferrum::web::prepare(router, &settings);
 
 ## Zugriff
 
-Views bekommen keine Admin-Rechte durch die Registrierung. `allow_anonymous`, Modellrechte und `ObjectPolicy` bleiben an `register` und `register_policy`. Eigene Seiten rufen `ferrum::views::require_user`, `require_staff`, `require_permission` oder `require_object_read` auf. Eine zweite Auth-Middleware gibt es nicht.
+Views bekommen keine Admin-Rechte durch die Registrierung. `allow_anonymous`, Modellrechte und `ObjectPolicy` bleiben an `register` und `register_policy`. Eigene Seiten rufen `ferrioxid::views::require_user`, `require_staff`, `require_permission` oder `require_object_read` auf. Eine zweite Auth-Middleware gibt es nicht.
 
 ## Unbekannte Pfade
 

@@ -1,19 +1,19 @@
 //! Erweiterter Admin: eigene Seite, Aktion, Filter, Widget und Vorlage.
 
-use ferrum::admin::{
+use ferrioxid::admin::{
     ActionContext, ActionError, ActionHandler, AdminAction, AdminFilter, AdminRegistry, AdminView,
     AdminWidget, ExtensionError, FilterOption, ViewHandler, ViewPage, ViewRequest,
 };
-use ferrum::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
-use ferrum::core::{QueryScope, ScopeValue};
-use ferrum::db::ModelRepository;
-use ferrum::prelude::*;
+use ferrioxid::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
+use ferrioxid::core::{QueryScope, ScopeValue};
+use ferrioxid::db::ModelRepository;
+use ferrioxid::prelude::*;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 use std::sync::Arc;
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "extension_tickets",
     api = "/api/v1/extension_tickets",
     permissions = "tickets",
@@ -75,7 +75,7 @@ impl ObjectPolicy<Ticket> for TicketPolicy {
 
 struct Report;
 
-#[ferrum::async_trait::async_trait]
+#[ferrioxid::async_trait::async_trait]
 impl ViewHandler for Report {
     async fn handle(&self, request: &ViewRequest<'_>) -> Result<ViewPage, ExtensionError> {
         let mut data = serde_json::Map::new();
@@ -93,7 +93,7 @@ impl ViewHandler for Report {
 
 struct CloseTicket;
 
-#[ferrum::async_trait::async_trait]
+#[ferrioxid::async_trait::async_trait]
 impl ActionHandler for CloseTicket {
     async fn apply(&self, context: &mut ActionContext) -> Result<(), ActionError> {
         for id in context.ids() {
@@ -105,7 +105,7 @@ impl ActionHandler for CloseTicket {
 
 struct Hostile;
 
-#[ferrum::async_trait::async_trait]
+#[ferrioxid::async_trait::async_trait]
 impl ActionHandler for Hostile {
     async fn apply(&self, context: &mut ActionContext) -> Result<(), ActionError> {
         let id = context.ids()[0];
@@ -128,8 +128,8 @@ async fn extensions_keep_auth_scopes_and_validation() {
         .template("../secret.html", "{% extends \"base.html\" %}")
         .is_err());
 
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
     let staff = auth
         .create_user("staff@example.com", "correct-horse-battery", true, false)
@@ -216,7 +216,7 @@ async fn extensions_keep_auth_scopes_and_validation() {
         .seal()
         .is_err());
 
-    let app = ferrum::App::new(db.clone())
+    let app = ferrioxid::App::new(db.clone())
         .with_auth(auth)
         .with_admin(registry)
         .register_policy::<Ticket, TicketPolicy>();
@@ -554,7 +554,7 @@ async fn login(
     let login = call("GET", "/admin/login".into(), None, String::new())
         .await
         .unwrap();
-    let token = cookie_value(&login.headers, "ferrum_login_csrf");
+    let token = cookie_value(&login.headers, "ferrioxid_login_csrf");
     let signed = call(
         "POST",
         "/admin/login".into(),
@@ -564,12 +564,12 @@ async fn login(
             ("password", "correct-horse-battery"),
             ("next", "/admin"),
         ])),
-        format!("Cookie: ferrum_login_csrf={token}\r\n"),
+        format!("Cookie: ferrioxid_login_csrf={token}\r\n"),
     )
     .await
     .unwrap();
     assert_eq!(signed.status, 303, "{}", signed.body);
-    cookie_value(&signed.headers, "ferrum_session")
+    cookie_value(&signed.headers, "ferrioxid_session")
 }
 
 struct Reply {
@@ -615,7 +615,7 @@ fn http(port: u16, method: &str, path: &str, body: Option<&str>, extra: &str) ->
 }
 
 fn cookie(token: &str) -> String {
-    format!("Cookie: ferrum_session={token}\r\n")
+    format!("Cookie: ferrioxid_session={token}\r\n")
 }
 
 fn cookie_value(headers: &str, name: &str) -> String {

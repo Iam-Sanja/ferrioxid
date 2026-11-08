@@ -42,7 +42,7 @@ Umgesetzt in v0.14. Die drei Flags bleiben getrennt. Die CLI druckt sie nach dem
 
 Die drei Flags bleiben getrennt. Kein Login und kein Admin-Aufruf setzt `is_staff` still nach.
 
-- `ferrum admin create-user --superuser` ohne `--staff` weist auf der Konsole darauf hin, dass der Admin `is_staff` verlangt, und legt den Benutzer trotzdem so an, wie die Flags gesetzt wurden.
+- `ferrioxid admin create-user --superuser` ohne `--staff` weist auf der Konsole darauf hin, dass der Admin `is_staff` verlangt, und legt den Benutzer trotzdem so an, wie die Flags gesetzt wurden.
 - Die 403-Seite eines angemeldeten Superusers ohne Staff nennt, dass der Admin-Zugang das Staff-Flag braucht. Sie verrät nicht, ob andere Benutzer existieren.
 - Die Verzeichniszeile trennt Staff, Superuser und Aktiv als eigene Wörter. Farbe allein trägt den Status nicht.
 - Dokumentation der Kombinationen in `docs/auth.md` und hier.
@@ -61,7 +61,7 @@ CLI-Test: Superuser ohne Staff erzeugt eine Hinweiszeile und `is_staff = false`.
 
 ### Dateien
 
-`crates/ferrum-cli/src/main.rs`, `crates/ferrum-cli/src/text.rs`, `html.rs`, `templates/directory/users.html`, `templates/errors/error.html`, `docs/auth.md`.
+`crates/ferrioxid-cli/src/main.rs`, `crates/ferrioxid-cli/src/text.rs`, `html.rs`, `templates/directory/users.html`, `templates/errors/error.html`, `docs/auth.md`.
 
 ## P0 – Listenspalten
 
@@ -89,7 +89,7 @@ Umgesetzt in v0.14. Die Reihenfolge steht in [admin-native.md](admin-native.md).
 
 ### Dateien
 
-`crates/ferrum-macros/src/lib.rs`, `crates/ferrum-admin/src/registry.rs`, `crates/ferrum-admin/src/html.rs`, `templates/models/list.html`, `crates/ferrum-cli/src/scaffold.rs`, `examples/myshop/tests/admin_html.rs`.
+`crates/ferrioxid-macros/src/lib.rs`, `crates/ferrioxid-admin/src/registry.rs`, `crates/ferrioxid-admin/src/html.rs`, `templates/models/list.html`, `crates/ferrioxid-cli/src/scaffold.rs`, `examples/myshop/tests/admin_html.rs`.
 
 Der Generator setzt bei neuen Fullstack-Projekten weiter `list_display` auf das Namensfeld, damit die ausdrückliche Liste und der Fallback dasselbe zeigen.
 
@@ -159,7 +159,7 @@ Die Benutzer-, Passwort-, Sitzungs- und Bestätigungsabnahme ist erfüllt. Entw�
 
 ### Dateien
 
-`html.rs`, `templates/directory/`, `ferrum-auth` Service-Methoden, die es schon für die CLI gibt, `admin_html.rs`, `admin_http.rs`. Keine neue Migration, solange die Auth-Tabellen reichen.
+`html.rs`, `templates/directory/`, `ferrioxid-auth` Service-Methoden, die es schon für die CLI gibt, `admin_html.rs`, `admin_http.rs`. Keine neue Migration, solange die Auth-Tabellen reichen.
 
 ## Abhängigkeiten
 

@@ -2,7 +2,7 @@
 
 **Stand:** v0.19. Die Cargo-Version bleibt `0.1.0`.
 
-Ferrum unterscheidet drei Typen. Sie werden nicht ineinander umgerechnet.
+Ferrioxid unterscheidet drei Typen. Sie werden nicht ineinander umgerechnet.
 
 | Rust | `ColumnKind` | Bedeutung | Kanonische Zeichenkette |
 |---|---|---|---|
@@ -32,12 +32,12 @@ Ferrum unterscheidet drei Typen. Sie werden nicht ineinander umgerechnet.
 | Time | `<input type="time">` |
 | DateTime | `<input type="datetime-local">` |
 
-`datetime-local` enthält keine Zone. Ferrum behandelt den Wert als UTC und sagt das im Hinweis. `2026-11-07T13:30` wird `2026-11-07T13:30:00Z`. Es gibt keine Umrechnung in die Zeitzone des Browsers und damit keine Sommerzeit-Lücke.
+`datetime-local` enthält keine Zone. Ferrioxid behandelt den Wert als UTC und sagt das im Hinweis. `2026-11-07T13:30` wird `2026-11-07T13:30:00Z`. Es gibt keine Umrechnung in die Zeitzone des Browsers und damit keine Sommerzeit-Lücke.
 
 ## Modell
 
 ```rust
-#[ferrum(table = "events", api = "/api/v1/events", admin = true, admin_date_hierarchy = "event_date")]
+#[ferrioxid(table = "events", api = "/api/v1/events", admin = true, admin_date_hierarchy = "event_date")]
 pub struct Event {
     pub event_date: NaiveDate,
     pub start_time: Option<NaiveTime>,
@@ -45,7 +45,7 @@ pub struct Event {
 }
 ```
 
-Die Typen liegen in `ferrum::prelude`. Bestehende Modelle müssen sie nicht verwenden.
+Die Typen liegen in `ferrioxid::prelude`. Bestehende Modelle müssen sie nicht verwenden.
 
 ## Grenzen
 

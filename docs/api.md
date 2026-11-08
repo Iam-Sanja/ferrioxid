@@ -1,16 +1,16 @@
-# ferrum-api – HTTP-Routing und Antwortverträge
+# ferrioxid-api – HTTP-Routing und Antwortverträge
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-api/src/lib.rs`. Datumsformate: [date-time-types.md](date-time-types.md). Ungültige Werte bleiben 422 mit `validation.date`, `validation.time`, `validation.datetime` oder `validation.datetime_offset`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-api/src/lib.rs`. Datumsformate: [date-time-types.md](date-time-types.md). Ungültige Werte bleiben 422 mit `validation.date`, `validation.time`, `validation.datetime` oder `validation.datetime_offset`.
 
 ## Verantwortung (IST)
 
-Die Crate stellt `App` als Builder für Registrierung, Entwicklungs-Bootstrap und Axum-Router bereit. Sie darf nicht versuchen, Datenbank-Models automatisch im Workspace zu entdecken. `ApiError` antwortet mit `problem_json` aus `ferrum-core`. Die Codes stehen in [error-codes.md](error-codes.md). `detail` bleibt der Fallback für bestehende Tests.
+Die Crate stellt `App` als Builder für Registrierung, Entwicklungs-Bootstrap und Axum-Router bereit. Sie darf nicht versuchen, Datenbank-Models automatisch im Workspace zu entdecken. `ApiError` antwortet mit `problem_json` aus `ferrioxid-core`. Die Codes stehen in [error-codes.md](error-codes.md). `detail` bleibt der Fallback für bestehende Tests.
 
 ```rust
-let app = ferrum::App::new(db.clone()).register::<Product>();
+let app = ferrioxid::App::new(db.clone()).register::<Product>();
 app.bootstrap_schema().await?;  // separat, nur Demo/Entwicklung
 let router = app.into_router();
-let router = ferrum::web::prepare(router, &settings);
+let router = ferrioxid::web::prepare(router, &settings);
 ```
 
 ### Registrierung
@@ -24,7 +24,7 @@ let router = ferrum::web::prepare(router, &settings);
 - Bootstrap merkt sich Tabelle und `columns()`, unabhängig von der Freigabe, und rendert das DDL erst aus dem erkannten Datenbank-Backend.
 - `into_router()` hängt `GET /healthz` an. Der Axum-State ist `AppState` mit Datenbank und optionalem Auth-Service.
 - Cookie-Schreibzugriffe verlangen `x-csrf-token`. Das Token ist je Sitzung stabil, siehe [csrf.md](csrf.md). Anonyme Demo-Routen prüfen dieses Token nicht, weil sie das Session-Cookie nicht als Berechtigung verwenden.
-- Ferrum-Fehler sind `application/problem+json` mit `type`, `title`, `status` und `detail`. 422 bleibt die Antwort für Validierung und unbekannte Sortier- oder Filterfelder. 409 ist reserviert und wird von den aktuellen Handlern nicht erzeugt. Axum-Rejections, zum Beispiel ungültiges JSON, behalten das Axum-Format und sind kein Ferrum-Problem-Detail. Datenbanktexte, Hashes, Tokens und Stacktraces gehen nicht an den Client.
+- Ferrioxid-Fehler sind `application/problem+json` mit `type`, `title`, `status` und `detail`. 422 bleibt die Antwort für Validierung und unbekannte Sortier- oder Filterfelder. 409 ist reserviert und wird von den aktuellen Handlern nicht erzeugt. Axum-Rejections, zum Beispiel ungültiges JSON, behalten das Axum-Format und sind kein Ferrioxid-Problem-Detail. Datenbanktexte, Hashes, Tokens und Stacktraces gehen nicht an den Client.
 
 ### HTTP-API (IST)
 
@@ -32,12 +32,12 @@ let router = ferrum::web::prepare(router, &settings);
 |---|---|---|
 | `GET /healthz` | 200 | `{"status":"ok"}`; keine DB-Readiness-Prüfung |
 | `GET /api/v1/products` | 200 | `{"data":[...],"limit":100,"truncated":false}` |
-| `GET /api/v1/products/{id}` | 200 / 404 | typisiertes Model / Ferrum-Problem-JSON bei unbekannter UUID |
+| `GET /api/v1/products/{id}` | 200 / 404 | typisiertes Model / Ferrioxid-Problem-JSON bei unbekannter UUID |
 | `POST /api/v1/products` | 201 | erstelltes JSON-Model mit serverseitiger UUID |
 | `PATCH /api/v1/products/{id}` | 200 / 404 / 422 | aktualisiertes Model, fehlende UUID oder Validierung |
 | `DELETE /api/v1/products/{id}` | 204 / 404 / 422 | leerer Körper nur bei 204; fehlende UUID als Problem-JSON; Foreign-Key-`restrict` als 422 |
-| nicht freigegebenes Model, alle diese Methoden | 403 | Ferrum-Problem-JSON |
-| Validierungsfehler, Unique- oder Foreign-Key-Verletzung | 422 | Ferrum-Problem-JSON ohne SQL-Text |
+| nicht freigegebenes Model, alle diese Methoden | 403 | Ferrioxid-Problem-JSON |
+| Validierungsfehler, Unique- oder Foreign-Key-Verletzung | 422 | Ferrioxid-Problem-JSON ohne SQL-Text |
 | Datenbankfehler | 500 | generische Nachricht; Detail im `tracing`-Log |
 
 Es existiert kein Auth-System, kein API-Versionierungsmodul, kein Filter und kein Offset/Cursor. Der `/api/v1`-Prefix stammt aus dem im Model hinterlegten Pfad. Eine ungültige UUID im Pfad beantwortet Axum selbst, nicht `ApiError`.
@@ -48,7 +48,7 @@ Es existiert kein Auth-System, kein API-Versionierungsmodul, kein Filter und kei
 {"type":"about:blank","title":"Validation failed","status":422,"detail":"name must not be blank"}
 ```
 
-`ApiError` ist ein **lokaler Newtype** über `FerrumError`. Dies ist nötig wegen Rusts Orphan Rule: `IntoResponse` ist fremd und `FerrumError` gehört einer anderen Crate. Den Newtype nicht entfernen. `denied` nutzt dieselbe Fehlerform für GET, POST, PATCH und DELETE. HTTP 204 wird als `StatusCode::NO_CONTENT` ohne JSON-Körper zurückgegeben. **Ausnahme:** Fehler beim Dekodieren ungültigen JSONs entstehen in Axums `Json`-Extractor und behalten Axums eigene Rejection-Antwort.
+`ApiError` ist ein **lokaler Newtype** über `FerrioxidError`. Dies ist nötig wegen Rusts Orphan Rule: `IntoResponse` ist fremd und `FerrioxidError` gehört einer anderen Crate. Den Newtype nicht entfernen. `denied` nutzt dieselbe Fehlerform für GET, POST, PATCH und DELETE. HTTP 204 wird als `StatusCode::NO_CONTENT` ohne JSON-Körper zurückgegeben. **Ausnahme:** Fehler beim Dekodieren ungültigen JSONs entstehen in Axums `Json`-Extractor und behalten Axums eigene Rejection-Antwort.
 
 ### Sicherheitsgrenze (IST)
 

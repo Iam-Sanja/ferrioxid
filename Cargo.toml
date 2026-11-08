@@ -1,11 +1,11 @@
 [workspace]
 resolver = "2"
 members = [
-  "crates/ferrum", "crates/ferrum-core", "crates/ferrum-macros",
-  "crates/ferrum-db", "crates/ferrum-api", "crates/ferrum-cli",
-  "crates/ferrum-migrations", "crates/ferrum-auth", "crates/ferrum-admin",
-  "crates/ferrum-forms", "crates/ferrum-static", "crates/ferrum-storage",
-  "crates/ferrum-middleware", "crates/ferrum-mail", "crates/ferrum-jobs",
+  "crates/ferrioxid", "crates/ferrioxid-core", "crates/ferrioxid-macros",
+  "crates/ferrioxid-db", "crates/ferrioxid-api", "crates/ferrioxid-cli",
+  "crates/ferrioxid-migrations", "crates/ferrioxid-auth", "crates/ferrioxid-admin",
+  "crates/ferrioxid-forms", "crates/ferrioxid-static", "crates/ferrioxid-storage",
+  "crates/ferrioxid-middleware", "crates/ferrioxid-mail", "crates/ferrioxid-jobs",
   "examples/myshop",
   "examples/notes"
 ]

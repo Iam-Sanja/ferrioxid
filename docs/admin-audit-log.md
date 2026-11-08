@@ -4,7 +4,7 @@
 
 ## Tabelle
 
-`_ferrum_admin_audit` aus `crates/ferrum-auth/migrations/0002_admin_journal.json`. SQLite speichert die UUID-Spalten als Text. Dieselbe Migration läuft über die vorhandene Engine. PostgreSQL-Kompatibilität folgt aus dem Dialekt der Engine. Die ignorierten PostgreSQL-Tests wurden dafür nicht ausgeführt.
+`_ferrum_admin_audit` aus `crates/ferrioxid-auth/migrations/0002_admin_journal.json`. SQLite speichert die UUID-Spalten als Text. Dieselbe Migration läuft über die vorhandene Engine. PostgreSQL-Kompatibilität folgt aus dem Dialekt der Engine. Die ignorierten PostgreSQL-Tests wurden dafür nicht ausgeführt.
 
 | Spalte | Inhalt |
 |---|---|
@@ -40,4 +40,4 @@ Die Seite steht in der Seitenleiste unter System, nicht als Modell. `?model=` un
 
 `created_at` bleibt Unix-Sekunden. Die HTML-Seite zeigt `YYYY-MM-DD HH:MM:SS UTC` in `<time>`. Die Zeitzone der Anzeige ist UTC. Ein nicht darstellbarer Wert wird als nicht lesbar bezeichnet. Der gespeicherte Wert wird nicht umgerechnet und nicht überschrieben.
 
-Code: `crates/ferrum-admin/src/audit.rs`. Test: `summary_skips_sensitive_values` und `admin_v018_drafts_inlines_bulk_and_audit`.
+Code: `crates/ferrioxid-admin/src/audit.rs`. Test: `summary_skips_sensitive_values` und `admin_v018_drafts_inlines_bulk_and_audit`.

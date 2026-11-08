@@ -2,34 +2,34 @@
 
 [Zur Übersicht](index.md) · Jobs: [jobs.md](jobs.md) · Sicherheit: [job-security.md](job-security.md)
 
-**IST.** Funktionsstand v0.27.1. `ferrum worker` startet keinen Webserver und führt nur den Mail-Handler aus. `ferrum dev` startet keinen Worker. Eine installierte App führt durch `App::install` keine Jobs aus. Anwendungs-Handler starten über `WorkerHost` im Projekt-Binary.
+**IST.** Funktionsstand v0.27.1. `ferrioxid worker` startet keinen Webserver und führt nur den Mail-Handler aus. `ferrioxid dev` startet keinen Worker. Eine installierte App führt durch `App::install` keine Jobs aus. Anwendungs-Handler starten über `WorkerHost` im Projekt-Binary.
 
 ## Öffentliche Start-API
 
 ```rust
-let project = ferrum::migrations::discover_project(&root)?;
-let mut host = ferrum::jobs::WorkerHost::from_project(&project)
-    .with_mail(ferrum::mail_for(&project));
+let project = ferrioxid::migrations::discover_project(&root)?;
+let mut host = ferrioxid::jobs::WorkerHost::from_project(&project)
+    .with_mail(ferrioxid::mail_for(&project));
 NotesApp.register_jobs(host.registry_mut())?;
 host.run_until_ctrl_c()?;
 ```
 
-`WorkerHost::new` nimmt eine `WorkerConfig`. `from_project` liest `[jobs]` und die aufgelöste Datenbank-URL. `register` und `registry_mut` tragen Handler in dieselbe `JobRegistry` ein. Ein zweiter Handler mit demselben `NAME` liefert `job.handler`. `with_mail` ergänzt `ferrum_mail_notice`, wenn dieser Name noch fehlt. `prepare` prüft die SQLite-Datei und `_ferrum_jobs` und gibt den vorhandenen `Worker` zurück. `run_until_ctrl_c` legt die Tokio-Laufzeit an und beendet die Schleife nach Ctrl+C.
+`WorkerHost::new` nimmt eine `WorkerConfig`. `from_project` liest `[jobs]` und die aufgelöste Datenbank-URL. `register` und `registry_mut` tragen Handler in dieselbe `JobRegistry` ein. Ein zweiter Handler mit demselben `NAME` liefert `job.handler`. `with_mail` ergänzt `ferrioxid_mail_notice`, wenn dieser Name noch fehlt. `prepare` prüft die SQLite-Datei und `_ferrum_jobs` und gibt den vorhandenen `Worker` zurück. `run_until_ctrl_c` legt die Tokio-Laufzeit an und beendet die Schleife nach Ctrl+C.
 
 Die API migriert nicht und öffnet keinen Router. Fehlt die SQLite-Datei, entsteht `job.database` und es wird keine Datei angelegt. Fehlt die Tabelle, entsteht `job.migration.missing`. `jobs.enabled = false` ergibt `job.disabled`.
 
 SQLite nutzt den vorhandenen Pool mit einer Verbindung. `effective_concurrency` ist dann 1, auch wenn `[jobs].concurrency` höher steht. Bei PostgreSQL bleibt die Obergrenze 4. Die Schleife beansprucht diese Anzahl nacheinander auf derselben Verbindung. Gleichzeitige Worker sind getrennte Prozesse.
 
-`ferrum generate worker` schreibt `src/bin/worker.rs`. Die Datei enthält ein kompilierbares Beispiel `app_example`, das durch `register_jobs` der eigenen App ersetzt wird. Eine vorhandene Datei wird nicht überschrieben. Windows und Linux nutzen denselben Quelltext und `tokio::signal::ctrl_c`. Ein Worker kann auch von Hand auf `WorkerHost` aufsetzen, ohne den Generator.
+`ferrioxid generate worker` schreibt `src/bin/worker.rs`. Die Datei enthält ein kompilierbares Beispiel `app_example`, das durch `register_jobs` der eigenen App ersetzt wird. Eine vorhandene Datei wird nicht überschrieben. Windows und Linux nutzen denselben Quelltext und `tokio::signal::ctrl_c`. Ein Worker kann auch von Hand auf `WorkerHost` aufsetzen, ohne den Generator.
 
 ## Start
 
 ```powershell
-ferrum worker
-ferrum worker --concurrency 2 --poll-ms 500
+ferrioxid worker
+ferrioxid worker --concurrency 2 --poll-ms 500
 ```
 
-Der CLI-Worker registriert nur `ferrum_mail_notice`. Handler einer App starten `src/bin/worker.rs`. Die CLI lädt dafür keinen Rust-Code und keine unbekannte Crate.
+Der CLI-Worker registriert nur `ferrioxid_mail_notice`. Handler einer App starten `src/bin/worker.rs`. Die CLI lädt dafür keinen Rust-Code und keine unbekannte Crate.
 
 Fehlt die SQLite-Datei, wird sie nicht angelegt. Fehlt `_ferrum_jobs`, endet der Prozess mit Exitcode 2 und `job.migration.missing`. `jobs.enabled = false` beendet den Worker ebenfalls mit Exitcode 2. Ein sauberes Stoppsignal endet mit 0. Ein Datenbankfehler endet mit 1.
 
@@ -53,7 +53,7 @@ Verliert der Worker die Lease, liefert `finish_success` `Finish::LostLease`. Der
 
 Ctrl+C setzt das Stopp-Flag zwischen zwei Claims. Der aktuelle `run_once` läuft bis zum Ergebnis oder bis zum Timeout. Der laufende Effekt wird nicht zurückgerollt.
 
-Die Zustellung ist at least once. Eine Exactly-once-Garantie stellt Ferrum nicht bereit. Zwei Prozesse können denselben fälligen Job nicht beide als gültigen Claim besitzen. Nach einer abgelaufenen Lease kann ein zweiter Lauf denselben Effekt wiederholen.
+Die Zustellung ist at least once. Eine Exactly-once-Garantie stellt Ferrioxid nicht bereit. Zwei Prozesse können denselben fälligen Job nicht beide als gültigen Claim besitzen. Nach einer abgelaufenen Lease kann ein zweiter Lauf denselben Effekt wiederholen.
 
 ## Einstellungen
 

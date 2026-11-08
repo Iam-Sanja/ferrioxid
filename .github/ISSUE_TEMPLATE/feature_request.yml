@@ -1,11 +1,11 @@
 name: Feature request
-description: Propose a change to Ferrum's developer experience.
+description: Propose a change to Ferrioxid's developer experience.
 title: "feat: "
 body:
   - type: markdown
     attributes:
       value: |
-        Ferrum is pre-release. A proposal is not a commitment to implement it.
+        Ferrioxid is pre-release. A proposal is not a commitment to implement it.
         Security work belongs in the process described by SECURITY.md.
   - type: textarea
     id: problem

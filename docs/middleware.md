@@ -4,12 +4,12 @@
 
 ## Verantwortlichkeit
 
-`ferrum-middleware` hängt Tower-Schichten an einen Axum-Router. Es gibt keine zweite Middleware-Laufzeit. Authentifizierung, Sitzungen und CSRF bleiben in den Handlern.
+`ferrioxid-middleware` hängt Tower-Schichten an einen Axum-Router. Es gibt keine zweite Middleware-Laufzeit. Authentifizierung, Sitzungen und CSRF bleiben in den Handlern.
 
 ## Crates und Dateien
 
-- `crates/ferrum-middleware/src/lib.rs`
-- Anwendung: `ferrum::web::prepare` und `examples/myshop/src/main.rs`
+- `crates/ferrioxid-middleware/src/lib.rs`
+- Anwendung: `ferrioxid::web::prepare` und `examples/myshop/src/main.rs`
 
 ## Öffentliche API
 
@@ -33,7 +33,7 @@ Tower führt die zuletzt hinzugefügte Schicht zuerst aus. `apply` hängt deshal
 
 Das Log enthält Methode, Pfad, Status, Dauer und Request-ID. Query, Cookies, `Authorization`, CSRF, Passwörter und Multipart-Inhalte werden nicht geschrieben. Antwortheader sind `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` und `Referrer-Policy: no-referrer`. Eine Content-Security-Policy wird nicht gesetzt, damit der Admin nicht bricht. Die Middleware ersetzt keine Berechtigungsprüfung.
 
-Der Header `x-ferrum-trace-order` ist nur eine Testsonde. Er verändert die Route nicht.
+Der Header `x-ferrioxid-trace-order` ist nur eine Testsonde. Er verändert die Route nicht.
 
 ## Fehlerfälle
 
@@ -42,12 +42,12 @@ Ein Body über dem Limit ergibt 413, bevor die Route läuft. Eine Request-ID, di
 ## Beispiel
 
 ```rust
-let router = ferrum::middleware::apply(router, ferrum::middleware::Standard::default());
+let router = ferrioxid::middleware::apply(router, ferrioxid::middleware::Standard::default());
 ```
 
 ## Tests
 
-`cargo test -p ferrum-middleware` prüft die Request-ID, die Sicherheitsheader, die Reihenfolge `request_id,access_log,security_headers`, das Body-Limit und dass Query und Cookie nicht im Antwortstrom des Log-Pfads stehen.
+`cargo test -p ferrioxid-middleware` prüft die Request-ID, die Sicherheitsheader, die Reihenfolge `request_id,access_log,security_headers`, das Body-Limit und dass Query und Cookie nicht im Antwortstrom des Log-Pfads stehen.
 
 ## Einschränkungen
 

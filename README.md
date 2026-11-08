@@ -1,6 +1,6 @@
-# Ferrum — Model-first Rust backend (experimental)
+# Ferrioxid — Model-first Rust backend (experimental)
 
-Ferrum is a pre-release Rust full-stack web framework with a Django-inspired shape: explicit models, migrations, authentication, a server-rendered admin, and application modules on Axum and SeaORM. The framework name is Ferrum. Crate names stay `ferrum`, `ferrum-api`, `ferrum-cli`, and the other workspace members. The Cargo version is `0.1.0`. This is not a stable public release, and `neravol` is not an installable crate.
+Ferrioxid is a pre-release Rust full-stack web framework with a Django-inspired shape: explicit models, migrations, authentication, a server-rendered admin, and application modules on Axum and SeaORM. The framework name is Ferrioxid. Crate names stay `ferrioxid`, `ferrioxid-api`, `ferrioxid-cli`, and the other workspace members. The Cargo version is `0.1.0`. This is not a stable public release, and `ferrioxid` is not an installable crate.
 
 SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js are not required for the admin.
 
@@ -15,19 +15,19 @@ SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js
 
 The following paragraph is the German milestone record.
 
-Funktionsstand v0.27.1 startet Anwendungsjobs über `WorkerHost` und `src/bin/worker.rs`. `ferrum jobs inspect` verbirgt die Payload, bis `--show-payload` gesetzt ist. Beschreibung: `docs/workers.md` und `docs/job-security.md`. Funktionsstand v0.27 ergänzt persistente Hintergrundjobs ohne Redis. Beschreibung: `docs/jobs.md` und `docs/workers.md`. Funktionsstand v0.26 ergänzt wiederverwendbare Modellfelder und prüft installierte Apps vor dem Start. Beschreibung: `docs/models.md`, `docs/model-components.md`, `docs/model-timestamps.md` und `docs/app-lifecycle.md`. Soft Delete ist nicht enthalten. Funktionsstand v0.25 ergänzt typisierte Apps über `App::install`. Beschreibung: `docs/apps.md`, `docs/app-registry.md`, `docs/app-migrations.md`, `docs/reusable-apps.md` und `docs/create-app.md`. Eine bestehende `main.rs` muss dafür nicht umgeschrieben werden. `ferrum.toml` lädt keine App-Crate. Funktionsstand v0.24 ergänzt typisierte Settings, benannte Axum-Routen und View-Helfer. Die Beschreibung steht in `docs/settings.md`, `docs/urls.md` und `docs/views.md`. Bestehende `main.rs`-Dateien müssen dafür nicht umgeschrieben werden. Funktionsstand v0.23 bleibt gültig. E-Mail und Passwort-Reset beschreibt `docs/mail.md` und `docs/password-reset.md`. Der öffentliche Reset liegt unter `/auth/password-reset` und verlangt kein Staff. Ohne aktives Mail-Backend wird keine E-Mail versendet. Funktionsstand v0.22 bleibt gültig. Eigene Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen registriert `AdminRegistry` in `ferrum::admin`. Die Beschreibung steht in `docs/admin-extension-api.md`. `ferrum migrate status`, `check`, `doctor` und `dev` zeigen ausstehende Auth- und App-Migrationen, ohne sie anzuwenden. `ferrum upgrade` legt höchstens ein fehlendes Legacy-Manifest an und überschreibt keine Projektdatei. Details: `docs/migration-diagnostics.md` und `docs/project-upgrade.md`. v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Verzeichnisänderungen und ihr Audit sind eine Transaktion. Ein `admin_inline` mit `|form` speichert Elternobjekt und Kinder gemeinsam. Details: `docs/transactions.md`. Der Admin ist serverseitiges HTML mit Axum und Tera. React, Vite und Node.js sind dafür nicht nötig. Die Beschreibung steht in `docs/admin-native.md`. Die Fläche folgt `DESIGN.md` und `docs/admin-design-system.md`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware bleiben aus v0.12. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
+Funktionsstand v0.27.1 startet Anwendungsjobs über `WorkerHost` und `src/bin/worker.rs`. `ferrioxid jobs inspect` verbirgt die Payload, bis `--show-payload` gesetzt ist. Beschreibung: `docs/workers.md` und `docs/job-security.md`. Funktionsstand v0.27 ergänzt persistente Hintergrundjobs ohne Redis. Beschreibung: `docs/jobs.md` und `docs/workers.md`. Funktionsstand v0.26 ergänzt wiederverwendbare Modellfelder und prüft installierte Apps vor dem Start. Beschreibung: `docs/models.md`, `docs/model-components.md`, `docs/model-timestamps.md` und `docs/app-lifecycle.md`. Soft Delete ist nicht enthalten. Funktionsstand v0.25 ergänzt typisierte Apps über `App::install`. Beschreibung: `docs/apps.md`, `docs/app-registry.md`, `docs/app-migrations.md`, `docs/reusable-apps.md` und `docs/create-app.md`. Eine bestehende `main.rs` muss dafür nicht umgeschrieben werden. `ferrum.toml` lädt keine App-Crate. Funktionsstand v0.24 ergänzt typisierte Settings, benannte Axum-Routen und View-Helfer. Die Beschreibung steht in `docs/settings.md`, `docs/urls.md` und `docs/views.md`. Bestehende `main.rs`-Dateien müssen dafür nicht umgeschrieben werden. Funktionsstand v0.23 bleibt gültig. E-Mail und Passwort-Reset beschreibt `docs/mail.md` und `docs/password-reset.md`. Der öffentliche Reset liegt unter `/auth/password-reset` und verlangt kein Staff. Ohne aktives Mail-Backend wird keine E-Mail versendet. Funktionsstand v0.22 bleibt gültig. Eigene Admin-Seiten, Aktionen, Filter, Widgets und Vorlagen registriert `AdminRegistry` in `ferrioxid::admin`. Die Beschreibung steht in `docs/admin-extension-api.md`. `ferrioxid migrate status`, `check`, `doctor` und `dev` zeigen ausstehende Auth- und App-Migrationen, ohne sie anzuwenden. `ferrioxid upgrade` legt höchstens ein fehlendes Legacy-Manifest an und überschreibt keine Projektdatei. Details: `docs/migration-diagnostics.md` und `docs/project-upgrade.md`. v0.20 bleibt gültig. Die Cargo-Version bleibt `0.1.0`. Verzeichnisänderungen und ihr Audit sind eine Transaktion. Ein `admin_inline` mit `|form` speichert Elternobjekt und Kinder gemeinsam. Details: `docs/transactions.md`. Der Admin ist serverseitiges HTML mit Axum und Tera. React, Vite und Node.js sind dafür nicht nötig. Die Beschreibung steht in `docs/admin-native.md`. Die Fläche folgt `DESIGN.md` und `docs/admin-design-system.md`. Formulare, Staticfiles, lokaler Upload-Speicher und Request-Middleware bleiben aus v0.12. Der Admin spricht Deutsch und Englisch. `GET /admin/api/config` liefert Titel, Farbe, Sprachen und Währung aus `ferrum.toml`. Fehlerantworten tragen einen stabilen `code`. Einstellungen stehen in `ferrum.toml`, beschrieben in `docs/settings.md`. Die Entwicklerdokumentation ist Deutsch. Der Admin liegt unter `/admin`. `FERRUM_CSRF_SECRET` ist in Produktion 64 Hex-Zeichen.
 
 Ein neues Projekt außerhalb dieses Workspaces:
 
 ```powershell
-cargo run -p ferrum-cli -- new demo --template fullstack --ferrum-path .
+cargo run -p ferrioxid-cli -- new demo --template fullstack --ferrioxid-path .
 cd demo
-cargo run --manifest-path ..\Cargo.toml -p ferrum-cli -- migrate up
-cargo run --manifest-path ..\Cargo.toml -p ferrum-cli -- admin create-user --email admin@example.com --staff --superuser
-cargo run --manifest-path ..\Cargo.toml -p ferrum-cli -- dev
+cargo run --manifest-path ..\Cargo.toml -p ferrioxid-cli -- migrate up
+cargo run --manifest-path ..\Cargo.toml -p ferrioxid-cli -- admin create-user --email admin@example.com --staff --superuser
+cargo run --manifest-path ..\Cargo.toml -p ferrioxid-cli -- dev
 ```
 
-Nach `cargo install --path crates/ferrum-cli` heißen dieselben Schritte `ferrum migrate up`, `ferrum admin create-user` und `ferrum dev`. Das Passwort wird abgefragt. `FERRUM_PASSWORD` ist nur für Automationen und hat keinen Standardwert.
+Nach `cargo install --path crates/ferrioxid-cli` heißen dieselben Schritte `ferrioxid migrate up`, `ferrioxid admin create-user` und `ferrioxid dev`. Das Passwort wird abgefragt. `FERRUM_PASSWORD` ist nur für Automationen und hat keinen Standardwert.
 
 Authentifizierung, Sitzungen und Rollen beschreibt `docs/auth.md`. Geschützte myshop-Ressource ist `/api/v1/internal_notes`. Produkte und Kategorien bleiben ausdrücklich öffentliche Demo-Routen.
 
@@ -49,12 +49,12 @@ Unset `DATABASE_URL` uses `sqlite://db.sqlite3?mode=rwc` in the process working 
 Create and update the schema with migrations, from the workspace root:
 
 ```powershell
-cargo run -p ferrum-cli -- migrate make initial
-cargo run -p ferrum-cli -- migrate up
-cargo run -p ferrum-cli -- migrate status
-cargo run -p ferrum-cli -- migrate rename-column --table products --from name --to title
-cargo run -p ferrum-cli -- migrate baseline --confirm
-cargo run -p ferrum-cli -- admin create-user --email admin@example.com --superuser
+cargo run -p ferrioxid-cli -- migrate make initial
+cargo run -p ferrioxid-cli -- migrate up
+cargo run -p ferrioxid-cli -- migrate status
+cargo run -p ferrioxid-cli -- migrate rename-column --table products --from name --to title
+cargo run -p ferrioxid-cli -- migrate baseline --confirm
+cargo run -p ferrioxid-cli -- admin create-user --email admin@example.com --superuser
 cargo run -p myshop
 ```
 
@@ -71,27 +71,27 @@ curl -i -X POST http://127.0.0.1:3000/api/v1/products \
 curl http://127.0.0.1:3000/api/v1/products
 ```
 
-`myshop --bootstrap` does not create or migrate a schema. Use `ferrum migrate up` before serving.
+`myshop --bootstrap` does not create or migrate a schema. Use `ferrioxid migrate up` before serving.
 
 ### Project files
 
 - `examples/myshop/src/models/product.rs` — developer-facing model
-- `crates/ferrum-macros/src/lib.rs` — Rust derive macro
-- `crates/ferrum-core/src/lib.rs` — descriptors, errors and core trait
-- `crates/ferrum-db/src/lib.rs` — repository contract and database connection
-- `crates/ferrum-db/src/sql.rs` — SeaQuery DDL and CRUD for SQLite and PostgreSQL
-- `crates/ferrum-api/src/lib.rs` — route registration, handler adapters and bootstrap
-- `crates/ferrum/src/lib.rs` — public framework API
-- `crates/ferrum-cli/src/main.rs` — experimental informational `ferrum doctor` CLI
-- `crates/ferrum-admin/` — Admin-API, HTML-Oberfläche, Vorlagen und CSS
+- `crates/ferrioxid-macros/src/lib.rs` — Rust derive macro
+- `crates/ferrioxid-core/src/lib.rs` — descriptors, errors and core trait
+- `crates/ferrioxid-db/src/lib.rs` — repository contract and database connection
+- `crates/ferrioxid-db/src/sql.rs` — SeaQuery DDL and CRUD for SQLite and PostgreSQL
+- `crates/ferrioxid-api/src/lib.rs` — route registration, handler adapters and bootstrap
+- `crates/ferrioxid/src/lib.rs` — public framework API
+- `crates/ferrioxid-cli/src/main.rs` — experimental informational `ferrioxid doctor` CLI
+- `crates/ferrioxid-admin/` — Admin-API, HTML-Oberfläche, Vorlagen und CSS
 
 ## Model example
 
 ```rust
-use ferrum::prelude::*;
+use ferrioxid::prelude::*;
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(table = "products", api = "/api/v1/products", allow_anonymous = true)]
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(table = "products", api = "/api/v1/products", allow_anonymous = true)]
 pub struct Product {
     #[field(primary_key, auto)]
     pub id: Uuid,
@@ -117,7 +117,7 @@ DELETE  /api/v1/products/{id}
 ```
 
 `GET /{id}` and `PATCH /{id}` return the typed model. A missing row is `404`
-with Ferrum problem JSON. `DELETE /{id}` returns `204` with an empty body when
+with Ferrioxid problem JSON. `DELETE /{id}` returns `204` with an empty body when
 a row was removed, and `404` when it was already gone. `{id}` must be a UUID;
 Axum rejects other path values with its own response. Routes inherit
 `allow_anonymous` and return `403` when it is false.
@@ -129,7 +129,7 @@ store the original text.
 
 ## Important security notice
 
-Ferrum `0.1.0` is pre-release. Do not expose a demo to the public internet. Models deny access unless `allow_anonymous = true`, and that flag is only appropriate for a local demo. Authentication, sessions, CSRF for cookie-authenticated writes, and the server-rendered admin exist and are described in `docs/auth.md` and `docs/admin.md`. The example binds to `127.0.0.1` by default. The sample PostgreSQL password is for local development only. Report vulnerabilities through [SECURITY.md](SECURITY.md), not through a public issue.
+Ferrioxid `0.1.0` is pre-release. Do not expose a demo to the public internet. Models deny access unless `allow_anonymous = true`, and that flag is only appropriate for a local demo. Authentication, sessions, CSRF for cookie-authenticated writes, and the server-rendered admin exist and are described in `docs/auth.md` and `docs/admin.md`. The example binds to `127.0.0.1` by default. The sample PostgreSQL password is for local development only. Report vulnerabilities through [SECURITY.md](SECURITY.md), not through a public issue.
 
 ## Scope and limitations
 
@@ -170,19 +170,19 @@ in SQL DDL. PostgreSQL stores them as boolean defaults. SQLite stores them as in
 | Backend | How to select it | Role |
 |---|---|---|
 | SQLite file | leave `DATABASE_URL` unset | default local development |
-| SQLite memory | `sqlite::memory:` | tests; Ferrum uses one pooled connection |
+| SQLite memory | `sqlite::memory:` | tests; Ferrioxid uses one pooled connection |
 | PostgreSQL | `DATABASE_URL=postgres://...` | supported server backend |
 
 Optional PostgreSQL, after a server is actually running:
 
 ```powershell
 docker compose up -d db
-$env:DATABASE_URL="postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum"
+$env:DATABASE_URL="postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid"
 cargo test -p myshop --test postgres_api -- --ignored --nocapture
 ```
 
 The ignored test **requires `DATABASE_URL`** and drops its fixed test tables. Use only a disposable database. `cargo test --workspace` already runs the same HTTP flow against SQLite memory and does not need this step.
 
-`ferrum doctor` prints setup hints only. `.env.example` is not loaded automatically.
+`ferrioxid doctor` prints setup hints only. `.env.example` is not loaded automatically.
 
-`FerrumModel::schema_sql` now takes `DatabaseKind` and returns `String`. Callers of the old `schema_sql() -> &'static str` must pass the backend.
+`FerrioxidModel::schema_sql` now takes `DatabaseKind` and returns `String`. Callers of the old `schema_sql() -> &'static str` must pass the backend.

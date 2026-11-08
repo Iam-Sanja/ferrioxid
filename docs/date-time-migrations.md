@@ -13,7 +13,7 @@ SQLite speichert die kanonische Zeichenkette. Sortierung und Präfixfilter folge
 
 ## Neue Spalten
 
-Eine neue nullable oder Pflichtspalte entsteht über `ferrum migrate make`. myshop hängt `events` als `migrations/0004_events.json` an `0003_internal_notes`. Die Dateien `0001_initial.json`, `0002_categories_and_product_relations.json`, `0003_internal_notes.json` und `crates/ferrum-auth/migrations/0002_admin_journal.json` sind unverändert.
+Eine neue nullable oder Pflichtspalte entsteht über `ferrioxid migrate make`. myshop hängt `events` als `migrations/0004_events.json` an `0003_internal_notes`. Die Dateien `0001_initial.json`, `0002_categories_and_product_relations.json`, `0003_internal_notes.json` und `crates/ferrioxid-auth/migrations/0002_admin_journal.json` sind unverändert.
 
 ## Blockierte Umwandlung
 

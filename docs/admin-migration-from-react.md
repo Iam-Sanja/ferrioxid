@@ -21,18 +21,18 @@ Der Browser spricht jetzt direkt mit HTML-Routen. Die JSON-API unter `/admin/api
 
 ## Anmeldung
 
-Die HTML-Anmeldung kann noch kein Sitzungs-CSRF senden, weil die Sitzung erst im Erfolgsfall entsteht. Dafür gibt es das kurzlebige Cookie `ferrum_login_csrf`. Es ersetzt das HMAC der Sitzung nicht. Nach dem Login gelten wieder `ferrum_session` und das Feld `csrf_token`.
+Die HTML-Anmeldung kann noch kein Sitzungs-CSRF senden, weil die Sitzung erst im Erfolgsfall entsteht. Dafür gibt es das kurzlebige Cookie `ferrioxid_login_csrf`. Es ersetzt das HMAC der Sitzung nicht. Nach dem Login gelten wieder `ferrioxid_session` und das Feld `csrf_token`.
 
 ## Build
 
 Ein Fullstack-Projekt braucht nur Cargo:
 
 ```powershell
-ferrum new myproject --template fullstack --ferrum-path D:\04_Projekte_Arbeit\Projekte\ferrum
+ferrioxid new myproject --template fullstack --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
 cd myproject
-ferrum migrate up
-ferrum admin create-user --staff --superuser
-ferrum dev
+ferrioxid migrate up
+ferrioxid admin create-user --staff --superuser
+ferrioxid dev
 ```
 
 Die Startseite liegt unter `/`, der Admin unter `/admin/login`. Die API-Vorlage bindet den Admin nicht ein.

@@ -1,4 +1,4 @@
-# Ferrum Admin
+# Ferrioxid Admin
 
 [Zur Übersicht](index.md) · Backend: [admin-backend.md](admin-backend.md) · Oberfläche: [admin-frontend.md](admin-frontend.md) · Sicherheit: [admin-security.md](admin-security.md)
 
@@ -14,16 +14,16 @@ Ein Modell mit `admin = true` liefert Navigation, Tabelle, Formular, Detail und 
 
 | Bereich | Dateien |
 |---|---|
-| Metadaten | `crates/ferrum-core/src/lib.rs`, `crates/ferrum-macros/src/lib.rs` |
-| Admin-API | `crates/ferrum-admin/src/` |
-| Listenabfrage | `crates/ferrum-db/src/sql.rs` (`query_admin_page`) |
-| Oberfläche | `crates/ferrum-admin/templates/`, `crates/ferrum-admin/static/` |
+| Metadaten | `crates/ferrioxid-core/src/lib.rs`, `crates/ferrioxid-macros/src/lib.rs` |
+| Admin-API | `crates/ferrioxid-admin/src/` |
+| Listenabfrage | `crates/ferrioxid-db/src/sql.rs` (`query_admin_page`) |
+| Oberfläche | `crates/ferrioxid-admin/templates/`, `crates/ferrioxid-admin/static/` |
 | Beispiel | `examples/myshop/src/models/`, `examples/myshop/src/main.rs` |
 | Test | `examples/myshop/tests/admin_http.rs`, `examples/myshop/tests/admin_html.rs`, `examples/myshop/tests/admin_extensions.rs` |
 
 ## Datenfluss
 
-Rust-Struct → `FerrumModel` erzeugt `AdminModelMeta` neben dem bestehenden `ModelDescriptor` → `AdminRegistry::add` → HTML unter `/admin/models/{modell}` und JSON unter `/admin/api`. Schreibende Aufrufe laufen durch Session, Staff-Prüfung, Modellrecht, CSRF und die vorhandene Repository-Validierung.
+Rust-Struct → `FerrioxidModel` erzeugt `AdminModelMeta` neben dem bestehenden `ModelDescriptor` → `AdminRegistry::add` → HTML unter `/admin/models/{modell}` und JSON unter `/admin/api`. Schreibende Aufrufe laufen durch Session, Staff-Prüfung, Modellrecht, CSRF und die vorhandene Repository-Validierung.
 
 ## Konfiguration
 
@@ -32,7 +32,7 @@ Rust-Struct → `FerrumModel` erzeugt `AdminModelMeta` neben dem bestehenden `Mo
 ## Öffentliche Nutzung
 
 ```rust
-let admin = ferrum::admin::AdminRegistry::new()
+let admin = ferrioxid::admin::AdminRegistry::new()
     .add::<Category>()
     .add::<Product>()
     .add::<InternalNote>();

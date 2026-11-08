@@ -11,23 +11,23 @@ Eine Seite heißt `/admin/pages/{key}`. `key` passt auf `[a-z][a-z0-9_]{0,39}`. 
 ```rust
 struct OrderReport;
 
-#[ferrum::async_trait::async_trait]
-impl ferrum::admin::ViewHandler for OrderReport {
+#[ferrioxid::async_trait::async_trait]
+impl ferrioxid::admin::ViewHandler for OrderReport {
     async fn handle(
         &self,
-        request: &ferrum::admin::ViewRequest<'_>,
-    ) -> Result<ferrum::admin::ViewPage, ferrum::admin::ExtensionError> {
+        request: &ferrioxid::admin::ViewRequest<'_>,
+    ) -> Result<ferrioxid::admin::ViewPage, ferrioxid::admin::ExtensionError> {
         let listed = Order::list(request.db).await.map_err(|_| {
-            ferrum::admin::ExtensionError::new("extension.view", "orders could not be read")
+            ferrioxid::admin::ExtensionError::new("extension.view", "orders could not be read")
         })?;
         let mut data = serde_json::Map::new();
         data.insert("rows".to_owned(), serde_json::json!(listed.data.len()));
-        Ok(ferrum::admin::ViewPage::new(data))
+        Ok(ferrioxid::admin::ViewPage::new(data))
     }
 }
 ```
 
-Ferrum prüft vor `handle` die Sitzung, `is_staff` und `AuthService::holds` für den registrierten Code. Ein Superuser besteht `holds`, bleibt aber an `is_staff` gebunden. POST ohne gültiges CSRF ist 403 und ruft den Handler nicht auf. Fehlt `on_post`, ist POST 405.
+Ferrioxid prüft vor `handle` die Sitzung, `is_staff` und `AuthService::holds` für den registrierten Code. Ein Superuser besteht `holds`, bleibt aber an `is_staff` gebunden. POST ohne gültiges CSRF ist 403 und ruft den Handler nicht auf. Fehlt `on_post`, ist POST 405.
 
 `ViewPage` liefert Daten für die registrierte Vorlage. `notice` und `alert` werden gekürzt und von Tera escaped. Die Vorlage wählt der Entwickler bei der Registrierung, nicht die Anfrage.
 

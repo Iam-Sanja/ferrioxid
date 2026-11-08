@@ -1,12 +1,12 @@
 # Migrations-Engine
 
-[Zur Übersicht](index.md) · **IST:** `crates/ferrum-migrations/`. **Nicht** der Legacy-Befehl `myshop --bootstrap`. Datumstypen: [date-time-migrations.md](date-time-migrations.md). Auth `0003_audit_operation` ergänzt `operation_id`. myshop `0005_orders` ergänzt `orders` und `order_lines`. `0001` bis `0004` und Auth `0001`/`0002` bleiben unverändert.
+[Zur Übersicht](index.md) · **IST:** `crates/ferrioxid-migrations/`. **Nicht** der Legacy-Befehl `myshop --bootstrap`. Datumstypen: [date-time-migrations.md](date-time-migrations.md). Auth `0003_audit_operation` ergänzt `operation_id`. myshop `0005_orders` ergänzt `orders` und `order_lines`. `0001` bis `0004` und Auth `0001`/`0002` bleiben unverändert.
 
 ## 1. Architektur
 
 ```text
 Rust-Modelle
-  → FerrumModel / ColumnSpec
+  → FerrioxidModel / ColumnSpec
   → explizite Registrierung
   → SchemaSnapshot
   → Diff
@@ -16,27 +16,27 @@ Rust-Modelle
        → PostgreSQL
 ```
 
-Die Engine liest keinen Rust-Quelltext. Sie hängt nicht an Axum und nicht am Admin-Frontend. CRUD und Migrationen nutzen dieselbe Typabbildung in `crates/ferrum-db/src/sql.rs`.
+Die Engine liest keinen Rust-Quelltext. Sie hängt nicht an Axum und nicht am Admin-Frontend. CRUD und Migrationen nutzen dieselbe Typabbildung in `crates/ferrioxid-db/src/sql.rs`.
 
 App-Pakete nutzen dieselbe Tabelle. Die Historien-ID ist `shop:0001_initial`, die Datei bleibt `0001_initial`. Details: [app-migrations.md](app-migrations.md). Bestehende unqualifizierte Zeilen werden nicht umgeschrieben. Der Prozessstart vergleicht `registry.migrations` mit `[app.<name>]`. Die CLI sieht nur die TOML-Seite und kennzeichnet das. Eine Feldgruppe ohne konkretes Model erzeugt keine Tabelle. Spalten stehen in `columns()` der konkreten Models und damit im Schema-Diff.
 
-Auth-Dateien liegen in `crates/ferrum-auth/migrations/` und schreiben die Historie `_ferrum_auth_migrations`. `ferrum migrate up` wendet dieses Verzeichnis vor den Anwendungsdateien an. Die Anwendungshistorie bleibt `_ferrum_migrations`. Dadurch kollidiert `0001_auth_schema` nicht mit `0001_initial`. Der Serverstart migriert nicht. `0001_initial.json` bleibt unverändert.
+Auth-Dateien liegen in `crates/ferrioxid-auth/migrations/` und schreiben die Historie `_ferrum_auth_migrations`. `ferrioxid migrate up` wendet dieses Verzeichnis vor den Anwendungsdateien an. Die Anwendungshistorie bleibt `_ferrum_migrations`. Dadurch kollidiert `0001_auth_schema` nicht mit `0001_initial`. Der Serverstart migriert nicht. `0001_initial.json` bleibt unverändert.
 
 | Aufgabe | Datei |
 |---|---|
-| Snapshot und Validierung | `crates/ferrum-migrations/src/snapshot.rs` |
-| Diff und Risiko | `crates/ferrum-migrations/src/diff.rs` |
-| Dateiformat und Checksum | `crates/ferrum-migrations/src/store.rs` |
-| Historientabelle | `crates/ferrum-migrations/src/history.rs` |
-| Ausführung | `crates/ferrum-migrations/src/runner.rs` |
-| Snapshot-Simulation | `crates/ferrum-migrations/src/simulate.rs` |
-| SQLite-Umbau und PostgreSQL-ALTER | `crates/ferrum-migrations/src/rebuild.rs` |
-| SQLite-Introspektion | `crates/ferrum-migrations/src/introspection.rs` |
-| Baseline | `crates/ferrum-migrations/src/baseline.rs` |
-| `ferrum.toml` und Schema-Befehl | `crates/ferrum-migrations/src/project.rs` |
-| CLI | `crates/ferrum-cli/src/main.rs` |
+| Snapshot und Validierung | `crates/ferrioxid-migrations/src/snapshot.rs` |
+| Diff und Risiko | `crates/ferrioxid-migrations/src/diff.rs` |
+| Dateiformat und Checksum | `crates/ferrioxid-migrations/src/store.rs` |
+| Historientabelle | `crates/ferrioxid-migrations/src/history.rs` |
+| Ausführung | `crates/ferrioxid-migrations/src/runner.rs` |
+| Snapshot-Simulation | `crates/ferrioxid-migrations/src/simulate.rs` |
+| SQLite-Umbau und PostgreSQL-ALTER | `crates/ferrioxid-migrations/src/rebuild.rs` |
+| SQLite-Introspektion | `crates/ferrioxid-migrations/src/introspection.rs` |
+| Baseline | `crates/ferrioxid-migrations/src/baseline.rs` |
+| `ferrum.toml` und Schema-Befehl | `crates/ferrioxid-migrations/src/project.rs` |
+| CLI | `crates/ferrioxid-cli/src/main.rs` |
 | myshop-Registrierung | `examples/myshop/src/main.rs`, `ferrum.toml` |
-| DDL | `crates/ferrum-db/src/sql.rs` |
+| DDL | `crates/ferrioxid-db/src/sql.rs` |
 
 `ColumnSpec` bleibt die Modellmetadaten. Der Snapshot übersetzt sie in logische Typen. SQL entsteht erst für `DatabaseKind`. Unique-Constraints und Indizes sind in den Modellmetadaten nicht vorhanden und fehlen deshalb im Snapshot. Fremdschlüsselbeziehungen sind nicht implementiert.
 
@@ -110,8 +110,8 @@ Gleiche fachliche Schemas gelten auch dann als unverändert, wenn nur die Spalte
 Zuerst das Modell auf den neuen Namen ändern. Danach, im Workspace-Root:
 
 ```powershell
-cargo run -p ferrum-cli -- migrate rename-column --table products --from name --to title
-cargo run -p ferrum-cli -- migrate rename-table --from products --to items
+cargo run -p ferrioxid-cli -- migrate rename-column --table products --from name --to title
+cargo run -p ferrioxid-cli -- migrate rename-table --from products --to items
 ```
 
 Die CLI lädt das registrierte Schema. Die eine Operation muss dieses Schema aus dem letzten Migrationsziel vollständig erklären. Weitere Abweichungen führen dazu, dass keine Datei geschrieben wird. Der folgende `migrate make` sieht dann keine Änderung mehr.
@@ -130,7 +130,7 @@ Eine Umbenennung kopiert die Tabelle nicht. Hängt ein Unique Index oder ein sek
 Eine noch nicht angewendete Datei darf bearbeitet werden. Danach:
 
 ```powershell
-cargo run -p ferrum-cli -- migrate reseal migrations\0002_rename_title.json
+cargo run -p ferrioxid-cli -- migrate reseal migrations\0002_rename_title.json
 ```
 
 `reseal` prüft, dass die Operationen den Zielsnapshot erzeugen, schreibt die Checksum neu und verweigert die Datei, wenn ihre ID schon in `_ferrum_migrations` steht. Eine angewendete Datei mit geänderter Checksum stoppt `migrate up`.
@@ -160,27 +160,27 @@ Tabelle `_ferrum_migrations`:
 
 Die Zeile wird in derselben Transaktion geschrieben wie die Schemaänderung. Schlägt die Migration fehl, gibt es weder die Schemaänderung noch den Historieneintrag. Es gibt keinen gespeicherten Fehlerstatus. Eine angewendete ID wird nicht erneut ausgeführt. Eine fehlende Datei oder eine abweichende Checksum stoppt `migrate up`.
 
-Ein Historieneintrag garantiert nicht, dass niemand das Schema danach von außen geändert hat. Ferrum vergleicht die Historie mit den Dateien, liest aber nicht das komplette Live-Schema zurück.
+Ein Historieneintrag garantiert nicht, dass niemand das Schema danach von außen geändert hat. Ferrioxid vergleicht die Historie mit den Dateien, liest aber nicht das komplette Live-Schema zurück.
 
 ## 7. CLI
 
 Im Workspace-Root:
 
 ```powershell
-cargo run -p ferrum-cli -- migrate make add_note
-cargo run -p ferrum-cli -- migrate up
-cargo run -p ferrum-cli -- migrate status
-cargo run -p ferrum-cli -- migrate rename-column --table products --from name --to title
-cargo run -p ferrum-cli -- migrate rename-table --from products --to items
-cargo run -p ferrum-cli -- migrate reseal pfad\zur\datei.json
-cargo run -p ferrum-cli -- migrate baseline
-cargo run -p ferrum-cli -- migrate baseline --confirm
+cargo run -p ferrioxid-cli -- migrate make add_note
+cargo run -p ferrioxid-cli -- migrate up
+cargo run -p ferrioxid-cli -- migrate status
+cargo run -p ferrioxid-cli -- migrate rename-column --table products --from name --to title
+cargo run -p ferrioxid-cli -- migrate rename-table --from products --to items
+cargo run -p ferrioxid-cli -- migrate reseal pfad\zur\datei.json
+cargo run -p ferrioxid-cli -- migrate baseline
+cargo run -p ferrioxid-cli -- migrate baseline --confirm
 ```
 
-Die installierte Binary heißt `ferrum`. `make` legt ohne Schemaänderung keine Datei an. Riskante Löschungen stehen in der Datei und laufen erst mit:
+Die installierte Binary heißt `ferrioxid`. `make` legt ohne Schemaänderung keine Datei an. Riskante Löschungen stehen in der Datei und laufen erst mit:
 
 ```powershell
-cargo run -p ferrum-cli -- migrate up --allow-destructive
+cargo run -p ferrioxid-cli -- migrate up --allow-destructive
 ```
 
 `status` zeigt Backend, Auth-Migrationen und App-Migrationen getrennt, angewendet oder ausstehend, Checksums und Konflikte. Wenn das Modellschema geladen werden konnte, steht darunter, ob es zum letzten App-Migrationsziel passt. Ausstehende Migrationen lassen den Befehl erfolgreich. Checksum, unbekannte IDs und Reihenfolgefehler beenden ihn mit Exitcode 1. Die Diagnose öffnet SQLite mit `mode=ro` und legt eine fehlende Datei nicht an. Die Datenbank-URL wird nicht ausgegeben. `--database-url` und `--migrations-dir` überschreiben Projekt und Umgebung. Ohne URL gilt `DATABASE_URL`, sonst `sqlite://db.sqlite3?mode=rwc` im Arbeitsverzeichnis. Der gemeinsame Bericht steht in [migration-diagnostics.md](migration-diagnostics.md).
@@ -201,7 +201,7 @@ Ausgeführt werden `CREATE TABLE` inklusive Foreign Keys, `CREATE UNIQUE INDEX`,
 2. Fremdschlüssel, explizite Indizes, Trigger und Views der Tabelle prüfen. Ist eines davon vorhanden, wird vor jedem DDL abgebrochen.
 3. Bei Verschärfung auf `NOT NULL` die vorhandenen `NULL`-Werte zählen. Ist die Zahl größer als 0, wird abgebrochen. Es wird kein Ersatzwert eingesetzt.
 4. Nur die betroffene Spalte lesen und in Rust prüfen. `NULL` bleibt `NULL`. Gleiche Typen müssen zum Speicherwert passen. Bool muss `0` oder `1` sein. `i64` nach `string` ist die dezimale Darstellung. `string` nach `i64` muss exakt `i64::to_string` entsprechen. `01`, `+1`, `1.0`, `-0` und leerer Text werden abgelehnt. Ein erfolgreiches SQL-`CAST` allein gilt nicht.
-5. `ferrum_rebuild_<tabelle>` mit dem Zielschema anlegen.
+5. `ferrioxid_rebuild_<tabelle>` mit dem Zielschema anlegen.
 6. `INSERT INTO ... SELECT` kopiert die übrigen Spalten. Nur die geprüfte Typänderung wird als `CAST` eingesetzt. `name` wird nicht als `title` erraten.
 7. `COUNT(*)` von Quelle und Kopie vergleichen.
 8. Die alte Tabelle löschen und die Kopie auf den alten Namen umbenennen.
@@ -245,7 +245,7 @@ Der HTTP-Server migriert nicht beim Start.
 
 ### Übergang einer alten SQLite-Datei
 
-`ferrum migrate baseline` übernimmt eine SQLite-Datei, deren Schema bereits dem letzten Migrationsziel entspricht. Der Befehl ändert keine Tabelle und keine Zeile. Ohne `--confirm` wird auch keine Historie geschrieben, und der Prozess endet mit einem Fehler, der die erfolgreiche Prüfung und die fehlende Bestätigung nennt.
+`ferrioxid migrate baseline` übernimmt eine SQLite-Datei, deren Schema bereits dem letzten Migrationsziel entspricht. Der Befehl ändert keine Tabelle und keine Zeile. Ohne `--confirm` wird auch keine Historie geschrieben, und der Prozess endet mit einem Fehler, der die erfolgreiche Prüfung und die fehlende Bestätigung nennt.
 
 Ablauf:
 

@@ -8,15 +8,15 @@ Dieses Dokument beschreibt die Reihenfolge einer HTTP-Anfrage, nachdem Formulare
 
 ## Crates und Dateien
 
-- Routeraufbau: `crates/ferrum-api/src/lib.rs`, `App::merge`, `App::into_router`
-- Hülle: `crates/ferrum-api/src/web.rs`
-- Middleware: `crates/ferrum-middleware/src/lib.rs`
-- Seiten: `crates/ferrum-api/src/pages.rs`
-- Auth: `crates/ferrum-auth/src/service.rs`
+- Routeraufbau: `crates/ferrioxid-api/src/lib.rs`, `App::merge`, `App::into_router`
+- Hülle: `crates/ferrioxid-api/src/web.rs`
+- Middleware: `crates/ferrioxid-middleware/src/lib.rs`
+- Seiten: `crates/ferrioxid-api/src/pages.rs`
+- Auth: `crates/ferrioxid-auth/src/service.rs`
 
 ## Öffentliche API
 
-`App::merge` hängt zustandsbehaftete Routen an, bevor `into_router` den Zustand bindet. `ferrum::web::prepare` montiert danach Staticfiles, wenn `[static] enabled` ist, und die Standard-Middleware.
+`App::merge` hängt zustandsbehaftete Routen an, bevor `into_router` den Zustand bindet. `ferrioxid::web::prepare` montiert danach Staticfiles, wenn `[static] enabled` ist, und die Standard-Middleware.
 
 ## Datenfluss
 
@@ -51,11 +51,11 @@ Zuerst wird die Größe begrenzt, danach eine eigene Request-ID erzeugt. Logs se
 
 ## Beispiel
 
-Ein Fullstack-Projekt aus `ferrum new` ruft `mount_pages` und danach `ferrum::web::prepare` auf. `/contact` ist vor `into_router` gemerged.
+Ein Fullstack-Projekt aus `ferrioxid new` ruft `mount_pages` und danach `ferrioxid::web::prepare` auf. `/contact` ist vor `into_router` gemerged.
 
 ## Tests
 
-Die Middleware-Reihenfolge steht in `ferrum-middleware`. Auth-, CSRF- und CRUD-Tests bleiben die bestehenden SQLite-Tests.
+Die Middleware-Reihenfolge steht in `ferrioxid-middleware`. Auth-, CSRF- und CRUD-Tests bleiben die bestehenden SQLite-Tests.
 
 ## Einschränkungen
 

@@ -1,14 +1,14 @@
 //! HTTP-Prüfung für Login, Sitzungen, CSRF und Modellrechte. Nur SQLite.
 
-use ferrum::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
-use ferrum::core::{QueryScope, ScopeValue};
-use ferrum::db::ModelRepository;
-use ferrum::prelude::*;
+use ferrioxid::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
+use ferrioxid::core::{QueryScope, ScopeValue};
+use ferrioxid::db::ModelRepository;
+use ferrioxid::prelude::*;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "auth_demo_products",
     api = "/api/v1/auth_demo_products",
     allow_anonymous = true
@@ -20,8 +20,8 @@ struct DemoProduct {
     name: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "auth_internal_notes",
     api = "/api/v1/auth_internal_notes",
     permissions = "notes"
@@ -33,8 +33,8 @@ struct ProtectedNote {
     title: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "auth_secrets",
     api = "/api/v1/auth_secrets",
     permissions = "secrets",
@@ -49,8 +49,8 @@ struct SecretNote {
     title: String,
 }
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "auth_unbound_secrets",
     api = "/api/v1/auth_unbound_secrets",
     permissions = "secrets",
@@ -229,8 +229,8 @@ fn auth_headers(cookie: &str, csrf: &str, origin: Option<&str>) -> String {
 
 #[tokio::test]
 async fn sqlite_auth_http_permissions_and_csrf() {
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
     let editor = auth
         .create_user("editor@example.com", "correct-horse-battery", false, false)
@@ -239,7 +239,7 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     auth.create_user("root@example.com", "superuser-password", true, true)
         .await
         .unwrap();
-    let app = ferrum::App::new(db.clone())
+    let app = ferrioxid::App::new(db.clone())
         .with_auth(auth.clone())
         .register::<DemoProduct>()
         .register::<ProtectedNote>()
@@ -308,7 +308,7 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     assert!(!raw.contains("password_hash"));
     assert!(!raw.contains("argon2"));
     let cookie = session_cookie(&login.headers);
-    assert!(cookie.starts_with("ferrum_session="));
+    assert!(cookie.starts_with("ferrioxid_session="));
     assert!(!raw.contains(cookie.split('=').nth(1).unwrap_or("missing-token")));
     let csrf = login.json["csrf_token"].as_str().unwrap().to_owned();
     let me = call(
@@ -684,7 +684,7 @@ async fn sqlite_auth_http_permissions_and_csrf() {
         "GET",
         "/auth/me".into(),
         None,
-        "Cookie: ferrum_session=tampered\r\n".into(),
+        "Cookie: ferrioxid_session=tampered\r\n".into(),
     )
     .await
     .unwrap();
@@ -695,15 +695,15 @@ async fn sqlite_auth_http_permissions_and_csrf() {
 
 #[tokio::test]
 async fn expired_session_cookie_is_rejected() {
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    ferrum::auth::apply_migrations(&db).await.unwrap();
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let mut config = AuthConfig::development();
     config.session_ttl_secs = 0;
     let auth = AuthService::new(db.clone(), config);
     auth.create_user("short@example.com", "correct-horse-battery", false, false)
         .await
         .unwrap();
-    let app = ferrum::App::new(db).with_auth(auth);
+    let app = ferrioxid::App::new(db).with_auth(auth);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });

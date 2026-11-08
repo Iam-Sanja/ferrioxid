@@ -1,12 +1,12 @@
 # URLs
 
-[Zur Übersicht](index.md) · Einbindung: [routing.md](routing.md) · Views: [views.md](views.md) · **IST-Datei:** `crates/ferrum-api/src/urls.rs`.
+[Zur Übersicht](index.md) · Einbindung: [routing.md](routing.md) · Views: [views.md](views.md) · **IST-Datei:** `crates/ferrioxid-api/src/urls.rs`.
 
 ## Aufgabe
 
 `UrlSet` sammelt Axum-Routen und stabile Namen. Axum bleibt der Router. Eine zweite Routing-Engine gibt es nicht. Namen haben die Form `bereich.name`, zum Beispiel `shop.list` oder `site.home`.
 
-Das entspricht konzeptionell Djangos `urls.py` und `reverse`. Ferrum versteckt `Router<AppState>` dabei nicht.
+Das entspricht konzeptionell Djangos `urls.py` und `reverse`. Ferrioxid versteckt `Router<AppState>` dabei nicht.
 
 Eine App hängt ihr `UrlSet` über `Registration::routes` ein. Der Namensraum muss der App-Name sein. Ein schon belegter Pfad, auch ein Modellpfad, ist `url.duplicate`. `App::merge` eines rohen Routers sieht diese Namen nicht.
 
@@ -22,7 +22,7 @@ Tera kodiert das Ergebnis. Ein Schrägstrich erscheint als `&#x2F;`. In einem `h
 
 ```rust
 use axum::routing::get;
-use ferrum::urls::{UrlError, UrlSet};
+use ferrioxid::urls::{UrlError, UrlSet};
 
 pub fn routes() -> Result<UrlSet, UrlError> {
     let shop = UrlSet::new().route("shop.detail", "/{id}", get(detail))?;
@@ -32,11 +32,11 @@ pub fn routes() -> Result<UrlSet, UrlError> {
 }
 
 async fn list() -> axum::response::Response {
-    ferrum::views::json(&ferrum::serde_json::json!({"ok": true}))
+    ferrioxid::views::json(&ferrioxid::serde_json::json!({"ok": true}))
 }
 
 async fn detail() -> axum::response::Response {
-    ferrum::views::json(&ferrum::serde_json::json!({"ok": true}))
+    ferrioxid::views::json(&ferrioxid::serde_json::json!({"ok": true}))
 }
 ```
 
@@ -45,7 +45,7 @@ async fn detail() -> axum::response::Response {
 Die Anwendung übergibt das Ergebnis an `App::urls`:
 
 ```rust
-let app = ferrum::App::new(db)
+let app = ferrioxid::App::new(db)
     .with_settings(settings.clone())
     .urls(routes()?)?;
 ```
@@ -54,21 +54,21 @@ let app = ferrum::App::new(db)
 
 ## Namen auflösen
 
-Nach `into_router` liegt die Karte als `Extension<Arc<ferrum::urls::RouteMap>>`.
+Nach `into_router` liegt die Karte als `Extension<Arc<ferrioxid::urls::RouteMap>>`.
 
 ```rust
 use std::sync::Arc;
 
 use axum::extract::Extension;
-use ferrum::urls::RouteMap;
+use ferrioxid::urls::RouteMap;
 
 async fn go(Extension(names): Extension<Arc<RouteMap>>) -> axum::response::Response {
     match names.path("shop.detail", &[("id", "sku-1")]) {
-        Ok(path) => match ferrum::views::redirect_to(&path) {
+        Ok(path) => match ferrioxid::views::redirect_to(&path) {
             Ok(response) => response,
             Err(error) => error.into_response(),
         },
-        Err(error) => ferrum::views::fail(
+        Err(error) => ferrioxid::views::fail(
             &axum::http::HeaderMap::new(),
             None,
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,

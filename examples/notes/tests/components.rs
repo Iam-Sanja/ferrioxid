@@ -1,23 +1,23 @@
 use axum::body::Body;
 use axum::http::StatusCode;
-use ferrum::core::{FerrumModel, HasTimestamps};
-use ferrum::migrations::{plan_change, RegisteredModel, SchemaSnapshot};
-use ferrum::prelude::*;
+use ferrioxid::core::{FerrioxidModel, HasTimestamps};
+use ferrioxid::migrations::{plan_change, RegisteredModel, SchemaSnapshot};
+use ferrioxid::prelude::*;
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-ferrum::model_fields! {
+ferrioxid::model_fields! {
     pub struct AuditStamp {
         #[field(managed = "created")]
-        pub created_at: ferrum::chrono::DateTime<ferrum::chrono::Utc>,
+        pub created_at: ferrioxid::chrono::DateTime<ferrioxid::chrono::Utc>,
         #[field(managed = "updated")]
-        pub updated_at: ferrum::chrono::DateTime<ferrum::chrono::Utc>,
+        pub updated_at: ferrioxid::chrono::DateTime<ferrioxid::chrono::Utc>,
     }
 }
 
-ferrum_fields_AuditStamp! {
-    #[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-    #[ferrum(
+ferrioxid_fields_AuditStamp! {
+    #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+    #[ferrioxid(
         table = "products",
         api = "/api/v1/products",
         allow_anonymous = true,
@@ -34,9 +34,9 @@ ferrum_fields_AuditStamp! {
     }
 }
 
-ferrum::with_timestamps! {
-    #[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-    #[ferrum(
+ferrioxid::with_timestamps! {
+    #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+    #[ferrioxid(
         table = "categories",
         api = "/api/v1/categories",
         allow_anonymous = true,
@@ -104,19 +104,19 @@ async fn two_models_share_flat_timestamps_and_reject_client_values() {
     assert!(rendered.contains("categories"));
     assert!(rendered.contains("created_at"));
 
-    let first = ferrum::chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+    let first = ferrioxid::chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
         .unwrap()
         .with_timezone(&Utc);
-    let second = ferrum::chrono::DateTime::parse_from_rfc3339("2026-01-02T00:00:00Z")
+    let second = ferrioxid::chrono::DateTime::parse_from_rfc3339("2026-01-02T00:00:00Z")
         .unwrap()
         .with_timezone(&Utc);
-    ferrum::core::set_test_clock(Some(first));
-    let db = ferrum::db::connect("sqlite::memory:").await.unwrap();
-    let app = ferrum::App::new(db)
+    ferrioxid::core::set_test_clock(Some(first));
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    let app = ferrioxid::App::new(db)
         .register::<Product>()
         .register::<Category>();
     app.bootstrap_schema().await.unwrap();
-    let rejected = ferrum::serde_json::from_str::<ProductCreate>(
+    let rejected = ferrioxid::serde_json::from_str::<ProductCreate>(
         r#"{"name":"red-chair","created_at":"2020-01-01T00:00:00Z"}"#,
     );
     assert!(rejected.is_err());
@@ -146,11 +146,11 @@ async fn two_models_share_flat_timestamps_and_reject_client_values() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let created_row: Product = ferrum::serde_json::from_slice(&body).unwrap();
+    let created_row: Product = ferrioxid::serde_json::from_slice(&body).unwrap();
     assert_eq!(created_row.created_at(), first);
     assert_eq!(created_row.updated_at(), first);
     assert!(!body.windows(12).any(|window| window == b"\"timestamps\""));
-    ferrum::core::set_test_clock(Some(second));
+    ferrioxid::core::set_test_clock(Some(second));
     let patched = router
         .oneshot(
             axum::http::Request::patch(format!("/api/v1/products/{}", created_row.id))
@@ -162,8 +162,8 @@ async fn two_models_share_flat_timestamps_and_reject_client_values() {
         .unwrap();
     assert_eq!(patched.status(), StatusCode::OK);
     let body = patched.into_body().collect().await.unwrap().to_bytes();
-    let updated: Product = ferrum::serde_json::from_slice(&body).unwrap();
+    let updated: Product = ferrioxid::serde_json::from_slice(&body).unwrap();
     assert_eq!(updated.created_at(), first);
     assert_eq!(updated.updated_at(), second);
-    ferrum::core::set_test_clock(None);
+    ferrioxid::core::set_test_clock(None);
 }

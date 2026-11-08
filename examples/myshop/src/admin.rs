@@ -1,10 +1,10 @@
 //! Öffentliche Admin-Erweiterungen für die Bestellpflege.
 
-use ferrum::admin::{
+use ferrioxid::admin::{
     ActionContext, ActionError, ActionHandler, AdminAction, AdminFilter, AdminRegistry, AdminView,
     AdminWidget, ExtensionError, FilterOption, ViewHandler, ViewPage, ViewRequest,
 };
-use ferrum::db::ModelRepository;
+use ferrioxid::db::ModelRepository;
 use myshop::models::order::Order;
 use serde_json::{json, Map, Value};
 use std::sync::Arc;
@@ -16,7 +16,7 @@ const ORDER_STATUS: &[FilterOption] = &[
 
 struct OrderReport;
 
-#[ferrum::async_trait::async_trait]
+#[ferrioxid::async_trait::async_trait]
 impl ViewHandler for OrderReport {
     async fn handle(&self, request: &ViewRequest<'_>) -> Result<ViewPage, ExtensionError> {
         let listed = Order::list(request.db)
@@ -74,7 +74,7 @@ impl ViewHandler for OrderReport {
 
 struct MarkProcessed;
 
-#[ferrum::async_trait::async_trait]
+#[ferrioxid::async_trait::async_trait]
 impl ActionHandler for MarkProcessed {
     async fn apply(&self, context: &mut ActionContext) -> Result<(), ActionError> {
         for id in context.ids() {

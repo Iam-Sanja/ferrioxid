@@ -3,7 +3,7 @@
 **Stand:** v0.19.
 
 ```rust
-#[ferrum(admin = true, admin_date_hierarchy = "event_date")]
+#[ferrioxid(admin = true, admin_date_hierarchy = "event_date")]
 ```
 
 Das Feld muss ein sichtbares `NaiveDate` oder `DateTime<Utc>` sein. `NaiveTime` ist nicht erlaubt.

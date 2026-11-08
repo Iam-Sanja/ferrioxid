@@ -1,19 +1,19 @@
 # Views
 
-[Zur Übersicht](index.md) · Routen: [urls.md](urls.md) · **IST-Datei:** `crates/ferrum-api/src/views.rs`.
+[Zur Übersicht](index.md) · Routen: [urls.md](urls.md) · **IST-Datei:** `crates/ferrioxid-api/src/views.rs`.
 
 ## Aufgabe
 
-`ferrum::views` liefert die Antworten, die eine Anwendung häufig braucht: HTML, JSON, einen lokalen Redirect und stabile Fehler. Die Typen bleiben Axum-`Response` und `HeaderMap`. Tera bleibt die Vorlagen-Engine.
+`ferrioxid::views` liefert die Antworten, die eine Anwendung häufig braucht: HTML, JSON, einen lokalen Redirect und stabile Fehler. Die Typen bleiben Axum-`Response` und `HeaderMap`. Tera bleibt die Vorlagen-Engine.
 
 `require_mutation(auth, headers, token)` prüft eine POST-Anfrage über `AuthService::authenticate_csrf`. Fehlt der Auth-Dienst, ist die Antwort `401` und `auth.not_configured`. Es gibt keinen zweiten CSRF-Mechanismus. `require_user` bleibt eine GET-Prüfung. Die App-Registrierung vergibt dadurch keine Berechtigung.
 
-## Django und Ferrum
+## Django und Ferrioxid
 
-| Django | Ferrum |
+| Django | Ferrioxid |
 |---|---|
 | `render(request, "home.html", context)` | `views::render(site, "home.html", context, debug)` |
-| `JsonResponse({"ok": True})` | `views::json(&ferrum::serde_json::json!({"ok": true}))` |
+| `JsonResponse({"ok": True})` | `views::json(&ferrioxid::serde_json::json!({"ok": true}))` |
 | `redirect("/home")` | `views::redirect_to("/home")` |
 | `Http404` | `views::fail(..., StatusCode::NOT_FOUND, code, detail, debug)` |
 | `PermissionDenied` | `views::fail(..., StatusCode::FORBIDDEN, ...)` oder `require_staff` |
@@ -22,7 +22,7 @@
 | `permission_required("app.view")` | `require_permission(..., "app.view")` |
 | `get_object_or_404` plus Policy | vorhandenes Repository und `require_object_read::<T, P>` |
 
-Die Entsprechung ist die Aufgabe, nicht die Syntax. Eine Ferrum-View ist eine Axum-Funktion. Sie erhält den Zustand als Argument und gibt `Response` zurück.
+Die Entsprechung ist die Aufgabe, nicht die Syntax. Eine Ferrioxid-View ist eine Axum-Funktion. Sie erhält den Zustand als Argument und gibt `Response` zurück.
 
 ## HTML
 
@@ -30,15 +30,15 @@ Die Entsprechung ist die Aufgabe, nicht die Syntax. Eine Ferrum-View ist eine Ax
 use std::sync::Arc;
 
 use axum::extract::Extension;
-use ferrum::migrations::ProjectConfig;
+use ferrioxid::migrations::ProjectConfig;
 
 pub async fn home(
     Extension(settings): Extension<Arc<ProjectConfig>>,
 ) -> axum::response::Response {
-    let site = match ferrum::pages::Site::open(&settings.templates_directory()) {
+    let site = match ferrioxid::pages::Site::open(&settings.templates_directory()) {
         Ok(site) => site,
         Err(_) => {
-            return ferrum::views::fail(
+            return ferrioxid::views::fail(
                 &axum::http::HeaderMap::new(),
                 None,
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -48,8 +48,8 @@ pub async fn home(
             )
         }
     };
-    let context = ferrum::pages::home_context(&settings);
-    ferrum::views::render(&site, "home.html", &context, settings.debug)
+    let context = ferrioxid::pages::home_context(&settings);
+    ferrioxid::views::render(&site, "home.html", &context, settings.debug)
 }
 ```
 
@@ -58,10 +58,10 @@ Schlägt das Rendern fehl, antwortet `render` mit `view.template`. In Produktion
 ## JSON, Redirect, Formular
 
 ```rust
-fn answers() -> Result<axum::response::Response, ferrum::views::ViewError> {
-    let _response = ferrum::views::json(&ferrum::serde_json::json!({"ok": true}));
-    let target = ferrum::views::redirect_to("/home")?;
-    let _fields = ferrum::views::form_fields("name=Ada&city=Bern")?;
+fn answers() -> Result<axum::response::Response, ferrioxid::views::ViewError> {
+    let _response = ferrioxid::views::json(&ferrioxid::serde_json::json!({"ok": true}));
+    let target = ferrioxid::views::redirect_to("/home")?;
+    let _fields = ferrioxid::views::form_fields("name=Ada&city=Bern")?;
     Ok(target)
 }
 ```
@@ -92,14 +92,14 @@ Eigene Seiten können `fail` mit einem eigenen `code` aufrufen. Die Projektvorla
 
 ```rust
 async fn account(
-    axum::extract::State(state): axum::extract::State<ferrum::auth::AppState>,
+    axum::extract::State(state): axum::extract::State<ferrioxid::auth::AppState>,
     headers: axum::http::HeaderMap,
 ) -> axum::response::Response {
-    let user = match ferrum::views::require_user(state.auth.as_ref(), &headers).await {
+    let user = match ferrioxid::views::require_user(state.auth.as_ref(), &headers).await {
         Ok(user) => user,
         Err(error) => return error.into_response(),
     };
-    ferrum::views::json(&ferrum::serde_json::json!({"email": user.email}))
+    ferrioxid::views::json(&ferrioxid::serde_json::json!({"email": user.email}))
 }
 ```
 

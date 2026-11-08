@@ -11,7 +11,7 @@ cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-Ein generiertes Projekt startet mit `ferrum dev` im Projektverzeichnis. Windows und Linux nutzen denselben Befehl. Der Server startet ohne automatische Migration. Zuerst `ferrum migrate up` ausführen. Generierte Anwendungen binden nicht an `0.0.0.0`. `myshop --bootstrap` ändert die Datei nicht. Die Datei `db.sqlite3` liegt im Arbeitsverzeichnis. Eine ältere Bootstrap-Datei ohne `_ferrum_migrations` wird nicht übernommen und nicht gelöscht.
+Ein generiertes Projekt startet mit `ferrioxid dev` im Projektverzeichnis. Windows und Linux nutzen denselben Befehl. Der Server startet ohne automatische Migration. Zuerst `ferrioxid migrate up` ausführen. Generierte Anwendungen binden nicht an `0.0.0.0`. `myshop --bootstrap` ändert die Datei nicht. Die Datei `db.sqlite3` liegt im Arbeitsverzeichnis. Eine ältere Bootstrap-Datei ohne `_ferrum_migrations` wird nicht übernommen und nicht gelöscht.
 
 Der Admin braucht keinen Node-Prozess. `cargo build` genügt. `FERRUM_CSRF_SECRET` in Produktion setzen. Die Datei `.ferrum/csrf.key` ist nur die lokale Quelle.
 
@@ -23,17 +23,17 @@ Eine abweichende `BIND_ADDRESS`, insbesondere `0.0.0.0:3000`, kann den Dienst au
 
 ```powershell
 docker compose up -d db
-$env:DATABASE_URL="postgres://ferrum:ferrum_dev_only@127.0.0.1:5432/ferrum"
+$env:DATABASE_URL="postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid"
 cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-Dieselbe registrierte Anwendung spricht danach PostgreSQL. Die Handler bleiben unverändert. Docker ist ein optionales Werkzeug für diesen Server, nicht die Voraussetzung für Ferrum.
+Dieselbe registrierte Anwendung spricht danach PostgreSQL. Die Handler bleiben unverändert. Docker ist ein optionales Werkzeug für diesen Server, nicht die Voraussetzung für Ferrioxid.
 
 ## Produktionsarchitektur (SOLL, nicht implementiert)
 
 ```text
-TLS-Client → Reverse Proxy → Ferrum-App → PostgreSQL
+TLS-Client → Reverse Proxy → Ferrioxid-App → PostgreSQL
                                   └→ Log-/Metrics-Ziel
 ```
 
@@ -44,7 +44,7 @@ TLS-Client → Reverse Proxy → Ferrum-App → PostgreSQL
 5. Forwarded-Header nur von vertrauenswürdigen Proxies.
 6. HTTPS am Proxy. Sessions und CSRF erst zusammen mit Authentifizierung.
 7. Secrets über die Einsatzumgebung, nicht im Image oder Repository.
-8. Schemaänderungen bleiben ein eigener Schritt über `ferrum migrate up`, nicht beim Prozessstart. `down` ist nicht Teil dieses Schritts.
+8. Schemaänderungen bleiben ein eigener Schritt über `ferrioxid migrate up`, nicht beim Prozessstart. `down` ist nicht Teil dieses Schritts.
 9. Kein produktives `allow_anonymous=true` ohne Sicherheitsreview.
 
 SQLite kann lokale Entwicklung und Tests tragen. Für mehrere App-Prozesse ist es nicht die vorgesehene Produktionsdatenbank: der Pool hat eine Verbindung, und Schreibzugriffe serialisieren sich über die Datei. PostgreSQL bleibt dafür das unterstützte Server-Backend, sobald es betrieben wird.

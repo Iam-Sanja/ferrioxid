@@ -1,21 +1,21 @@
 # Diagnose und Projektprüfung
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-cli/src/diagnose.rs`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-cli/src/diagnose.rs`.
 
 ## Aufgabe
 
-`ferrum doctor` prüft die Werkzeugkette und das Projekt. `ferrum check` prüft Konfiguration, Migrationen und die Übersetzung, ohne Daten zu ändern.
+`ferrioxid doctor` prüft die Werkzeugkette und das Projekt. `ferrioxid check` prüft Konfiguration, Migrationen und die Übersetzung, ohne Daten zu ändern.
 
 ## Zuständige Dateien
 
-- `crates/ferrum-cli/src/diagnose.rs`
-- `crates/ferrum-migrations/src/project.rs`
+- `crates/ferrioxid-cli/src/diagnose.rs`
+- `crates/ferrioxid-migrations/src/project.rs`
 
 ## Öffentliche Schnittstelle
 
 ```powershell
-ferrum doctor
-ferrum check
+ferrioxid doctor
+ferrioxid check
 ```
 
 Statuszeilen sind `[OK]`, `[WARN]` und `[ERROR]`. Ein Fehler ergibt Exitcode 1. `check --strict` ergibt Exitcode 2, wenn nur Warnungen bleiben. Ohne `--strict` bleiben Warnungen bei Exitcode 0.
@@ -41,7 +41,7 @@ Gelesen wird `ferrum.toml`. `DATABASE_URL` darf den Datenbankeintrag ersetzen. `
 | Docker fehlt | kein Fehler; Docker ist optional und wird nicht geprüft |
 | Prüfsummenkonflikt | Fehler in `check` |
 
-`doctor` im Ferrum-Workspace selbst meldet fehlende `src/main.rs` und `src/lib.rs`, weil das Workspace-Root keine Anwendung ist. Der Befehl gilt für generierte Projekte und für `examples/myshop` nur, wenn dort eine eigene `ferrum.toml` liegt. Die Workspace-Datei bleibt gültig für `migrate`.
+`doctor` im Ferrioxid-Workspace selbst meldet fehlende `src/main.rs` und `src/lib.rs`, weil das Workspace-Root keine Anwendung ist. Der Befehl gilt für generierte Projekte und für `examples/myshop` nur, wenn dort eine eigene `ferrum.toml` liegt. Die Workspace-Datei bleibt gültig für `migrate`.
 
 ## Sicherheitsregeln
 
@@ -51,16 +51,16 @@ Verbindungszeichenketten werden nicht ausgegeben. `doctor` und `check` legen kei
 
 ```powershell
 cd demo
-ferrum doctor
-ferrum check
-ferrum check --strict
+ferrioxid doctor
+ferrioxid check
+ferrioxid check --strict
 ```
 
 Dieselbe Aufrufform gilt unter Linux in der jeweiligen Shell.
 
 ## Tests
 
-`generator.rs` erwartet Erfolg in einem frischen API-Projekt und einen Fehler, nachdem `src/lib.rs` entfernt wurde. Dieselbe Datei vergleicht die Migrationsbytes vor und nach `ferrum check`.
+`generator.rs` erwartet Erfolg in einem frischen API-Projekt und einen Fehler, nachdem `src/lib.rs` entfernt wurde. Dieselbe Datei vergleicht die Migrationsbytes vor und nach `ferrioxid check`.
 
 ## Einschränkungen
 

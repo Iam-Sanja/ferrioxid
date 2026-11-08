@@ -4,23 +4,23 @@
 
 ## Verantwortlichkeit
 
-`ferrum-core::validation` ist der gemeinsame Regelkern für Formularfelder. `FerrumModel` behält die bisher generierten Prüfungen, damit bestehende CRUD-Antworten unverändert bleiben.
+`ferrioxid-core::validation` ist der gemeinsame Regelkern für Formularfelder. `FerrioxidModel` behält die bisher generierten Prüfungen, damit bestehende CRUD-Antworten unverändert bleiben.
 
 ## Crates und Dateien
 
-- `crates/ferrum-core/src/validation.rs`
-- Aufrufer: `crates/ferrum-forms/src/lib.rs`
-- Modellmakro, unverändert: `crates/ferrum-macros/src/lib.rs`
+- `crates/ferrioxid-core/src/validation.rs`
+- Aufrufer: `crates/ferrioxid-forms/src/lib.rs`
+- Modellmakro, unverändert: `crates/ferrioxid-macros/src/lib.rs`
 
 ## Öffentliche API
 
-`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` und `is_http_url`. Rückgaben sind stabile Codes, keine übersetzten Sätze. Übersetzung macht `ferrum::forms::message`.
+`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` und `is_http_url`. Rückgaben sind stabile Codes, keine übersetzten Sätze. Übersetzung macht `ferrioxid::forms::message`.
 
 ## Datenfluss
 
 ```text
-FerrumModel-Makro → eigene Meldungen (unverändert)
-ferrum-forms → text_code / parse_* → Feldcode → message(locale, code)
+FerrioxidModel-Makro → eigene Meldungen (unverändert)
+ferrioxid-forms → text_code / parse_* → Feldcode → message(locale, code)
 ```
 
 Optionale Textfelder behandeln einen leeren Wert als `None`, bevor die Pflichtregel greift. Zahlen und UUIDs ohne Wert bleiben `validation.required`, wenn die Required-Hilfe verwendet wird.
@@ -50,12 +50,12 @@ Regeln sehen nur den bereits dekodierten Feldwert. Sie führen keine SQL- oder S
 ## Beispiel
 
 ```rust
-ferrum::core::text_code("a@b", true, None, Some(254), true, false);
+ferrioxid::core::text_code("a@b", true, None, Some(254), true, false);
 ```
 
 ## Tests
 
-`ferrum-core` prüft die Codes. `ferrum-forms` prüft die Zuordnung zu Feldern.
+`ferrioxid-core` prüft die Codes. `ferrioxid-forms` prüft die Zuordnung zu Feldern.
 
 ## Einschränkungen
 

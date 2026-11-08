@@ -9,7 +9,7 @@ Die Anpassung geschieht am Rust-Modell. Es gibt keinen Laufzeit-Baukasten und ke
 ## Attribute
 
 ```rust
-#[ferrum(
+#[ferrioxid(
     table = "products",
     api = "/api/v1/products",
     allow_anonymous = true,

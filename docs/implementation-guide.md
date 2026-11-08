@@ -13,7 +13,7 @@ Lies in dieser Reihenfolge `Cargo.toml`, [architecture.md](architecture.md), [co
 - DB: Connection, typsicheres Repository, DB-Fehler; keine HTTP-Statuscodes.
 - API: Axum-Router, DTO-Extractor, HTTP-Response, keine neue Modellsyntax.
 - CLI: Commands und Orchestrierung, keine doppelte ORM-Logik.
-- Beispiel: ausschließlich öffentliche Ferrum-Fassade, kein interner Sondercode.
+- Beispiel: ausschließlich öffentliche Ferrioxid-Fassade, kein interner Sondercode.
 
 ## 3. Pflichtablauf je Änderung
 
@@ -75,4 +75,4 @@ Ein Admin-Auftrag, der nur die Roadmap erweitert, ändert keine Handler und kein
 
 ## 8. Aktueller Schwerpunkt
 
-SQLite ist die lokale Standarddatenbank. PostgreSQL bleibt über `DATABASE_URL` unterstützt. Neue Spaltenabbildungen gehören nach `crates/ferrum-db/src/sql.rs`. Neue Migrationsregeln gehören nach `crates/ferrum-migrations`. Ein SQLite-Umbau darf nur laufen, wenn die geänderte Spalte vorher geprüft ist und die Transaktion bei Fehler alles zurücknimmt. Foreign Keys auf bestehenden Spalten werden nicht umgebaut. Authentifizierung ist vorhanden. Der Admin ist in v0.8 vorhanden und seit v0.13 serverseitiges HTML, beschrieben in [admin-native.md](admin-native.md). v0.9 ergänzt `can_create`, das Feature `admin-ui` und die Befehle `new`, `dev`, `doctor`, `check`, `generate model` und `build`. v0.10 ergänzt Settings und Tera-Seiten. Die Cargo-Version bleibt `0.1.0`. Many-to-Many und Eager Loading nur nach ausdrücklicher Beauftragung. Die Roadmap ist keine Freigabe. Constraints und Beziehungen sind in [constraints.md](constraints.md) und [relations.md](relations.md) beschrieben.
+SQLite ist die lokale Standarddatenbank. PostgreSQL bleibt über `DATABASE_URL` unterstützt. Neue Spaltenabbildungen gehören nach `crates/ferrioxid-db/src/sql.rs`. Neue Migrationsregeln gehören nach `crates/ferrioxid-migrations`. Ein SQLite-Umbau darf nur laufen, wenn die geänderte Spalte vorher geprüft ist und die Transaktion bei Fehler alles zurücknimmt. Foreign Keys auf bestehenden Spalten werden nicht umgebaut. Authentifizierung ist vorhanden. Der Admin ist in v0.8 vorhanden und seit v0.13 serverseitiges HTML, beschrieben in [admin-native.md](admin-native.md). v0.9 ergänzt `can_create`, das Feature `admin-ui` und die Befehle `new`, `dev`, `doctor`, `check`, `generate model` und `build`. v0.10 ergänzt Settings und Tera-Seiten. Die Cargo-Version bleibt `0.1.0`. Many-to-Many und Eager Loading nur nach ausdrücklicher Beauftragung. Die Roadmap ist keine Freigabe. Constraints und Beziehungen sind in [constraints.md](constraints.md) und [relations.md](relations.md) beschrieben.

@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Manifest: [project-manifest.md](project-manifest.md) · Diagnose: [migration-diagnostics.md](migration-diagnostics.md)
 
-**IST:** `crates/ferrum-migrations/src/upgrade.rs` und `ferrum upgrade`. Die Cargo-Version bleibt `0.1.0`. v0.21.1 ändert die Schreibregeln nicht: `--yes` legt weiterhin nur ein fehlendes Legacy-Manifest an.
+**IST:** `crates/ferrioxid-migrations/src/upgrade.rs` und `ferrioxid upgrade`. Die Cargo-Version bleibt `0.1.0`. v0.21.1 ändert die Schreibregeln nicht: `--yes` legt weiterhin nur ein fehlendes Legacy-Manifest an.
 
 ## Was der Befehl tut
 
@@ -22,9 +22,9 @@ Er tut ohne ausdrückliche spätere Erweiterung nicht:
 ## Aufruf
 
 ```powershell
-ferrum upgrade --check
-ferrum upgrade --dry-run
-ferrum upgrade --yes
+ferrioxid upgrade --check
+ferrioxid upgrade --dry-run
+ferrioxid upgrade --yes
 ```
 
 `--check` analysiert Abhängigkeit, Manifest und Migrationslage. `--dry-run` zeigt dieselben Codes und die geplanten Dateiänderungen unter der Überschrift `Geplante Dateiänderungen`. Beide schreiben nicht. `--yes` zusammen mit `--check` oder `--dry-run` schreibt ebenfalls nicht.
@@ -45,13 +45,13 @@ Ohne `--yes` wird nichts geschrieben. Die Zustimmung ist dieses Flag, keine Rüc
 | `project.dependency.path` | Lokaler Pfad, auch `D:\…` und `D:/…` |
 | `project.dependency.git` | Git-Abhängigkeit |
 | `project.dependency.registry` | Registry-Abhängigkeit |
-| `project.dependency.unavailable` | Keine Ferrum-Abhängigkeit in `Cargo.toml` |
+| `project.dependency.unavailable` | Keine Ferrioxid-Abhängigkeit in `Cargo.toml` |
 | `upgrade.conflict` | Abbruch, keine Ersetzung |
 | `upgrade.unsafe_path` | Der Pfad verlässt das Projekt |
 
 ## Dateisicherheit
 
-Pfade müssen relativ sein und dürfen nur normale Komponenten enthalten. `..`, absolute Pfade und Laufwerkspräfixe werden `upgrade.unsafe_path`. Existiert das Ziel oder ein Vorfahre, wird der kanonische Pfad mit der kanonischen Projektwurzel verglichen. Eine Junction oder ein Symlink nach außen, auch für `.ferrum`, wird abgelehnt, bevor etwas geschrieben wird.
+Pfade müssen relativ sein und dürfen nur normale Komponenten enthalten. `..`, absolute Pfade und Laufwerkspräfixe werden `upgrade.unsafe_path`. Existiert das Ziel oder ein Vorfahre, wird der kanonische Pfad mit der kanonischen Projektwurzel verglichen. Eine Junction oder ein Symlink nach außen, auch für `.ferrioxid`, wird abgelehnt, bevor etwas geschrieben wird.
 
 Die neue Datei entsteht als `.ferrum/project.json.partial` und wird erst danach umbenannt. Liegt schon eine Partial-Datei, wandert sie nach `.ferrum/backup/<zeit>/`. Entsteht die Zieldatei zwischen Plan und Schreiben, bricht der Lauf ab und lässt die vorhandene Datei stehen. Ein Abbruch vor dem Umbenennen hinterlässt keine halbe `project.json`.
 
@@ -63,9 +63,9 @@ Konflikte verhindern auch das Anlegen des Manifests. Der Lauf endet dann mit Exi
 |---|---|
 | 0 | Plan ohne Dateikonflikt. Mit `--yes` wurde das Manifest angelegt oder es gab nichts zu tun |
 | 1 | Ungültiges Projekt, Konflikt, unsicherer Pfad oder Abbruch |
-| 2 | clap meldet eine ungültige Befehlszeile, bevor Ferrum den Plan baut |
+| 2 | clap meldet eine ungültige Befehlszeile, bevor Ferrioxid den Plan baut |
 
-Ausstehende Migrationen sind im Upgrade eine Empfehlung `ferrum migrate up`, kein Schreibfehler und kein angewendeter Schritt.
+Ausstehende Migrationen sind im Upgrade eine Empfehlung `ferrioxid migrate up`, kein Schreibfehler und kein angewendeter Schritt.
 
 ## Grenze
 

@@ -1,7 +1,7 @@
-use ferrum::prelude::*;
+use ferrioxid::prelude::*;
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "events",
     api = "/api/v1/events",
     admin = true,

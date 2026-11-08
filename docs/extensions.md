@@ -1,6 +1,6 @@
 # Erweiterbarkeit und Plugins – Entwurf (NICHT implementiert)
 
-[Zur Übersicht](index.md) · **Status:** ausschließlich SOLL. Keine `ferrum-plugins`-Crate, keine Hooks oder Laufzeitplugin-Engine in v0.1.
+[Zur Übersicht](index.md) · **Status:** ausschließlich SOLL. Keine `ferrioxid-plugins`-Crate, keine Hooks oder Laufzeitplugin-Engine in v0.1.
 
 ## Ziel und Designentscheidung
 
@@ -23,7 +23,7 @@
 2. Konkreten Erweiterungsfall auswählen (z. B. Custom Route).
 3. Kleinstes passendes Trait definieren, mit verständlichem Lifecycle.
 4. Failure-Handling und Tracing festlegen.
-5. Testen, dass eine Extension mit **nur** der öffentlichen Ferrum-Crate funktioniert.
+5. Testen, dass eine Extension mit **nur** der öffentlichen Ferrioxid-Crate funktioniert.
 
 ## Nicht im MVP
 

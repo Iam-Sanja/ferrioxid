@@ -1,10 +1,10 @@
 # Projektstruktur
 
-[Zur Übersicht](index.md) · Vorlagen: [project-templates.md](project-templates.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · **IST-Datei:** `crates/ferrum-cli/src/scaffold.rs`.
+[Zur Übersicht](index.md) · Vorlagen: [project-templates.md](project-templates.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · **IST-Datei:** `crates/ferrioxid-cli/src/scaffold.rs`.
 
 ## Aufgabe
 
-`ferrum new` legt ein Projekt außerhalb des Ferrum-Repositories an. Die Cargo-Version der Abhängigkeit bleibt die des Workspaces. Die Template-Version im Manifest ist `0.24`. `ferrum generate app` ergänzt danach `src/apps/<name>/`, beschrieben in [create-app.md](create-app.md). Der Generator neuer Projekte schreibt dieses Verzeichnis nicht mit.
+`ferrioxid new` legt ein Projekt außerhalb des Ferrioxid-Repositories an. Die Cargo-Version der Abhängigkeit bleibt die des Workspaces. Die Template-Version im Manifest ist `0.24`. `ferrioxid generate app` ergänzt danach `src/apps/<name>/`, beschrieben in [create-app.md](create-app.md). Der Generator neuer Projekte schreibt dieses Verzeichnis nicht mit.
 
 ## Fullstack
 
@@ -52,6 +52,6 @@ Es gibt kein zweites Settings-Modul neben `settings.rs`. Dieses Modul ruft nur `
 
 Ein Projekt, dessen `main.rs` `discover_project`, `App::new`, `register` und `merge` nutzt, muss diese Datei nicht umschreiben. `ferrum.toml` ohne `[custom]` bleibt gültig. Vorhandene Migrationen werden nicht verändert. `admin-ui` bleibt ein akzeptiertes Feature.
 
-`ferrum upgrade` ersetzt keine benutzerdefinierte Datei. Liegt die Template-Version nicht auf `0.24`, meldet der Plan `project.template.outdated` und lässt die Dateien stehen. Eine geänderte, im Manifest geführte Datei bleibt `project.file.modified`. Die Anpassung auf `src/settings.rs` und `src/urls.rs` ist manuell, wenn ein altes Projekt sie übernehmen will.
+`ferrioxid upgrade` ersetzt keine benutzerdefinierte Datei. Liegt die Template-Version nicht auf `0.24`, meldet der Plan `project.template.outdated` und lässt die Dateien stehen. Eine geänderte, im Manifest geführte Datei bleibt `project.file.modified`. Die Anpassung auf `src/settings.rs` und `src/urls.rs` ist manuell, wenn ein altes Projekt sie übernehmen will.
 
 Das Verzeichnis `D:\04_Projekte_Arbeit\Projekte\testprojekt` wird von dieser Vorlage nicht neu erzeugt und nicht verändert. Tests legen eigene temporäre Kopien an.

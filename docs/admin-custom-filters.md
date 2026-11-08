@@ -9,13 +9,13 @@
 Ein leerer Wert lässt den Filter weg. Ein Choice-Wert muss einer der festen Optionen entsprechen, sonst ist die Liste 422. Ein Equals-Wert wird nach dem Spaltentyp gebunden. Er wird nicht als SQL-Text eingesetzt. Suche, Sortierung, Datumshierarchie, Seitengröße und der Query-Scope der Objektregel bleiben zusätzlich aktiv.
 
 ```rust
-const STATUS: &[ferrum::admin::FilterOption] = &[
-    ferrum::admin::FilterOption::new("open", "Offen", "Open"),
-    ferrum::admin::FilterOption::new("processed", "Bearbeitet", "Processed"),
+const STATUS: &[ferrioxid::admin::FilterOption] = &[
+    ferrioxid::admin::FilterOption::new("open", "Offen", "Open"),
+    ferrioxid::admin::FilterOption::new("processed", "Bearbeitet", "Processed"),
 ];
 
 registry.filter(
-    ferrum::admin::AdminFilter::choice("orders", "order_status", "status", STATUS)
+    ferrioxid::admin::AdminFilter::choice("orders", "order_status", "status", STATUS)
         .labels("Status", "Status"),
 )?;
 ```

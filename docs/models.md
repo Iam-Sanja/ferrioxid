@@ -1,14 +1,14 @@
 # Modelle
 
-[Zur Übersicht](index.md) · Komponenten: [model-components.md](model-components.md) · Zeitstempel: [model-timestamps.md](model-timestamps.md) · **IST:** `FerrumModel` in `crates/ferrum-macros`.
+[Zur Übersicht](index.md) · Komponenten: [model-components.md](model-components.md) · Zeitstempel: [model-timestamps.md](model-timestamps.md) · **IST:** `FerrioxidModel` in `crates/ferrioxid-macros`.
 
-Ein Modell ist eine Rust-Struct mit `#[derive(FerrumModel)]`. Dieselbe Struct liefert Spalten, Repository, JSON, REST und Admin. Es gibt kein zweites Model-System.
+Ein Modell ist eine Rust-Struct mit `#[derive(FerrioxidModel)]`. Dieselbe Struct liefert Spalten, Repository, JSON, REST und Admin. Es gibt kein zweites Model-System.
 
 ```rust
-use ferrum::prelude::*;
+use ferrioxid::prelude::*;
 
-#[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-#[ferrum(
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
     table = "products",
     api = "/api/v1/products",
     allow_anonymous = true

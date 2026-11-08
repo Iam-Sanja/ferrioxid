@@ -4,19 +4,19 @@
 
 ## Zweck
 
-`ferrum-admin` veröffentlicht registrierte Modelle unter `/admin/api`, prüft Rechte und liefert die gebaute Oberfläche aus. Es gibt keine zweite ORM- und keine zweite Anmeldeimplementierung.
+`ferrioxid-admin` veröffentlicht registrierte Modelle unter `/admin/api`, prüft Rechte und liefert die gebaute Oberfläche aus. Es gibt keine zweite ORM- und keine zweite Anmeldeimplementierung.
 
 ## Dateien
 
 | Datei | Aufgabe |
 |---|---|
-| `crates/ferrum-admin/src/lib.rs` | `mount` |
-| `crates/ferrum-admin/src/registry.rs` | `AdminRegistry`, Adapter auf `ModelRepository` |
-| `crates/ferrum-admin/src/http.rs` | Routen, Schema, Verzeichnis |
-| `crates/ferrum-admin/src/assets.rs` | Dateiauslieferung, Pfadprüfung |
-| `crates/ferrum-db/src/sql.rs` | parameterisierte Listenabfrage |
+| `crates/ferrioxid-admin/src/lib.rs` | `mount` |
+| `crates/ferrioxid-admin/src/registry.rs` | `AdminRegistry`, Adapter auf `ModelRepository` |
+| `crates/ferrioxid-admin/src/http.rs` | Routen, Schema, Verzeichnis |
+| `crates/ferrioxid-admin/src/assets.rs` | Dateiauslieferung, Pfadprüfung |
+| `crates/ferrioxid-db/src/sql.rs` | parameterisierte Listenabfrage |
 
-Die Crate hängt von `ferrum-core`, `ferrum-db` und `ferrum-auth` ab, nicht von `ferrum-api`. `ferrum-api` ruft `ferrum_admin::mount` auf.
+Die Crate hängt von `ferrioxid-core`, `ferrioxid-db` und `ferrioxid-auth` ab, nicht von `ferrioxid-api`. `ferrioxid-api` ruft `ferrioxid_admin::mount` auf.
 
 ## Schnittstelle
 

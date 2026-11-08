@@ -1,4 +1,4 @@
-# Ferrum Roadmap – Status und nächste Phasen
+# Ferrioxid Roadmap – Status und nächste Phasen
 
 [Zur Übersicht](index.md) · Admin-Vergleich: [admin-django-parity.md](admin-django-parity.md) · UX-Backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
 
@@ -32,9 +32,9 @@ Langfristig soll der Admin die relevanten Funktionen des Django-Admins funktions
 | v0.22 | Abgeschlossen | Öffentliche Admin-Erweiterung: Seiten, Aktionen, Filter, Widgets, Vorlagen | Keine zweite Admin-Engine. PostgreSQL-Laufzeit ungetestet. Der rustc-Absturz bleibt ungeklärt |
 | v0.23 | Abgeschlossen | E-Mail-Dienst, Self-Service-Passwort-Reset, typisierte Hinweise | Keine Zustellgarantie. Kein Admin-Benachrichtigungscenter. PostgreSQL-Laufzeit ungetestet |
 | v0.24 | Abgeschlossen | Typisierte Settings, `[custom.*]`, `UrlSet`, View-Helfer, Generatorstruktur | `require_user` prüft kein CSRF. API-Vorlagen behalten HTML-Startseiten. PostgreSQL-Laufzeit ungetestet |
-| v0.25 | Abgeschlossen | `App::install`, App-Migrationen, Tera-`url`, App-Vorlagen und Staticfiles, `ferrum generate app` | `merge` eines rohen Routers sieht keine Namen. PostgreSQL-Laufzeit ungetestet |
+| v0.25 | Abgeschlossen | `App::install`, App-Migrationen, Tera-`url`, App-Vorlagen und Staticfiles, `ferrioxid generate app` | `merge` eines rohen Routers sieht keine Namen. PostgreSQL-Laufzeit ungetestet |
 | v0.27 | Abgeschlossen | Persistente Queue, Lease, begrenzte Retries, Worker, gewöhnliche Mail-Jobs | Cron fehlt. Reset-Tokens bleiben außerhalb der Queue. PostgreSQL-Laufzeit ungetestet |
-| v0.27.1 | Abgeschlossen | `WorkerHost`, `ferrum generate worker`, App-Handler, verdeckte Job-Payload | CLI-Worker lädt keinen Anwendungscode. Exactly once fehlt. PostgreSQL-Laufzeit ungetestet |
+| v0.27.1 | Abgeschlossen | `WorkerHost`, `ferrioxid generate worker`, App-Handler, verdeckte Job-Payload | CLI-Worker lädt keinen Anwendungscode. Exactly once fehlt. PostgreSQL-Laufzeit ungetestet |
 | v0.26 | Abgeschlossen | Geprüfter App-Start, Abgleich von Rust- und TOML-Migrationen, flache Feldgruppen, verwaltete Zeitstempel | Soft Delete fehlt. PostgreSQL-Laufzeit ungetestet |
 
 ## Offen nach v0.27.1
@@ -55,7 +55,7 @@ Langfristig soll der Admin die relevanten Funktionen des Django-Admins funktions
 - `views::fail` nutzt eine eigene HTML-Seite und nicht `templates/errors/`.
 - `require_user` authentifiziert weiterhin mit GET. Mutationen nutzen `require_mutation`.
 - Seit v0.26 vergleicht der Prozessstart beide Listen. Die CLI bleibt bei `ferrum.toml`.
-- `ferrum new` erzeugt noch kein `src/apps/`.
+- `ferrioxid new` erzeugt noch kein `src/apps/`.
 
 ## Offen nach v0.24
 
@@ -110,7 +110,7 @@ Geprüft am 2026-11-07: Impeccable liegt unter `.cursor/skills/impeccable/` und 
 | Skill | Einsatz, erst nach Prüfung | Nicht tun |
 |---|---|---|
 | Impeccable | Designkritik, Audit, Layout und Feinschliff des nativen Admins in v0.15 | Externe Installation ohne Zustimmung, dekorative Umbauten ohne Funktionsgewinn |
-| Cloudflare Security Audit | Gezielte Prüfung von CSRF, XSS, Sessions und Dateizugriff vor v0.16 und v0.18 | Blindes Übernehmen von Befunden ohne Abgleich mit dem Ferrum-Code |
+| Cloudflare Security Audit | Gezielte Prüfung von CSRF, XSS, Sessions und Dateizugriff vor v0.16 und v0.18 | Blindes Übernehmen von Befunden ohne Abgleich mit dem Ferrioxid-Code |
 | ub-mode | Architekturgrenzen und Tests für Verzeichnis und Audit | Neue Frameworks oder eine zweite CRUD-Engine |
 | Ponytail | Komplexität in `html.rs` und den Metadaten senken, wenn eine Phase sonst wächst | Verhalten streichen, das die Abnahme verlangt |
 

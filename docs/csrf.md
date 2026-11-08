@@ -8,17 +8,17 @@ Schreibende Cookie-Anfragen brauchen ein CSRF-Token, das an die gültige Sitzung
 
 ## Architektur
 
-Das Token ist ein HMAC-SHA256 über den festen Präfix `ferrum-csrf-v1`, die Sitzungs-ID und den SHA-256-Hex des Session-Tokens. Der Schlüssel ist 32 Byte. Dieselbe Sitzung ergibt deshalb immer dasselbe Token. `GET /auth/csrf` schreibt die Datenbank nicht. Seit v0.12 akzeptiert `authenticate_csrf` dasselbe Token aus einem HTML-Feld. `authenticate` liest weiter nur `x-csrf-token`. Eine Anfrage ohne Sitzungscookie bleibt für öffentliche Formulare ohne diese Prüfung.
+Das Token ist ein HMAC-SHA256 über den festen Präfix `ferrioxid-csrf-v1`, die Sitzungs-ID und den SHA-256-Hex des Session-Tokens. Der Schlüssel ist 32 Byte. Dieselbe Sitzung ergibt deshalb immer dasselbe Token. `GET /auth/csrf` schreibt die Datenbank nicht. Seit v0.12 akzeptiert `authenticate_csrf` dasselbe Token aus einem HTML-Feld. `authenticate` liest weiter nur `x-csrf-token`. Eine Anfrage ohne Sitzungscookie bleibt für öffentliche Formulare ohne diese Prüfung.
 
 Logout, Passwortwechsel und Ablauf widerrufen oder verwerfen die Sitzung. Danach schlägt die Prüfung fehl, bevor das Token überhaupt verglichen wird. Ein Token einer anderen Sitzung passt nicht, weil ID und Token-Hash in den HMAC eingehen.
 
 ## Verantwortliche Dateien
 
-- `crates/ferrum-auth/src/service.rs`
-- `crates/ferrum-auth/src/config.rs`
-- `crates/ferrum-auth/src/routes.rs`
-- `crates/ferrum-auth/src/cookie.rs`
-- `crates/ferrum-admin/src/html.rs`
+- `crates/ferrioxid-auth/src/service.rs`
+- `crates/ferrioxid-auth/src/config.rs`
+- `crates/ferrioxid-auth/src/routes.rs`
+- `crates/ferrioxid-auth/src/cookie.rs`
+- `crates/ferrioxid-admin/src/html.rs`
 
 ## Öffentliche APIs
 
@@ -27,7 +27,7 @@ Logout, Passwortwechsel und Ablauf widerrufen oder verwerfen die Sitzung. Danach
 - `GET /auth/csrf` liefert `{ "csrf_token": "..." }`
 - Header `x-csrf-token` bei unsicheren JSON-Methoden
 - HTML-Feld `csrf_token` mit demselben HMAC
-- Cookie `ferrum_login_csrf` nur für `POST /admin/login`, bevor eine Sitzung existiert. Es ist 64 Hex-Zeichen, HttpOnly, `Path=/`, SameSite aus der Auth-Konfiguration, `Secure` nur bei `cookie_secure` und `Max-Age=600`. Ein gültiges Cookie wird für weitere Tabs wiederverwendet.
+- Cookie `ferrioxid_login_csrf` nur für `POST /admin/login`, bevor eine Sitzung existiert. Es ist 64 Hex-Zeichen, HttpOnly, `Path=/`, SameSite aus der Auth-Konfiguration, `Secure` nur bei `cookie_secure` und `Max-Age=600`. Ein gültiges Cookie wird für weitere Tabs wiederverwendet.
 
 ## Datenfluss
 
@@ -43,8 +43,8 @@ Logout, Passwortwechsel und Ablauf widerrufen oder verwerfen die Sitzung. Danach
 - `Referrer-Policy: no-referrer` lässt Browser bei einem HTML-Formular-POST `Origin: null` senden, auch wenn die Seite same-origin ist. Das gilt nur, wenn zusätzlich `Sec-Fetch-Site: same-origin` steht. Diesen Header kann eine Seite nicht selbst setzen. `null` mit `cross-site`, `same-site` oder ohne diesen Header bleibt abgelehnt. `null` steht nicht auf der Allowlist.
 - Das Session-Cookie bleibt `HttpOnly`.
 - Der Vergleich nutzt `constant_eq`.
-- Entwicklung verwendet den festen Schlüssel `ferrum-dev-csrf-secret-32-bytes!`.
-- `FERRUM_CSRF_SECRET` ist 64 Hex-Zeichen. Sonst liest Ferrum `.ferrum/csrf.key` und legt die Datei einmal an, wenn sie fehlt. Produktion soll die Umgebungsvariable setzen, damit ein Neustart nicht alle Sitzungen ungültig macht.
+- Entwicklung verwendet den festen Schlüssel `ferrioxid-dev-csrf-secret-32-bytes!`.
+- `FERRUM_CSRF_SECRET` ist 64 Hex-Zeichen. Sonst liest Ferrioxid `.ferrum/csrf.key` und legt die Datei einmal an, wenn sie fehlt. Produktion soll die Umgebungsvariable setzen, damit ein Neustart nicht alle Sitzungen ungültig macht.
 - Anonyme Demo-Schreibrouten prüfen kein CSRF. Sie hängen nicht am Cookie.
 
 ## Fehlerfälle
@@ -66,10 +66,10 @@ assert_eq!(token, again);
 
 ```http
 GET /auth/csrf
-Cookie: ferrum_session=...
+Cookie: ferrioxid_session=...
 
 POST /admin/api/models/admin_products/records
-Cookie: ferrum_session=...
+Cookie: ferrioxid_session=...
 x-csrf-token: ...
 ```
 

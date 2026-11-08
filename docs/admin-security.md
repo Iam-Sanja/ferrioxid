@@ -25,7 +25,7 @@ Ein aktiver Superuser überspringt Modellrechte, wenn die Ressource gesetzt ist.
 
 `GET /auth/csrf` funktioniert nur mit gültiger Sitzung. Origin oder Referer müssen erlaubt sein, wenn sie gesendet werden. Ein fehlender Origin ist erlaubt, weil keine offene CORS-Policy existiert. Der Aufruf berechnet dasselbe HMAC-Token erneut. Sitzungstoken und Ablauf bleiben. Gleichzeitige Tabs bleiben gültig. Details stehen in [csrf.md](csrf.md).
 
-Die HTML-Anmeldung prüft zusätzlich `ferrum_login_csrf` gegen das Formularfeld. Die erlaubten Origins folgen der Bind-Adresse und nicht einem fest verdrahteten Port 3000. Der Host-Header wird dafür nicht gelesen. Logs enthalten den Grundcode, nicht das Cookie und nicht das Token.
+Die HTML-Anmeldung prüft zusätzlich `ferrioxid_login_csrf` gegen das Formularfeld. Die erlaubten Origins folgen der Bind-Adresse und nicht einem fest verdrahteten Port 3000. Der Host-Header wird dafür nicht gelesen. Logs enthalten den Grundcode, nicht das Cookie und nicht das Token.
 
 Das Token steht nicht in `localStorage` und nicht in der URL. Das Sitzungscookie bleibt `HttpOnly`.
 

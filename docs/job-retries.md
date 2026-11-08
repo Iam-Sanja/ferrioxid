@@ -19,16 +19,16 @@ Die Wartezeit in Sekunden ist `min(300, 2^(attempt-1))`. Der erste Fehlversuch w
 ## Operator
 
 ```powershell
-ferrum jobs list
-ferrum jobs inspect <job-id>
-ferrum jobs retry <job-id> --yes
-ferrum jobs cancel <job-id> --yes
+ferrioxid jobs list
+ferrioxid jobs inspect <job-id>
+ferrioxid jobs retry <job-id> --yes
+ferrioxid jobs cancel <job-id> --yes
 ```
 
 `list` und `inspect` öffnen SQLite mit `mode=ro` und schreiben nicht. `retry` gilt für `failed` und `cancelled`. Es setzt `pending`, `attempts = 0` und löscht Lease und Fehlercode. `cancel` gilt für `pending` und `retry`. Ein `running` Job bleibt unangetastet und liefert `job.running`.
 
-Ohne `--yes` ist der Exitcode 2 und die Datenbank bleibt unverändert. Die Berechtigung ist die des lokalen Operators, dieselbe Vertrauensgrenze wie `ferrum migrate up`. Es gibt keinen HTTP-Endpunkt dafür.
+Ohne `--yes` ist der Exitcode 2 und die Datenbank bleibt unverändert. Die Berechtigung ist die des lokalen Operators, dieselbe Vertrauensgrenze wie `ferrioxid migrate up`. Es gibt keinen HTTP-Endpunkt dafür.
 
 ## Intervalle
 
-Nur ein erfolgreicher Abschluss plant die nächste Fälligkeit. Ein dauerhaft fehlgeschlagenes Intervall erzeugt keine weiteren Zeilen. `ferrum jobs retry --yes` öffnet dieselbe Zeile wieder. Zwei Einträge mit demselben `schedule_key` liefert der zweite Aufruf als `EnqueueOutcome::Existing`.
+Nur ein erfolgreicher Abschluss plant die nächste Fälligkeit. Ein dauerhaft fehlgeschlagenes Intervall erzeugt keine weiteren Zeilen. `ferrioxid jobs retry --yes` öffnet dieselbe Zeile wieder. Zwei Einträge mit demselben `schedule_key` liefert der zweite Aufruf als `EnqueueOutcome::Existing`.

@@ -1,10 +1,10 @@
 # Eigene Settings
 
-[Zur Übersicht](index.md) · Gemeinsame Datei: [settings.md](settings.md) · **IST-Datei:** `crates/ferrum-migrations/src/project.rs`.
+[Zur Übersicht](index.md) · Gemeinsame Datei: [settings.md](settings.md) · **IST-Datei:** `crates/ferrioxid-migrations/src/project.rs`.
 
 ## Aufgabe
 
-Anwendungswerte stehen unter `[custom.<name>]`. Ferrum speichert sie am gelesenen `ProjectConfig` und wandelt einen Abschnitt in eine Struktur um, die `serde::Deserialize` implementiert. Es gibt keinen zweiten Parser und kein Singleton.
+Anwendungswerte stehen unter `[custom.<name>]`. Ferrioxid speichert sie am gelesenen `ProjectConfig` und wandelt einen Abschnitt in eine Struktur um, die `serde::Deserialize` implementiert. Es gibt keinen zweiten Parser und kein Singleton.
 
 ## Datei
 
@@ -27,7 +27,7 @@ struct ShopSettings {
     open: bool,
 }
 
-let settings = ferrum::migrations::Settings::discover(std::path::Path::new("."))?;
+let settings = ferrioxid::migrations::Settings::discover(std::path::Path::new("."))?;
 let shop: ShopSettings = settings.project().custom_settings("shop")?;
 ```
 

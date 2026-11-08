@@ -1,7 +1,7 @@
 {
   "schemaVersion": 2,
   "generatedAt": "2026-11-07T13:30:00+01:00",
-  "title": "Design System: Ferrum",
+  "title": "Design System: Ferrioxid",
   "extensions": {
     "colorMeta": {
       "slate-door": {
@@ -192,7 +192,7 @@
       "kind": "nav",
       "refersTo": "sidebar",
       "description": "Tür mit Anwendungsnamen und Blocklinks. Fokusring auf der Tür ist weiß.",
-      "html": "<nav class=\"ds-side\" aria-label=\"Verwaltung\"><p class=\"ds-side-brand\">Ferrum</p><a href=\"#\">Übersicht</a><a href=\"#\">Modelle</a></nav>",
+      "html": "<nav class=\"ds-side\" aria-label=\"Verwaltung\"><p class=\"ds-side-brand\">Ferrioxid</p><a href=\"#\">Übersicht</a><a href=\"#\">Modelle</a></nav>",
       "css": ".ds-side { background: var(--sidebar, #0f172a); color: var(--sidebar-ink, #ffffff); padding: 1.25rem; width: 16rem; font-family: \"Segoe UI\", sans-serif; } .ds-side-brand { font-weight: 700; margin: 0 0 1rem; } .ds-side a { color: var(--sidebar-ink, #ffffff); display: block; padding: 0.45rem 0; text-decoration: none; } .ds-side a:hover { text-decoration: none; } .ds-side a:focus, .ds-side a:focus-visible { outline: 2px solid #ffffff; outline-offset: 2px; }"
     },
     {

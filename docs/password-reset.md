@@ -2,7 +2,7 @@
 
 [Zur Übersicht](index.md) · Auth: [auth.md](auth.md) · E-Mail: [mail.md](mail.md) · Sicherheit: [mail-security.md](mail-security.md)
 
-**Stand:** v0.23. Die Cargo-Version bleibt `0.1.0`. Die Migration ist `crates/ferrum-auth/migrations/0004_password_reset.json`. `0001`, `0002` und `0003` bleiben unverändert.
+**Stand:** v0.23. Die Cargo-Version bleibt `0.1.0`. Die Migration ist `crates/ferrioxid-auth/migrations/0004_password_reset.json`. `0001`, `0002` und `0003` bleiben unverändert.
 
 ## Routen
 
@@ -10,13 +10,13 @@
 
 | Methode | Pfad | Ergebnis |
 |---|---|---|
-| `GET` | `/auth/password-reset` | Formular, Cookie `ferrum_reset_csrf` |
+| `GET` | `/auth/password-reset` | Formular, Cookie `ferrioxid_reset_csrf` |
 | `POST` | `/auth/password-reset` | Dieselbe Annahme für bekannte und unbekannte Adressen |
-| `GET` | `/auth/password-reset/confirm?token=` | Tauscht einen gültigen Token gegen Cookie `ferrum_reset` und antwortet 303 auf `/auth/password-reset/choose` |
+| `GET` | `/auth/password-reset/confirm?token=` | Tauscht einen gültigen Token gegen Cookie `ferrioxid_reset` und antwortet 303 auf `/auth/password-reset/choose` |
 | `GET` | `/auth/password-reset/choose` | Passwort und Wiederholung |
 | `POST` | `/auth/password-reset/choose` | Setzt das Passwort oder zeigt einen sichtbaren Fehler |
 
-Die öffentliche Annahme lautet: „Wenn ein Konto mit dieser Adresse existiert, wurde eine E-Mail mit weiteren Schritten angefordert.“ Englisch: „If an account with this address exists, an email with further steps was requested.“ Unbekannte Adresse, deaktiviertes Konto, ungültige Adresse, Rate-Limit, fehlendes Mail-Backend, ungeeigneter Origin und Versandfehler liefern dieselbe Seite. Ferrum kennt kein separates „nicht verifiziert“. `is_active = false` wird wie eine unbekannte Adresse behandelt und erhält keine E-Mail. CSRF- oder Origin-Fehler sind 403 und nennen die Adresse nicht. Ohne Auth-Dienst antwortet POST mit 404. Ein Körper über 8 KiB ist 403.
+Die öffentliche Annahme lautet: „Wenn ein Konto mit dieser Adresse existiert, wurde eine E-Mail mit weiteren Schritten angefordert.“ Englisch: „If an account with this address exists, an email with further steps was requested.“ Unbekannte Adresse, deaktiviertes Konto, ungültige Adresse, Rate-Limit, fehlendes Mail-Backend, ungeeigneter Origin und Versandfehler liefern dieselbe Seite. Ferrioxid kennt kein separates „nicht verifiziert“. `is_active = false` wird wie eine unbekannte Adresse behandelt und erhält keine E-Mail. CSRF- oder Origin-Fehler sind 403 und nennen die Adresse nicht. Ohne Auth-Dienst antwortet POST mit 404. Ein Körper über 8 KiB ist 403.
 
 Die Seiten sind serverseitiges HTML ohne externe Datei und ohne JavaScript. `Referrer-Policy` ist `no-referrer`. Die Content-Security-Policy erlaubt kein externes Asset. Der Admin-Login bleibt unverändert und enthält keinen zusätzlichen Link.
 
@@ -35,8 +35,8 @@ Höchstens drei unbenutzte, nicht abgelaufene Tokens bleiben je Benutzer. Eine n
 Die Reset-URL entsteht aus `public_origin`, nie aus dem Host-Header.
 
 ```rust
-use ferrum::auth::{complete_reset, exchange_token, request_reset};
-use ferrum::mail::MailService;
+use ferrioxid::auth::{complete_reset, exchange_token, request_reset};
+use ferrioxid::mail::MailService;
 
 let (mail, inbox) = MailService::memory("noreply@example.com", "http://127.0.0.1:3000");
 request_reset(&auth, Some(&mail), "person@example.com", "203.0.113.10", "de").await;

@@ -1,5 +1,5 @@
 name: Bug report
-description: Report a defect in Ferrum with enough detail to reproduce it.
+description: Report a defect in Ferrioxid with enough detail to reproduce it.
 title: "fix: "
 body:
   - type: markdown
@@ -69,6 +69,6 @@ body:
     id: reproduction
     attributes:
       label: Minimal reproduction
-      description: A small Ferrum project or test is welcome. Do not attach a real user database.
+      description: A small Ferrioxid project or test is welcome. Do not attach a real user database.
     validations:
       required: false

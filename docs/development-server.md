@@ -1,28 +1,28 @@
 # Entwicklungsserver
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-cli/src/develop.rs`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-cli/src/develop.rs`.
 
 ## Aufgabe
 
-`ferrum dev` übersetzt das Projekt, startet die Binary und startet sie nach relevanten Dateiänderungen neu. `ferrum build` erzeugt einen Release-Build.
+`ferrioxid dev` übersetzt das Projekt, startet die Binary und startet sie nach relevanten Dateiänderungen neu. `ferrioxid build` erzeugt einen Release-Build.
 
 ## Zuständige Dateien
 
-- `crates/ferrum-cli/src/develop.rs`
-- `crates/ferrum-cli/src/main.rs`
+- `crates/ferrioxid-cli/src/develop.rs`
+- `crates/ferrioxid-cli/src/main.rs`
 
 ## Öffentliche Schnittstelle
 
 ```powershell
-ferrum dev
-ferrum build
+ferrioxid dev
+ferrioxid build
 ```
 
 Beide Befehle lesen `ferrum.toml` im Arbeitsverzeichnis oder einem Elternverzeichnis.
 
 ## Konfiguration
 
-`BIND_ADDRESS` und `DATABASE_URL` gelten für den gestarteten Prozess. Vor dem Build prüft `ferrum dev` die Migrationslage nur lesend. Ausstehende Migrationen oder eine nicht prüfbare Datenbank ergeben eine Warnung und keinen Abbruch. Es wird nichts migriert. `ferrum build` und `ferrum dev` starten kein Node.js. Der Admin ist im Rust-Binary enthalten. Die Warnung beschreibt [migration-diagnostics.md](migration-diagnostics.md).
+`BIND_ADDRESS` und `DATABASE_URL` gelten für den gestarteten Prozess. Vor dem Build prüft `ferrioxid dev` die Migrationslage nur lesend. Ausstehende Migrationen oder eine nicht prüfbare Datenbank ergeben eine Warnung und keinen Abbruch. Es wird nichts migriert. `ferrioxid build` und `ferrioxid dev` starten kein Node.js. Der Admin ist im Rust-Binary enthalten. Die Warnung beschreibt [migration-diagnostics.md](migration-diagnostics.md).
 
 ## Datenfluss
 
@@ -48,18 +48,18 @@ Der Wächter startet keine Shell mit dem Dateinamen. Kindprozesse werden beim Be
 Windows und Linux:
 
 ```powershell
-ferrum dev
+ferrioxid dev
 ```
 
 ```bash
-ferrum dev
+ferrioxid dev
 ```
 
 Beenden in beiden Fällen mit Strg+C.
 
 ## Tests
 
-Die Integration in `crates/ferrum-cli/tests/generator.rs` setzt `FERRUM_DEV_EXIT_MS` und prüft, dass der Server lauscht und der Prozess danach endet. Ein Unit-Test prüft, dass Pfade unter `target` und `node_modules` nicht relevant sind. Ein weiterer Unit-Test beendet einen Kindprozess.
+Die Integration in `crates/ferrioxid-cli/tests/generator.rs` setzt `FERRUM_DEV_EXIT_MS` und prüft, dass der Server lauscht und der Prozess danach endet. Ein Unit-Test prüft, dass Pfade unter `target` und `node_modules` nicht relevant sind. Ein weiterer Unit-Test beendet einen Kindprozess.
 
 ## Einschränkungen
 

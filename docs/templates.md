@@ -1,20 +1,20 @@
 # Vorlagen
 
-[Zur Übersicht](index.md) · **IST-Dateien:** `crates/ferrum-api/src/pages.rs`, `crates/ferrum-cli/src/scaffold.rs`.
+[Zur Übersicht](index.md) · **IST-Dateien:** `crates/ferrioxid-api/src/pages.rs`, `crates/ferrioxid-cli/src/scaffold.rs`.
 
 ## Aufgabe
 
-Normale Seiten außerhalb des Admins werden serverseitig mit Tera gerendert. Die Admin-Vorlagen liegen getrennt in `crates/ferrum-admin/templates` und werden nicht aus dem Projektordner geladen. Siehe [admin-templates.md](admin-templates.md). Tera entspricht dem Jinja- und Django-Modell: Vererbung über `extends`, Bausteine über `include`, Variablen in `{{ }}`. Formular-HTML aus `ferrum::forms::render_form` ist zusätzlich verfügbar und escaped Feldwerte. Die Kontaktseite des Generators und von myshop nutzt diesen Weg. Das Stylesheet liegt unter `/static/css/app.css`.
+Normale Seiten außerhalb des Admins werden serverseitig mit Tera gerendert. Die Admin-Vorlagen liegen getrennt in `crates/ferrioxid-admin/templates` und werden nicht aus dem Projektordner geladen. Siehe [admin-templates.md](admin-templates.md). Tera entspricht dem Jinja- und Django-Modell: Vererbung über `extends`, Bausteine über `include`, Variablen in `{{ }}`. Formular-HTML aus `ferrioxid::forms::render_form` ist zusätzlich verfügbar und escaped Feldwerte. Die Kontaktseite des Generators und von myshop nutzt diesen Weg. Das Stylesheet liegt unter `/static/css/app.css`.
 
 ## Zuständige Dateien
 
-- `crates/ferrum-api/src/pages.rs`
-- `crates/ferrum/src/lib.rs`
+- `crates/ferrioxid-api/src/pages.rs`
+- `crates/ferrioxid/src/lib.rs`
 - `templates/` im generierten Projekt
 
 ## Öffentliche Schnittstelle
 
-`ferrum::pages::Site::open` lädt `**/*.html`. `render` erzeugt eine Seite. `home_context` füllt Projektname, Sprache, Admin-Flag und die kurzen Standardtexte. `mount_pages` hängt `/` und eine 404-Antwort an den Router, wenn `templates.enabled` wahr ist. Pro Anfrage wählt `negotiate_locale` die Sprache. `message` liefert die vorbereiteten Texte für `de` und `en`, darunter Willkommen, 404 und 500. Eine unbekannte Locale fällt auf Englisch zurück und wird nicht als Pfad verwendet.
+`ferrioxid::pages::Site::open` lädt `**/*.html`. `render` erzeugt eine Seite. `home_context` füllt Projektname, Sprache, Admin-Flag und die kurzen Standardtexte. `mount_pages` hängt `/` und eine 404-Antwort an den Router, wenn `templates.enabled` wahr ist. Pro Anfrage wählt `negotiate_locale` die Sprache. `message` liefert die vorbereiteten Texte für `de` und `en`, darunter Willkommen, 404 und 500. Eine unbekannte Locale fällt auf Englisch zurück und wird nicht als Pfad verwendet.
 
 ## Konfiguration
 
@@ -57,4 +57,4 @@ Die Anwendung lädt die Einstellungen, öffnet das Vorlagenverzeichnis und rende
 
 ## Einschränkungen
 
-Panics werden nicht automatisch zur 500-Seite. `ferrum dev` lädt Vorlagen beim Prozessstart neu, nicht bei jedem Speichern ohne Neustart. Eine Änderung einer Rust-Datei startet den Prozess neu und lädt die Vorlagen damit erneut. `include` für Partials ist möglich, der Generator legt aber noch keine eigene Partial-Datei an. Die Basisvorlage ist das gemeinsame Layout.
+Panics werden nicht automatisch zur 500-Seite. `ferrioxid dev` lädt Vorlagen beim Prozessstart neu, nicht bei jedem Speichern ohne Neustart. Eine Änderung einer Rust-Datei startet den Prozess neu und lädt die Vorlagen damit erneut. `include` für Partials ist möglich, der Generator legt aber noch keine eigene Partial-Datei an. Die Basisvorlage ist das gemeinsame Layout.

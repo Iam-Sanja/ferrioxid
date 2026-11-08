@@ -1,6 +1,6 @@
 # Projektvorlagen
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-cli/src/scaffold.rs`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-cli/src/scaffold.rs`.
 
 ## Aufgabe
 
@@ -8,10 +8,10 @@ Zwei Vorlagen unterscheiden eine reine API von einer Anwendung mit Authentifizie
 
 ## Zuständige Dateien
 
-- `crates/ferrum-cli/src/scaffold.rs`
-- `crates/ferrum-cli/src/models.rs`
-- `crates/ferrum/Cargo.toml` (`admin-ui`)
-- `crates/ferrum-admin/Cargo.toml` (`embedded-admin`)
+- `crates/ferrioxid-cli/src/scaffold.rs`
+- `crates/ferrioxid-cli/src/models.rs`
+- `crates/ferrioxid/Cargo.toml` (`admin-ui`)
+- `crates/ferrioxid-admin/Cargo.toml` (`embedded-admin`)
 
 ## Öffentliche Schnittstelle
 
@@ -57,7 +57,7 @@ Beide Vorlagen aktivieren Tera und eine Startseite. API: `admin.enabled` und `em
 
 ## Datenfluss
 
-`ferrum generate model Customer` schreibt `src/models/customer.rs` und ergänzt Zeilen vor den Markierungen `ferrum:models`, `ferrum:uses`, `ferrum:schema`, `ferrum:registry` und, falls vorhanden, `ferrum:admin`. Die Tabelle heißt `customers`. Ein zweiter Aufruf desselben Namens ändert nichts und endet mit einem Fehler.
+`ferrioxid generate model Customer` schreibt `src/models/customer.rs` und ergänzt Zeilen vor den Markierungen `ferrum:models`, `ferrioxid:uses`, `ferrioxid:schema`, `ferrioxid:registry` und, falls vorhanden, `ferrioxid:admin`. Die Tabelle heißt `customers`. Ein zweiter Aufruf desselben Namens ändert nichts und endet mit einem Fehler.
 
 ## Fehlerfälle
 
@@ -70,9 +70,9 @@ Die API-Vorlage verlangt das Admin-Feature nicht und hängt keine Admin-Routen e
 ## Beispiel
 
 ```powershell
-ferrum new shop --template api --ferrum-path D:\04_Projekte_Arbeit\Projekte\ferrum
+ferrioxid new shop --template api --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
 cd shop
-ferrum generate model Customer
+ferrioxid generate model Customer
 ```
 
 ## Tests
@@ -81,4 +81,4 @@ ferrum generate model Customer
 
 ## Einschränkungen
 
-Besitzerfelder werden nicht automatisch aus der Sitzung gesetzt. Das ist geplant. Die Vorlage enthält ein anonymes Produktbeispiel, keine Objektregel. Authentifizierung im Fullstack-Projekt muss der Entwickler mit `ferrum admin create-user` und Rollen vervollständigen.
+Besitzerfelder werden nicht automatisch aus der Sitzung gesetzt. Das ist geplant. Die Vorlage enthält ein anonymes Produktbeispiel, keine Objektregel. Authentifizierung im Fullstack-Projekt muss der Entwickler mit `ferrioxid admin create-user` und Rollen vervollständigen.

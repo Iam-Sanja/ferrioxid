@@ -4,11 +4,11 @@
 
 ## Zweck
 
-Eine Objektregel soll Listen in der Datenbank einschränken. Ferrum lädt nicht alle Zeilen, um sie danach im Prozess zu filtern.
+Eine Objektregel soll Listen in der Datenbank einschränken. Ferrioxid lädt nicht alle Zeilen, um sie danach im Prozess zu filtern.
 
 ## Architektur
 
-`QueryScope` liegt in `ferrum-core`, damit Datenbank, API und Admin dieselbe Darstellung nutzen.
+`QueryScope` liegt in `ferrioxid-core`, damit Datenbank, API und Admin dieselbe Darstellung nutzen.
 
 ```rust
 pub enum QueryScope {
@@ -22,13 +22,13 @@ pub enum QueryScope {
 
 ## Verantwortliche Dateien
 
-- `crates/ferrum-core/src/lib.rs`
-- `crates/ferrum-auth/src/policy.rs`
-- `crates/ferrum-db/src/sql.rs`
-- `crates/ferrum-macros/src/lib.rs`
-- `crates/ferrum-api/src/lib.rs`
-- `crates/ferrum-admin/src/registry.rs`
-- `crates/ferrum-admin/src/http.rs`
+- `crates/ferrioxid-core/src/lib.rs`
+- `crates/ferrioxid-auth/src/policy.rs`
+- `crates/ferrioxid-db/src/sql.rs`
+- `crates/ferrioxid-macros/src/lib.rs`
+- `crates/ferrioxid-api/src/lib.rs`
+- `crates/ferrioxid-admin/src/registry.rs`
+- `crates/ferrioxid-admin/src/http.rs`
 
 ## Öffentliche APIs
 

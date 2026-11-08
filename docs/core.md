@@ -1,14 +1,14 @@
-# ferrum-core – Verträge und Modellmetadaten
+# ferrioxid-core – Verträge und Modellmetadaten
 
-[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrum-core/src/lib.rs`.
+[Zur Übersicht](index.md) · **IST-Datei:** `crates/ferrioxid-core/src/lib.rs`.
 
 ## Authentifizierung (v0.7)
 
-`permission` ist `None`, `"authenticated"` oder ein Ressourcenname. `requires_object_policy` markiert Modelle, deren Einzelzugriff eine gebundene `ObjectPolicy` braucht. `FerrumError` hat zusätzlich `Denied(String)` und `Unauthorized(String)`. Die HTTP-Zuordnung steht in [api.md](api.md).
+`permission` ist `None`, `"authenticated"` oder ein Ressourcenname. `requires_object_policy` markiert Modelle, deren Einzelzugriff eine gebundene `ObjectPolicy` braucht. `FerrioxidError` hat zusätzlich `Denied(String)` und `Unauthorized(String)`. Die HTTP-Zuordnung steht in [api.md](api.md).
 
 ## Verantwortung
 
-`ferrum-core` enthält die gemeinsamen, von HTTP und ORM unabhängigen Vertragstypen. Die Crate darf **keine** Abhängigkeit auf `ferrum-api`, Axum oder eine konkrete Datenbankanbindung annehmen. Seit v0.12 liegen die Formularfeldregeln in `validation.rs`. Das Modellmakro ruft sie noch nicht auf. Die Beschreibung steht in [forms-validation.md](forms-validation.md).
+`ferrioxid-core` enthält die gemeinsamen, von HTTP und ORM unabhängigen Vertragstypen. Die Crate darf **keine** Abhängigkeit auf `ferrioxid-api`, Axum oder eine konkrete Datenbankanbindung annehmen. Seit v0.12 liegen die Formularfeldregeln in `validation.rs`. Das Modellmakro ruft sie noch nicht auf. Die Beschreibung steht in [forms-validation.md](forms-validation.md).
 
 ## Tatsächliche öffentliche Typen (IST)
 
@@ -40,13 +40,13 @@ pub struct TableConstraints {
     pub unique_groups: &'static [&'static [&'static str]],
     pub index_groups: &'static [&'static [&'static str]],
 }
-pub trait FerrumModel: Send + Sync + 'static {
+pub trait FerrioxidModel: Send + Sync + 'static {
     fn descriptor() -> &'static ModelDescriptor;
     fn columns() -> &'static [ColumnSpec];
     fn constraints() -> &'static TableConstraints;
     fn schema_sql(kind: DatabaseKind) -> String;
 }
-pub enum FerrumError {
+pub enum FerrioxidError {
     Validation(String),
     Forbidden,
     NotFound,
@@ -54,7 +54,7 @@ pub enum FerrumError {
 }
 ```
 
-Hinweis: Das obige `Error` ist zur Lesbarkeit abgekürzt; in der Quelldatei steht `std::error::Error` vollständig. Der Helfer `FerrumError::database(error)` konvertiert beliebige kompatible Fehler zu `Database`.
+Hinweis: Das obige `Error` ist zur Lesbarkeit abgekürzt; in der Quelldatei steht `std::error::Error` vollständig. Der Helfer `FerrioxidError::database(error)` konvertiert beliebige kompatible Fehler zu `Database`.
 
 ### Semantik
 
@@ -76,7 +76,7 @@ Hinweis: Das obige `Error` ist zur Lesbarkeit abgekürzt; in der Quelldatei steh
 | `NotFound` | Zeile fehlt | 404 |
 | `Database` | Datenbank, Query oder Daten-Deserialisierung | 500, internes Detail nur im Log |
 
-Die Umwandlung zu HTTP findet **nicht** in `ferrum-core`, sondern ausschließlich in `ferrum-api` statt; siehe [api.md](api.md).
+Die Umwandlung zu HTTP findet **nicht** in `ferrioxid-core`, sondern ausschließlich in `ferrioxid-api` statt; siehe [api.md](api.md).
 
 ## Erweiterungsentwurf (SOLL)
 
@@ -98,8 +98,8 @@ Designregeln: Spaltenmetadaten bleiben die kanonische Darstellung. SQL entsteht 
 
 ## NotFound (IST)
 
-`FerrumError::NotFound` ist der Fehler für fehlende Ressourcen. Die Axum-Adapter liefern dafür `404` mit demselben JSON-Format wie für `Validation` und `Forbidden`.
+`FerrioxidError::NotFound` ist der Fehler für fehlende Ressourcen. Die Axum-Adapter liefern dafür `404` mit demselben JSON-Format wie für `Validation` und `Forbidden`.
 
 ## Admin-Metadaten
 
-`FerrumModel::admin_meta` liefert standardmäßig `None`. Das Makro überschreibt die Methode nur bei `admin = true`. `AdminModelMeta` und `AdminFieldMeta` stehen neben `ModelDescriptor` und ändern keine Spalte. Sensible Felder bleiben über den Namen erkennbar und werden von der Admin-API entfernt. Tests: `examples/myshop/tests/admin_http.rs`. Grenze: die Metadaten beschreiben die Oberfläche, nicht einen zweiten Schema-Snapshot.
+`FerrioxidModel::admin_meta` liefert standardmäßig `None`. Das Makro überschreibt die Methode nur bei `admin = true`. `AdminModelMeta` und `AdminFieldMeta` stehen neben `ModelDescriptor` und ändern keine Spalte. Sensible Felder bleiben über den Namen erkennbar und werden von der Admin-API entfernt. Tests: `examples/myshop/tests/admin_http.rs`. Grenze: die Metadaten beschreiben die Oberfläche, nicht einen zweiten Schema-Snapshot.

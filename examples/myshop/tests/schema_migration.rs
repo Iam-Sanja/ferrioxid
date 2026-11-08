@@ -1,8 +1,8 @@
 //! `0001_initial.json` bleibt an das Produktmodell gebunden, das beim Anlegen dieser Datei galt.
 //! Das aktuelle Product hat `category_id` und wird durch `0002_categories_and_product_relations.json` abgebildet.
 
-use ferrum::core::FerrumModel;
-use ferrum::migrations::{
+use ferrioxid::core::FerrioxidModel;
+use ferrioxid::migrations::{
     load_migration, make_migration, plan_change, seal, RegisteredModel, SchemaSnapshot,
 };
 use myshop::models::category::Category;
@@ -14,10 +14,10 @@ use myshop::models::product::Product as LiveProduct;
 use myshop_schema::Product;
 
 mod myshop_schema {
-    use ferrum::prelude::*;
+    use ferrioxid::prelude::*;
 
-    #[derive(FerrumModel, ferrum::serde::Serialize, ferrum::serde::Deserialize)]
-    #[ferrum(table = "products", api = "/api/v1/products", allow_anonymous = true)]
+    #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+    #[ferrioxid(table = "products", api = "/api/v1/products", allow_anonymous = true)]
     pub struct Product {
         #[field(primary_key, auto)]
         pub id: Uuid,
@@ -103,7 +103,7 @@ fn events_migration_adds_date_time_columns_without_rewriting_history() {
             .unwrap()
             .logical_type
     };
-    use ferrum::migrations::LogicalType;
+    use ferrioxid::migrations::LogicalType;
     assert_eq!(kind("event_date"), LogicalType::Date);
     assert_eq!(kind("start_time"), LogicalType::Time);
     assert_eq!(kind("created_at"), LogicalType::DateTime);
