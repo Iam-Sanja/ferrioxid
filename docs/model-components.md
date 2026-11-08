@@ -1,12 +1,12 @@
 # Reusable model fields
 
-[Zur Übersicht](index.md) · Modelle: [models.md](models.md) · Zeitstempel: [model-timestamps.md](model-timestamps.md)
+[Overview](index.md) · Models: [models.md](models.md) · Timestamps: [model-timestamps.md](model-timestamps.md)
 
-**ACT.** Functional status v0.26. A field group is not a table, a REST route and an admin registration.
+**Implemented.** Milestone v0.26. A field group creates no table, REST route or admin registration.
 
-Rust cannot reliably look up the fields of another type in a Derive. Ferrioxide therefore inserts the fields into the concrete structure with a macro before `FerrioxidModel` sees them. The stored columns are flat.
+A derive macro cannot reliably inspect another type’s fields. Ferrioxid uses a separate macro to insert fields into a concrete struct before `FerrioxidModel` processes it. The resulting database columns are flat.
 
-## Eigene Feldgruppe
+## Custom field group
 
 ```rust
 use ferrioxid::prelude::*;
@@ -32,7 +32,7 @@ ferrioxid_fields_AuditStamp! {
 }
 ```
 
-`model_fields!` generates the structure `AuditStamp` without table and the macro `ferrioxid_fields_AuditStamp!` in the same crate. The macro copies the fields in `Product`. A second structure can use the same macro and get the same columns in another table.
+`model_fields!` generates an `AuditStamp` struct without a table and a `ferrioxid_fields_AuditStamp!` macro in the same crate. The macro copies fields into `Product`; other structs can reuse it to add the same columns to their own tables.
 
 The same field names in the concrete structure and in the group are rejected by the compiler. An unknown attribute value as well. The group itself has no migration.
 
@@ -40,11 +40,11 @@ The same field names in the concrete structure and in the group are rejected by 
 
 | Django | Ferrioxid |
 |---|---|
-| abstraktes Model |`model_fields!`, without table|
-| Vererbung |Macro that copies fields into the concrete structure|
-| `Model._meta` | `FerrioxidModel::columns` des konkreten Models |
-|own table of the base class|there are no|
-|Multiple inheritance and MRO|not provided for|
+| Abstract model | `model_fields!`, without a table |
+| Inheritance | A macro copies fields into the concrete struct |
+| `Model._meta` | `FerrioxidModel::columns` on the concrete model |
+| Separate base-class table | None |
+| Multiple inheritance and MRO | Not supported |
 
 A change in the field group changes `columns()` of each specific model. The schema diff thus sees each affected table. Already applied migration files remain unchanged.
 

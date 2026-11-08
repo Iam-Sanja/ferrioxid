@@ -1,8 +1,8 @@
 # Settings
 
-[For overview](index.md) · Own values: [custom-settings.md](custom-settings.md) · **actual file:** `crates/ferrioxid-migrations/src/project.rs`].
+[Overview](index.md) · Own values: [custom-settings.md](custom-settings.md) · **actual file:** `crates/ferrioxid-migrations/src/project.rs`.
 
-## Aufgabe
+## Purpose
 
 `ferrum.toml` remains the only project file. `Settings` reads it, checks the runtime and returns `ProjectConfig`. There is no global singleton. Secrets are in environment variables, not in the file and not in `Debug`.
 
@@ -12,9 +12,9 @@
 2. The value from `ferrum.toml`.
 3. A set environment variable replaces only the intended value.
 
-An unknown section or key remains an error. Exceptions are `[custom.<name>]`, described in [custom-settings.md](custom-settings.md), and `[app.<name>]`, described in [app-registry.md](app-registry.md). `[custom]` and `[app]` without names are errors]. `[app.<name>]` declares a migration directory and does not load a rust code. App settings remain under `[custom.<name>]` and do not override framework keys.
+An unknown section or key remains an error. Exceptions are `[custom.<name>]`, described in [custom-settings.md](custom-settings.md), and `[app.<name>]`, described in [app-registry.md](app-registry.md). `[custom]` and `[app]` without names are errors. `[app.<name>]` declares a migration directory and does not load a rust code. App settings remain under `[custom.<name>]` and do not override framework keys.
 
-## Lesen
+## Reading
 
 ```rust
 fn load() -> Result<ferrioxid::migrations::ProjectConfig, Box<dyn std::error::Error>> {
@@ -28,15 +28,15 @@ fn load() -> Result<ferrioxid::migrations::ProjectConfig, Box<dyn std::error::Er
 
 `discover` searches `ferrum.toml` from the start directory upwards and calls `enforce_runtime`. `from_project` checks an already read `ProjectConfig` again. `project()` borrows the configuration. The generator writes the same sequence in `src/settings.rs`.
 
-## Bereiche
+## Sections
 
-Die vorhandenen Bereiche bleiben: `project`, `server`, `database`, `admin`, `auth`, `templates`, `branding`, `static`, `storage`, `mail`, `jobs`. Fehlende neue Schlüssel behalten die bisherigen Defaults: Sprache `de` mit Fallback `en`, Sitzung 12 Stunden, Leerlauf 30 Minuten, Vorlagen aus, Farbe `#0f172a`, Währung `EUR`, Staticfiles aus, lokaler Speicher unter `media` mit 10 MiB, Mail `disabled`. `[jobs]` ist optional. Ohne Abschnitt bleibt der Worker erlaubt, startet aber nicht von selbst. Grenzen stehen in [workers.md](workers.md).
+Existing sections remain `project`, `server`, `database`, `admin`, `auth`, `templates`, `branding`, `static`, `storage`, `mail` and `jobs`. Omitted settings retain their defaults: language `de` with fallback `en`, 12-hour sessions, a 30-minute idle timeout, templates disabled, color `#0f172a`, currency `EUR`, static files disabled, local storage under `media` with a 10 MiB limit, and mail backend `disabled`. `[jobs]` is optional. Without it, workers are permitted but never start automatically. See [workers.md](workers.md) for limits.
 
 `server.host` must not be `0.0.0.0`. `templates.engine` is `tera`. Languages are `de` and `en`. `branding.currency` consists of three capital letters. `storage.backend` is `local`. Static prefixes must not cover Admin, API, Auth, Health and Uploads.
 
-## Umgebung
+## Environment
 
-| Variable | Wirkung |
+| Variable | Effect |
 |---|---|
 | `DATABASE_URL` |Replaces the file URL if it is not empty. The value does not appear in `Debug`|
 | `FERRUM_ENV=production` |Turn on the production mode. Any other or missing value remains development|
@@ -49,13 +49,13 @@ Die vorhandenen Bereiche bleiben: `project`, `server`, `database`, `admin`, `aut
 | `FERRUM_IDLE_MINUTES` |Replaces the file when set. Otherwise `auth.idle_minutes` applies|
 | `FERRUM_COOKIE_SECURE` |`1` or `true` sets the Secure cookie. In production, the standard|
 | `FERRUM_CSRF_SECRET` |64 Hex marks in production. The value is not logged|
-| `FERRUM_ALLOWED_ORIGINS` |Comage-separated origins. In production without this variable, the list is empty until `apply_bound_address` sets loopback|
+| `FERRUM_ALLOWED_ORIGINS` |Comma-separated origins. In production without this variable, the list is empty until `apply_bound_address` sets loopback|
 
-A missing optional variable retains the file or default value. A missing mandatory production specification remains an error: `FERRUM_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FERRUM_ENV=production`. Ferrioxide does not switch debug silently to `false` in this case.
+A missing optional variable retains the file or default value. A missing mandatory production specification remains an error: `FERRUM_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FERRUM_ENV=production`. Ferrioxid does not switch debug silently to `false` in this case.
 
 ## Development and production
 
-Entwicklung ist der Normalfall. Generierte Projekte setzen `debug = true` und binden `127.0.0.1`. Produktion ist ausschließlich `FERRUM_ENV=production`. Dann lehnt `enforce_runtime` aktives Debug ab. `ferrioxid check` und `ferrioxid doctor` rufen dieselbe Prüfung auf und öffnen dafür keine Datenbank- und keine SMTP-Verbindung. Erfolg ist `OK settings.runtime`. Ein Fehler ist `ERROR settings.runtime` und Exitcode 1.
+Development is the default. Generated projects set `debug = true` and bind to `127.0.0.1`. Production is selected only by `FERRUM_ENV=production`; `enforce_runtime` then rejects enabled debug mode. `ferrioxid check` and `ferrioxid doctor` use the same runtime validation without opening a database or SMTP connection for that check. Success is `OK settings.runtime`; failure is `ERROR settings.runtime` with exit code 1.
 
 ## Debug and logs
 
@@ -91,4 +91,4 @@ The workspace file with only `migrations_dir` and `schema_command` remains valid
 
 ## Limitations
 
-`resolved_database_url` returns the ambient value to the caller. Whoever lied to him avoided blackening. The HTML error pages of the views are not the project templates under `templates/errors/`.
+`resolved_database_url` returns the environment value to the caller. Logging that value directly bypasses the redaction provided by `ProjectConfig::Debug`. HTML error responses from view helpers are separate from project templates under `templates/errors/`.

@@ -1,10 +1,10 @@
-# Diagnosis and project review
+# Diagnostics and project checks
 
-[For overview](index.md) · **IST file:** `crates/ferrioxid-cli/src/diagnose.rs`.]
+[Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/diagnose.rs`.
 
-## Aufgabe
+## Purpose
 
-`ferrioxid doctor` checks the tool chain and the project. `ferrioxid check` checks configuration, migrations and translation without changing data.
+`ferrioxid doctor` checks the toolchain and project. `ferrioxid check` validates configuration, migrations and compilation without changing application data.
 
 ## Responsible files
 
@@ -20,34 +20,34 @@ ferrioxid check
 
 Status lines are `[OK]`, `[WARN]` and `[ERROR]`. An error gives exit code 1. `check --strict` gives exit code 2 if only warnings remain. Without `--strict`, warnings remain with Exitcode 0.
 
-## Konfiguration
+## Configuration
 
 It reads `ferrum.toml`. `DATABASE_URL` may replace the database entry. `check` rejects an empty `DATABASE_URL`. If `FERRUM_CSRF_SECRET` is set, it must have 64 hex characters. A missing value is not an error here, because the runtime can generate a development key.
 
-## Datenfluss
+## Data flow
 
-`doctor` calls `rustc` and `cargo` with `--version`. After that it searches `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` and the migration directory. An existing database is only read. A non-existent SQLite file is a warning and is not created. PostgreSQL is readably connected when the URL points to it. A failure is a mistake. For a fullstack project, `doctor` reports that the admin is in the rust binary. Node.js is not required. Storage routes are not closed from `main.rs`.
+`doctor` runs `rustc --version` and `cargo --version`, then checks `ferrum.toml`, `Cargo.toml`, `src/main.rs`, `src/lib.rs` and the migration directory. Existing databases are inspected read-only; a missing SQLite file produces a warning without being created. PostgreSQL connection failures are errors. For fullstack projects, it explains that the admin is embedded in the Rust binary and needs no Node.js. It does not infer storage route registration from `main.rs`.
 
 `check` checks the environment, both migration histories and executes `cargo check`. If the database file is available and `schema_command` is set, it compares the model. `FERRUM_CHECK_SKIP_SCHEMA=1` and `FERRUM_CHECK_SKIP_CARGO=1` skip these steps in tests. It does not call `migrate up` and does not delete anything.
 
 ## Error cases
 
-| Fall | Status |
+| Case | Status |
 |---|---|
-|`rustc` or `cargo` is missing| Fehler |
-|`ferrum.toml` or `src/lib.rs` is missing| Fehler |
-| `server.host` ist `0.0.0.0` | Fehler |
-|SQLite file is missing| Warnung |
-| Docker fehlt |no error; Docker is optional and not tested|
-|Checksum conflict| Fehler in `check` |
+|`rustc` or `cargo` is missing| Error |
+|`ferrum.toml` or `src/lib.rs` is missing| Error |
+| `server.host` is `0.0.0.0` | Error |
+|SQLite file is missing| Warning |
+| Docker is missing | Not an error; Docker is optional and is not probed. |
+|Checksum conflict| Error in `check` |
 
-`doctor` in the ferrioxide workspace itself reports missing `src/main.rs` and `src/lib.rs` because the workspace root is not an application. The command applies to generated projects and to `examples/myshop` only if there is a separate `ferrum.toml` there. The workspace file remains valid for `migrate`.
+`doctor` in the Ferrioxid workspace itself reports missing `src/main.rs` and `src/lib.rs` because the workspace root is not an application. The command applies to generated projects and to `examples/myshop` only if there is a separate `ferrum.toml` there. The workspace file remains valid for `migrate`.
 
-## Sicherheitsregeln
+## Security rules
 
-Connection character strings are not output. `doctor` and `check` do not create an SQLite file or a history table. `check` does not write a migration.
+Connection strings are never printed. `doctor` and `check` create neither SQLite files nor history tables; `check` writes no migrations.
 
-## Beispiele
+## Examples
 
 ```powershell
 cd demo
@@ -64,4 +64,4 @@ The same call form applies under Linux in the respective shell.
 
 ## Limitations
 
-A missing SQLite file is not created. If it exists, it is read with `mode=ro`. `doctor` does not start `schema_command`. `check` and `migrate status` compare the model if the file exists and a schema can be loaded. The joint report is published in [migration-diagnostics.md](migration-diagnostics.md)].
+A missing SQLite file is not created. If it exists, it is read with `mode=ro`. `doctor` does not start `schema_command`. `check` and `migrate status` compare the model if the file exists and a schema can be loaded. The joint report is published in [migration-diagnostics.md](migration-diagnostics.md).

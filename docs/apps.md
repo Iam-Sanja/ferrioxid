@@ -1,23 +1,23 @@
 # Apps
 
-[Zur Übersicht](index.md) · Registry: [app-registry.md](app-registry.md) · Migrationen: [app-migrations.md](app-migrations.md) · Wiederverwendung: [reusable-apps.md](reusable-apps.md) · Generator: [create-app.md](create-app.md)
+[Overview](index.md) · Registry: [app-registry.md](app-registry.md) · Migrations: [app-migrations.md](app-migrations.md) · Reuse: [reusable-apps.md](reusable-apps.md) · Generator: [create-app.md](create-app.md)
 
-**ACT.** Functional status v0.25. The cargo version remains `0.1.0`. The template version of new projects remains `0.24`. An app is a Rust type that passes models, routes, admins, migrations, templates, and static files to the existing engines. There is no second router, authentic, model or admin engine and no reloading of unknown crates.
+**Implemented.** Milestone v0.25. The Cargo version remains `0.1.0`. The template version of new projects remains `0.24`. An app is a Rust type that passes models, routes, admins, migrations, templates, and static files to the existing engines. There is no second router, auth, model or admin engine and no reloading of unknown crates.
 
-## Django and ferrioxide
+## Django and Ferrioxid
 
 | Django | Ferrioxid |
 |---|---|
 | `INSTALLED_APPS` |`App::install` with a type that implements `FerrioxidApplication`|
 | `AppConfig` | `AppConfig::new("shop").label(...).prefix(...).depends_on(...)` |
-|`apps.py` and Dynamic Import|Rust code in binary. `ferrum.toml` does not load a code|
-| `shop.Product` und `inventory.Product` |separate table names. An app name does not change SQL or API paths|
-| `migrations/` je App |same directory, history ID `shop:0001_initial`|
+| `apps.py` and dynamic imports | Rust code compiled into the binary; `ferrum.toml` does not load code |
+| `shop.Product` and `inventory.Product` | Separate table names; the app name does not change SQL or API paths. |
+| `migrations/` per app | Shared migration engine; history ID `shop:0001_initial` |
 | `{% url "shop:product_detail" id=product.id %}` | `{{ url(name="shop.detail", id=product.id) }}` |
 | App-Templates |Files under `{app}/`, for example `shop/list.html`|
 | App-Staticfiles |`/static/{app}/...` on the existing Staticfiles delivery|
 
-## Registrieren
+## Registration
 
 ```rust
 use axum::routing::get;
@@ -54,29 +54,29 @@ let app = ferrioxid::App::new(database)
 let router = app.into_router();
 ```
 
-`install` checks the name, rejects duplicates and reserved names and calls `contribute`. `seal` checks the migration graph, the match with `[app.<name>]` and, if available, `AdminRegistry::seal`. `seal` does not apply migration. `try_into_router` performs this check if it is still missing. `into_router` remains without `Result` and does not start in case of an error. Without apps and without `[app.<name>]`, the start does not change. The life cycle is in [app-lifecycle.md](app-lifecycle.md)].
+`install` checks the name, rejects duplicates and reserved names and calls `contribute`. `seal` checks the migration graph, the match with `[app.<name>]` and, if available, `AdminRegistry::seal`. `seal` does not apply migration. `try_into_router` performs this check if it is still missing. `into_router` remains without `Result` and does not start in case of an error. Without apps and without `[app.<name>]`, the start does not change. The life cycle is in [app-lifecycle.md](app-lifecycle.md).
 
-Without `install`, `App::new`, `register`, `urls` and `merge` remain valid. `FerrioxidApplication::register_jobs` has an empty standard method. `install`, `seal` and `into_router` do not call and do not start a worker. The application’s worker binary calls `register_jobs` on the same `JobRegistry`. An example is `examples/notes`. See [jobs.md](jobs.md) and [workers.md](workers.md)].
+`App::new`, `register`, `urls` and `merge` remain valid without `install`. `FerrioxidApplication::register_jobs` has an empty default implementation; `install`, `seal` and `into_router` do not call it or start workers. The application’s worker binary calls `register_jobs` with the shared `JobRegistry`, as shown in `examples/notes`. See [jobs.md](jobs.md) and [workers.md](workers.md).
 
-## What an App Can Sign Up
+## What an app can register
 
-- `routes`: a `UrlSet`. The namespace before the point must be the app name. A prefix is prescribed. `/` becomes the prefix itself.
+- `routes`: a `UrlSet` with names prefixed by the app name and a period. A URL prefix is required; `/` maps to that prefix.
 - `model`: the existing `FerrioxidModel` repository. An already occupied table is `app.model.duplicate`.
 - `admin_model`, `admin_view`, `admin_action`, `admin_filter`, `admin_widget`: the existing `AdminRegistry`.
 - `migrations`: a relative directory without `..`.
 - `templates`: HTML under `{app}/`. `TemplateMode::Isolated` rejects a project file of the same name. `ProjectOverride` reads them instead.
-- `static_files`: Dateien unter `/static/{app}`.
-- `project`: the `ProjectConfig` from `with_settings`. Own values come from `[custom.shop]` over `custom_settings`.
+- `static_files`: files under `/static/{app}`.
+- `project`: the `ProjectConfig` supplied by `with_settings`. Read app-specific `[custom.shop]` values through `custom_settings`.
 
-The registration does not award a staff, a superuser or a model right.
+Registration grants no staff status, superuser status or model permissions.
 
-## Namen
+## Names
 
 An app name begins with a lowercase letter and then contains only lowercase letters, numbers and `_`. Not more than 32 characters. `admin`, `auth`, `api`, `static`, `healthz` and `uploads` are reserved.
 
 A URL prefix must not be `/admin` or `/auth` and must not break out of the path.
 
-## Lebenszyklus
+## Lifecycle
 
 1. `App::new` and optionally `with_settings` and `with_admin`.
 2. `install` per app, in the desired order.

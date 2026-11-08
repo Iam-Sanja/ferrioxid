@@ -1,16 +1,16 @@
 # Sessions and Cookies
 
-[For overview](index.md) · [auth.md](auth.md)]
+[Overview](index.md) · [auth.md](auth.md)
 
-## Zweck
+## Purpose
 
 The admin and browser login uses server-side sessions. JSON Web Tokens are not the standard.
 
-## Architektur
+## Architecture
 
-The login generates 32 bytes from `OsRng` for the session token. The CSRF token is an HMAC via session ID and token hash, see [csrf.md](csrf.md)]. The database stores SHA-256 as a hex. `last_seen_at` is set at every successful exam. `expires_at` will not be renewed.
+Login generates a 32-byte session token with `OsRng`. The CSRF token is derived from the session ID and token hash using HMAC; see [csrf.md](csrf.md). The database stores SHA-256 digests as hex strings. Every successful authentication updates `last_seen_at` without extending `expires_at`.
 
-`rotate_session` revokes the current line and creates a new one with the same `expires_at`. A meeting that has already expired will not be renewed. The login always creates a new session. An automatic rotation at each request is switched off because the CSRF token would change without a reliable channel.
+`rotate_session` revokes the current session row and creates a new one with the same `expires_at`. It never renews an expired session. Login always creates a new session. Automatic rotation on every request is disabled because the CSRF token would otherwise change without a reliable channel to update clients.
 
 ## Responsible files
 
@@ -21,26 +21,26 @@ The login generates 32 bytes from `OsRng` for the session token. The CSRF token 
 
 ## Public API
 
-`AuthService::login` delivers `IssuedSession` with cookie line, raw token, CSRF token and `PublicUser`. HTTP handlers only set the cookie and return tokens plus users in login JSON as `csrf_token` and `user`. Subsequent replies do not contain session tokens.
+`AuthService::login` returns an `IssuedSession` containing the cookie header, raw session token, CSRF token and `PublicUser`. HTTP handlers set the session cookie and return `csrf_token` and `user` in the login JSON. The raw session token is never returned in JSON.
 
 `logout` revokes the session if the token is still known and deletes the cookie. Without a cookie, the HTTP 204 call remains. With a valid cookie, Logout requires the CSRF token.
 
-## Datenmodell `_ferrum_sessions`
+## Data model: `_ferrum_sessions`
 
-| Spalte | Bedeutung |
+| Column | Meaning |
 |---|---|
 | `id` | UUID |
-| `user_id` | Foreign Key auf `_ferrum_users`, `ON DELETE CASCADE` |
+| `user_id` | Foreign key to `_ferrum_users`, `ON DELETE CASCADE` |
 | `token_hash` |SHA-256-hex, unique|
-| `csrf_token_hash` | SHA-256-Hex des CSRF-Tokens |
-| `created_at`, `expires_at`, `last_seen_at` | Unix-Sekunden |
+| `csrf_token_hash` | SHA-256 hex digest of the CSRF token |
+| `created_at`, `expires_at`, `last_seen_at` | Unix seconds |
 | `revoked_at` |set at logout, rotation and revocation of all sessions|
 
 Standard life: 12 hours absolute, 30 minutes without use.
 
 ## Security mechanisms
 
-The cookie is called `ferrioxid_session`. It is `HttpOnly`, `Path=/`, `SameSite=Lax` and without `Domain`. `Secure` stands only if `cookie_secure` is set. This is decided by `FERRUM_COOKIE_SECURE` or, if the variable is missing, `FERRUM_ENV=production`. `BIND_ADDRESS` does not matter. Local HTTP remains usable in development without `Secure`. Production without `Secure` writes a warning.
+The default cookie name remains `ferrum_session` for compatibility. It uses `HttpOnly`, `Path=/`, `SameSite=Lax` and no `Domain` attribute. `Secure` follows `FERRUM_COOKIE_SECURE`, or `FERRUM_ENV=production` when the former is unset. `BIND_ADDRESS` does not affect this setting. Local HTTP works in development without `Secure`; production logs a warning if `Secure` is disabled.
 
 Logout uses the same cookie attributes and `Max-Age=0`.
 
@@ -51,6 +51,8 @@ Tokens are not in URLs. The database row does not contain the raw token.
 Expired, revoked, unknown and too long unused tokens result in `Unauthenticated`. A disabled user as well, even if the line were still valid.
 
 ## Example
+
+The preserved HTTP example uses `ferrioxid_session` as a placeholder cookie name. Replace it with the default `ferrum_session` or your configured cookie name; it is not an alias.
 
 ```http
 POST /auth/logout

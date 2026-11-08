@@ -1,12 +1,12 @@
-# Hintergrundjobs
+# Background jobs
 
-[Zur Übersicht](index.md) · Worker: [workers.md](workers.md) · Retries: [job-retries.md](job-retries.md) · Mail: [job-mail-integration.md](job-mail-integration.md)
+[Overview](index.md) · Worker: [workers.md](workers.md) · Retries: [job-retries.md](job-retries.md) · Mail: [job-mail-integration.md](job-mail-integration.md)
 
-**IST.** Functional status v0.27.1. Cargo version `0.1.0`. The queue is in `crates/ferrioxid-jobs`. There is no redis and no second database engine.
+**Implemented.** Milestone v0.27.1. Cargo version `0.1.0`. The queue is in `crates/ferrioxid-jobs`. There is no redis and no second database engine.
 
-## Zustellung
+## Delivery
 
-Ferrioxide guarantees **at least once**. A trader can see the same job more than once. Exactly once does not exist. SMTP and other external effects cannot be fixed in the same transaction as the job. An accepted SMTP response is not a delivery confirmation.
+Jobs use **at-least-once** execution: a handler may receive the same job more than once. Ferrioxid provides no exactly-once guarantee. SMTP and other external effects cannot participate in the job’s database transaction. SMTP acceptance does not confirm inbox delivery.
 
 ## Public API
 
@@ -45,36 +45,36 @@ queue.enqueue::<PulseHandler>(&Pulse { label: "wieder".into() }, When::every("no
 
 `When::now` is due immediately. `When::at` sets `available_at` as a Unix second in UTC. `When::every` carries an interval of 1 to 2 592 000 seconds and a `schedule_key`. There is no cron syntax.
 
-## Zustand
+## Status
 
-| Zustand | Bedeutung |
+| Status | Meaning |
 |---|---|
-| `pending` | wartet auf `available_at` |
+| `pending` | Waiting until `available_at` |
 | `running` |A worker keeps the lease|
 | `retry` |temporary error, `next_attempt_at` lies in the future|
-| `succeeded` | abgeschlossen |
-| `failed` |Final or trials exhausted|
+| `succeeded` | Completed |
+| `failed` | Permanent failure or attempts exhausted |
 | `cancelled` |Aborted by the operator|
 
-`pending` and `retry` are claimed. `running` with expired lease also. Success, permanent error and termination are over for the automatic worker. `retry` and `cancel` via the CLI reset the allowed transitions. Details are available in [job-retries.md](job-retries.md) and [workers.md](workers.md)].
+Workers claim due `pending` and `retry` jobs, and may reclaim `running` jobs whose leases expired. They do not automatically resume succeeded, failed or cancelled jobs. CLI retry and cancellation follow the allowed state transitions; see [job-retries.md](job-retries.md) and [workers.md](workers.md).
 
 ## Schema
 
-The migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` creates `_ferrum_jobs`. The story is called `_ferrum_job_migrations`. Auth migrations `0001` to `0004` remain unchanged. `ferrioxid migrate up` applies the job migration. The Worker and `ferrioxid dev` do not do this.
+The migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` creates `_ferrum_jobs`, with history in `_ferrum_job_migrations`. Auth migrations `0001` to `0004` remain unchanged. `ferrioxid migrate up` applies the job migration; workers and `ferrioxid dev` do not.
 
-Times are UTC-Unix seconds. A unique `idempotency_key` delivers the same job on the second entry. A `schedule_key` may hang on only one line at a time. After success, it is passed on to the next maturity. Missed intervals are skipped so that a silent worker does not create an avalanche.
+Timestamps are UTC Unix seconds. Reusing an `idempotency_key` returns the existing job. A `schedule_key` belongs to one row at a time and transfers to the next scheduled job after success. Missed intervals are skipped to avoid a backlog when a worker has been stopped.
 
-Completed jobs older than `jobs.retention_hours` are deleted by the worker in blocks of 100 lines. Continuing jobs.
+The worker deletes completed jobs older than `jobs.retention_hours` in batches of 100 rows. Active jobs remain.
 
-The example with Instant, Delay, Interval and Mail Job is in `examples/notes`. `examples/notes/src/bin/worker.rs` executes the same traders in its own process. Myshop remains unchanged.
+The example with Instant, Delay, Interval and Mail Job is in `examples/notes`. `examples/notes/src/bin/worker.rs` executes the same handlers in its own process. Myshop remains unchanged.
 
 ## Procedure in a project
 
 1. Defining the job. One type implements `JobHandler` with `NAME`, `VERSION` and a JSON object as a payload.
-2. Register traders. The app implements `FerrioxidApplication::register_jobs`. `App::install` does not call this method.
-3. A job line. The web process uses `queue.enqueue::<Handler>(...)`. For this, `_ferrum_jobs` must already exist through `ferrioxid migrate up`.
+2. Register handlers. The app implements `FerrioxidApplication::register_jobs`. `App::install` does not call this method.
+3. Enqueue a job from the web process with `queue.enqueue::<Handler>(...)`. First create `_ferrum_jobs` with `ferrioxid migrate up`.
 4. Starting the worker. `ferrioxid generate worker` creates `src/bin/worker.rs` if the file is missing. The process loads `ferrum.toml`, connects the configured database and calls `WorkerHost::run_until_ctrl_c`. `ferrioxid dev` does not start it.
-5. Check job status. `ferrioxid jobs list` and `ferrioxid jobs inspect <id>` show status, handler, version, trials, times and error code. The payload remains hidden until `--show-payload` is set.
-6. Treat errors. `JobError::retry` is planning a new attempt. `JobError::permanent` terminates the job. `ferrioxid jobs retry <id> --yes` and `ferrioxid jobs cancel <id> --yes` apply to the permitted states.
+5. Inspect status with `ferrioxid jobs list` or `ferrioxid jobs inspect <id>`. Output includes the handler, version, attempt count, timestamps and error code. Payloads remain hidden unless `--show-payload` is supplied.
+6. Handle failures with `JobError::retry` or `JobError::permanent`. Operators can use `ferrioxid jobs retry <id> --yes` or `ferrioxid jobs cancel <id> --yes` for eligible states.
 
-An unknown trader remains `pending` and does not increase `attempts`. If the migration is missing, the worker ends with `job.migration.missing` and Exitcode 2.
+An unknown handler remains `pending` and does not increase `attempts`. If the migration is missing, the worker ends with `job.migration.missing` and Exitcode 2.

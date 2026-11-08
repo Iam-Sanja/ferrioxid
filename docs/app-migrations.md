@@ -1,26 +1,26 @@
 # App migrations
 
-[For overview](index.md) · Engine: [migrations.md](migrations.md) · **IST files:** `crates/ferrioxid-migrations/src/packages.rs`, `runner.rs`, `inspect.rs`].
+[Overview](index.md) · Engine: [migrations.md](migrations.md) · **Implemented files:** `crates/ferrioxid-migrations/src/packages.rs`, `runner.rs`, `inspect.rs`.
 
 All app migrations remain in `_ferrum_migrations`. Auth remains in `_ferrum_auth_migrations`. There is no second history table.
 
-## Kennung
+## Identifier
 
 The file retains the ID `0001_initial`. The `name` field remains `initial`. The checksum is formed over the file content with this unqualified ID.
 
-The history line of a new app is `shop:0001_initial`. The reader for the app removes the prefix `shop:` and compares the rest with the file ID. The previous reader ignores lines containing `:`. An old line `0001_initial` is therefore not assigned to an app and is not executed again.
+A new app’s history ID is `shop:0001_initial`. The app-specific reader removes `shop:` before comparing it with the file ID. The legacy reader ignores IDs containing `:`. Existing unqualified IDs such as `0001_initial` remain in the legacy history and are not reassigned to an app.
 
 Two apps can both have a file `0001_initial.json`. The history IDs `shop:0001_initial` and `blog:0001_initial` are different.
 
-## Reihenfolge
+## Order
 
-`depends_on` calls other app names. `package_order` sorted topologically. Ready apps come by name. A cycle, missing dependency, self-reference, and duplicate name fail before a file is applied.
+`depends_on` lists other app names. `package_order` sorts apps topologically, ordering ready apps by name. Cycles, missing dependencies, self-references and duplicate names fail before any migration is applied.
 
-`ferrioxid migrate up` first applies Auth, then the previous project directory, then the packages from `[app.<name>]`. A second run does not apply anything again. An amended checksum is a conflict and is not applied. The server only starts when `registry.migrations` describes the same set. The CLI cannot read the Rust page without running the application and therefore does not claim the match.
+`ferrioxid migrate up` applies auth migrations first, then the legacy project directory, then packages declared in `[app.<name>]`. Repeating the command does not reapply migrations. A changed checksum is a conflict. At server startup, the registered migration packages must match the declarations; the CLI cannot verify Rust registration without running the application.
 
-`migrate status`, `check` and `doctor` include pending packet migrations. A missing `ferrum.toml` with a pure `--migrations-dir` remains the previous empty packet case. An existing, invalid `ferrum.toml` is an error. The diagnosis does not create a history table and a SQLite file.
+`migrate status`, `check` and `doctor` report pending package migrations. Using only `--migrations-dir` without `ferrum.toml` retains legacy behavior with no app packages. An existing invalid `ferrum.toml` is an error. Diagnostics create neither a history table nor a SQLite file.
 
-## Bestehende Projekte
+## Existing projects
 
 Projects without `[app.<name>]` retain their unqualified IDs. Applied rows and their checksums are not rewritten. Tables are not renamed. Installing an app does not create a migration.
 

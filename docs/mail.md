@@ -1,25 +1,25 @@
-# E-Mail
+# Email
 
-[Zur Übersicht](index.md) · SMTP: [mail-smtp.md](mail-smtp.md) · Sicherheit: [mail-security.md](mail-security.md) · Hinweise: [notifications.md](notifications.md) · Passwort: [password-reset.md](password-reset.md)
+[Overview](index.md) · SMTP: [mail-smtp.md](mail-smtp.md) · Security: [mail-security.md](mail-security.md) · Notifications: [notifications.md](notifications.md) · Password: [password-reset.md](password-reset.md)
 
-**Stand:** v0.23. The cargo version remains `0.1.0`. The crate is `ferrioxid-mail`. The facade is `ferrioxid::mail`.
+**Milestone:** v0.23. The Cargo version remains `0.1.0`. The crate is `ferrioxid-mail`. The facade is `ferrioxid::mail`.
 
-## Zweck
+## Purpose
 
 `MailService` sends a typed message. Sender, recipient, subject, text, optional HTML and optional Reply-To are checked before transport. The service does not open a connection to an external mailbox in the test.
 
 ## Backends
 
-| Backend | Verhalten |
+| Backend | Behavior |
 |---|---|
 | `disabled` |`send` provides `mail.disabled`. This is the standard without `[mail]`.|
 | `console` |Writes the message to stderr and logs only `mail accepted by the console transport`.|
 | `memory` |Holds the message in the process. `MemoryInbox::messages` returns them.|
-| `smtp` |An attempt via STARTTLS or implicit TLS. Details in [mail-smtp.md](mail-smtp.md)].|
+| `smtp` |An attempt via STARTTLS or implicit TLS. Details in [mail-smtp.md](mail-smtp.md).|
 
 `FERRUM_ENV=production` rejects `console` and `memory` and falls back to `disabled`. The password is never in `ferrum.toml`. SMTP reads `FERRUM_SMTP_USERNAME` and `FERRUM_SMTP_PASSWORD`.
 
-## Konfiguration
+## Configuration
 
 ```toml
 [mail]
@@ -30,9 +30,9 @@ reset_ttl_minutes = 30
 
 For SMTP additionally `host`, `port`, `security = "starttls"` or `"tls"`, `from` and `timeout_secs` between 1 and 30. `reset_ttl_minutes` is between 5 and 1440. An active backend needs a plausible sender address and a trusted `public_origin`: `http://127.0.0.1`, `http://localhost` or `https` without user info, path, query and fragment. Keys `mail.password`, `mail.secret` and `mail.smtp_password` are an error.
 
-Umgebungsvariablen überschreiben die Datei: `FERRUM_MAIL_BACKEND`, `FERRUM_MAIL_FROM`, `FERRUM_MAIL_REPLY_TO`, `FERRUM_PUBLIC_ORIGIN`, `FERRUM_RESET_TTL_MINUTES`, `FERRUM_SMTP_HOST`, `FERRUM_SMTP_PORT`, `FERRUM_SMTP_SECURITY`, `FERRUM_SMTP_TIMEOUT_SECS`, `FERRUM_SMTP_USERNAME`, `FERRUM_SMTP_PASSWORD`.
+Environment variables override file settings: `FERRUM_MAIL_BACKEND`, `FERRUM_MAIL_FROM`, `FERRUM_MAIL_REPLY_TO`, `FERRUM_PUBLIC_ORIGIN`, `FERRUM_RESET_TTL_MINUTES`, `FERRUM_SMTP_HOST`, `FERRUM_SMTP_PORT`, `FERRUM_SMTP_SECURITY`, `FERRUM_SMTP_TIMEOUT_SECS`, `FERRUM_SMTP_USERNAME` and `FERRUM_SMTP_PASSWORD`.
 
-`ferrioxid check` and `ferrioxid doctor` do not open a socket. With `smtp` without `FERRUM_SMTP_PASSWORD`, the warning `mail.credentials` arises. `check --strict` ends this warning with Exitcode 2. `ferrioxid upgrade` does not rewrite an existing `ferrum.toml`. The template version remains `0.21`.
+`ferrioxid check` and `ferrioxid doctor` do not open network sockets. SMTP without `FERRUM_SMTP_PASSWORD` produces `mail.credentials`; `check --strict` exits with code 2 for this warning. `ferrioxid upgrade` does not rewrite existing `ferrum.toml` files. The current project template version is `0.24`.
 
 ## API
 

@@ -1,6 +1,6 @@
-# App-Lebenszyklus
+# App lifecycle
 
-[Zur Übersicht](index.md) · Registry: [app-registry.md](app-registry.md) · Migrationen: [app-migrations.md](app-migrations.md)
+[Overview](index.md) · Registry: [app-registry.md](app-registry.md) · Migrations: [app-migrations.md](app-migrations.md)
 
 `install` checks the name, duplicates and contributions of the app. `seal` then checks the migration graph, the match with `[app.<name>]` and the admin registry. `seal` does not write a migration.
 

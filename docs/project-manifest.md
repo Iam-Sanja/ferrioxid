@@ -1,8 +1,8 @@
-# Projektmanifest
+# Project manifest
 
-[Zur Übersicht](index.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · Legacy: [legacy-projects.md](legacy-projects.md)
+[Overview](index.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · Legacy: [legacy-projects.md](legacy-projects.md)
 
-**IST:** `crates/ferrioxid-migrations/src/manifest.rs`. File: `.ferrum/project.json`. The cargo package version remains `0.1.0`. The template version is independent of it and is in the manifesto. Currently the `0.21` is.
+**Implemented:** `crates/ferrioxid-migrations/src/manifest.rs`, stored in `.ferrum/project.json`. The Cargo version remains `0.1.0`; the independent current template version is `0.24`. The preserved JSON example below shows the older `0.21` manifest format, which remains readable.
 
 ## Schema
 
@@ -18,7 +18,7 @@
 }
 ```
 
-| Feld | Bedeutung |
+| Field | Meaning |
 |---|---|
 | `format` |Only `1` is read. Another format is not rewritten|
 | `template_version` |Generator level. `legacy` if the manifest was subsequently created for an existing project|
@@ -26,15 +26,15 @@
 | `template` |`api` or `fullstack`, at Legacy `null`|
 | `files` |Relative paths and SHA-256 of the bytes at the time of generation|
 
-The manifesto itself is not in `files`. An SHA-256 applies only to the recorded content. The filename alone is not proof that a file is unchanged.
+The manifest itself is not in `files`. An SHA-256 applies only to the recorded content. The filename alone is not proof that a file is unchanged.
 
-## Erzeugung
+## Generation
 
-`ferrioxid new` writes the manifest for `api` and `fullstack` after the project files are located. It is not a runtime dependency and does not require Node.js. Ferrioxide dependence remains a path when `--ferrioxid-path` is set.
+`ferrioxid new` writes a manifest after generating all API or fullstack project files. The manifest is not required at runtime. Generated projects currently use a local Ferrioxid path dependency.
 
 ## Legacy
 
-If the file is missing, the project is not faulty. `ferrioxid upgrade --yes` then creates exactly this manifesto:
+If the file is missing, the project is not faulty. `ferrioxid upgrade --yes` then creates exactly this manifest:
 
 ```json
 {
@@ -46,8 +46,8 @@ If the file is missing, the project is not faulty. `ferrioxid upgrade --yes` the
 }
 ```
 
-The empty file list means: the origin of the existing files is unknown. They will not be replaced. A later run sees the Legacy Manifesto and writes nothing more.
+The empty file list means: the origin of the existing files is unknown. They will not be replaced. A later run sees the Legacy Manifest and writes nothing more.
 
-## Kein Freibrief
+## Explicit limits
 
-A suitable hash does not allow tacit replacement by a newer template. v0.21 does not automatically replace tracked files. If the content is different, the code is `project.file.modified` and the file remains. If a tracked file is missing, the code is `project.file.missing`. It is not newly produced. An invalid or manipulated manifest is `upgrade.conflict` and remains.
+A matching hash does not authorize automatic replacement by a newer template. Upgrade leaves modified files in place and reports `project.file.modified`. Missing tracked files produce `project.file.missing` without being recreated. Invalid or manipulated manifests produce `upgrade.conflict` and remain untouched.

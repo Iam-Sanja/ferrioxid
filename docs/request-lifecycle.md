@@ -1,24 +1,24 @@
-# Request-Lebenszyklus
+# Request lifecycle
 
-**Stand:** v0.12, IST. The cargo version remains `0.1.0`.
+**Milestone:** v0.12, Implemented. The Cargo version remains `0.1.0`.
 
-## Verantwortlichkeit
+## Responsibility
 
 This document describes the order of an HTTP request after supplementing forms, static files, uploads and middleware.
 
 ## Crates and files
 
-- Routeraufbau: `crates/ferrioxid-api/src/lib.rs`, `App::merge`, `App::into_router`
-- Case: `crates/ferrioxid-api/src/web.rs`
+- Router construction: `crates/ferrioxid-api/src/lib.rs`, `App::merge`, `App::into_router`
+- Web integration: `crates/ferrioxid-api/src/web.rs`
 - Middleware: `crates/ferrioxid-middleware/src/lib.rs`
-- Seiten: `crates/ferrioxid-api/src/pages.rs`
+- Pages: `crates/ferrioxid-api/src/pages.rs`
 - Auth: `crates/ferrioxid-auth/src/service.rs`
 
 ## Public API
 
-`App::merge` attaches conditioned routes before `into_router` binds the state. `ferrioxid::web::prepare` then assembles static files if `[static] enabled` is, and the standard middleware.
+`App::merge` adds routes before `into_router` binds application state. `ferrioxid::web::prepare` then mounts static files when `[static] enabled` is true and applies standard middleware.
 
-## Datenfluss
+## Data flow
 
 ```text
 Body-Limit
@@ -35,13 +35,13 @@ Body-Limit
   → SQLite, PostgreSQL oder lokaler Speicher
 ```
 
-Auth and CSRF run in the trader. A middleware cannot skip it because it does not replace the trader check.
+Auth and CSRF run in the handler. A middleware cannot skip it because it does not replace the handler check.
 
-## Konfiguration
+## Configuration
 
 Static files and storage are in `ferrum.toml`. The body limit follows the upload size when `prepare` is used. myshop mounts static files and middleware explicitly because the workspace file omits static files.
 
-## Sicherheit
+## Security
 
 First the size is limited, then a separate request ID is generated. Logs see the path without query. Forms check fields on the server side. Uploads check the owner. Staticfiles remain in the configured root.
 
@@ -61,6 +61,6 @@ The middleware order is in `ferrioxid-middleware`. Auth, CSRF and CRUD tests rem
 
 myshop and generated projects differ in the attachment point: myshop knows the workspace file and mounts its own `static/`. `prepare` reads the discovered `ferrum.toml`.
 
-## Erweiterung
+## Extension
 
-Further outer layers may lie in front of `prepare`. Inner auth middleware is not planned as long as the trader verification remains the source of the decision.
+Further outer layers may lie in front of `prepare`. Inner auth middleware is not planned as long as the handler verification remains the source of the decision.

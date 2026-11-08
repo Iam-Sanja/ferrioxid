@@ -1,43 +1,43 @@
-# Security – Threat Model and Security Borders
+# Security – threat model and security boundaries
 
-[For overview](index.md) · **IST + REQUIRED.** **Ferrioxide v0.1 is not ready for production.] ***
+[Overview](index.md) · **Implemented security mechanisms and required safeguards. Ferrioxid `0.1.0` is pre-release and is not ready for unrestricted production use.**
 
-## ACTual protection mechanisms
+## Implemented protection mechanisms
 
-- Without `allow_anonymous = true`, GET, POST, PATCH and DELETE are registered as 403. The JSON body is the same `ApiError` contract.
-- Create and update validation checks known fields according to macro rules. `deny_unknown_fields` prevents `id` or `readonly` fields from arriving in JSON.
+- Models without anonymous access or a configured permission policy receive 403 handlers for GET, POST, PATCH and DELETE, using the `ApiError` contract.
+- Create and update DTOs validate declared fields. `deny_unknown_fields` rejects auto-generated IDs and fields excluded from the relevant DTO. Read-only fields remain writable at creation; managed timestamps are excluded from both DTOs.
 - INSERT, UPDATE and DELETE bind values via SeaORM. The DELETE and UPDATE statements always contain `WHERE "id" = $1`. Table and column names come only from checked macro attributes.
 - `ApiError` logs DB details internally and delivers only generic information to the outside world at 500. Since v0.11, the same answer has a stable `code`. SQL and hashes are also replaced if a free text contained them.
 - Axum’s JSON-Extractor uses Serde DTOs with `deny_unknown_fields` on the Create type as standard.
 - Demo bind is `127.0.0.1:3000`; Docker Postgres port is published on `127.0.0.1`.
 - `can_create` checks the Create input before the INSERT. A foreign owner ID is rejected if the rule requires it. The standard of the method is `false`. Generated projects do not bind to `0.0.0.0` and do not contain a standard password.
-- Since v0.12, static files remain in the configured root. Uploads use UUID names, check the file contents and belong to the logged-in user. The request ID comes from the server. Logs do not contain a query string. Details are available in [staticfiles.md](staticfiles.md), [uploads.md](uploads.md) and [middleware.md](middleware.md)].
+- Since v0.12, static files remain in the configured root. Uploads use UUID names, check the file contents and belong to the logged-in user. The request ID comes from the server. Logs do not contain a query string. Details are available in [staticfiles.md](staticfiles.md), [uploads.md](uploads.md) and [middleware.md](middleware.md).
 
 ## Authentication (actual, v0.7)
 
-Users, Argon2id, server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model rights are implemented. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [permissions.md](permissions.md) and [policies.md](policies.md)].
+Users, Argon2id, server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model permissions are implemented. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [permissions.md](permissions.md) and [policies.md](policies.md).
 
 `allow_anonymous = true` remains an explicit public release. Product and category in myshop are such demo endpoints. Protected routes refuse without session and right.
 
 ## Remaining gaps (actual)
 
-No OAuth, no MFA, no password reset and no JWT for external APIs. The login rate limit is per process. Filter object rules via [query-scopes.md](query-scopes.md)]. Without an explicit scope, the list does not provide a line. `allow_anonymous` does not check CSRF because the access does not depend on the cookie. Parallel PATCH statements do not have a version field. Ferrioxide is thus not described as a public Internet service without additional proxy and operational limits.
+OAuth, MFA and JWT for external APIs remain unimplemented; password reset is available as described in [password-reset.md](password-reset.md). Login rate limits are process-local. Object-filtered lists require explicit [query scopes](query-scopes.md). Anonymous routes do not check CSRF because they do not authorize access through a cookie. Concurrent PATCH requests have no version field to detect lost updates. Public deployment still requires appropriate proxy and operational controls.
 
-## SOLL-Bedrohungsmodell
+## Planned threat model
 
-| Bedrohung |Target action| Nachweis |
+| Threat |Target action| Evidence |
 |---|---|---|
-|Unauthorized Reads/Writes| Deny by default + serverseitige Policies | 401/403-Tests |
-| IDOR |Object policy **after** Identity verification for each individual ID| Querzugriffstests |
-| Mass Assignment | geteilte DB-Models nie blind als Writable DTO verwenden |Field masking tests|
-| CSRF |Protection for cookie-based state changes| Cross-Origin-Tests |
-| SQL Injection |bound values, identifier-allowlist| fuzzer-/negativ-Tests |
-| Brute Force |Rate limit, lockout by risk, auditing| Login-Stresstests |
-| Session-Diebstahl | HttpOnly/Secure/SameSite, Rotation, Ablauf | Session-Tests |
-| Secrets in Logs |Redaction, generic API error| Log-Audit |
-|Public Demo|Bind and configuration checks, no Prod default| Deployment-Test |
+| Unauthorized reads/writes | Deny by default and server-side policies | 401/403 tests |
+| IDOR | Check each object policy after authenticating the caller | Cross-user access tests |
+| Mass assignment | Never expose shared database models directly as writable DTOs | Field-masking tests |
+| CSRF | Protect cookie-authenticated state changes | Cross-origin tests |
+| SQL injection | Bound values and validated identifiers | Fuzz and negative tests |
+| Brute force | Rate limits, risk-based lockout and auditing | Login stress tests |
+| Session theft | HttpOnly, Secure, SameSite, rotation and expiry | Session tests |
+| Secrets in logs | Redaction and generic API errors | Log review |
+| Public demo exposure | Bind and configuration checks; no production defaults | Deployment tests |
 
-## Implementation targets (reference)
+## Implementation targets (planned)
 
 - `auth` and policies are separate concepts: authentication determines identity, authorization decides access.
 - RBAC alone is not sufficient for object-level/field-level policies.
@@ -50,4 +50,4 @@ No OAuth, no MFA, no password reset and no JWT for external APIs. The login rate
 
 ## Admin
 
-The admin checks session, active user, staff, model right, object rule and write access CSRF. Path parameters are not unchecked to SQL identifiers. Sorting, searching and filtering are whitelists. Details and known limits are given in [admin-security.md](admin-security.md)].
+The admin checks session, active user, staff, model right, object rule and write access CSRF. Path parameters are not unchecked to SQL identifiers. Sorting, searching and filtering are whitelists. Details and known limits are given in [admin-security.md](admin-security.md).

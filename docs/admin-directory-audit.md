@@ -1,30 +1,30 @@
 # Directory audit
 
-[Zur Übersicht](admin.md) · Auth: [auth.md](auth.md) · Transaktionen: [transactions.md](transactions.md) · Historie: [admin-audit-log.md](admin-audit-log.md)
+[Overview](admin.md) · Auth: [auth.md](auth.md) · Transactions: [transactions.md](transactions.md) · History: [admin-audit-log.md](admin-audit-log.md)
 
-**Stand:** v0.20. The cargo version remains `0.1.0`.
+**Milestone:** v0.20. The Cargo version remains `0.1.0`.
 
-HTML and JSON of the directory call the same functions in `ferrioxid-admin`. Auth writing, session revocation and audit line share a transaction. If the audit fails, the previous Auth state remains.
+The HTML and JSON directory endpoints call the same functions in `ferrioxid-admin`. Auth changes, session revocation and the audit entry share one transaction. If auditing fails, the previous authentication state is preserved.
 
-## Ablauf
+## Workflow
 
 1. Check input. Argon2id hashes are created before `begin` so that the SQLite write lock is not held during hashing.
-2. Transaktion starten.
-3. Re-read the executing user. He must be active, staff and superuser. A superuser flag withdrawn in the meantime ends the process with `Forbidden`.
-4. Check the target state: no superuser target for profile, password, active and staff. No self-deactivation. No withdrawal of your own staff flag. An authorization code containing `superuser` is rejected. Superuser allocation remains the CLI.
-5. Letter. Password change and deactivation revoke the target sessions in the same transaction.
+2. Begin the transaction.
+3. Reload the acting user. The user must be active, staff and superuser. If superuser access was revoked in the meantime, the operation ends with `Forbidden`.
+4. Check the target state: profile, password, active and staff changes cannot target superusers. Self-deactivation and removal of one's own staff access are blocked. Permission codes containing `superuser` are rejected. Granting superuser access remains a CLI operation.
+5. Apply the change. Password changes and deactivation revoke the target user's sessions in the same transaction.
 6. Write an audit line with `operation_id`.
-7. Commit. Any error before it rolls back hash, flags, roles, rights, sessions, and audit.
+7. Commit. Any error before it rolls back hash, flags, roles, permissions, sessions, and audit.
 
-## Ereignisse
+## Events
 
-| Aktion | `action` | Zusammenfassung |
+| Event | `action` | Summary |
 |---|---|---|
 |Creating Users| `user_create` |Email, including the role names set|
 |Email, Active, Staff| `user_update` |new email, `active`/`inactive` or `staff`/`not-staff`|
-| Passwort | `password_reset` | leer |
-| Rolle | `role_assign` / `role_revoke` | Rollenname |
-| Recht | `permission_grant` / `permission_revoke` | Berechtigungscode |
+| Password | `password_reset` | Empty |
+| Role | `role_assign` / `role_revoke` | Role name |
+| Permission | `permission_grant` / `permission_revoke` | Permission code |
 
 `record_id` is the user UUID or, in the case of a right, the role name. `actor_id` is the executing user. Passwords, hashes, session and CSRF tokens are not in the summary.
 

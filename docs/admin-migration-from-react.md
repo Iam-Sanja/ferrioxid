@@ -1,6 +1,6 @@
-# Change from React-Admin
+# Migration from the React admin
 
-[For overview](admin-native.md) · Routes: [admin-routing.md](admin-routing.md)]
+[Overview](admin-native.md) · Routes: [admin-routing.md](admin-routing.md)
 
 ## What is changing
 
@@ -8,20 +8,20 @@ Until v0.12 the surface was in `apps/admin-ui` and was built with Vite. v0.13 re
 
 The browser now speaks directly to HTML routes. The JSON API under `/admin/api` remains for programs and previous tests. It is not a requirement for the surface.
 
-## Was gleich bleibt
+## What stays unchanged
 
 - `AdminRegistry`, `admin = true` and the field metadata
-- Meetings, Staff, RBAC, Object Rules and Query Scopes
-- HMAC-CSRF of the Writing Actions Session
-- `POST /auth/login` als JSON
+- Sessions, staff access, RBAC, object policies and query scopes
+- Session-bound HMAC CSRF tokens for state-changing requests
+- JSON `POST /auth/login`
 - Database, migrations and the REST API of the models
-- Branding aus `ferrum.toml`
+- Branding from `ferrum.toml`
 - German and English
 - The cargo feature `admin-ui` as an empty flag, so that existing `Cargo.toml` files continue to build
 
-## Anmeldung
+## Login
 
-The HTML login cannot yet send a session CSF, because the session only arises when successful. For this, there is the short-lived cookie `ferrioxid_login_csrf`. It does not replace the HMAC of the session. After login, `ferrioxid_session` and the field `csrf_token` apply again.
+The HTML login cannot send a session CSRF token before a session exists, so it uses the short-lived `ferrioxid_login_csrf` cookie. After login, the legacy default `ferrum_session` cookie and `csrf_token` form field provide session authentication and CSRF protection.
 
 ## Build
 

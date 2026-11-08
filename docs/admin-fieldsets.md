@@ -1,8 +1,8 @@
-# Formularabschnitte
+# Fieldsets
 
-[For overview](admin.md) · Templates: [admin-templates.md](admin-templates.md)]
+[Overview](admin.md) · Templates: [admin-templates.md](admin-templates.md)
 
-**Stand:** v0.17. The cargo version remains `0.1.0`.
+**Milestone:** v0.17. The Cargo version remains `0.1.0`.
 
 Without `admin_fieldset`, the form remains a single unnamed group.
 
@@ -23,8 +23,8 @@ struct Offer {
 }
 ```
 
-The three parts are name, optional description and the word `optional`. The name has 1 to 80 characters, the description a maximum of 160. Names are clear. An empty section and a field without a section are translation errors once the model has sections. Hidden fields do not need a section. A field may occur only once.
+A section has a name, an optional description and the optional flag `optional`. Names contain 1–80 characters and must be unique; descriptions contain at most 160. Once a model declares sections, empty sections and unassigned visible fields are compiler errors. Hidden fields need no section, and a field can appear only once.
 
-The template draws a named section as `fieldset` with `legend`. `optional` is `details` and `summary` and remains without JavaScript. Empty sections, for example the ID when creating, are not drawn. The field order is the Struct order within the section.
+Named sections render as `fieldset` with `legend`. An `optional` section uses `details` and `summary` without JavaScript. Empty sections, such as an ID-only section during creation, are omitted. Fields follow struct order within each section.
 
-`readonly` and `id` remain text. `hidden` is not sent. Rights, CSRF and `reject_locked` apply unchanged.
+`readonly` fields and `id` remain text. Hidden fields are not submitted. Permissions, CSRF and `reject_locked` apply unchanged.

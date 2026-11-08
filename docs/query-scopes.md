@@ -1,12 +1,12 @@
 # Query scopes for object rules
 
-[For overview](index.md) · [policies.md](policies.md)] · [database.md](database.md)]
+[Overview](index.md) · [policies.md](policies.md) · [database.md](database.md)
 
-## Zweck
+## Purpose
 
-An object rule is designed to restrict lists in the database. Ferrioxide does not load all lines to filter them in the process.
+An object rule is designed to restrict lists in the database. Ferrioxid does not load all lines to filter them in the process.
 
-## Architektur
+## Architecture
 
 `QueryScope` is located in `ferrioxid-core` so that database, API and admin use the same representation.
 
@@ -18,7 +18,7 @@ pub enum QueryScope {
 }
 ```
 
-`ScopeValue` is `Text`, `Uuid`, `BigInt` or `Bool`. The standard method `ObjectPolicy::read_scope` provides `None`. `write_scope` takes over `read_scope` as long as the rule says otherwise. An active superuser receives `All`.
+`ScopeValue` supports `Text`, `Uuid`, `BigInt` and `Bool`. `ObjectPolicy::read_scope` defaults to `None`; `write_scope` delegates to `read_scope` unless overridden. Active superusers receive `All`.
 
 ## Responsible file
 
@@ -32,18 +32,18 @@ pub enum QueryScope {
 
 ## Public APIs
 
-- `ObjectPolicy::read_scope` und `write_scope`
+- `ObjectPolicy::read_scope` and `write_scope`
 - `ModelRepository::list_scoped`, `get_scoped`, `update_scoped`, `delete_scoped`
 - `list`, `get`, `update` and `delete` remain and use `QueryScope::All`
 - Admin lists respond additionally with `total`
 
-## Datenfluss
+## Data flow
 
 REST and Admin call the same SeaQuery helpers. The scope is attached as a parameterized condition before search, sorting, offset and limit. `None` becomes `0 = 1`. `Equals` checks the column name against the model metadata and binds the value as a parameter. `total` counts with the same filters and the same scope, without limit.
 
 PATCH and DELETE carry the scope in the `WHERE` clause. A previous SELECT remains as a second check on `can_update` and `can_delete`.
 
-## Sicherheitsregeln
+## Security rules
 
 - Column names come only from trusted model metadata.
 - Values from the HTTP request are never adopted as scope expression.
@@ -54,12 +54,12 @@ PATCH and DELETE carry the scope in the `WHERE` clause. A previous SELECT remain
 
 ## Error cases
 
-| Fall | Antwort |
+| Case | Response |
 |---|---|
 |Rule not bound| 403 |
 |The line is outside the scope| 404 |
 |Column of the scope does not belong to the model| 422 |
-| Superuser |Full access, still staff duty in the admin|
+| Superuser | Full access; staff status is still required in the admin |
 
 ## Example
 
@@ -78,4 +78,4 @@ fn read_scope(user: &AuthUser) -> QueryScope {
 
 ## Limitations
 
-There is no `OR`, no joins and no expressions from multiple columns. A `can_*` method that is more stringent than `write_scope` remains a second test after the SELECT. `write_scope` must therefore be at least as close as `can_update` and `can_delete`. Create does not check the new content against the scope.
+Scopes support neither `OR`, joins nor multi-column expressions. Record-level `can_*` checks run after SELECT and can reject rows admitted by the scope. Keep `write_scope` consistent with `can_update` and `can_delete`. Creation checks `can_create`, not the query scope.

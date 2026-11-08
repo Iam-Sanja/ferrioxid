@@ -1,12 +1,12 @@
-# Objektregeln
+# Object policies
 
-[For overview](index.md) · [permissions.md](permissions.md)]
+[Overview](index.md) · [permissions.md](permissions.md)
 
-## Zweck
+## Purpose
 
-An object rule decides based on the user and data set. It complements the roller test and does not replace it.
+An object policy decides access using the authenticated user and record. It supplements role-based permissions.
 
-## Architektur
+## Architecture
 
 ```rust
 pub trait ObjectPolicy<T> {
@@ -32,30 +32,30 @@ The rule runs after the session and authorization check. An active superuser ski
 
 `ferrioxid::auth::ObjectPolicy` and `App::register_policy`.
 
-For GET, PATCH and DELETE, the trader loads the record. If the rule fails, the answer is 404, even if the line exists. Thus, the interface does not confirm the identifier.
+For GET, PATCH and DELETE, the handler loads the record. If the rule fails, the answer is 404, even if the line exists. Thus, the interface does not confirm the identifier.
 
 POST checks the Create right first and then `can_create`. The method gets the Create type. The standard is `false`. A superuser skips them. The test is before the INSERT. A rejection is 403 with the detail `create policy rejected the record` and does not create a line.
 
-## Datenmodell
+## Data model
 
-The rule does not have its own table. She sees the already loaded model.
+Policies have no separate database table; they inspect the loaded model.
 
 ## Security mechanisms
 
-Lists, counters and write accesses use `QueryScope`. The standard is `None`, so not a line. `All` must explicitly provide the rule. An active superuser receives `All`. The SQL form is in [query-scopes.md](query-scopes.md)].
+Lists, counts and writes use `QueryScope`. The default is `None`, allowing no rows. A policy must return `All` explicitly to allow every row; active superusers receive `All` automatically. See [query-scopes.md](query-scopes.md) for SQL behavior.
 
 `register` and `register_policy` for the same path may not both be called. Axum keeps both routes.
 
 ## Error cases
 
-| Fall | Antwort |
+| Case | Response |
 |---|---|
 |Rule not bound| 403, `object policy is not bound` |
 |Scope is `None` or the line does not belong to it|empty list or 404|
 |Dataset missing or `can_*` refuses| 404 |
-| Create-Recht fehlt |403 before writing|
-|`can_create` refuses to enter| 403, keine Zeile |
-| Pflichtfeld fehlt | 422 |
+| Create permission is missing | 403 before writing |
+| `can_create` rejects the input | 403; no row is written |
+| Required field is missing | 422 |
 
 ## Example
 
@@ -92,4 +92,4 @@ The scope knows `All`, `None` and an equality comparison. Joins and OR links are
 
 ## Planned extensions
 
-Scopes with multiple columns or joins are planned and not implemented. A rejected individual data set remains 404. Superusers get `All` and skip `can_*`. Test: `auth.rs` and `admin_http.rs`.
+Scopes with multiple columns or joins are planned and not implemented. A rejected individual record remains 404. Superusers get `All` and skip `can_*`. Test: `auth.rs` and `admin_http.rs`.

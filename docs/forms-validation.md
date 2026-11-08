@@ -1,51 +1,51 @@
-# Formularvalidierung
+# Form validation
 
-**Stand:** v0.19, IST. The cargo version remains `0.1.0`. Additional codes: `validation.date`, `validation.time`, `validation.datetime`, `validation.datetime_offset`.
+**Milestone:** v0.19, Implemented. The Cargo version remains `0.1.0`. Additional codes: `validation.date`, `validation.time`, `validation.datetime`, `validation.datetime_offset`.
 
-## Verantwortlichkeit
+## Responsibility
 
 `ferrioxid-core::validation` is the common rule kernel for form fields. `FerrioxidModel` retains the previously generated checks so that existing CRUD responses remain unchanged.
 
 ## Crates and files
 
 - `crates/ferrioxid-core/src/validation.rs`
-- Aufrufer: `crates/ferrioxid-forms/src/lib.rs`
-- Modellmakro, unverändert: `crates/ferrioxid-macros/src/lib.rs`
+- Caller: `crates/ferrioxid-forms/src/lib.rs`
+- Model macro, unchanged: `crates/ferrioxid-macros/src/lib.rs`
 
 ## Public API
 
-`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` and `is_http_url`. Returns are stable codes, not translated sentences. Translation makes `ferrioxid::forms::message`.
+`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` and `is_http_url` return stable codes rather than localized sentences. `ferrioxid::forms::message` translates those codes.
 
-## Datenfluss
+## Data flow
 
 ```text
 FerrioxidModel-Makro → eigene Meldungen (unverändert)
 ferrioxid-forms → text_code / parse_* → Feldcode → message(locale, code)
 ```
 
-Optional text fields treat an empty value as `None` before the mandatory rule takes effect. Numbers and UUIDs without value remain `validation.required` if the Required help is used.
+Optional text fields convert empty input to `None` before required-field validation. Missing numbers and UUIDs produce `validation.required` when the required-field helper is used.
 
-## Konfiguration
+## Configuration
 
 None. Boundaries are at the call point, for example `TextSpec.min_length`.
 
-## Sicherheit
+## Security
 
 Rules only see the already decoded field value. They do not run SQL or shell commands. Email and URL checks are deliberately narrow: ASCII, a `@`, a domain with point, `http` or `https`.
 
 ## Error cases
 
-| Code | Bedeutung |
+| Code | Meaning |
 |---|---|
-| `validation.required` | leerer Pflichtwert |
-| `validation.min_length` | zu kurz |
-| `validation.max_length` | zu lang |
-| `validation.min_value` | Zahl zu klein |
+| `validation.required` | Required value is empty |
+| `validation.min_length` | Too short |
+| `validation.max_length` | Too long |
+| `validation.min_value` | Number is too small |
 | `validation.max_value` |Number too large|
 | `validation.email` |Not a simple email|
 | `validation.url` |No `http` or `https` URL|
 | `validation.invalid_type` |No number or bool|
-| `validation.uuid` | keine UUID |
+| `validation.uuid` | Invalid UUID |
 
 ## Example
 
@@ -61,6 +61,6 @@ ferrioxid::core::text_code("a@b", true, None, Some(254), true, false);
 
 The model macro still duplicates the rules. International email addresses and free URL schemes are rejected.
 
-## Erweiterung
+## Extension
 
 The macro can later call `text_code` without changing the public error texts of the REST API.

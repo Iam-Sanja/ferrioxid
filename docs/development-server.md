@@ -1,10 +1,10 @@
-# Entwicklungsserver
+# Development server
 
-[For overview](index.md) · **IST file:** `crates/ferrioxid-cli/src/develop.rs`.]
+[Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/develop.rs`.
 
-## Aufgabe
+## Purpose
 
-`ferrioxid dev` translates the project, starts the binary and restarts it after relevant file changes. `ferrioxid build` creates a release build.
+`ferrioxid dev` compiles the project, starts its binary and restarts it after relevant file changes. `ferrioxid build` creates a release build.
 
 ## Responsible files
 
@@ -20,30 +20,30 @@ ferrioxid build
 
 Both commands read `ferrum.toml` in the working directory or a parent directory.
 
-## Konfiguration
+## Configuration
 
-`BIND_ADDRESS` and `DATABASE_URL` apply to the started process. Before the build, `ferrioxid dev` checks the migration situation only by reading. Pending migrations or a non-auditable database result in a warning and not an abort. Nothing is migrated. `ferrioxid build` and `ferrioxid dev` do not start Node.js. The admin is included in the rust binary. The warning describes [migration-diagnostics.md](migration-diagnostics.md)].
+`BIND_ADDRESS` and `DATABASE_URL` apply to the started process. Before the build, `ferrioxid dev` checks the migration situation only by reading. Pending migrations or a non-auditable database result in a warning and not an abort. Nothing is migrated. `ferrioxid build` and `ferrioxid dev` do not start Node.js. The admin is included in the rust binary. The warning describes [migration-diagnostics.md](migration-diagnostics.md).
 
-## Datenfluss
+## Data flow
 
-A restart also reloads the Tera templates. `dev` starts the binary from `target/debug` or from `CARGO_TARGET_DIR/debug` when this variable is set. The guardian observes the project recursively. `target`, `node_modules`, `.git`, `dist` and `embedded-admin` are ignored. Only `.rs`, `.toml` and `.json` will trigger a restart. Between two starts are at least 400 milliseconds. The CLI starts `cargo build --bin <paket>` and then the Binary. A crash does not restart the server until a file changes. Ctrl+C ends the child process. At most, one server instance is running.
+Restarting reloads Tera templates. `dev` launches the binary from `target/debug` or `CARGO_TARGET_DIR/debug`. Its recursive file watcher ignores `target`, `node_modules`, `.git`, `dist` and `embedded-admin`; only `.rs`, `.toml` and `.json` changes trigger restarts, at least 400 ms apart. It runs `cargo build --bin <paket>` before launching the binary. A crash waits for the next file change. Ctrl+C stops the child process, and only one server instance runs at a time.
 
-`build` checks the frontend for embedded assets and then executes `cargo build --release`. The list of results is output. If `CARGO_TARGET_DIR` is in the environment, this is the release folder there.
+`build` runs `cargo build --release` and prints the resulting artifact paths. When `CARGO_TARGET_DIR` is set, artifacts are placed in its release directory. No frontend build is required.
 
 ## Error cases
 
-| Fall | Verhalten |
+| Case | Behavior |
 |---|---|
-| Keine `ferrum.toml` |Termination with notice|
-|Translation errors|Message that the old process has ended, no restart until the next change|
+| Missing `ferrum.toml` | Exit with a diagnostic |
+| Compilation errors | Report that the previous process has stopped; retry on the next change |
 |The admin is missing in the binary|This is not due to a lack of frontend. A compile error of Rust remains a compile error.|
 |Address starts with `0.0.0.0`|The generated application ends|
 
-## Sicherheitsregeln
+## Security rules
 
 The guard does not start a shell with the filename. Child processes are terminated upon termination of the CLI. The admin is already in the binary.
 
-## Beispiele
+## Examples
 
 Windows and Linux:
 

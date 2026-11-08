@@ -1,8 +1,8 @@
-# Eigene Admin-Filter
+# Custom admin filters
 
-[For an overview](admin-extension-api.md)]
+[Overview](admin-extension-api.md)
 
-## IST
+## Implemented
 
 `AdminFilter::equals` and `AdminFilter::choice` attach a GET field `filter.{name}` to the model list. The name must not be a model field. The column is a `'static` name from the registry and must belong to the model. It must not be the primary key and must not be hidden or sensitive.
 

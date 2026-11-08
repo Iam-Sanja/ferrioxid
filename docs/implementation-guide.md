@@ -1,21 +1,21 @@
-# Implementation guide for executing coding AIs
+# Implementation guide for coding agents
 
-[For an overview](index.md) · **Status:** Working conventions and testable target criteria. Function status v0.27.1 complements the application worker in [workers.md](workers.md)]. Functional status v0.27 complements [jobs.md](jobs.md), [workers.md](workers.md) and [job-mail-integration.md](job-mail-integration.md)]. Reset tokens are not placed in job payloads. Functional status v0.26 complements [models.md](models.md), [model-components.md](model-components.md), [model-timestamps.md](model-timestamps.md) and [app-lifecycle.md](app-lifecycle.md)]. Soft Delete cannot be described as finished. Functional status v0.25 complements [apps.md](apps.md), [app-registry.md](app-registry.md) and [app-migrations.md](app-migrations.md)]. An existing `main.rs` and applied migrations are not rewritten for this. Functional status v0.24 complements [settings.md](settings.md), [urls.md](urls.md) and [views.md](views.md)]. An existing `main.rs` is not rewritten for this. Function status v0.23 remains valid. Email and reset: [mail.md](mail.md), [password-reset.md](password-reset.md), [notifications.md](notifications.md). Functional status v0.22 remains valid]. Admin extensions: [admin-extension-api.md](admin-extension-api.md). Diagnosis and upgrade: [migration-diagnostics.md](migration-diagnostics.md)., [project-upgrade.md](project-upgrade.md). v0.20 remains valid.] The date and time are described in [date-time-types.md](date-time-types.md)]. Transactions: [transactions.md](transactions.md)]. Existing applied migrations are not rewritten.
+[Overview](index.md) · **Scope:** working conventions and testable acceptance criteria. Relevant modules include [jobs](jobs.md), [workers](workers.md), [model components](model-components.md), [apps](apps.md), [settings](settings.md), [named routes](urls.md), [views](views.md), [migration diagnostics](migration-diagnostics.md), [project upgrade](project-upgrade.md), [date/time types](date-time-types.md) and [transactions](transactions.md). Reset tokens never belong in job payloads. Soft delete is planned. Framework changes must not silently rewrite existing `main.rs` files or applied migrations.
 
 ## 1. First understand the existing code
 
-Lies in dieser Reihenfolge `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md), [i18n.md](i18n.md), [error-codes.md](error-codes.md), [testing.md](testing.md), bevor du die betroffene Crate änderst. **Behaupte keine Feature-Vollständigkeit auf Basis einer SOLL-Dokumentation.** Auth-Tabellen laufen über `apply_directory_with_history` und `_ferrum_auth_migrations`. `0001_initial.json` wird nicht geändert. v0.12 ergänzt Formulare, Staticfiles, lokalen Speicher und Middleware. Upload-Metadaten bleiben Sidecar-JSON, damit die Migrationsprüfsummen gelten. S3 und ein Virenscanner sind nicht als fertig zu beschreiben.
+Read `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md), [i18n.md](i18n.md), [error-codes.md](error-codes.md) and [testing.md](testing.md), in that order, before changing the relevant crate. **Do not claim a feature is complete based on a planned-design document.** Auth tables use `apply_directory_with_history` and `_ferrum_auth_migrations`. Do not edit `0001_initial.json`. v0.12 adds forms, static files, local storage and middleware. Upload metadata remains in sidecar JSON to preserve migration checksums. Do not describe S3 or virus scanning as implemented.
 
 ## 2. Respect for module boundaries
 
 - Core: only joint contracts, no ORM/Axum dependency.
 - Macros: syn-parsing, typecheck, codegen; no DB connection.
-- DB: Connection, typsicheres Repository, DB-Fehler; keine HTTP-Statuscodes.
+- DB: connections, type-safe repositories and database errors; no HTTP status codes.
 - API: Axum router, DTO extractor, HTTP response, no new model syntax.
 - CLI: Commands and orchestration, not double ORM logic.
-- Example: only public ferrioxide facade, no special internal code.
+- Example: only public Ferrioxid facade, no special internal code.
 
-## 3. Mandatory expiry per change
+## 3. Required workflow for each change
 
 1. Name specific target and affected paths.
 2. Check public API/data model for breaking changes.
@@ -23,7 +23,7 @@ Lies in dieser Reihenfolge `Cargo.toml`, [architecture.md](architecture.md), [co
 4. Supplement tests for positive, negative and safety cases.
 5. `cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and `cargo build --workspace`. The SQLite HTTP test is part of `cargo test`. Check PostgreSQL only with running server and `--ignored`.
 6. Document each executed command with result; Name missing tools or DB openly.
-7. Update affected documentation pages in IST/SOLL and check cross-links.
+7. Update affected documentation pages in Implemented/Planned and check cross-links.
 
 ## 4. Modification template (for issue/PR)
 
@@ -49,7 +49,7 @@ Bekannte Einschränkungen:
 - Negative tests confirm necessary rejection.
 - README and partial documentation describe the **actually implemented**.
 
-## 6. Decision Papers (ADR)
+## 6. Architecture decision records (ADRs)
 
 Create short ADRs under `docs/adr/` for landmark decisions:
 
@@ -63,16 +63,16 @@ Folgen:
 Migrationsaufwand:
 ```
 
-Proposed ADR topics: Macro ↔ ORM strategy; schema format; access policy; Admin Scheme API; Migration and Rollback Semantics. SOLL means **suggested** here – do not require existing ADRs.
+Proposed ADR topics: macro/ORM strategy, schema format, access policy, the admin schema API, and migration and rollback semantics. These ADRs are suggestions, not existing requirements.
 
 ## 7. Next admin phases
 
-Read [roadmap.md](roadmap.md)] before expanding the admin. v0.14 to v0.18 are implemented. The date and time are deliberately not supplemented.
+Read [roadmap.md](roadmap.md) before extending the admin. Milestones through v0.28 are implemented, including date/time fields in v0.19. Keep planned work separate from those existing features.
 
 Impeccable, a Cloudflare audit skill, sub-mode and ponytail are not stored in the work tree as a skill. Don't install them on the side. Read a skill only after express consent and only for the phase that calls it. No skill or hook generates commits or pushes.
 
-An admin order that only extends the roadmap does not change traders and templates other than documentation.
+An admin order that only extends the roadmap does not change handlers and templates other than documentation.
 
 ## 8. Current focus
 
-SQLite ist die lokale Standarddatenbank. PostgreSQL bleibt über `DATABASE_URL` unterstützt. Neue Spaltenabbildungen gehören nach `crates/ferrioxid-db/src/sql.rs`. Neue Migrationsregeln gehören nach `crates/ferrioxid-migrations`. Ein SQLite-Umbau darf nur laufen, wenn die geänderte Spalte vorher geprüft ist und die Transaktion bei Fehler alles zurücknimmt. Foreign Keys auf bestehenden Spalten werden nicht umgebaut. Authentifizierung ist vorhanden. Der Admin ist in v0.8 vorhanden und seit v0.13 serverseitiges HTML, beschrieben in [admin-native.md](admin-native.md). v0.9 ergänzt `can_create`, das Feature `admin-ui` und die Befehle `new`, `dev`, `doctor`, `check`, `generate model` und `build`. v0.10 ergänzt Settings und Tera-Seiten. Die Cargo-Version bleibt `0.1.0`. Many-to-Many und Eager Loading nur nach ausdrücklicher Beauftragung. Die Roadmap ist keine Freigabe. Constraints und Beziehungen sind in [constraints.md](constraints.md) und [relations.md](relations.md) beschrieben.
+SQLite is the default local database; PostgreSQL remains supported through `DATABASE_URL`. Add column mappings in `crates/ferrioxid-db/src/sql.rs` and migration rules in `crates/ferrioxid-migrations`. A SQLite rebuild must validate affected values before conversion and roll back the entire transaction on error. Existing-column foreign keys are not rebuilt. Authentication exists; the admin was added in v0.8 and has used server-rendered HTML since v0.13, as described in [admin-native.md](admin-native.md). v0.9 adds `can_create`, the `admin-ui` feature and `new`, `dev`, `doctor`, `check`, `generate model` and `build`. v0.10 adds settings and Tera pages. The Cargo version remains `0.1.0`. Implement many-to-many or eager loading only when explicitly requested; the roadmap is not authorization. See [constraints.md](constraints.md) and [relations.md](relations.md).

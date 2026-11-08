@@ -1,10 +1,10 @@
 # SMTP
 
-[For overview](index.md) · Service: [mail.md](mail.md) · Security: [mail-security.md](mail-security.md)]
+[Overview](index.md) · Service: [mail.md](mail.md) · Security: [mail-security.md](mail-security.md)
 
-**Stand:** v0.23. One shipment attempt per `send`. There is no plaintext fallback and no repetition within the HTTP request.
+**Milestone:** v0.23. One delivery attempt per `send`. There is no plaintext fallback and no repetition within the HTTP request.
 
-## Verbindung
+## Connection
 
 `security = "starttls"` uses `starttls_relay`. `security = "tls"` uses `relay` for implicit TLS. Both check the certificate on the rustls standard roots. Another value does not activate SMTP. The timeout is the smaller value of configuration and 30 seconds, at least one second. An expired timeout is `mail.timeout`. A rejected or failed handover is `mail.rejected`. A non-constructable transport is `mail.unavailable`. The library message is not logged because it can repeat access data.
 
@@ -30,7 +30,7 @@ let mail = MailService::smtp(
 
 A successful SMTP result means that the server has accepted the message. It does not prove that it is in the inbox.
 
-## Konfiguration
+## Configuration
 
 ```toml
 [mail]

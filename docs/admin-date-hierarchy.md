@@ -1,6 +1,6 @@
-# Datumshierarchie
+# Date hierarchy
 
-**Stand:** v0.19.
+**Milestone:** v0.19.
 
 ```rust
 #[ferrioxid(admin = true, admin_date_hierarchy = "event_date")]

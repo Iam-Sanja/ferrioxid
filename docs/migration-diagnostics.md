@@ -1,33 +1,33 @@
-# Migrationsdiagnose
+# Migration diagnostics
 
-[For overview](index.md) · Migrations: [migrations.md](migrations.md) · CLI: [cli.md](cli.md)]
+[Overview](index.md) · Migrations: [migrations.md](migrations.md) · CLI: [cli.md](cli.md)
 
-**IST:** `crates/ferrioxid-migrations/src/inspect.rs`. The cargo version remains `0.1.0`.
+**Implemented:** `crates/ferrioxid-migrations/src/inspect.rs`. The Cargo version remains `0.1.0`.
 
-## Aufgabe
+## Purpose
 
-The same reading test applies to `ferrioxid migrate status`, `ferrioxid check`, `ferrioxid doctor`, `ferrioxid dev` and `ferrioxid upgrade --check` and `--dry-run`, respectively. It does not apply migration, does not create a history table, and does not create an SQLite file.
+`ferrioxid migrate status`, `ferrioxid check`, `ferrioxid doctor`, `ferrioxid dev` and `ferrioxid upgrade --check` or `--dry-run` share read-only diagnostics. These checks apply no migrations and create neither history tables nor SQLite files.
 
-Auth files are in `crates/ferrioxid-auth/migrations`. The story is called `_ferrum_auth_migrations`. App files are in the project’s `migrations_dir`. The story is called `_ferrum_migrations`. Declared app packages from `[app.<name>]` are in the same history under `shop:0001_initial`. The CLI reads this declaration and not `registry.migrations`. The line `app.migration.runtime` says that. The process start compares both sides.
+Auth files live in `crates/ferrioxid-auth/migrations`, with history in `_ferrum_auth_migrations`. Project migrations use `migrations_dir` and `_ferrum_migrations`. Declared `[app.<name>]` packages share that table with namespaced IDs such as `shop:0001_initial`. The CLI reads TOML rather than `registry.migrations` and reports this limit as `app.migration.runtime`; startup compares both declarations.
 
-## Bericht
+## Report
 
 Each deviation is a `Diagnostic` with range `Auth` or `App`, migration ID, level `Ok`, `Warn` or `Error`, stable code and text. Applied, pending and conflicted files remain separate.
 
-Stabile Codes:
+Stable codes:
 
-| Code | Stufe | Bedeutung |
+| Code | Level | Meaning |
 |---|---|---|
-| `migration.auth.pending` | Warnung |Auth file is not in `_ferrum_auth_migrations`|
-| `migration.app.pending` | Warnung |App file is not in `_ferrum_migrations`|
-| `migration.history.missing` | Warnung |The history table is missing. It is not invested|
-| `migration.checksum_mismatch` | Fehler |Saved checksum and file do not match|
-| `migration.unknown` | Fehler |An applied ID no longer has a file|
-| `migration.order` | Fehler |The order of files and history is wrong|
-| `migration.schema_conflict` | Warnung |The loaded model does not correspond to the migration target|
-| `migration.auth.table_missing` | Fehler |`0002_admin_journal` or `0003_audit_operation` is applied, the table or `operation_id` is missing|
+| `migration.auth.pending` | Warning |Auth file is not in `_ferrum_auth_migrations`|
+| `migration.app.pending` | Warning |App file is not in `_ferrum_migrations`|
+| `migration.history.missing` | Warning | The history table is missing; diagnostics do not create it |
+| `migration.checksum_mismatch` | Error |Saved checksum and file do not match|
+| `migration.unknown` | Error |An applied ID no longer has a file|
+| `migration.order` | Error |The order of files and history is wrong|
+| `migration.schema_conflict` | Warning |The loaded model does not correspond to the migration target|
+| `migration.auth.table_missing` | Error |`0002_admin_journal` or `0003_audit_operation` is applied, the table or `operation_id` is missing|
 | `migration.database.missing` |Warning in Check, Doctor, Dev and Upgrade. Error in `migrate status`|The SQLite file does not exist|
-| `migration.database.unavailable` | Fehler |The existing file is not a readable database. This is not a success|
+| `migration.database.unavailable` | Error |The existing file is not a readable database. This is not a success|
 
 `0002_admin_journal` relates to `_ferrum_admin_audit` and `_ferrum_admin_drafts`. `0003_audit_operation` relates to the column `operation_id`. As long as these files are only pending, this is a warning and not a silent creation.
 
@@ -39,9 +39,9 @@ The URL is `DATABASE_URL`, otherwise `database.url` from `ferrum.toml`. The same
 
 ## Schema
 
-`ferrioxid migrate status` loads the model via `--schema-file` or `schema_command`. `ferrioxid check` does the same after the database file is present. `FERRUM_SCHEMA_FILE` replaces the command. `FERRUM_CHECK_SKIP_SCHEMA=1` skips it in `check`. `doctor`, `dev` and `upgrade` do not start `schema_command`. Without a loaded scheme, the diagnosis explicitly reports this and claims no match.
+`ferrioxid migrate status` loads the model via `--schema-file` or `schema_command`. `ferrioxid check` does the same after the database file is present. `FERRUM_SCHEMA_FILE` replaces the command. `FERRUM_CHECK_SKIP_SCHEMA=1` skips it in `check`. `doctor`, `dev` and `upgrade` do not start `schema_command`. Without a loaded schema, the diagnosis explicitly reports this and claims no match.
 
-## Orders
+## Commands
 
 `migrate status` remains successful for pending migrations and names `ferrioxid migrate up`. Conflicts, a missing file and an unreadable database terminate it with Exitcode 1.
 
@@ -49,7 +49,7 @@ The URL is `DATABASE_URL`, otherwise `database.url` from `ferrum.toml`. The same
 
 `doctor` explains the same situation and proposes `ferrioxid migrate up`. Warnings do not change its exit code. An unreadable database is an error. An uncreated SQLite file is a warning. Storage routes are not guessed from the source code. A missing storage directory is only a warning if the directory itself is missing.
 
-`dev` prints the warning before the build. Pending migrations do not stop the start. If the status could not be read, it is there. There is no success report about an unchecked database.
+`dev` prints migration warnings before building. Pending migrations do not prevent startup. If status cannot be read, it reports that failure rather than claiming the database was checked.
 
 ## Example
 

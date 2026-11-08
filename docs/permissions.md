@@ -1,14 +1,14 @@
-# Roles and authorisations
+# Roles and permissions
 
-[For overview](index.md) · [auth.md](auth.md)] · [policies.md](policies.md)]
+[Overview](index.md) · [auth.md](auth.md) · [policies.md](policies.md)
 
-## Zweck
+## Purpose
 
-Rights apply on the server side. A change in role or authorization takes effect at the next request. Ferrioxide does not cached these rights in session.
+Permissions are enforced on the server and reloaded on each request. Role and permission changes take effect immediately without being cached in the session.
 
-## Architektur
+## Architecture
 
-A user can have multiple roles. A role can have multiple permissions. The code has the form `ressource.aktion`. The promotion is `read`, `create`, `update` or `delete`.
+A user can have several roles, and each role can grant several permissions. Codes use the form `ressource.aktion` (resource and action), with actions `read`, `create`, `update` or `delete`.
 
 `authorize` checks the tables `_ferrum_user_roles`, `_ferrum_role_permissions` and `_ferrum_permissions` on each call.
 
@@ -16,7 +16,7 @@ A user can have multiple roles. A role can have multiple permissions. The code h
 
 - `crates/ferrioxid-auth/src/service.rs`
 - `crates/ferrioxid-auth/src/store.rs`
-- `crates/ferrioxid-macros/src/lib.rs` für `permissions`
+- `crates/ferrioxid-macros/src/lib.rs` for `permissions`
 - `crates/ferrioxid-api/src/lib.rs` for assigning HTTP method to action
 
 ## Public API
@@ -31,29 +31,29 @@ auth.revoke_role("editor@example.com", "editor").await?;
 
 The CLI provides the same steps: `auth create-role`, `auth grant-permission`, `auth revoke-permission`, `auth assign-role`, `auth revoke-role`.
 
-## Datenmodell
+## Data model
 
-| Tabelle | Inhalt |
+| Table | Contents |
 |---|---|
-| `_ferrum_roles` | `id`, eindeutiger `name` |
-| `_ferrum_permissions` | `id`, eindeutiger `code` |
+| `_ferrum_roles` | `id`, unique `name` |
+| `_ferrum_permissions` | `id`, unique `code` |
 | `_ferrum_user_roles` |own UUID, `user_id`, `role_id`, uniquely as a pair|
 | `_ferrum_role_permissions` |own UUID, `role_id`, `permission_id`, uniquely as a pair|
 
 Foreign Keys delete assignments via `CASCADE`.
 
-## Modellattribut
+## Model attribute
 
 ```rust
 #[ferrioxid(table = "internal_notes", api = "/api/v1/internal_notes", permissions = "notes")]
 ```
 
-| Attribut | Wirkung |
+| Attribute | Effect |
 |---|---|
-| keines, `allow_anonymous = false` | jede Methode 403 |
+| No permission and `allow_anonymous = false` | Every method returns 403. |
 | `allow_anonymous = true` |Public, without cookie check|
-| `permissions = "authenticated"` | jede aktive Sitzung |
-| `permissions = "notes"` | `notes.read`, `notes.create`, `notes.update`, `notes.delete` je nach Methode |
+| `permissions = "authenticated"` | Any active authenticated session |
+| `permissions = "notes"` | `notes.read`, `notes.create`, `notes.update` or `notes.delete`, according to the method |
 
 `allow_anonymous` together with `permissions` or `object_policy` is a compile error. The standard remains refusal.
 
@@ -63,11 +63,11 @@ An active superuser passes the role test. `is_staff` does not.
 
 ## Security mechanisms
 
-There is no authorization without entry. `grant_permission` creates role and code if they are missing. `revoke_permission` does not create anything and is without hits.
+Permissions must be explicitly granted. `grant_permission` creates a missing role or permission code; `revoke_permission` creates nothing and succeeds when no matching grant exists.
 
 ## Error cases
 
-Missing rights are HTTP 403 `Access denied`. A missing session is HTTP 401 and is returned before the rights check.
+Missing permissions are HTTP 403 `Access denied`. A missing session is HTTP 401 and is returned before the permissions check.
 
 ## Example
 
@@ -81,16 +81,16 @@ myshop protects `InternalNote` with `permissions = "notes"`. `Product` and `Cate
 
 ## Tests
 
-`sqlite_tests` forgives and withdraws `notes.*` and checks the superuser. `examples/myshop/tests/auth.rs` checks the protected HTTP methods and the anonymous demo route.
+`sqlite_tests` grants and revokes `notes.*` permissions and checks superuser behavior. `examples/myshop/tests/auth.rs` covers protected HTTP methods and anonymous demo routes.
 
 ## Limitations
 
-There are no field rights. Permissions are global codes, not line filters. Object rules are responsible for this. Lists use the same `QueryScope` as the REST API. See [policies.md](policies.md) and [query-scopes.md](query-scopes.md)].
+There are no field permissions. Permissions are global codes, not line filters. Object rules are responsible for this. Lists use the same `QueryScope` as the REST API. See [policies.md](policies.md) and [query-scopes.md](query-scopes.md).
 
 ## Planned extensions
 
-Field rights, groups beyond roles and a cache with targeted disability are not implemented.
+Field permissions, groups beyond roles and permission caching with targeted invalidation are not implemented.
 
 ## Admin
 
-Staff alone does not grant model rights. A superuser skips the role test, but needs `is_staff` for the admin. An empty admin permission means superuser-only. `permissions = "authenticated"` allows any Staff user after the Staff exam. The directory checks superusers separately from the model rights.
+Staff status alone grants no model permissions. A superuser bypasses role checks but still needs `is_staff` to enter the admin. An empty admin permission allows superusers only. `permissions = "authenticated"` allows any authenticated staff user. The user directory checks superuser status separately from model permissions.

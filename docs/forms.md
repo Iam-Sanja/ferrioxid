@@ -1,15 +1,15 @@
-# Formulare
+# Forms
 
-**Stand:** v0.19, IST. The cargo version remains `0.1.0`. `required_date`, `optional_date`, `required_time`, `optional_time`, `required_datetime_utc` and `required_datetime_local` check the canonical strings. The local DateTime field is considered UTC.
+**Milestone:** v0.19, Implemented. The Cargo version remains `0.1.0`. `required_date`, `optional_date`, `required_time`, `optional_time`, `required_datetime_utc` and `required_datetime_local` check the canonical strings. The local DateTime field is considered UTC.
 
-## Verantwortlichkeit
+## Responsibility
 
 `ferrioxid-forms` checks URL-encoded input and provides a typed Rust object or field error. Forms are not bound to a database table. Contact, search and filter can thus be described without creating a `FerrioxidModel`.
 
 ## Crates and files
 
 - `crates/ferrioxid-forms/src/lib.rs`
-- Gemeinsame Regeln: `crates/ferrioxid-core/src/validation.rs`
+- Shared validation rules: `crates/ferrioxid-core/src/validation.rs`
 - Example: `examples/myshop/src/contact.rs`
 - Generator: `crates/ferrioxid-cli/src/scaffold.rs`, function `contact_handlers`
 
@@ -17,25 +17,25 @@ The facade exports the module as `ferrioxid::forms`.
 
 ## Public API
 
-`FerrioxidForm::from_form` nimmt `FormValues` entgegen. `ContactForm` ist die mitgelieferte Referenz. Hilfen heißen `required_text`, `optional_text`, `required_i64`, `optional_i64`, `required_bool`, `optional_bool`, `required_uuid` und `optional_uuid`. `render_form` und `render_page` erzeugen HTML. `message` liefert deutsche und englische Texte zu stabilen Codes. `FormValues::parse_urlencoded` begrenzt den Body auf 65536 Byte und lehnt unbekannte Felder über `reject_unknown` ab. `csrf_token` ist erlaubt und kein Datenfeld.
+`FerrioxidForm::from_form` accepts `FormValues`; `ContactForm` is the supplied example. Helpers include `required_text`, `optional_text`, `required_i64`, `optional_i64`, `required_bool`, `optional_bool`, `required_uuid` and `optional_uuid`. `render_form` and `render_page` generate HTML. `message` maps stable codes to German and English text. `FormValues::parse_urlencoded` limits the body to 65536 bytes and rejects unknown fields through `reject_unknown`. `csrf_token` is allowed as a control field rather than form data.
 
 A `#[derive(FerrioxidForm)]` is not implemented. The Trait form is the compilable API.
 
-## Datenfluss
+## Data flow
 
-The trader reads the body, builds `FormValues` and calls `from_form`. Valid values are typed. Errors remain codes per field. `render_form` escaped names, values and messages. The success page of the contact example does not save the message and does not send an email.
+The handler reads the body, builds `FormValues` and calls `from_form`. Valid values are typed. Errors remain codes per field. `render_form` escaped names, values and messages. The success page of the contact example does not save the message and does not send an email.
 
-## Konfiguration
+## Configuration
 
 Forms do not have their own `ferrum.toml` section. The maximum URL-encoded size is in `FormValues::parse_urlencoded`. Larger requests are previously rejected by the body limit middleware if `ferrioxid::web::prepare` or `ferrioxid::middleware::apply` is used.
 
-## Sicherheit
+## Security
 
-HTML is escaped. Unknown fields result in `validation.unknown_field` and are not adopted silently. The test runs on the server. A session that sends a CSRF cookie must send the same HMAC token as `x-csrf-token` in the `csrf_token` field. Without a meeting, a public form is left without a second CSRF mechanism. The token comes from `AuthService::csrf_from_request`.
+HTML output is escaped. Unknown fields return `validation.unknown_field` instead of being silently accepted. Validation runs on the server. A cookie-authenticated form submits the same HMAC token used by `x-csrf-token` in its `csrf_token` field. Public forms without a session do not add a separate CSRF mechanism. Obtain the token with `AuthService::csrf_from_request`.
 
 ## Error cases
 
-`validation.required`, `validation.min_length`, `validation.max_length`, `validation.min_value`, `validation.max_value`, `validation.email`, `validation.url`, `validation.invalid_type`, `validation.uuid`, `validation.unknown_field`, `validation.mismatch`, `form.csrf`. `ContactForm` setzt `validation.mismatch`, wenn der Name dem lokalen Teil der E-Mail entspricht. Unbekannte Codes ergeben in `message` den Text `missing message`.
+Codes include `validation.required`, `validation.min_length`, `validation.max_length`, `validation.min_value`, `validation.max_value`, `validation.email`, `validation.url`, `validation.invalid_type`, `validation.uuid`, `validation.unknown_field`, `validation.mismatch` and `form.csrf`. `ContactForm` returns `validation.mismatch` when the name equals the local part of the email address. For unknown codes, `message` returns `missing message`.
 
 ## Example
 
@@ -53,6 +53,6 @@ let _checked = form.name;
 
 There is no form set, no file fields in the form API, and no proc macro. The model macro does not yet call the common core.
 
-## Erweiterung
+## Extension
 
-A later derivative can call the same functions from `ferrioxid-core`. File and Formset fields remain planned.
+A future derive macro can call the same functions from `ferrioxid-core`. File fields and formsets remain planned.

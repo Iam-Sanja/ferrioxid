@@ -1,8 +1,8 @@
-# Own admin actions
+# Custom admin actions
 
-[For overview](admin.md) · Collective actions: [admin-bulk-actions.md](admin-bulk-actions.md)]
+[Overview](admin.md) · Bulk actions: [admin-bulk-actions.md](admin-bulk-actions.md)
 
-## Registrierung
+## Registration
 
 ```rust
 registry.action(AdminAction {
@@ -19,7 +19,7 @@ registry.action(AdminAction {
 
 `ferrioxid::admin` exports `AdminAction` and `ActionOperation`. `AdminRegistry::action` attaches the entry to the same registry. There is no second model list.
 
-## Regeln
+## Rules
 
 - The name fits `[a-z][a-z0-9_]{0,39}`.
 - `delete`, `activate` and `deactivate` are reserved.
@@ -28,11 +28,11 @@ registry.action(AdminAction {
 - `Delete` requires the right `delete`.
 - `SetBool` requires `update` and a visible, non-write-protected, non-sensitive bool column that is not the primary key.
 
-Built-in actions: `delete` always, `activate` and `deactivate` only if such a column `active` exists. An HTTP name that is neither built-in nor registered through `try_action` is 422. No SQL is executed from the request.
+Built-in actions are `delete` for every model and `activate`/`deactivate` when an `active` column exists. An HTTP action name that is neither built in nor registered through `try_action` returns 422. Requests cannot supply SQL.
 
-Both operations run out in the transaction [admin-bulk-actions.md](admin-bulk-actions.md) and write `bulk_delete` or `bulk_update`].
+Both operations run in the transaction described in [admin-bulk-actions.md](admin-bulk-actions.md) and write `bulk_delete` or `bulk_update` audit entries.
 
-## Eigener Handler
+## Custom handler
 
 ```rust
 struct MarkProcessed;
@@ -57,4 +57,4 @@ registry.try_action(
 )?;
 ```
 
-The HTTP parameter selects only the registered name. Ferrioxide checks `update`, the selection limit, the query scope and the object rule beforehand. `set_text`, `set_integer` and `set_bool` only accept one ID from this selection and one column from `writes`. The method does not open a connection. According to the plan, `update_in` writes in the same transaction as the audit. One mistake rolls everything back. `Delete` and `SetBool` remain the previous literals.
+The HTTP parameter selects a registered action by name. Before invoking it, Ferrioxid checks `update` permission, the selection limit, query scope and object policy. `set_text`, `set_integer` and `set_bool` accept only IDs from that selection and columns declared in `writes`. The handler does not open a connection: `update_in` writes in the same transaction as the audit. Any error rolls back all changes. `Delete` and `SetBool` remain available as built-in operations.

@@ -1,12 +1,12 @@
-# Admin-Erweiterung
+# Admin extensions
 
-[Zur Übersicht](admin.md) · Seiten: [admin-custom-views.md](admin-custom-views.md) · Aktionen: [admin-custom-actions.md](admin-custom-actions.md) · Filter: [admin-custom-filters.md](admin-custom-filters.md) · Widgets: [admin-custom-widgets.md](admin-custom-widgets.md)
+[Overview](admin.md) · Pages: [admin-custom-views.md](admin-custom-views.md) · Actions: [admin-custom-actions.md](admin-custom-actions.md) · Filters: [admin-custom-filters.md](admin-custom-filters.md) · Widgets: [admin-custom-widgets.md](admin-custom-widgets.md)
 
-## IST
+## Implemented
 
-The public API is in `ferrioxid::admin`. It is attached to the same `AdminRegistry` as the models. There is no second admin engine and no global registration. myshop shows them in `examples/myshop/src/admin.rs`.
+The public extension API is in `ferrioxid::admin` and uses the same `AdminRegistry` as the models. There is no second admin engine or global registration. The myshop example is in `examples/myshop/src/admin.rs`.
 
-`seal` checks pages, filters, widgets and own actions against the already registered models. Without `seal`, ferrioxide answers its own page with an error and does not apply the extension as a success.
+`seal` validates pages, filters, widgets and custom actions against the registered models. If the registry is not sealed, custom-page requests return an error rather than running an unvalidated extension.
 
 ## Example
 
@@ -51,13 +51,13 @@ let registry = AdminRegistry::new()
     .seal()?;
 ```
 
-`OrderReport` and `MarkProcessed` are available in [admin-custom-views.md](admin-custom-views.md) and [admin-custom-actions.md](admin-custom-actions.md)]. The model key is the table name.
+`OrderReport` and `MarkProcessed` are available in [admin-custom-views.md](admin-custom-views.md) and [admin-custom-actions.md](admin-custom-actions.md). The model key is the table name.
 
-## Grenzen
+## Limitations
 
 - The namespace is `ferrioxid::admin`, not `ferrioxid::prelude`.
-- An own action uses the model verb `update`. A page uses a full code such as `orders.read`.
+- A custom action requires the model permission `update`. A page uses a complete permission code such as `orders.read`.
 - Templates cannot replace `base.html`.
 - A widget does not open a hidden or sensitive field and does not replace a foreign key select.
-- The trader of one side receives the connection only after staff and rights check. He may not reproduce the list. The directory routes continue to check superusers themselves.
-- The navigation of the own pages appears on the overview, in model lists, forms and on the own page, only if `holds` confirms the code.
+- Page handlers receive the connection only after staff and permission checks. They must not bypass the query scope or object policy. Directory routes continue to check superuser access separately.
+- Custom-page navigation appears on the dashboard, model lists, forms and custom pages only when `holds` confirms the required permission.

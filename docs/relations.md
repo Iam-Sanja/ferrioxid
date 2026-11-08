@@ -1,6 +1,6 @@
-# Typical model relationships
+# Typed model relationships
 
-[For overview](index.md) · **IST** for Belongs-To and Has-Many. Many-to-Many, Eager Loading and Batch Loading are not implemented.
+[Overview](index.md) · **Implemented** for Belongs-To and Has-Many. Many-to-Many, Eager Loading and Batch Loading are not implemented.
 
 A relationship does not only exist in Rust. The field carries a foreign key, and the database checks it. The methods load typed models. You do not return a `serde_json::Value`.
 
@@ -21,7 +21,7 @@ pub category_id: Option<Uuid>,
 let category = product.category(&db).await?;
 ```
 
-| Feld |Return|
+| Field |Return|
 |---|---|
 | `Option<Uuid>` | `Result<Option<Category>, FerrioxidError>` |
 | `Uuid` | `Result<Category, FerrioxidError>` |
@@ -47,7 +47,7 @@ pub struct Category {
 }
 ```
 
-The form is `methode=Typpfad.spalte`. The column must exist on the child model. `find_by_column` rejects an unknown column.
+The attribute syntax is `methode=Typpfad.spalte` (method name, type path and column). The column must exist on the child model; `find_by_column` rejects unknown columns.
 
 ```rust
 let products = category.products(&db).await?;
@@ -57,11 +57,11 @@ The return is `Result<Vec<Product>, FerrioxidError>`. No children make an empty 
 
 Mutual module references are allowed because the types are only in method signatures. `myshop` separates `category.rs` and `product.rs`.
 
-## Laden
+## Loading
 
 Each relationship method performs a query when it is called. This is lazy loading. A loop about products that calls `product.category(&db)` each creates one query per product. This is the N+1 problem: one query for the list and N more for the parents.
 
-Eager loading and a `WHERE id IN (...)` for many parents are not implemented. If you invite many children, you should do so with your own query instead of calling `products()` in a loop.
+Eager loading and batched parent queries with `WHERE id IN (...)` are not implemented. To load many child collections, use a custom query rather than calling `products()` in a loop.
 
 The repository methods `list`, `get`, `create`, `update` and `delete` remain unchanged. The relationship methods are separate methods on the model, not new repository methods.
 

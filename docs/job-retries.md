@@ -1,14 +1,14 @@
-# Job-Retries
+# Job retries
 
-[For an overview](index.md) · Jobs: [jobs.md](jobs.md) · Worker: [workers.md](workers.md)]
+[Overview](index.md) · Jobs: [jobs.md](jobs.md) · Worker: [workers.md](workers.md)
 
-**IST.** Attempts are limited. An unlimited repetition is rejected.
+**Implemented.** Attempts are limited. An unlimited repetition is rejected.
 
-## Fehlerklassen
+## Error categories
 
-`JobError::retry("code")` puts the job on `retry` as long as `attempts < max_attempts`. After that, he becomes `failed` with `job.attempts`. `JobError::permanent("code")` immediately sets `failed`. A trader time limit is a retry with `mail.timeout` or `job.timeout`.
+`JobError::retry("code")` sets `retry` while `attempts < max_attempts`; exhausted attempts produce `failed` with `job.attempts`. `JobError::permanent("code")` fails immediately. Handler timeouts are retryable and use `mail.timeout` or `job.timeout`.
 
-The stored code shall consist of lower case, digit, point and underscore and shall have a maximum of 64 characters. Everything else becomes `job.error`. The code does not contain a payload.
+Stored codes contain only lowercase letters, digits, periods and underscores, up to 64 characters. Invalid codes become `job.error`. Codes contain no payload.
 
 ## Backoff
 
@@ -27,8 +27,8 @@ ferrioxid jobs cancel <job-id> --yes
 
 `list` and `inspect` open SQLite with `mode=ro` and do not write. `retry` applies to `failed` and `cancelled`. It sets `pending`, `attempts = 0` and deletes lease and error code. `cancel` applies to `pending` and `retry`. A `running` job remains untouched and delivers `job.running`.
 
-Without `--yes`, the exit code is 2 and the database remains unchanged. The permission is that of the local operator, the same confidence limit as `ferrioxid migrate up`. There is no HTTP endpoint for this.
+Without `--yes`, the command exits with code 2 and leaves the database unchanged. Authorization relies on the local operator’s access, the same trust boundary as `ferrioxid migrate up`. There is no HTTP endpoint.
 
-## Intervalle
+## Intervals
 
-Only a successful deal plans the next maturity. A permanently failed interval does not generate further lines. `ferrioxid jobs retry --yes` opens the same line again. Two entries with the same `schedule_key` deliver the second call as `EnqueueOutcome::Existing`.
+Only successful completion schedules the next interval. A permanently failed recurring job creates no further rows. `ferrioxid jobs retry --yes` reopens the same row. Enqueuing twice with the same `schedule_key` returns `EnqueueOutcome::Existing` on the second call.

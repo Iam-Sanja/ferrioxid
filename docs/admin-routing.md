@@ -1,24 +1,24 @@
-# Admin-Routen
+# Admin routes
 
-[For overview](admin-native.md) · Security: [admin-security.md](admin-security.md) · CSRF: [csrf.md](csrf.md)]
+[Overview](admin-native.md) · Security: [admin-security.md](admin-security.md) · CSRF: [csrf.md](csrf.md)
 
 ## HTML
 
-| Methode | Pfad | Wirkung |
+| Method | Path | Effect |
 |---|---|---|
-| GET | `/admin`, `/admin/` |Overview. Without session forwarding for registration.|
-| GET | `/admin/login` |Form. Sets or takes over `ferrioxid_login_csrf`.|
-| POST | `/admin/login` |Checks Login-CSRF, Origin and access data. Then 303.|
-| POST | `/admin/logout` |Check the session CSF and end the session.|
-| POST | `/admin/preferences` |Language and theme. Requires Staff and Session CSF.|
-| GET | `/admin/models` | Weiterleitung auf `/admin`. |
+| GET | `/admin`, `/admin/` | Dashboard; requests without a session redirect to login. |
+| GET | `/admin/login` | Render the form; create or reuse `ferrioxid_login_csrf`. |
+| POST | `/admin/login` | Validate login CSRF, origin and credentials; redirect with 303 on success. |
+| POST | `/admin/logout` |Check the session CSRF and end the session.|
+| POST | `/admin/preferences` |Language and theme. Requires Staff and Session CSRF.|
+| GET | `/admin/models` | Redirect to `/admin`. |
 | GET | `/admin/models/{model}` |Query: `q`, `sort`, `dir`, `page`, `filter.{feld}`.|
-| GET | `/admin/models/{model}/new` | Leeres Formular. |
+| GET | `/admin/models/{model}/new` | Empty creation form. |
 | POST | `/admin/models/{model}/new` |Create, then 303 on the detail.|
 | GET | `/admin/models/{model}/{id}` | Detail. |
-| GET, POST | `/admin/models/{model}/{id}/edit` |Form and storage.|
-| GET | `/admin/models/{model}/{id}/delete` |Confirmation. Don't delete anything.|
-| POST | `/admin/models/{model}/{id}/delete` |Delete, then add 303 to the list.|
+| GET, POST | `/admin/models/{model}/{id}/edit` | Render the edit form or save changes. |
+| GET | `/admin/models/{model}/{id}/delete` | Show confirmation without deleting. |
+| POST | `/admin/models/{model}/{id}/delete` | Delete, then redirect to the list with 303. |
 | GET | `/admin/directory/users` |User. Staff superusers only.|
 | GET, POST | `/admin/directory/users/new` |Create the user. No superuser field.|
 | GET | `/admin/directory/users/{id}` |User detail without hash.|
@@ -31,7 +31,7 @@
 | POST | `/admin/directory/roles/{role}/permissions` |`action=grant` or `revoke`.|
 | POST | `/admin/directory/assignments` |Assign or withdraw role.|
 | GET | `/admin/assets/admin.css` | Stylesheet. |
-| GET | `/admin/assets/admin.js` | Optionales Script. |
+| GET | `/admin/assets/admin.js` | Optional JavaScript. |
 
 GET does not change data. Writing actions are POST and respond to success with 303. Query parameters do not set, change or delete anything.
 
@@ -39,25 +39,25 @@ GET does not change data. Writing actions are POST and respond to success with 3
 
 `/admin/api` remains the existing JSON API: configuration, session, models, records and directory. It reads CSRF from the header `x-csrf-token`. HTML forms send the same token as the `csrf_token` field. The two paths are shared by `authenticate_csrf`.
 
-## Registration without a meeting
+## Login before a session exists
 
-The session CSF exists only after login. The registration form therefore uses its own cookie `ferrioxid_login_csrf`. It is 64 Hex characters, HttpOnly, path `/`, SameSite from the Auth configuration, `Secure` only if the session cookie is `Secure`, and is valid for a maximum of ten minutes. The HTML response sets `Cache-Control: no-store` to keep the form and cookie together. Multiple tabs accept the same valid cookie. After successful registration, it will be deleted. The JSON route `POST /auth/login` remains without this cookie, as before.
+Session CSRF is available only after login. The login form therefore uses a separate `ferrioxid_login_csrf` cookie: 64 hex characters, HttpOnly, path `/`, SameSite from auth configuration, `Secure` when the session cookie is secure, and a lifetime of at most ten minutes. `Cache-Control: no-store` keeps the form and cookie together. Tabs reuse the same valid cookie, which is deleted after successful login. JSON `POST /auth/login` does not use this HTML login cookie.
 
-`Origin` or, if no origin is sent, `Referer` must fit the Allowlist. If both are missing, the request is allowed from the point of view of the origin verification; The login cookie is independent of this obligation. The Allowlist reads `AuthConfig::apply_bound_address` from `BIND_ADDRESS` or from `server.host` and `server.port` in `ferrum.toml`. Without set `FERRUM_ALLOWED_ORIGINS`, the `http://127.0.0.1:{port}` and `http://localhost:{port}` are. An earlier fixed port 3000 no longer applies if the process is listening at another port. Public hosts and the request’s host header are not supplemented. `Origin: null` is invalid unless the browser simultaneously sends `Sec-Fetch-Site: same-origin`. This happens with `Referrer-Policy: no-referrer` for a form of the same origin. The visible error message remains "The security check failed". The log mentions the basic code and in case of an origin rejection only source, class and port, never the cookie or the token.
+`Origin`, or `Referer` when Origin is absent, must match the allowlist. When both are missing, origin validation permits the request, but the login cookie and token are still required. `AuthConfig::apply_bound_address` derives loopback origins from `BIND_ADDRESS` or `server.host` and `server.port` in `ferrum.toml`. Unless `FERRUM_ALLOWED_ORIGINS` is explicitly set, the origins are `http://127.0.0.1:{port}` and `http://localhost:{port}` for the bound port. Public hosts and request Host headers are never added. `Origin: null` is accepted only with `Sec-Fetch-Site: same-origin`, as browsers may send it for a same-origin form with `Referrer-Policy: no-referrer`. Rejection shows “The security check failed”. Logs record the reason code and, for origin rejection, only source, category and port; they never log cookies or tokens.
 
 `next` is only accepted if the value begins with `/admin`, has a maximum of 200 characters and contains neither `//`, `\`, `://` nor control characters. Everything else becomes `/admin`.
 
-## Fehler
+## Errors
 
-| Lage | HTML |
+| Situation | HTML |
 |---|---|
-|Auth is not configured| 403, Klartext |
-| Keine Sitzung | 303 auf `/admin/login?next=` |
-| Kein Staff | 403, Klartext `staff access is required` |
-|Lack of model law| 403, Fehlerseite |
-|Data set not visible|404, same text as for a missing data set|
+| Auth is not configured | 403, plain text |
+| No session | 303 to `/admin/login?next=` |
+| Not staff | 403, plain text `staff access is required` |
+| Missing model permission | 403, error page |
+|Data set not visible|404, same text as for a missing record|
 |Invalid sorting or invalid filter| 422 |
 |Missing or incorrect CSRF| 403 |
-|Incorrect access data, unknown email or inactive user| 401, derselbe Text |
+| Invalid credentials, unknown email or inactive user | 401, identical response text |
 
 The JSON API retains its previous status codes. An anonymous JSON request remains 401.

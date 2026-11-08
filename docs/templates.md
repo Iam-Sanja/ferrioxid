@@ -1,10 +1,10 @@
-# Vorlagen
+# Templates
 
-[For overview](index.md) · **IST files:** `crates/ferrioxid-api/src/pages.rs`, `crates/ferrioxid-cli/src/scaffold.rs`.]
+[Overview](index.md) · **Implemented files:** `crates/ferrioxid-api/src/pages.rs`, `crates/ferrioxid-cli/src/scaffold.rs`.
 
-## Aufgabe
+## Purpose
 
-Normal pages outside the admin are rendered on the server side with Tera. The admin templates are separate in `crates/ferrioxid-admin/templates` and are not loaded from the project folder. See [admin-templates.md](admin-templates.md)]. Tera corresponds to the Jinja and Django model: inheritance via `extends`, building blocks via `include`, variables in `{{ }}`. Form HTML from `ferrioxid::forms::render_form` is additionally available and escaped field values. The contact side of the generator and myshop uses this path. The style sheet is under `/static/css/app.css`.
+Normal pages outside the admin are rendered on the server side with Tera. The admin templates are separate in `crates/ferrioxid-admin/templates` and are not loaded from the project folder. See [admin-templates.md](admin-templates.md). Tera corresponds to the Jinja and Django model: inheritance via `extends`, building blocks via `include`, variables in `{{ }}`. Form HTML from `ferrioxid::forms::render_form` is additionally available and escaped field values. The contact side of the generator and myshop uses this path. The style sheet is under `/static/css/app.css`.
 
 ## Responsible files
 
@@ -14,9 +14,9 @@ Normal pages outside the admin are rendered on the server side with Tera. The ad
 
 ## Public interface
 
-`ferrioxid::pages::Site::open` loads `**/*.html`. `render` creates a page. `home_context` fills project name, language, admin flag and the short standard texts. `mount_pages` depends on `/` and a 404 response to the router if `templates.enabled` is true. For each request, `negotiate_locale` selects the language. `message` provides the prepared texts for `de` and `en`, including Welcome, 404 and 500. An unknown locale falls back in English and is not used as a path.
+`ferrioxid::pages::Site::open` loads `**/*.html`, and `render` renders a template. `home_context` supplies the project name, locale, admin flag and standard text. When `templates.enabled` is true, `mount_pages` adds `/` and an HTML 404 fallback. `negotiate_locale` selects the language for each request. `message` provides German and English text, including welcome, 404 and 500 messages. Unknown locales fall back to English and never become file paths.
 
-## Konfiguration
+## Configuration
 
 ```toml
 [templates]
@@ -25,19 +25,19 @@ engine = "tera"
 templates_dir = "templates"
 ```
 
-## Datenfluss
+## Data flow
 
 The application loads the settings, opens the template directory and renders again every time it is called. A missing start page prevents the start. If the rendering fails, `errors/500.html` is attempted.
 
 ## Error cases
 
-| Fall | Verhalten |
+| Case | Behavior |
 |---|---|
-| `index.html` fehlt |Start with error message|
-| unbekannte Engine |`ferrum.toml` is rejected|
-| unbekannte Route | 404 aus `errors/404.html` |
+| Missing `index.html` | Startup fails with an error message |
+| Unknown template engine | Reject `ferrum.toml` |
+| Unknown route | 404 rendered from `errors/404.html` |
 
-## Sicherheitsregeln
+## Security rules
 
 `primary_color` must only be a hex value so that it can be inserted into the CSS of the template. Template paths remain relative and without `..`.
 
@@ -53,7 +53,7 @@ The application loads the settings, opens the template directory and renders aga
 
 ## Tests
 
-`index_template_renders_the_project_name` renders a temporary project. The generator applies `templates/base.html`, `index.html` and `errors/`. A generated project must translate with `cargo check`.
+`index_template_renders_the_project_name` renders a temporary project. The generator writes `templates/base.html`, `index.html` and `errors/`. Generated projects must compile with `cargo check`.
 
 ## Limitations
 

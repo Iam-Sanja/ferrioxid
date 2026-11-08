@@ -1,8 +1,8 @@
-# Modelle
+# Models
 
-[Zur Übersicht](index.md) · Komponenten: [model-components.md](model-components.md) · Zeitstempel: [model-timestamps.md](model-timestamps.md) · **IST:** `FerrioxidModel` in `crates/ferrioxid-macros`.
+[Overview](index.md) · Components: [model-components.md](model-components.md) · Timestamps: [model-timestamps.md](model-timestamps.md) · **Implemented:** `FerrioxidModel` in `crates/ferrioxid-macros`.
 
-A model is a rust structure with `#[derive(FerrioxidModel)]`. The same structure provides columns, repository, JSON, REST and admin. There is no second model system.
+A model is a Rust struct with `#[derive(FerrioxidModel)]`. That struct supplies columns, repository methods, JSON, REST routes and admin metadata.
 
 ```rust
 use ferrioxid::prelude::*;

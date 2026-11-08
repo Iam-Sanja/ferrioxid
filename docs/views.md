@@ -1,14 +1,14 @@
 # Views
 
-[For overview](index.md) · Routes: [urls.md](urls.md) · **actual file:** `crates/ferrioxid-api/src/views.rs`].
+[Overview](index.md) · Routes: [urls.md](urls.md) · **actual file:** `crates/ferrioxid-api/src/views.rs`.
 
-## Aufgabe
+## Purpose
 
 `ferrioxid::views` provides the answers that an application often needs: HTML, JSON, a local redirect and stable errors. The types remain Axum-`Response` and `HeaderMap`. Tera remains the template engine.
 
 `require_mutation(auth, headers, token)` checks a POST request via `AuthService::authenticate_csrf`. If the Auth service is missing, the answer is `401` and `auth.not_configured`. There is no second CSRF mechanism. `require_user` remains a GET test. The app registration does not grant any permission.
 
-## Django and ferrioxide
+## Django and Ferrioxid
 
 | Django | Ferrioxid |
 |---|---|
@@ -22,7 +22,7 @@
 | `permission_required("app.view")` | `require_permission(..., "app.view")` |
 | `get_object_or_404` plus Policy |Existing repository and `require_object_read::<T, P>`|
 
-The correspondence is the task, not the syntax. A ferrioxide view is an axum function. It gets the state as an argument and returns `Response`.
+The correspondence is the task, not the syntax. A Ferrioxid view is an axum function. It gets the state as an argument and returns `Response`.
 
 ## HTML
 
@@ -55,7 +55,7 @@ pub async fn home(
 
 If the rendering fails, `render` responds with `view.template`. In production and at `debug = false` the text is `Internal server error`. The template itself is not copied into the response if the error calls a secret, a token or a stacktrace.
 
-## JSON, Redirect, Formular
+## JSON, redirects and forms
 
 ```rust
 fn answers() -> Result<axum::response::Response, ferrioxid::views::ViewError> {
@@ -66,9 +66,9 @@ fn answers() -> Result<axum::response::Response, ferrioxid::views::ViewError> {
 }
 ```
 
-`json` takes `&serde_json::Value`. `redirect_to` allows a single local path: it starts with `/`, not `//`, and does not contain any schema, `\`, `..` or control characters. `https://…` is `view.redirect` with status 400. `form_fields` reads `application/x-www-form-urlencoded` up to 8 KiB. A larger or faulty pair is `request.rejected`.
+`json` accepts `&serde_json::Value`. `redirect_to` permits local paths beginning with a single `/` and containing no URL scheme, `\`, `..` or control characters. An external URL such as `https://…` returns `view.redirect` with status 400. `form_fields` reads at most 8 KiB of `application/x-www-form-urlencoded` data; oversized or malformed input returns `request.rejected`.
 
-## Fehler
+## Errors
 
 `fail` and `ViewError` use the same categories:
 
@@ -82,13 +82,13 @@ fn answers() -> Result<axum::response::Response, ferrioxid::views::ViewError> {
 | 422 | `validation` |
 | 500 | `server_error` |
 
-Enthält `Accept` den Text `text/html` und nicht `application/json`, ist die Antwort HTML. Sonst bleibt `problem_json` mit `type`, `title`, `status`, `detail` und `code`. `validation` setzt das Detail auf `field:{name}: {detail}`, damit die bestehende Feldklassifikation gilt.
+If `Accept` contains `text/html` and not `application/json`, the response is HTML. Otherwise, it remains `problem_json` with `type`, `title`, `status`, `detail` and `code`. For `validation`, the detail is `field:{name}: {detail}` so existing field-error classification continues to work.
 
-`Accept-Language`, das mit `en` beginnt, wählt die englische Überschrift. Sonst Deutsch. Ein Status 500 zeigt ohne Debug keinen inneren Text. Details mit `password`, `secret`, `token` oder `stack backtrace` werden `Request rejected`. Das Log enthält Request-ID, Code und Status, nicht das Detail.
+An `Accept-Language` value beginning with `en` selects the English heading; otherwise the heading is German. Without debug mode, a 500 response hides internal details. Details containing `password`, `secret`, `token` or `stack backtrace` become `Request rejected`. Logs include the request ID, code and status, not the detail.
 
-Own pages can access `fail` with their own `code`. The project templates `templates/errors/404.html` and `500.html` remain the answers of `mount_pages`, not `fail`.
+Custom pages can access `fail` with their own `code`. The project templates `templates/errors/404.html` and `500.html` remain the answers of `mount_pages`, not `fail`.
 
-## Zugriff
+## Access
 
 ```rust
 async fn account(
@@ -105,8 +105,8 @@ async fn account(
 
 `require_user` calls `AuthService::authenticate` with GET. CSRF is not checked. `require_staff` requires additional active staff. `require_permission` uses `holds`. `require_object_read::<T, P>` uses `ObjectPolicy::can_read`. None of these functions sets Staff or Superuser.
 
-A change is sent to CSRF via `authenticate_csrf`. View helpers do not replace this exam.
+State-changing requests must pass `authenticate_csrf`. View helpers do not replace that check.
 
 ## Tests
 
-`redirect_rejects_external_targets`, `responses_keep_problem_json_and_escape_html` and `staff_route_and_request_id_stay_closed` in `views.rs`. HTML is escaped. A 422 without `text/html` remains problem JSON. Staff will be closed without meeting. The request ID is in the response header if the standard middleware is in front of it.
+`redirect_rejects_external_targets`, `responses_keep_problem_json_and_escape_html` and `staff_route_and_request_id_stay_closed` in `views.rs` cover redirects, responses and staff access. HTML is escaped. A 422 response without `text/html` remains problem JSON. Staff routes reject requests without a session. The response includes a request-ID header when standard middleware is installed.

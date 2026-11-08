@@ -1,10 +1,10 @@
-# Inline-Relationen
+# Inline relations
 
-[For overview](admin.md) · Relations: [relations.md](relations.md)]
+[Overview](admin.md) · Relations: [relations.md](relations.md)
 
-## Deklaration
+## Declaration
 
-The attribute must match an existing `has_many`. The child table is explicitly in the attribute so that two models do not coincide with the same column.
+The attribute must match an existing `has_many` relation. It explicitly names the child table so models with identically named columns cannot be confused.
 
 ```rust
 #[ferrioxid(
@@ -13,20 +13,20 @@ The attribute must match an existing `has_many`. The child table is explicitly i
 )]
 ```
 
-`AdminInline` is `name`, `child_table` and `column`. At term, the child must be registered, the column must exist and `foreign_table` must be the parent table. Otherwise the section will not appear. There is no second relation engine.
+`AdminInline` contains `name`, `child_table` and `column`. At runtime, the child must be registered, the column must exist, and `foreign_table` must identify the parent table. Otherwise the section is omitted. The admin reuses the existing relation metadata.
 
-## Anzeige
+## Display
 
-The detail page loads the children via `child.page` with equality filter on the foreign key and the child's reading scope. The page is at most `min(per_page, 25)` lines. The query parameter is `inline.{name}`. Shown is the first `list_display` field, which is not the foreign key and not `id`. There is no additional query per line for the display name.
+The detail page loads children through `child.page`, filtering by the parent foreign key and the child's read scope. Each page contains at most `min(per_page, 25)` rows; its query parameter is `inline.{name}`. The label is the first `list_display` field other than the foreign key or `id`. Labels do not require an extra query per row.
 
 A link opens the child record. Editing uses the normal child page. The foreign key can be changed there. Only the creation from the inline enforces the parent key.
 
-## Anlegen
+## Creation
 
 `GET` and `POST /admin/models/{parent}/{id}/inline/{name}/new`.
 
-The parental sentence must be legible. The child checks the Create right and `can_create`. Before `child.create`, the server sets the foreign key to the ID from the URL. Another value sent along is replaced. Further foreign keys run through `ensure_relations`.
+The parent record must be readable. Creating a child requires create permission and `can_create`. Before `child.create`, the server sets the foreign key from the parent ID in the URL, replacing any submitted value. Other foreign keys are checked by `ensure_relations`.
 
-Without `|form`, parents and children are not stored in a form. With `|form`, storing is a transaction. Syntax, rollback and limits: [admin-transactional-inlines.md](admin-transactional-inlines.md)].
+Without `|form`, parent and child records use separate forms. With `|form`, they save in one transaction. See [admin-transactional-inlines.md](admin-transactional-inlines.md) for syntax, rollback behavior and limits.
 
 Example without a common form: `examples/myshop/src/models/category.rs`. Example with form: `examples/myshop/src/models/order.rs`. Tests: `admin_v018_drafts_inlines_bulk_and_audit` and `examples/myshop/tests/orders.rs`.

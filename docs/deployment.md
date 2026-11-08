@@ -1,8 +1,8 @@
 # Deployment and operation
 
-[For overview](index.md) · **IST:** local process with SQLite. Docker is optional and only launches PostgreSQL. **SOLL:** App container and reverse proxy.
+[Overview](index.md) · **Implemented:** local process with SQLite. Docker is optional and only launches PostgreSQL. **Planned:** App container and reverse proxy.
 
-## Local Development (IST)
+## Local Development (Implemented)
 
 SQLite is the standard database. Rust and Cargo are enough. Docker and PostgreSQL do not have to be installed.
 
@@ -17,7 +17,7 @@ The admin does not need a node process. `cargo build` is sufficient. Put `FERRUM
 
 A different `BIND_ADDRESS`, in particular `0.0.0.0:3000`, can make the service accessible on other networks. With the anonymous demo model, this is not an Internet deployment.
 
-## Optional PostgreSQL (IST)
+## Optional PostgreSQL (Implemented)
 
 `compose.yaml` starts `postgres:16-alpine` with database, user, volume and `pg_isready`. The port is limited to `127.0.0.1:5432:5432`. The repository does not contain a Dockerfile for the API server.
 
@@ -28,9 +28,9 @@ cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-The same registered application then speaks PostgreSQL. The traders remain unchanged. Docker is an optional tool for this server, not the prerequisite for ferrioxide.
+The same registered application then speaks PostgreSQL. The handlers remain unchanged. Docker is an optional tool for this server, not the prerequisite for Ferrioxid.
 
-## Production architecture (reference, not implemented)
+## Production architecture (planned, not implemented)
 
 ```text
 TLS-Client → Reverse Proxy → Ferrioxid-App → PostgreSQL
@@ -49,14 +49,14 @@ TLS-Client → Reverse Proxy → Ferrioxid-App → PostgreSQL
 
 SQLite can carry local development and testing. For several app processes, it is not the intended production database: the pool has a connection, and write accesses serialize through the file. PostgreSQL remains the supported server backend as soon as it is operated.
 
-## Docker, Portainer and Nginx Proxy Manager (SOLL)
+## Docker, Portainer and Nginx Proxy Manager (Planned)
 
 An internal Compose network and Nginx Proxy Manager are not implemented. Subsequent guidance must describe TLS, proxy headers and intended accessibility individually.
 
-## Abnahme
+## Acceptance criteria
 
 The local SQLite startup does not need a database server. An optional PostgreSQL setup remains limited to localhost. Secrets do not appear in the log. There is no app container and no automatic migration.
 
-## Admin ausliefern
+## Serving the admin
 
 `/admin` renders HTML from the binary. Unknown asset paths are 404. `/admin/api` remains the JSON API. Paths with `..` are not read as files.

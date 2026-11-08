@@ -1,10 +1,10 @@
-# Projektstruktur
+# Project structure
 
-[For overview](index.md) · Templates: [project-templates.md](project-templates.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · **IST file:** `crates/ferrioxid-cli/src/scaffold.rs`].
+[Overview](index.md) · Templates: [project-templates.md](project-templates.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · **Implemented file:** `crates/ferrioxid-cli/src/scaffold.rs`.
 
-## Aufgabe
+## Purpose
 
-`ferrioxid new` creates a project outside the ferrioxide repository. The cargo version of dependency remains that of the workspace. The template version in the manifest is `0.24`. `ferrioxid generate app` then supplements `src/apps/<name>/`, described in [create-app.md](create-app.md)]. The generator of new projects does not write this directory.
+`ferrioxid new` creates a project outside the Ferrioxid repository. The Cargo version of dependency remains that of the workspace. The template version in the manifest is `0.24`. `ferrioxid generate app` then supplements `src/apps/<name>/`, described in [create-app.md](create-app.md). The generator of new projects does not write this directory.
 
 ## Fullstack
 
@@ -36,15 +36,15 @@ meinprojekt/
 └── tests/api.rs
 ```
 
-`main.rs` loads `settings::load`, binds `bind_address` and attaches `.with_settings` and `.urls(urls::routes()?)?` to the existing administrator, authentic and contact sequence. `/` remains the built-in homepage. The named route `site.home` is located on `/home` and renders `templates/home.html`.
+`main.rs` calls `settings::load`, obtains `bind_address`, and adds `.with_settings` and `.urls(urls::routes()?)?` to the existing admin, auth and contact setup. `/` remains the built-in homepage. The named route `site.home` uses `/home` and renders `templates/home.html`.
 
 ## API
 
-The API template has the same models, migrations, static files and HTML startup templates. It has no admin, no authentic registration and no `src/views/`. `src/urls.rs` registers `api.ping` on `/api/v1/ping` and responds with JSON `{"ok": true}`.
+The API template includes models, migrations, static files and homepage templates. It does not register admin or authentication routes and has no `src/views/`. `src/urls.rs` registers `api.ping` at `/api/v1/ping`, returning JSON `{"ok": true}`.
 
 The HTML files remain because `templates.enabled` is true in both templates and the existing homepage expects them. An API template without any HTML file is not the generated state.
 
-## Was bewusst fehlt
+## Explicit exclusions
 
 There is no second settings module besides `settings.rs`. This module only calls `Settings::discover`. There is no additional example table besides `products`. Contact remains a function in `main.rs`, not its own view file.
 

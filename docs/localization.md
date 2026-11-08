@@ -1,10 +1,10 @@
 # Localization in the admin
 
-[For overview](index.md) · Architecture: [i18n.md](i18n.md)]
+[Overview](index.md) · Architecture: [i18n.md](i18n.md)
 
-## Formate
+## Formats
 
-The HTML admin formats numbers in `display_cell`. German grouped with point, English with comma. Fields on `_cents` are shown with the project currency and two decimal places. The stored value remains the whole cent number. Date values from the database remain the output text. There is no `Intl` call in the server.
+The HTML admin formats numbers in `display_cell`: German uses periods for digit grouping, English uses commas. Fields ending in `_cents` use the project currency and two decimal places; stored values remain integer cents. Date values retain their database representation. The server does not call `Intl`.
 
 ## Language of the homepage
 
@@ -13,14 +13,14 @@ The HTML admin formats numbers in `display_cell`. German grouped with point, Eng
 1. `?lang=` only if the value is `de` or `en`, optionally with region such as `de-DE`.
 2. The first supported entry of `Accept-Language`, weighted with `q`.
 3. `project.default_locale`.
-4. `project.fallback_locale`, sonst `en`.
+4. `project.fallback_locale`, otherwise `en`.
 
-The value is written in the Tera context as `locale`. It is not attached to a file path. Tera escaped the texts used. Generated projects link `/ ?lang=de` and `/?lang=en`.
+The selected language is added to the Tera context as `locale`; it never becomes a file path. Tera escapes rendered text. Generated projects link to `/?lang=de` and `/?lang=en`.
 
 ## CLI
 
-`FERRUM_LOCALE=en` or `de` overwrites `default_locale`. Translated are the messages for generated project, generated model and start and stop of the development server. `ferrioxid dev` outputs the line `Ferrioxid lauscht` of the generated program unchanged. Migration status, `Angewendet` and `Keine Schemaänderung` remain unchanged.
+`FERRUM_LOCALE=en` or `de` overrides `default_locale` for the CLI. Project-generation, model-generation and development-server start/stop messages are localized. `ferrioxid dev` passes through the generated program’s `Ferrioxid lauscht` line unchanged. Migration status messages, including `Angewendet` and `Keine Schemaänderung`, remain unchanged.
 
 ## Tests
 
-`examples/myshop/tests/admin_html.rs` checks the German registration, `Accept-Language: en` and the language change in English. `crates/ferrioxid-api/src/pages.rs` checks the English fallback and an invalid locale. Rejected branding colors are checked by the registry in `ferrioxid-admin`.
+`examples/myshop/tests/admin_html.rs` checks the German login page, `Accept-Language: en` and switching to English. Tests in `crates/ferrioxid-api/src/pages.rs` check English fallback and invalid locales. The admin registry tests reject invalid branding colors.

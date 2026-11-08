@@ -1,10 +1,10 @@
 # Constraints and Indices
 
-[For overview](index.md) · **IST.** Unique constraints, composite unique constraints, individual and composite indices as well as foreign keys are generated from the Rust model and enforced by the database.]
+[Overview](index.md) · **Implemented:** Rust models generate unique constraints, composite unique constraints, single-column and composite indexes, and foreign keys. The database enforces these constraints.
 
-## Quelle
+## Source
 
-Die Rust-Struct bleibt die Quelle. `#[field(...)]` und `#[ferrioxid(...)]` schreiben Metadaten in `ColumnSpec` und `TableConstraints`. `SchemaSnapshot::from_registered` prüft modellübergreifende Regeln. Das Derive-Makro sieht andere Dateien nicht und erfindet deshalb keine Prüfung über fremde Modelle.
+The Rust struct remains the source of truth. `#[field(...)]` and `#[ferrioxid(...)]` generate metadata in `ColumnSpec` and `TableConstraints`. `SchemaSnapshot::from_registered` checks rules across models. The derive macro cannot inspect other files and does not claim to validate foreign models.
 
 ```rust
 #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
@@ -38,9 +38,9 @@ pub struct Product {
 
 `unique_together` and `index_together` are on the model, not on the field. Multiple groups are multiple attributes. A group needs at least two columns. Unknown columns, the primary key and a repetition of a unique group as an index are compile errors.
 
-## Namen
+## Names
 
-| Objekt | Muster |Example|
+| Object | Pattern |Example|
 |---|---|---|
 | Unique | `uq_{tabelle}_{spalten}` | `uq_categories_name` |
 | Index | `ix_{tabelle}_{spalten}` | `ix_products_name` |
@@ -50,15 +50,15 @@ The names are deterministic. Identifiers remain limited to letters, numbers and 
 
 A primary key already generates a unique index. `unique` or `index` on the same column is a compile error. An index with the same column list as a Unique Constraint is not created a second time.
 
-## NULL bei Unique Constraints
+## NULL in unique constraints
 
-The standard SQL behavior of SQLite and PostgreSQL applies: several `NULL` values are allowed in a unique index. `NULL` is not considered to be `NULL`. Ferrioxide does not set `NULLS NOT DISTINCT`. A second concrete value, which already occurs, is rejected.
+SQLite and PostgreSQL use their standard SQL behavior: unique indexes allow multiple `NULL` values because `NULL` values are not considered equal. Ferrioxid does not use `NULLS NOT DISTINCT`. Duplicate non-null values are rejected.
 
 ## SQL
 
-Unique Constraints are clearly named Unique Indexes, not a pure Rust test.
+Unique constraints are implemented as explicitly named unique indexes, not just Rust validation checks.
 
-In `CREATE TABLE`, ferrioxide writes the columns and the foreign keys into the table statement. Unique indexes and secondary indexes follow as separate `CREATE UNIQUE INDEX` and `CREATE INDEX` statements. This keeps the name visible in `sqlite_master` and `DROP INDEX` removes it.
+In `CREATE TABLE`, Ferrioxid writes the columns and the foreign keys into the table statement. Unique indexes and secondary indexes follow as separate `CREATE UNIQUE INDEX` and `CREATE INDEX` statements. This keeps the name visible in `sqlite_master` and `DROP INDEX` removes it.
 
 A new nullable column can carry a foreign key in the same migration:
 
@@ -70,9 +70,9 @@ ALTER TABLE "products" ADD COLUMN "category_id" text CONSTRAINT "fk_products_cat
 
 PostgreSQL uses the same `CREATE INDEX` statements and `ALTER TABLE ... ADD COLUMN`. A Unique Index or Foreign Key that violates existing lines makes the statement fail. The migration is rolled back and the history does not store success.
 
-## Foreign-Key-Regeln
+## Foreign-key rules
 
-| `on_delete` | Wirkung |
+| `on_delete` | Effect |
 |---|---|
 | `restrict` |Deleting the parent line fails as long as children exist|
 | `cascade` |Children are also deleted|
@@ -92,7 +92,7 @@ In addition, `SchemaSnapshot::validate` checks:
 
 A foreign key on an existing column, the removal of a foreign key and a changed `ON DELETE` rule create `add_foreign_key` or `drop_foreign_key`. These variants are not executed. SQLite cannot change it without a table conversion, and the conversion remains blocked on Foreign Keys. `migrate make` does not write a file.
 
-Parent tables are created before child tables. Cycles are rejected. Tables with children are deleted first.
+Parent tables are created before child tables, and child tables are dropped before their parents. Cycles are rejected.
 
 ## Snapshot
 
@@ -100,25 +100,25 @@ The format version remains `1`. `unique_constraints`, `indexes` and `foreign_key
 
 The objects are in deterministic name order. `semantically_eq` compares them regardless of the list position.
 
-## Umbenennung
+## Renaming
 
-`RenameColumn` and `RenameTable` rewrite the column lists in the snapshot and recalculate the deterministic names. If another foreign key refers to the renamed column, `referenced_columns` is also drawn.
+`RenameColumn` and `RenameTable` update snapshot column lists and recompute deterministic constraint names. Foreign keys targeting the renamed column also update `referenced_columns`.
 
-In the database, the renaming of `DROP INDEX` and `CREATE INDEX` follows for each affected Unique Index and Secondary Index. The primary key auto index remains unaffected. Foreign key names do not exist in SQLite as their own object. The definition in `CREATE TABLE` follows the column renaming of the dialect. Subsequently changing the deletion rule remains blocked.
+In the database, each affected unique or secondary index is dropped and recreated with its new name. The primary-key autoindex is unaffected. SQLite foreign-key constraints are not separate named schema objects; its rename operation updates the table definition. Changing a deletion rule remains blocked.
 
-## Fehler
+## Errors
 
 `insert_record`, `update_record` and `delete_record` evaluate `sqlx::ErrorKind`.
 
-|Non-compliance| Abbildung |
+|Non-compliance| Mapping |
 |---|---|
 | `UniqueViolation` | `FerrioxidError::Validation("unique constraint violated")` |
 | `ForeignKeyViolation` | `FerrioxidError::Validation("foreign key constraint violated")` |
 |SQLite code `1811` with fixed message `FOREIGN KEY constraint failed`|Same foreign key validation|
 
-SQLite implements `ON DELETE RESTRICT` internally as `RAISE`. The extended code is then `1811` (`SQLITE_CONSTRAINT_TRIGGER`) and not `787`. The message is the fixed text of this implementation, not a free comparison of any mistexts. Other database errors remain `FerrioxidError::Database` and become at the HTTP border to 500 without SQL text.
+SQLite implements `ON DELETE RESTRICT` internally with `RAISE`, producing extended code `1811` (`SQLITE_CONSTRAINT_TRIGGER`) rather than `787`. Ferrioxid matches the fixed message from that implementation, not arbitrary error text. Other database errors remain `FerrioxidError::Database` and become HTTP 500 without exposing SQL.
 
-## SQLite-Umbau
+## SQLite table rebuild
 
 Tables with user index, trigger, view, outgoing or incoming foreign key are not rebuilt. The primary key auto index (`sql IS NULL`) does not count as a user index. A supported conversion only checks the changed column and then copies it with `INSERT INTO ... SELECT`. A type change `string` ↔ `i64` uses `CAST`, but only after the previous value check. Invalid values roll back the transaction.
 

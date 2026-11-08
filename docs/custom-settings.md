@@ -1,10 +1,10 @@
-# Eigene Settings
+# Custom settings
 
-[For overview](index.md) · Shared file: [settings.md](settings.md) · **IST file:** `crates/ferrioxid-migrations/src/project.rs`].
+[Overview](index.md) · Shared file: [settings.md](settings.md) · **Implemented file:** `crates/ferrioxid-migrations/src/project.rs`.
 
-## Aufgabe
+## Purpose
 
-Application values are under `[custom.<name>]`. Ferrioxide stores it on the read `ProjectConfig` and converts a section into a structure that implements `serde::Deserialize`. There is no second parser and no singleton.
+Application values are under `[custom.<name>]`. Ferrioxid stores it on the read `ProjectConfig` and converts a section into a structure that implements `serde::Deserialize`. There is no second parser and no singleton.
 
 ## File
 
@@ -17,7 +17,7 @@ open = true
 
 `shop` and each key are lower case, numerals and underscores, maximum 32 characters, and begin with one letter. Keys containing `password`, `secret`, `token` or `credential` are rejected. The error message does not contain the value.
 
-## Lesen
+## Reading
 
 ```rust
 #[derive(serde::Deserialize)]
@@ -33,7 +33,7 @@ let shop: ShopSettings = settings.project().custom_settings("shop")?;
 
 `custom_settings` delivers `custom.shop ist nicht konfiguriert.` if the section is missing. If a field does not fit, the message is `custom.shop passt nicht zur erwarteten Struktur.`.
 
-## Typen
+## Types
 
 The parser knows only three forms in this family:
 
@@ -43,6 +43,6 @@ The parser knows only three forms in this family:
 
 There are no decimal numbers, negative numbers and lists here. The existing typed sections remain responsible for this.
 
-## Grenzen
+## Limitations
 
 A section does not replace a framework setting. `custom.server` is its own name and does not change `server.port`. Unknown sections outside of `custom.*` remain errors. Existing files without `custom` remain valid.

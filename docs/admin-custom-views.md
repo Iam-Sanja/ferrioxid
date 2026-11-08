@@ -1,10 +1,10 @@
-# Eigene Admin-Seiten
+# Custom admin pages
 
-[For an overview](admin-extension-api.md)]
+[Overview](admin-extension-api.md)
 
 ## Route
 
-Eine Seite heißt `/admin/pages/{key}`. `key` passt auf `[a-z][a-z0-9_]{0,39}`. Reserviert sind `admin`, `api`, `assets`, `audit`, `directory`, `login`, `logout`, `models`, `pages` und `preferences`. Ein doppelter oder reservierter Name macht `view` zu einem `ExtensionError`. Eine unbekannte Seite ist 404, sobald eine Sitzung mit Staff vorliegt. Ohne Sitzung folgt die Weiterleitung zur Anmeldung.
+A custom page is served at `/admin/pages/{key}`. `key` must match `[a-z][a-z0-9_]{0,39}`. Reserved names are `admin`, `api`, `assets`, `audit`, `directory`, `login`, `logout`, `models`, `pages` and `preferences`. Passing a duplicate or reserved name to `view` returns an `ExtensionError`. An unknown page returns 404 for an authenticated staff user; a request without a session redirects to login.
 
 ## Handler
 
@@ -27,8 +27,8 @@ impl ferrioxid::admin::ViewHandler for OrderReport {
 }
 ```
 
-Ferrioxide checks the session before `handle`, `is_staff` and `AuthService::holds` for the registered code. A superuser exists `holds`, but remains bound to `is_staff`. POST without valid CSRF is 403 and does not call the trader. If `on_post` is missing, POST 405 is.
+Before calling `handle`, Ferrioxid checks the session, `is_staff` and `AuthService::holds` for the registered permission code. Superusers satisfy `holds` but still require `is_staff`. A POST without valid CSRF returns 403 without calling the handler. A page without `on_post` returns 405 for POST.
 
 `ViewPage` provides data for the registered template. `notice` and `alert` are shortened and escaped by Tera. The template is chosen by the developer during registration, not the request.
 
-The sidebar shows `navigation(true)` only for codes that the current user holds. This applies on the overview, in lists, forms and on the own page.
+The sidebar includes pages registered with `navigation(true)` only when the current user holds the required permission. This applies to the dashboard, lists, forms and custom pages.
