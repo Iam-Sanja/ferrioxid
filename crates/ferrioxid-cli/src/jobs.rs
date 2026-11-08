@@ -74,7 +74,7 @@ pub fn list(url: String) -> ExitCode {
     read(url, |queue| async move {
         let rows = queue.list(50).await.map_err(show)?;
         if rows.is_empty() {
-            println!("Jobs: keine");
+            println!("Jobs: none");
         }
         for row in rows {
             println!(
