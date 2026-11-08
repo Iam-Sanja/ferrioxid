@@ -1072,3 +1072,20 @@ fn canonical_origin(value: &str) -> Option<String> {
 pub fn csrf_header_name() -> &'static str {
     "x-csrf-token"
 }
+
+#[cfg(test)]
+mod compatibility_tests {
+    use super::*;
+
+    #[test]
+    fn legacy_csrf_hmac_namespace_stays_stable_after_framework_rename() {
+        let mut secret = [0_u8; 32];
+        for (index, byte) in secret.iter_mut().enumerate() {
+            *byte = index as u8;
+        }
+        assert_eq!(
+            csrf_for_session(&secret, Uuid::nil(), "legacy-test-token-hash"),
+            "7YhBGSxfUfH-DNB2AOwAAfkYTbefW2Qm5DSiseZFR3k"
+        );
+    }
+}
