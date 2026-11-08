@@ -16,7 +16,7 @@ ferrioxid-db = { path = "../ferrioxid-db" }
 ferrioxid-jobs = { path = "../ferrioxid-jobs" }
 ferrioxid-mail = { path = "../ferrioxid-mail" }
 ferrioxid-migrations = { path = "../ferrioxid-migrations" }
-notify = "6"
+notify = "8"
 rpassword.workspace = true
 tokio.workspace = true
 sea-orm.workspace = true
