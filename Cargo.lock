@@ -755,7 +755,7 @@ dependencies = [
  "ferrioxid-db",
  "ferrioxid-mail",
  "ferrioxid-migrations",
- "getrandom 0.2.17",
+ "getrandom 0.4.3",
  "hmac",
  "http-body-util",
  "sea-orm",
