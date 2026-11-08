@@ -65,6 +65,22 @@ fn empty_sqlite(path: &Path) {
 }
 
 #[test]
+fn cli_help_is_english_without_a_locale_override() {
+    let directory = root();
+    write_project(&directory);
+    let result = ferrioxid(&directory)
+        .env_remove("FERRUM_LOCALE")
+        .args(["new", "--help"])
+        .output()
+        .expect("CLI help");
+    assert!(result.status.success());
+    let help = String::from_utf8_lossy(&result.stdout);
+    assert!(help.contains("Creates a standalone Ferrioxid project."), "{help}");
+    assert!(!help.contains("Erzeugt"), "{help}");
+    let _ = std::fs::remove_dir_all(directory);
+}
+
+#[test]
 fn status_is_read_only_and_shows_auth_and_app() {
     let directory = root();
     let database = directory.join("app.sqlite");
