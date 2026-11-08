@@ -45,7 +45,7 @@ pub fn worker(
         config.concurrency = value;
     }
     if !config.enabled {
-        eprintln!("job.disabled jobs.enabled ist false. ferrioxid dev und der Webserver starten keinen Worker.");
+        eprintln!("job.disabled jobs.enabled is false. Neither ferrioxid dev nor the web server starts a worker.");
         return ExitCode::from(2);
     }
     if config.concurrency > 1 && config.database_url.starts_with("sqlite") {
@@ -112,7 +112,7 @@ pub fn retry(url: String, id: String, yes: bool) -> ExitCode {
     mutate(url, yes, |queue| async move {
         let id = parse_id(&id)?;
         queue.retry(id).await.map_err(show)?;
-        println!("Job {id} wartet erneut.");
+        println!("Job {id} has been scheduled for retry.");
         Ok(())
     })
 }
@@ -121,7 +121,7 @@ pub fn cancel(url: String, id: String, yes: bool) -> ExitCode {
     mutate(url, yes, |queue| async move {
         let id = parse_id(&id)?;
         queue.cancel(id).await.map_err(show)?;
-        println!("Job {id} ist abgebrochen.");
+        println!("Job {id} has been cancelled.");
         Ok(())
     })
 }
