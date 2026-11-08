@@ -40,3 +40,7 @@ New records, password forms, and inline "add row" stay available immediately. Wi
 ## User deletion
 
 The admin can deactivate a user. It does not delete the user row, sessions, or audit history. A physical delete needs a separate persistence design and is not part of v0.28.
+
+## Validation
+
+The Admin 2.0 change is tested with `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, and `cargo build --workspace` on both Linux and Windows in GitHub Actions. The HTML integration tests are part of the workspace test run. A separate PostgreSQL CI job runs the explicitly ignored integration tests against a disposable PostgreSQL instance. Do not interpret a workflow setup error or a skipped step as a passing or failing Rust test. The security audit is a separate workflow and is tracked independently.
