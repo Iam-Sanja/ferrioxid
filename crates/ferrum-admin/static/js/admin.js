@@ -29,6 +29,7 @@ function track(form) {
     const initial = fingerprint(form);
     const forced = mode === "record" && form.querySelector(".field-error, [role='alert']") !== null;
     const apply = () => {
+        delete form.dataset.submitting;
         const dirty = forced || fingerprint(form) !== initial;
         for (const button of buttons) {
             button.disabled = !dirty;
@@ -38,6 +39,16 @@ function track(form) {
     apply();
     form.addEventListener("input", apply);
     form.addEventListener("change", apply);
+    // A successful native submit may navigate away. Do not warn that the form
+    // has unsaved changes when the user explicitly chose to save them.
+    form.addEventListener("submit", (event) => {
+        if (!event.defaultPrevented && form.checkValidity()) {
+            form.dataset.submitting = "1";
+        }
+    });
+    form.addEventListener("invalid", () => {
+        delete form.dataset.submitting;
+    }, true);
 }
 
 for (const form of document.querySelectorAll("form[data-track-dirty]")) {
@@ -45,7 +56,7 @@ for (const form of document.querySelectorAll("form[data-track-dirty]")) {
 }
 
 window.addEventListener("beforeunload", (event) => {
-    if (document.querySelector("form[data-dirty='1']") === null) {
+    if (document.querySelector("form[data-dirty='1']:not([data-submitting='1'])") === null) {
         return;
     }
     event.preventDefault();
