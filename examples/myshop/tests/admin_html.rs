@@ -849,9 +849,7 @@ async fn html_admin_works_without_javascript() {
         "GET",
         "/admin".into(),
         None,
-        format!(
-            "Cookie: ferrum_session={session}; ferrioxid_locale=en; ferrioxid_theme=dark\r\n"
-        ),
+        format!("Cookie: ferrum_session={session}; ferrioxid_locale=en; ferrioxid_theme=dark\r\n"),
     )
     .await
     .unwrap();
