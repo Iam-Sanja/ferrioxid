@@ -257,7 +257,7 @@ fn pending_files<'a>(
     for (index, entry) in applied.iter().enumerate() {
         let file = files.get(index).ok_or_else(|| {
             MigrationError::new(format!(
-                "Angewendete Migration {} fehlt im Verzeichnis.",
+                "Applied migration {} is missing from the directory.",
                 entry.id
             ))
         })?;
