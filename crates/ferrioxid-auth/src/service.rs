@@ -903,7 +903,8 @@ async fn insert_session(
 fn csrf_for_session(secret: &[u8; 32], session_id: Uuid, token_hash: &str) -> String {
     use hmac::{Hmac, Mac};
     let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret).expect("csrf hmac key");
-    mac.update(b"ferrioxid-csrf-v1");
+    // Preserve the pre-rename HMAC namespace so existing CSRF tokens remain valid.
+    mac.update(b"ferrum-csrf-v1");
     mac.update(session_id.as_bytes());
     mac.update(token_hash.as_bytes());
     base64url(&mac.finalize().into_bytes())
