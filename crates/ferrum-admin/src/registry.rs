@@ -202,7 +202,8 @@ impl AdminRegistry {
         &self.branding
     }
 
-    /// Die folgenden Modelle und Admin-Seiten gehören zu dieser App, bis `with_app` erneut kommt.
+    /// Ordnet genau die nächste Modell- oder Seitenregistrierung dieser App zu.
+    /// Für weitere Registrierungen `with_app` erneut aufrufen.
     pub fn with_app(mut self, key: impl Into<String>, label: impl Into<String>) -> Self {
         let key = key.into();
         let label = label.into().trim().to_owned();
@@ -212,6 +213,7 @@ impl AdminRegistry {
             && key.len() <= 40;
         let label_ok =
             !label.is_empty() && label.len() <= 80 && !label.chars().any(|char| char.is_control());
+        self.pending_app = None;
         if key_ok && label_ok {
             if !self.apps.iter().any(|(name, _)| name == &key) {
                 self.apps.push((key.clone(), label));
@@ -239,22 +241,24 @@ impl AdminRegistry {
             .map(|(_, app)| app.as_str())
     }
 
-    pub fn add<M>(self) -> Self
+    pub fn add<M>(mut self) -> Self
     where
         M: ModelRepository + 'static,
     {
         if M::admin_meta().is_none() {
+            self.pending_app = None;
             return self;
         }
         self.push(Arc::new(Plain::<M>::new()))
     }
 
-    pub fn add_policy<M, P>(self) -> Self
+    pub fn add_policy<M, P>(mut self) -> Self
     where
         M: ModelRepository + 'static,
         P: ObjectPolicy<M> + Send + Sync + 'static,
     {
         if M::admin_meta().is_none() {
+            self.pending_app = None;
             return self;
         }
         self.push(Arc::new(Policed::<M, P>::new()))
@@ -311,9 +315,9 @@ impl AdminRegistry {
         self.sealed = false;
         let key = view.key().to_owned();
         self.views.push(view);
-        if let Some(app) = &self.pending_app {
+        if let Some(app) = self.pending_app.take() {
             if !self.view_apps.iter().any(|(view, _)| view == &key) {
-                self.view_apps.push((key, app.clone()));
+                self.view_apps.push((key, app));
             }
         }
         Ok(self)
@@ -516,6 +520,7 @@ impl AdminRegistry {
     }
 
     fn push(mut self, model: Arc<dyn ManagedModel>) -> Self {
+        let app_scope = self.pending_app.take();
         if model.meta().key.is_empty() {
             return self;
         }
@@ -525,9 +530,9 @@ impl AdminRegistry {
             return self;
         }
         models.push(model);
-        if let Some(app) = &self.pending_app {
+        if let Some(app) = app_scope {
             if !self.model_apps.iter().any(|(model, _)| model == &key) {
-                self.model_apps.push((key, app.clone()));
+                self.model_apps.push((key, app));
             }
         }
         self
