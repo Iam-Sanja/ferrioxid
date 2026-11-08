@@ -223,6 +223,10 @@ impl AdminRegistry {
         self
     }
 
+    fn take_app_scope(&mut self) -> Option<String> {
+        self.pending_app.take()
+    }
+
     pub(crate) fn app_catalog(&self) -> &[(String, String)] {
         &self.apps
     }
@@ -315,7 +319,7 @@ impl AdminRegistry {
         self.sealed = false;
         let key = view.key().to_owned();
         self.views.push(view);
-        if let Some(app) = self.pending_app.take() {
+        if let Some(app) = self.take_app_scope() {
             if !self.view_apps.iter().any(|(view, _)| view == &key) {
                 self.view_apps.push((key, app));
             }
@@ -520,7 +524,7 @@ impl AdminRegistry {
     }
 
     fn push(mut self, model: Arc<dyn ManagedModel>) -> Self {
-        let app_scope = self.pending_app.take();
+        let app_scope = self.take_app_scope();
         if model.meta().key.is_empty() {
             return self;
         }
@@ -1054,5 +1058,37 @@ mod tests {
         assert_eq!(branding.primary_color, "#0f172a");
         assert_eq!(branding.currency, "EUR");
         assert_eq!(branding.default_locale, "de");
+    }
+}
+
+#[cfg(test)]
+mod app_scope_tests {
+    use super::AdminRegistry;
+
+    #[test]
+    fn registration_scope_is_used_only_once() {
+        let mut registry = AdminRegistry::new().with_app("shop", "Shop");
+        assert_eq!(registry.take_app_scope().as_deref(), Some("shop"));
+        assert_eq!(registry.take_app_scope(), None);
+        assert_eq!(registry.app_catalog().len(), 1);
+    }
+
+    #[test]
+    fn invalid_scope_does_not_reuse_previously_selected_app() {
+        let mut registry = AdminRegistry::new()
+            .with_app("shop", "Shop")
+            .with_app("Invalid-App", "Invalid");
+        assert_eq!(registry.take_app_scope(), None);
+        assert_eq!(registry.app_catalog().len(), 1);
+    }
+
+    #[test]
+    fn successive_scopes_are_explicit() {
+        let mut registry = AdminRegistry::new()
+            .with_app("shop", "Shop")
+            .with_app("notes", "Notes");
+        assert_eq!(registry.take_app_scope().as_deref(), Some("notes"));
+        assert_eq!(registry.take_app_scope(), None);
+        assert_eq!(registry.app_catalog().len(), 2);
     }
 }
