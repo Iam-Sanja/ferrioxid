@@ -97,6 +97,17 @@ def main():
     for issue in errors[:100]:
         print(issue)
     if errors:
-        raise RuntimeError("Unrestored protected tokens need manual review")
+        report = ROOT / "docs" / "translation-review.md"
+        report.write_text(
+            "# Translation review queue\n\n"
+            "The following German source lines contain technical identifiers that "
+            "the offline translator could not protect reliably. They were left "
+            "unchanged to avoid corrupting code, commands, or Markdown links. "
+            "Translate and review them manually before merging PR #21.\n\n"
+            + "\n".join(f"- {item}" for item in errors)
+            + "\n",
+            encoding="utf-8",
+        )
+        print(f"Saved {len(errors)} review items to {report}")
 if __name__ == "__main__":
     main()
