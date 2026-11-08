@@ -597,7 +597,7 @@ mod tests {
             .iter()
             .any(|item| item.code == "migration.unknown"));
         let unknown_text = render_diagnosis("de", &unknown);
-        assert!(unknown_text.contains("nicht geladen"));
+        assert!(unknown_text.contains("not loaded"));
         assert!(!unknown_text.contains("entspricht dem letzten"));
         assert_eq!(std::fs::read(&file).unwrap(), before_unknown);
         let _ = std::fs::remove_dir_all(&root);
