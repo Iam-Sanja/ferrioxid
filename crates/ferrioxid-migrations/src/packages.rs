@@ -1,4 +1,4 @@
-//! Reihenfolge von App-Migrationen. Die Anwendung selbst startet keine Migration.
+//! App migration ordering. The application does not start migrations.
 
 use crate::error::MigrationError;
 use crate::runner::{apply_namespaced_directory, namespaced_status};
@@ -24,7 +24,7 @@ pub fn same_migration_contract(
             .is_some()
         {
             return Err(MigrationError::new(format!(
-                "Die App `{}` ist in der Rust-Registrierung doppelt.",
+                "App `{}` is registered more than once in Rust.",
                 package.name
             )));
         }
@@ -36,7 +36,7 @@ pub fn same_migration_contract(
             .is_some()
         {
             return Err(MigrationError::new(format!(
-                "Die App `{}` ist in ferrum.toml doppelt.",
+                "App `{}` is declared more than once in ferrum.toml.",
                 package.name
             )));
         }
@@ -61,7 +61,7 @@ pub fn same_migration_contract(
         }
         if !same_directory(root, &declared.directory, &registered.directory) {
             return Err(MigrationError::new(format!(
-                "Das Migrationsverzeichnis von `{name}` unterscheidet sich zwischen Rust und ferrum.toml."
+                "The migration directory for `{name}` differs between Rust and ferrum.toml."
             )));
         }
     }
@@ -98,7 +98,7 @@ fn same_directory(
 }
 
 pub fn runtime_contract_note() -> &'static str {
-    "app.migration.runtime Die CLI prüft die Verzeichnisse aus [app.<name>]. Ob registry.migrations dieselben Pfade anmeldet, prüft der Prozessstart. Diese Diagnose bestätigt die Übereinstimmung nicht."
+    "app.migration.runtime The CLI checks directories declared under [app.<name>]. Startup verifies whether registry.migrations declares matching paths; this check does not confirm consistency."
 }
 
 pub fn package_order(packages: &[PackageMigration]) -> Result<Vec<usize>, MigrationError> {
@@ -106,13 +106,13 @@ pub fn package_order(packages: &[PackageMigration]) -> Result<Vec<usize>, Migrat
     for (index, package) in packages.iter().enumerate() {
         if !crate::snapshot::is_identifier(&package.name) || package.name.len() > 32 {
             return Err(MigrationError::new(format!(
-                "Ungültiger App-Name `{}`.",
+                "Invalid app name `{}`.",
                 package.name
             )));
         }
         if index_of.insert(package.name.clone(), index).is_some() {
             return Err(MigrationError::new(format!(
-                "Die App `{}` ist doppelt registriert.",
+                "App `{}` is registered more than once.",
                 package.name
             )));
         }
@@ -121,13 +121,13 @@ pub fn package_order(packages: &[PackageMigration]) -> Result<Vec<usize>, Migrat
         for dependency in &package.depends_on {
             if !index_of.contains_key(dependency) {
                 return Err(MigrationError::new(format!(
-                    "Die App `{}` hängt von der fehlenden App `{dependency}` ab.",
+                    "App `{}` depends on missing app `{dependency}`.",
                     package.name
                 )));
             }
             if dependency == &package.name {
                 return Err(MigrationError::new(format!(
-                    "Die App `{}` hängt von sich selbst ab.",
+                    "App `{}` depends on itself.",
                     package.name
                 )));
             }
@@ -159,7 +159,7 @@ pub fn package_order(packages: &[PackageMigration]) -> Result<Vec<usize>, Migrat
     }
     if order.len() != packages.len() {
         return Err(MigrationError::new(
-            "Die App-Abhängigkeiten enthalten einen Zyklus.".to_owned(),
+            "App dependencies contain a cycle.".to_owned(),
         ));
     }
     Ok(order)
@@ -192,7 +192,7 @@ pub async fn package_reports(
         let package = &packages[index];
         if !package.directory.is_dir() {
             return Err(MigrationError::new(format!(
-                "Das Migrationsverzeichnis der App `{}` fehlt.",
+                "The migrations directory for app `{}` is missing.",
                 package.name
             )));
         }
