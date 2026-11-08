@@ -1,7 +1,7 @@
-//! Kontrollierter Umbau. SQLite kopiert per `INSERT INTO ... SELECT`. PostgreSQL ändert die Spalte direkt.
+//! Controlled rebuild. SQLite copies rows with `INSERT INTO ... SELECT`; PostgreSQL alters columns directly.
 //!
-//! `PRAGMA foreign_keys` wird nicht verändert. Ein Umbau mit Fremdschlüsseln wird abgelehnt.
-//! CREATE, INSERT, DROP und RENAME laufen in der Migrationstransaktion und werden bei Fehler zurückgerollt.
+//! `PRAGMA foreign_keys` is unchanged. Rebuilds involving foreign keys are rejected.
+//! CREATE, INSERT, DROP, and RENAME run in the migration transaction and are rolled back on errors.
 
 use crate::diff::{alter_is_supported, MigrationOperation};
 use crate::error::MigrationError;
@@ -27,7 +27,7 @@ pub async fn apply_alter(
 ) -> Result<(), MigrationError> {
     if !alter_is_supported(from, to) {
         return Err(MigrationError::new(format!(
-            "Änderung an `{table}.{}` von {:?} nach {:?} ist nicht unterstützt.",
+            "Changing `{table}.{}` from {:?} to {:?} is not supported.",
             from.name, from.logical_type, to.logical_type
         )));
     }
@@ -38,12 +38,12 @@ pub async fn apply_alter(
         .tables
         .iter()
         .find(|candidate| candidate.name == table)
-        .ok_or_else(|| MigrationError::new(format!("Tabelle `{table}` fehlt vor dem Umbau.")))?;
+        .ok_or_else(|| MigrationError::new(format!("Table `{table}` is missing before rebuild.")))?;
     if !to.nullable && from.nullable {
         let nulls = count_where(db, table, &format!("\"{}\" IS NULL", from.name)).await?;
         if nulls > 0 {
             return Err(MigrationError::new(format!(
-                "Spalte `{table}.{}` enthält {nulls} NULL-Werte. NOT NULL wird nicht gesetzt und kein Ersatzwert eingesetzt.",
+                "Column `{table}.{}` contains {nulls} NULL values. NOT NULL is not applied, and no replacement values are inserted.",
                 from.name
             )));
         }
@@ -86,7 +86,7 @@ async fn rebuild_sqlite(
     let temporary = format!("ferrioxid_rebuild_{}", source.name);
     if !is_identifier(&temporary) {
         return Err(MigrationError::new(format!(
-            "Temporärer Tabellenname `{temporary}` ist ungültig."
+            "Temporary table name `{temporary}` is invalid."
         )));
     }
     let before = count_where(db, &source.name, "1 = 1").await?;
@@ -134,7 +134,7 @@ async fn rebuild_sqlite(
     let after_rename = count_where(db, &source.name, "1 = 1").await?;
     if after_rename != before {
         return Err(MigrationError::new(
-            "Die Zeilenzahl nach dem Ersetzen der Tabelle stimmt nicht.",
+            "Row count does not match after replacing the table.",
         ));
     }
     let integrity = db
@@ -146,11 +146,11 @@ async fn rebuild_sqlite(
         .map_err(|error| MigrationError::new(format!("integrity_check fehlgeschlagen: {error}")))?
         .ok_or_else(|| MigrationError::new("integrity_check lieferte keine Zeile."))?;
     let status: String = integrity.try_get("", "integrity_check").map_err(|error| {
-        MigrationError::new(format!("integrity_check ist nicht lesbar: {error}"))
+        MigrationError::new(format!("Could not read integrity_check: {error}"))
     })?;
     if status != "ok" {
         return Err(MigrationError::new(format!(
-            "integrity_check meldet `{status}`. Die Transaktion wird zurückgerollt."
+            "integrity_check returned `{status}`. The transaction is rolled back."
         )));
     }
     let foreign_keys = db
@@ -164,7 +164,7 @@ async fn rebuild_sqlite(
         })?;
     if !foreign_keys.is_empty() {
         return Err(MigrationError::new(
-            "foreign_key_check hat Verstöße gemeldet. Die Transaktion wird zurückgerollt.",
+            "foreign_key_check reported violations. The transaction is rolled back.",
         ));
     }
     Ok(())
@@ -237,7 +237,7 @@ async fn assert_sqlite_rebuild_safe(
 ) -> Result<(), MigrationError> {
     if !is_identifier(table) {
         return Err(MigrationError::new(format!(
-            "Ungültiger Tabellenname `{table}`."
+            "Invalid table name `{table}`."
         )));
     }
     let attached = db
@@ -247,10 +247,10 @@ async fn assert_sqlite_rebuild_safe(
             [Value::from(table)],
         ))
         .await
-        .map_err(|error| MigrationError::new(format!("Objektprüfung fehlgeschlagen: {error}")))?;
+        .map_err(|error| MigrationError::new(format!("Object verification failed: {error}")))?;
     if !attached.is_empty() {
         return Err(MigrationError::new(format!(
-            "Tabelle `{table}` hat einen Index, Trigger oder eine View. Der Umbau würde sie verwerfen und wird blockiert."
+            "Table `{table}` has an index, trigger, or view. The rebuild would discard it and is blocked."
         )));
     }
     assert_no_foreign_keys(db, table).await
@@ -267,11 +267,11 @@ async fn assert_no_foreign_keys(
         ))
         .await
         .map_err(|error| {
-            MigrationError::new(format!("Fremdschlüsselprüfung fehlgeschlagen: {error}"))
+            MigrationError::new(format!("Foreign-key check failed: {error}"))
         })?;
     for row in tables {
         let name: String = row.try_get("", "name").map_err(|error| {
-            MigrationError::new(format!("Tabellenname ist nicht lesbar: {error}"))
+            MigrationError::new(format!("Could not read table name: {error}"))
         })?;
         if !is_identifier(&name) {
             continue;
@@ -287,14 +287,14 @@ async fn assert_no_foreign_keys(
             })?;
         if name == table && !keys.is_empty() {
             return Err(MigrationError::new(format!(
-                "Tabelle `{table}` hat Fremdschlüssel. Ein Tabellenumbau wird deshalb blockiert."
+                "Table `{table}` has foreign keys, so rebuilding it is blocked."
             )));
         }
         for key in keys {
             let referenced: String = key.try_get("", "table").unwrap_or_default();
             if referenced == table {
                 return Err(MigrationError::new(format!(
-                    "Tabelle `{name}` verweist auf `{table}`. Ein Tabellenumbau wird deshalb blockiert."
+                    "Table `{name}` references `{table}`, so rebuilding it is blocked."
                 )));
             }
         }
@@ -326,7 +326,7 @@ async fn validate_changed_column(
     let total = count_where(db, table, "1 = 1").await?;
     if rows.len() as i64 != total {
         return Err(MigrationError::new(
-            "Die gelesene Zeilenzahl entspricht nicht COUNT(*). Der Umbau wurde nicht geschrieben."
+            "The retrieved row count does not match COUNT(*). No rebuild was written."
                 .to_owned(),
         ));
     }
@@ -335,13 +335,13 @@ async fn validate_changed_column(
         let converted =
             convert_cell(cell, from.logical_type, to.logical_type).map_err(|error| {
                 MigrationError::new(format!(
-                    "Zeile {index} in `{table}.{}` kann nicht übernommen werden: {error}",
+                    "Row {index} in `{table}.{}` cannot be converted: {error}",
                     from.name
                 ))
             })?;
         if !to.nullable && matches!(converted, Cell::Null) {
             return Err(MigrationError::new(format!(
-                "Zeile {index} in `{table}.{}` ist NULL.",
+                "Row {index} in `{table}.{}` is NULL.",
                 from.name
             )));
         }
@@ -364,7 +364,7 @@ fn copy_expression(
         LogicalType::I64 => "INTEGER",
         LogicalType::Uuid | LogicalType::Bool => {
             return Err(MigrationError::new(format!(
-                "Änderung an `{}` von {:?} nach {:?} ist nicht unterstützt.",
+                "Changing `{}` from {:?} to {:?} is not supported.",
                 column.name, from.logical_type, to.logical_type
             )))
         }
@@ -386,7 +386,7 @@ fn read_cell(
             Ok(Some(text)) => Ok(Cell::Text(text)),
             Ok(None) => Ok(Cell::Null),
             Err(error) => Err(MigrationError::new(format!(
-                "Textwert in `{name}` ist nicht lesbar: {error}"
+                "Could not read text value in `{name}`: {error}"
             ))),
         },
         LogicalType::I64 | LogicalType::Bool => {
@@ -400,7 +400,7 @@ fn read_cell(
                 return Ok(Cell::Null);
             }
             Err(MigrationError::new(format!(
-                "Zahlenwert in `{name}` ist nicht lesbar."
+                "Could not read numeric value in `{name}`."
             )))
         }
     }
@@ -414,7 +414,7 @@ fn convert_cell(value: Cell, from: LogicalType, to: LogicalType) -> Result<Cell,
         return match (from, value) {
             (LogicalType::Bool, Cell::Integer(number @ (0 | 1))) => Ok(Cell::Integer(number)),
             (LogicalType::Bool, Cell::Integer(number)) => {
-                Err(format!("{number} ist kein boolescher 0/1-Wert"))
+                Err(format!("{number} is not a boolean 0/1 value"))
             }
             (LogicalType::I64, Cell::Integer(number)) => Ok(Cell::Integer(number)),
             (
@@ -425,7 +425,7 @@ fn convert_cell(value: Cell, from: LogicalType, to: LogicalType) -> Result<Cell,
                 | LogicalType::DateTime,
                 Cell::Text(text),
             ) => Ok(Cell::Text(text)),
-            _ => Err("gespeicherter Wert passt nicht zum Ausgangstyp".to_owned()),
+            _ => Err("stored value does not match the source type".to_owned()),
         };
     }
     match (from, to, value) {
@@ -444,10 +444,10 @@ fn convert_cell(value: Cell, from: LogicalType, to: LogicalType) -> Result<Cell,
 fn parse_canonical_i64(text: &str) -> Result<i64, String> {
     let parsed = text
         .parse::<i64>()
-        .map_err(|_| format!("`{text}` ist keine ganze Zahl"))?;
+        .map_err(|_| format!("`{text}` is not an integer"))?;
     if parsed.to_string() != text {
         return Err(format!(
-            "`{text}` würde beim Umwandeln zu `{parsed}` verändert"
+            "`{text}` would change when converting to `{parsed}`"
         ));
     }
     Ok(parsed)
@@ -486,12 +486,12 @@ async fn count_where(
         ))
         .await
         .map_err(|error| {
-            MigrationError::new(format!("Zählen in `{table}` fehlgeschlagen: {error}"))
+            MigrationError::new(format!("Could not count rows in `{table}`: {error}"))
         })?
-        .ok_or_else(|| MigrationError::new(format!("Zählen in `{table}` lieferte keine Zeile.")))?;
+        .ok_or_else(|| MigrationError::new(format!("Row count query for `{table}` returned no rows.")))?;
     row.try_get::<i64>("", "total")
         .or_else(|_| row.try_get::<i32>("", "total").map(i64::from))
-        .map_err(|error| MigrationError::new(format!("COUNT(*) ist nicht lesbar: {error}")))
+        .map_err(|error| MigrationError::new(format!("Could not read COUNT(*): {error}")))
 }
 
 async fn execute(
