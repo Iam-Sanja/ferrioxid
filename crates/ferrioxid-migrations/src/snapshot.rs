@@ -177,7 +177,7 @@ impl SchemaSnapshot {
             }
             if table_names.contains(&table.name.as_str()) {
                 return Err(MigrationError::new(format!(
-                    "Doppelter Tabellenname `{}`.",
+                    "Duplicate table name `{}`.",
                     table.name
                 )));
             }
@@ -659,7 +659,7 @@ mod tests {
             .validate()
             .unwrap_err()
             .0
-            .contains("Doppelter Tabellenname"));
+            .contains("Duplicate table name"));
 
         let mut columns = sample();
         let duplicate = columns.tables[0].columns[1].clone();
