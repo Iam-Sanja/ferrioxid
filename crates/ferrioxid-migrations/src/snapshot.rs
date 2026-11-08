@@ -199,7 +199,7 @@ impl SchemaSnapshot {
                 }
                 if column_names.contains(&column.name.as_str()) {
                     return Err(MigrationError::new(format!(
-                        "Doppelter Spaltenname `{}.{}`.",
+                        "Duplicate column name `{}.{}`.",
                         table.name, column.name
                     )));
                 }
