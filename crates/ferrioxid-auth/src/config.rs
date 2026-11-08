@@ -44,7 +44,7 @@ impl AuthConfig {
             trust_proxy: false,
             login_max_attempts: 5,
             login_window_secs: 15 * 60,
-            csrf_secret: *b"ferrioxid-dev-csrf-secret-32-bytes!",
+            csrf_secret: *b"ferrum-dev-csrf-secret-32-bytes!",
         }
     }
 
