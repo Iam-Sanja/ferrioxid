@@ -1176,7 +1176,7 @@ primary_color = "#0f172a"
             std::env::set_var("FERRUM_DEBUG", "true");
         }
         let error = config.enforce_runtime().unwrap_err();
-        assert!(error.0.contains("Produktion"));
+        assert!(error.0.contains("production"));
         assert!(!error.0.contains("super-secret-value"));
         unsafe {
             std::env::set_var("FERRUM_DEBUG", "maybe");
