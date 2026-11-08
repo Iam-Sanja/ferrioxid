@@ -13,7 +13,7 @@ pub fn new_project(
 ) -> Result<PathBuf, String> {
     validate_project_name(name)?;
     let template = parse_template(template)?;
-    let ferrioxid = resolve_ferrum_path(ferrioxid_path)?;
+    let ferrioxid = resolve_ferrioxid_path(ferrioxid_path)?;
     let destination = std::env::current_dir()
         .map_err(|error| error.to_string())?
         .join(name);
@@ -59,7 +59,7 @@ pub fn new_project(
     write(&destination.join("src/lib.rs"), "pub mod models;\n")?;
     write(
         &destination.join("src/models/mod.rs"),
-        "pub mod product;\n// ferrum:models\n// ferrum:models:end\n",
+        "pub mod product;\n// ferrioxid:models\n// ferrioxid:models:end\n",
     )?;
     write(
         &destination.join("src/models/product.rs"),
@@ -130,7 +130,7 @@ pub fn validate_project_name(name: &str) -> Result<(), String> {
     Ok(())
 }
 
-fn resolve_ferrum_path(explicit: Option<&Path>) -> Result<PathBuf, String> {
+fn resolve_ferrioxid_path(explicit: Option<&Path>) -> Result<PathBuf, String> {
     let raw = if let Some(path) = explicit {
         path.to_path_buf()
     } else {

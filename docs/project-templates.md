@@ -57,7 +57,7 @@ Both templates enable Tera and a homepage. In the API template, `admin.enabled` 
 
 ## Data flow
 
-`ferrioxid generate model Customer` writes `src/models/customer.rs` and inserts lines before the `ferrum:models`, `ferrioxid:uses`, `ferrioxid:schema`, `ferrioxid:registry` and, when present, `ferrioxid:admin` markers. The table is named `customers`. Repeating the command for the same name returns an error without replacing the existing model.
+`ferrioxid generate model Customer` writes `src/models/customer.rs` and inserts lines before the `ferrioxid:models`, `ferrioxid:uses`, `ferrioxid:schema`, `ferrioxid:registry` and, when present, `ferrioxid:admin` markers. The table is named `customers`. Repeating the command for the same name returns an error without replacing the existing model.
 
 ## Error cases
 
