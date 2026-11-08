@@ -54,15 +54,15 @@ async fn notes_worker_binary_runs_restarts_and_leaves_unknown_jobs() {
 
     let pulse = enqueue_pulse(&url, "bereit").await;
     let mut running = spawn(&root, &url);
-    wait_for(&url, pulse, JobStatus::Succeeded).await;
+    wait_for(&url, pulse, JobStatus::Succeeded, &mut running).await;
     stop(&mut running);
 
     let retry = enqueue_retry(&url).await;
     let mut running = spawn(&root, &url);
-    wait_for(&url, retry, JobStatus::Retry).await;
+    wait_for(&url, retry, JobStatus::Retry, &mut running).await;
     stop(&mut running);
     let mut running = spawn(&root, &url);
-    wait_for(&url, retry, JobStatus::Succeeded).await;
+    wait_for(&url, retry, JobStatus::Succeeded, &mut running).await;
     stop(&mut running);
 
     let unknown = enqueue_unknown(&url).await;
@@ -75,7 +75,7 @@ async fn notes_worker_binary_runs_restarts_and_leaves_unknown_jobs() {
 
     let mailed = enqueue_mail(&url).await;
     let mut running = spawn(&root, &url);
-    wait_for(&url, mailed, JobStatus::Succeeded).await;
+    wait_for(&url, mailed, JobStatus::Succeeded, &mut running).await;
     stop(&mut running);
     let _ = std::fs::remove_dir_all(root);
 }
@@ -229,14 +229,46 @@ async fn fetch(url: &str, id: ferrum::uuid::Uuid) -> ferrum::jobs::JobRecord {
     panic!("Die Job-Zeile blieb gesperrt.");
 }
 
-async fn wait_for(url: &str, id: ferrum::uuid::Uuid, status: JobStatus) {
-    for _ in 0..150 {
+async fn wait_for(
+    url: &str,
+    id: ferrum::uuid::Uuid,
+    status: JobStatus,
+    child: &mut Child,
+) {
+    // CI machines can be busy running the rest of the workspace in parallel.
+    // A deadline avoids turning slow worker startup into an arbitrary fixed
+    // number of polls while keeping a bounded failure time.
+    let deadline = tokio::time::Instant::now() + Duration::from_secs(45);
+    loop {
         let job = fetch(url, id).await;
         if job.status == status {
             return;
         }
+        if let Some(exit) = child.try_wait().expect("check worker process") {
+            let mut stderr = String::new();
+            if let Some(mut pipe) = child.stderr.take() {
+                use std::io::Read;
+                let _ = pipe.read_to_string(&mut stderr);
+            }
+            panic!(
+                "Worker exited with {exit} before job {id} reached {}; status={} attempts={} next_attempt_at={:?} error={:?}; stderr: {stderr}",
+                status.as_str(),
+                job.status.as_str(),
+                job.attempts,
+                job.next_attempt_at,
+                job.error_code,
+            );
+        }
+        if tokio::time::Instant::now() >= deadline {
+            panic!(
+                "Job {id} remained {} instead of {} after 45s; attempts={} next_attempt_at={:?} error={:?}",
+                job.status.as_str(),
+                status.as_str(),
+                job.attempts,
+                job.next_attempt_at,
+                job.error_code,
+            );
+        }
         tokio::time::sleep(Duration::from_millis(100)).await;
     }
-    let job = fetch(url, id).await;
-    panic!("Status {} blieb {}", job.status.as_str(), status.as_str());
 }
