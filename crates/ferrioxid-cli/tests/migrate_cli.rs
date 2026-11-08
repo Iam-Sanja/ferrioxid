@@ -28,7 +28,7 @@ fn run(args: &[&str]) -> std::process::Output {
         .expect("ferrioxid CLI");
     if !output.status.success() {
         panic!(
-            "CLI fehlgeschlagen: {}\nstdout: {}\nstderr: {}",
+            "CLI failed: {}\nstdout: {}\nstderr: {}",
             output.status,
             String::from_utf8_lossy(&output.stdout),
             String::from_utf8_lossy(&output.stderr)
@@ -86,11 +86,11 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
     ]);
     let status_text = String::from_utf8_lossy(&status.stdout);
     assert!(status_text.contains("Backend: sqlite"));
-    assert!(status_text.contains("0001_auth_schema  angewendet"));
-    assert!(status_text.contains("0003_audit_operation  angewendet"));
-    assert!(status_text.contains("0001_initial  angewendet"));
-    assert!(!status_text.contains("ausstehend"));
-    assert!(status_text.contains("Konflikte: keine"));
+    assert!(status_text.contains("0001_auth_schema  applied"));
+    assert!(status_text.contains("0003_audit_operation  applied"));
+    assert!(status_text.contains("0001_initial  applied"));
+    assert!(!status_text.contains("pending"));
+    assert!(status_text.contains("Conflicts: none"));
     assert!(status_text.contains("entspricht dem letzten angewendeten Migrationsziel"));
 
     let second = run(&[
