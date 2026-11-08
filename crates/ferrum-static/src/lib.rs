@@ -236,7 +236,15 @@ mod tests {
             std::env::temp_dir().join(format!("ferrum-static-secret-{}", std::process::id()));
         fs::write(&outside, b"secret").unwrap();
         let link = root.join("css/escape.css");
+        #[cfg(windows)]
         let created = std::os::windows::fs::symlink_file(&outside, &link);
+        #[cfg(unix)]
+        let created = std::os::unix::fs::symlink(&outside, &link);
+        #[cfg(not(any(unix, windows)))]
+        let created: std::io::Result<()> = Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "symlinks are not supported on this platform",
+        ));
         if created.is_ok() {
             assert!(resolve(&root, "css/escape.css").is_err());
         }
