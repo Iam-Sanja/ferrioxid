@@ -327,7 +327,8 @@ pub fn apply_upgrade(root: &Path, plan: &UpgradePlan) -> Result<bool, MigrationE
     );
     if !still || fresh.has_conflict() {
         return Err(MigrationError::new(
-            "upgrade.conflict: The project has changed since planning. The operation was aborted.".to_owned(),
+            "upgrade.conflict: The project has changed since planning. The operation was aborted."
+                .to_owned(),
         ));
     }
     write_new_file(
@@ -410,7 +411,8 @@ fn write_new_file(root: &Path, relative: &str, contents: &str) -> Result<(), Mig
     let destination = contained_target(root, relative)?;
     if destination.exists() {
         return Err(MigrationError::new(
-            "upgrade.conflict: The destination file already exists and will not be replaced.".to_owned(),
+            "upgrade.conflict: The destination file already exists and will not be replaced."
+                .to_owned(),
         ));
     }
     let partial_relative = format!("{relative}.partial");
@@ -457,9 +459,7 @@ fn backup_file(root: &Path, source: &Path) -> Result<(), MigrationError> {
         })?;
     }
     std::fs::rename(source, &target).map_err(|error| {
-        MigrationError::new(format!(
-            "upgrade.conflict: Backup failed: {error}"
-        ))
+        MigrationError::new(format!("upgrade.conflict: Backup failed: {error}"))
     })?;
     Ok(())
 }

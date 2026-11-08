@@ -45,7 +45,13 @@ impl StatusReport {
             for line in &self.lines {
                 text.push_str(&format!(
                     "  {}  {}  checksum {}\n",
-                    line.id, match line.state.as_str() { "angewendet" => "applied", "ausstehend" => "pending", other => other }, line.checksum
+                    line.id,
+                    match line.state.as_str() {
+                        "angewendet" => "applied",
+                        "ausstehend" => "pending",
+                        other => other,
+                    },
+                    line.checksum
                 ));
             }
         }
@@ -231,9 +237,7 @@ fn schema_note(
         Some(snapshot) if snapshot.semantically_eq(current) => {
             "The current model matches the last applied migration target.".to_owned()
         }
-        Some(_) => {
-            "The current model differs from the last applied migration target.".to_owned()
-        }
+        Some(_) => "The current model differs from the last applied migration target.".to_owned(),
         None if current.semantically_eq(&SchemaSnapshot::empty()) => {
             "No migrations or model tables exist.".to_owned()
         }
@@ -295,9 +299,8 @@ fn reject_blocked(file: &MigrationFile, allow_destructive: bool) -> Result<(), M
                 return Err(MigrationError::new(format!(
                     "Migration {} wurde abgebrochen: {}",
                     file.id,
-                    reason.unwrap_or_else(
-                        || "This operation has no safe implementation.".to_owned()
-                    )
+                    reason
+                        .unwrap_or_else(|| "This operation has no safe implementation.".to_owned())
                 )));
             }
         }
@@ -424,11 +427,10 @@ async fn apply_one(
 ) -> Result<(), MigrationError> {
     let backend = db.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
-    let transaction = db.begin().await.map_err(|error| {
-        MigrationError::new(format!(
-            "Could not start transaction: {error}"
-        ))
-    })?;
+    let transaction = db
+        .begin()
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not start transaction: {error}")))?;
     let mut schema = file.from_snapshot.clone();
     for operation in &file.operations {
         if let Some((table, from, to)) = crate::rebuild::alter_parts(operation) {
@@ -472,10 +474,7 @@ async fn apply_one(
     )
     .await?;
     transaction.commit().await.map_err(|error| {
-        MigrationError::new(format!(
-            "Could not commit migration {}: {error}",
-            file.id
-        ))
+        MigrationError::new(format!("Could not commit migration {}: {error}", file.id))
     })?;
     Ok(())
 }
@@ -600,7 +599,8 @@ fn render_operation(
         }
         MigrationOperation::AlterColumn { .. } => {
             return Err(MigrationError::new(
-                "ALTER COLUMN is handled by the verified table rebuild, not as standalone DDL.".to_owned(),
+                "ALTER COLUMN is handled by the verified table rebuild, not as standalone DDL."
+                    .to_owned(),
             ));
         }
     })

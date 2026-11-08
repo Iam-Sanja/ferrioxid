@@ -239,11 +239,7 @@ pub fn load_schema_from_command(
         .args(command_args(command))
         .current_dir(root)
         .output()
-        .map_err(|error| {
-            MigrationError::new(format!(
-                "Could not start schema command: {error}"
-            ))
-        })?;
+        .map_err(|error| MigrationError::new(format!("Could not start schema command: {error}")))?;
     if !output.status.success() {
         let stderr = String::from_utf8_lossy(&output.stderr);
         return Err(MigrationError::new(format!(
@@ -258,10 +254,7 @@ pub fn load_schema_from_command(
 
 fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let text = std::fs::read_to_string(path).map_err(|error| {
-        MigrationError::new(format!(
-            "Could not read {}: {error}",
-            path.display()
-        ))
+        MigrationError::new(format!("Could not read {}: {error}", path.display()))
     })?;
     let root = path.parent().unwrap_or(Path::new(".")).to_path_buf();
     let mut section = String::new();
@@ -596,7 +589,10 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         }
     }
     let migrations_dir = migrations_dir.ok_or_else(|| {
-        MigrationError::new(format!("{} does not define migrations_dir.", path.display()))
+        MigrationError::new(format!(
+            "{} does not define migrations_dir.",
+            path.display()
+        ))
     })?;
     if let Some(template) = &template {
         if template != "api" && template != "fullstack" {
@@ -839,8 +835,7 @@ fn validate_mail(mail: MailFields<'_>) -> Result<(), MigrationError> {
     }
     if !trusted_origin(origin) {
         return Err(MigrationError::new(
-            "mail.public_origin must use http://127.0.0.1, http://localhost, or https."
-                .to_owned(),
+            "mail.public_origin must use http://127.0.0.1, http://localhost, or https.".to_owned(),
         ));
     }
     if backend == "smtp" {
@@ -855,8 +850,7 @@ fn validate_mail(mail: MailFields<'_>) -> Result<(), MigrationError> {
         }
         if !matches!(security, "starttls" | "tls") {
             return Err(MigrationError::new(
-                "mail.security accepts starttls or tls. Plaintext is not supported."
-                    .to_owned(),
+                "mail.security accepts starttls or tls. Plaintext is not supported.".to_owned(),
             ));
         }
     }
