@@ -709,7 +709,9 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let mut apps = Vec::new();
     for (name, (migrations, depends_on)) in declared {
         let Some(migrations) = migrations else {
-            return Err(MigrationError::new(format!("app.{name}.migrations is missing.")));
+            return Err(MigrationError::new(format!(
+                "app.{name}.migrations is missing."
+            )));
         };
         apps.push(DeclaredApp {
             name,

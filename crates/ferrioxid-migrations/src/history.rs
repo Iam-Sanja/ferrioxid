@@ -47,9 +47,10 @@ pub async fn table_exists(db: &DatabaseConnection, table: &str) -> Result<bool, 
         }
     };
     let statement = Statement::from_sql_and_values(backend, sql, [Value::from(table)]);
-    let row = db.query_one(statement).await.map_err(|error| {
-        MigrationError::new(format!("Schema check failed: {error}"))
-    })?;
+    let row = db
+        .query_one(statement)
+        .await
+        .map_err(|error| MigrationError::new(format!("Schema check failed: {error}")))?;
     Ok(row.is_some())
 }
 
@@ -80,9 +81,10 @@ pub async fn column_exists(
         }
     };
     let statement = Statement::from_sql_and_values(backend, sql, values);
-    let row = db.query_one(statement).await.map_err(|error| {
-        MigrationError::new(format!("Column check failed: {error}"))
-    })?;
+    let row = db
+        .query_one(statement)
+        .await
+        .map_err(|error| MigrationError::new(format!("Column check failed: {error}")))?;
     Ok(row.is_some())
 }
 
@@ -135,9 +137,7 @@ pub async fn ensure_history_in(
     db.execute(Statement::from_string(backend, sql))
         .await
         .map_err(|error| {
-            MigrationError::new(format!(
-                "Could not create migration history: {error}"
-            ))
+            MigrationError::new(format!("Could not create migration history: {error}"))
         })?;
     Ok(())
 }
@@ -173,9 +173,7 @@ pub async fn read_history_in(
         .query_all(Statement::from_sql_and_values(backend, sql, values.0))
         .await
         .map_err(|error| {
-            MigrationError::new(format!(
-                "Could not read migration history: {error}"
-            ))
+            MigrationError::new(format!("Could not read migration history: {error}"))
         })?;
     rows.iter()
         .map(|row| {
@@ -232,9 +230,7 @@ pub async fn insert_history_in(
     db.execute(Statement::from_sql_and_values(backend, sql, values.0))
         .await
         .map_err(|error| {
-            MigrationError::new(format!(
-                "Could not write migration history: {error}"
-            ))
+            MigrationError::new(format!("Could not write migration history: {error}"))
         })?;
     Ok(())
 }

@@ -63,9 +63,7 @@ pub fn checksum_of(file: &MigrationFile) -> Result<String, MigrationError> {
         risks: &file.risks,
     };
     let canonical = serde_json::to_string(&body).map_err(|error| {
-        MigrationError::new(format!(
-            "Could not serialize checksum input: {error}"
-        ))
+        MigrationError::new(format!("Could not serialize checksum input: {error}"))
     })?;
     let digest = Sha256::digest(canonical.as_bytes());
     Ok(digest.iter().map(|byte| format!("{byte:02x}")).collect())
@@ -109,11 +107,8 @@ pub fn save_migration(directory: &Path, file: &MigrationFile) -> Result<PathBuf,
             path.display()
         )));
     }
-    let text = serde_json::to_string_pretty(file).map_err(|error| {
-        MigrationError::new(format!(
-            "Could not serialize migration: {error}"
-        ))
-    })?;
+    let text = serde_json::to_string_pretty(file)
+        .map_err(|error| MigrationError::new(format!("Could not serialize migration: {error}")))?;
     fs::write(&path, format!("{text}\n")).map_err(|error| {
         MigrationError::new(format!(
             "Could not write migration {}: {error}",
@@ -320,11 +315,8 @@ pub fn validate_chain(files: &[MigrationFile]) -> Result<(), MigrationError> {
 }
 
 fn validate_migration_name(id: &str, name: &str) -> Result<(), MigrationError> {
-    let number = migration_number(id).ok_or_else(|| {
-        MigrationError::new(format!(
-            "Migration ID `{id}` must match 0001_name."
-        ))
-    })?;
+    let number = migration_number(id)
+        .ok_or_else(|| MigrationError::new(format!("Migration ID `{id}` must match 0001_name.")))?;
     let expected = format!("{number:04}_{name}");
     if id != expected || !is_migration_slug(name) {
         return Err(MigrationError::new(format!(
@@ -442,11 +434,8 @@ pub fn reseal_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
         )));
     }
     file.checksum = checksum_of(&file)?;
-    let text = serde_json::to_string_pretty(&file).map_err(|error| {
-        MigrationError::new(format!(
-            "Could not serialize migration: {error}"
-        ))
-    })?;
+    let text = serde_json::to_string_pretty(&file)
+        .map_err(|error| MigrationError::new(format!("Could not serialize migration: {error}")))?;
     fs::write(path, format!("{text}\n")).map_err(|error| {
         MigrationError::new(format!(
             "Could not write migration {}: {error}",

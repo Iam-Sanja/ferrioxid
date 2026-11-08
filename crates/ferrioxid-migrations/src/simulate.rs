@@ -150,7 +150,9 @@ fn apply_one(
                 )));
             }
             let Some(position) = schema.tables.iter().position(|table| table.name == *from) else {
-                return Err(MigrationError::new(format!("Source table `{from}` is missing.")));
+                return Err(MigrationError::new(format!(
+                    "Source table `{from}` is missing."
+                )));
             };
             schema.tables[position].name.clone_from(to);
             for table in &mut schema.tables {

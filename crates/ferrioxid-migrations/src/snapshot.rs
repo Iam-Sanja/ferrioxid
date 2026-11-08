@@ -149,19 +149,15 @@ impl SchemaSnapshot {
     }
 
     pub fn from_json(text: &str) -> Result<Self, MigrationError> {
-        let snapshot: Self = serde_json::from_str(text).map_err(|error| {
-            MigrationError::new(format!("Snapshot is not valid JSON: {error}"))
-        })?;
+        let snapshot: Self = serde_json::from_str(text)
+            .map_err(|error| MigrationError::new(format!("Snapshot is not valid JSON: {error}")))?;
         snapshot.validate()?;
         Ok(snapshot)
     }
 
     pub fn to_canonical_json(&self) -> Result<String, MigrationError> {
-        serde_json::to_string(self).map_err(|error| {
-            MigrationError::new(format!(
-                "Could not serialize snapshot: {error}"
-            ))
-        })
+        serde_json::to_string(self)
+            .map_err(|error| MigrationError::new(format!("Could not serialize snapshot: {error}")))
     }
 
     pub fn validate(&self) -> Result<(), MigrationError> {

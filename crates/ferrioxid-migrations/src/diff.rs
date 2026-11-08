@@ -361,8 +361,7 @@ fn order_by_dependencies(
         });
         let Some(index) = ready else {
             return Err(MigrationError::new(
-                "Foreign keys form a cycle. No migration is written."
-                    .to_owned(),
+                "Foreign keys form a cycle. No migration is written.".to_owned(),
             ));
         };
         let table = pending.remove(index);
@@ -615,9 +614,7 @@ pub fn classify(
         MigrationOperation::CreateTable { .. } => (ApplyClass::Safe, None),
         MigrationOperation::AddColumn { column, .. } if column.primary_key => (
             ApplyClass::Unsupported,
-            Some(
-                "A primary-key column cannot safely be added to an existing table.".into(),
-            ),
+            Some("A primary-key column cannot safely be added to an existing table.".into()),
         ),
         MigrationOperation::AddColumn { column, .. }
             if !column.nullable && column.default.is_none() =>
@@ -639,9 +636,7 @@ pub fn classify(
             if primary {
                 (
                     ApplyClass::Unsupported,
-                    Some(format!(
-                        "Primary key `{table}.{name}` cannot be dropped."
-                    )),
+                    Some(format!("Primary key `{table}.{name}` cannot be dropped.")),
                 )
             } else {
                 (ApplyClass::Destructive, None)
@@ -670,10 +665,7 @@ pub fn classify(
         MigrationOperation::DropUniqueConstraint { .. } => (ApplyClass::Safe, None),
         MigrationOperation::AddForeignKey { .. } => (
             ApplyClass::Unsupported,
-            Some(
-                "Adding a foreign key to an existing column is not supported."
-                    .to_owned(),
-            ),
+            Some("Adding a foreign key to an existing column is not supported.".to_owned()),
         ),
         MigrationOperation::DropForeignKey { .. } => (
             ApplyClass::Unsupported,

@@ -54,9 +54,9 @@ pub async fn introspect_sqlite(
         .map_err(|error| MigrationError::new(format!("Tabellenliste fehlgeschlagen: {error}")))?;
     let mut tables = Vec::new();
     for row in rows {
-        let name: String = row.try_get("", "name").map_err(|error| {
-            MigrationError::new(format!("Could not read table name: {error}"))
-        })?;
+        let name: String = row
+            .try_get("", "name")
+            .map_err(|error| MigrationError::new(format!("Could not read table name: {error}")))?;
         if name.starts_with("_ferrum_") {
             continue;
         }
@@ -130,9 +130,7 @@ async fn index_info(
             continue;
         }
         if !crate::snapshot::is_identifier(&name) {
-            return Err(MigrationError::new(format!(
-                "Invalid index name `{name}`."
-            )));
+            return Err(MigrationError::new(format!("Invalid index name `{name}`.")));
         }
         let columns = db
             .query_all(Statement::from_string(
@@ -223,7 +221,10 @@ pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<St
     let mut differences = Vec::new();
     for table in &expected.tables {
         let Some(found) = live.iter().find(|candidate| candidate.name == table.name) else {
-            differences.push(format!("Table `{}` is missing from the database.", table.name));
+            differences.push(format!(
+                "Table `{}` is missing from the database.",
+                table.name
+            ));
             continue;
         };
         for column in &table.columns {

@@ -20,7 +20,8 @@ pub async fn baseline_database(
         .map_err(|error| MigrationError::new(error.to_string()))?;
     if kind != DatabaseKind::Sqlite {
         return Err(MigrationError::new(
-            "Baseline is not implemented for PostgreSQL. No history was written; migrate manually.".to_owned(),
+            "Baseline is not implemented for PostgreSQL. No history was written; migrate manually."
+                .to_owned(),
         ));
     }
     let state = inspect_directory(directory);
@@ -42,9 +43,7 @@ pub async fn baseline_database(
     let expected = &state
         .files
         .last()
-        .ok_or_else(|| {
-            MigrationError::new("There are no migration files to baseline.".to_owned())
-        })?
+        .ok_or_else(|| MigrationError::new("There are no migration files to baseline.".to_owned()))?
         .to_snapshot;
     let live = introspect_sqlite(db).await?;
     let differences = compare_snapshot(expected, &live);
@@ -60,9 +59,7 @@ pub async fn baseline_database(
         ));
     }
     let transaction = db.begin().await.map_err(|error| {
-        MigrationError::new(format!(
-            "Could not begin baseline transaction: {error}"
-        ))
+        MigrationError::new(format!("Could not begin baseline transaction: {error}"))
     })?;
     history::ensure_history(&transaction).await?;
     let applied_at_unix = SystemTime::now()
@@ -81,11 +78,10 @@ pub async fn baseline_database(
         .await?;
         ids.push(file.id.clone());
     }
-    transaction.commit().await.map_err(|error| {
-        MigrationError::new(format!(
-            "Could not commit baseline: {error}"
-        ))
-    })?;
+    transaction
+        .commit()
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not commit baseline: {error}")))?;
     Ok(ids)
 }
 

@@ -38,7 +38,9 @@ pub async fn apply_alter(
         .tables
         .iter()
         .find(|candidate| candidate.name == table)
-        .ok_or_else(|| MigrationError::new(format!("Table `{table}` is missing before rebuild.")))?;
+        .ok_or_else(|| {
+            MigrationError::new(format!("Table `{table}` is missing before rebuild."))
+        })?;
     if !to.nullable && from.nullable {
         let nulls = count_where(db, table, &format!("\"{}\" IS NULL", from.name)).await?;
         if nulls > 0 {
@@ -145,9 +147,9 @@ async fn rebuild_sqlite(
         .await
         .map_err(|error| MigrationError::new(format!("integrity_check fehlgeschlagen: {error}")))?
         .ok_or_else(|| MigrationError::new("integrity_check lieferte keine Zeile."))?;
-    let status: String = integrity.try_get("", "integrity_check").map_err(|error| {
-        MigrationError::new(format!("Could not read integrity_check: {error}"))
-    })?;
+    let status: String = integrity
+        .try_get("", "integrity_check")
+        .map_err(|error| MigrationError::new(format!("Could not read integrity_check: {error}")))?;
     if status != "ok" {
         return Err(MigrationError::new(format!(
             "integrity_check returned `{status}`. The transaction is rolled back."
@@ -266,13 +268,11 @@ async fn assert_no_foreign_keys(
             "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
         ))
         .await
-        .map_err(|error| {
-            MigrationError::new(format!("Foreign-key check failed: {error}"))
-        })?;
+        .map_err(|error| MigrationError::new(format!("Foreign-key check failed: {error}")))?;
     for row in tables {
-        let name: String = row.try_get("", "name").map_err(|error| {
-            MigrationError::new(format!("Could not read table name: {error}"))
-        })?;
+        let name: String = row
+            .try_get("", "name")
+            .map_err(|error| MigrationError::new(format!("Could not read table name: {error}")))?;
         if !is_identifier(&name) {
             continue;
         }
@@ -326,8 +326,7 @@ async fn validate_changed_column(
     let total = count_where(db, table, "1 = 1").await?;
     if rows.len() as i64 != total {
         return Err(MigrationError::new(
-            "The retrieved row count does not match COUNT(*). No rebuild was written."
-                .to_owned(),
+            "The retrieved row count does not match COUNT(*). No rebuild was written.".to_owned(),
         ));
     }
     for (index, row) in rows.iter().enumerate() {
@@ -488,7 +487,9 @@ async fn count_where(
         .map_err(|error| {
             MigrationError::new(format!("Could not count rows in `{table}`: {error}"))
         })?
-        .ok_or_else(|| MigrationError::new(format!("Row count query for `{table}` returned no rows.")))?;
+        .ok_or_else(|| {
+            MigrationError::new(format!("Row count query for `{table}` returned no rows."))
+        })?;
     row.try_get::<i64>("", "total")
         .or_else(|_| row.try_get::<i32>("", "total").map(i64::from))
         .map_err(|error| MigrationError::new(format!("Could not read COUNT(*): {error}")))
