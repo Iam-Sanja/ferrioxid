@@ -1,4 +1,4 @@
-//! Diagnose und Upgrade an temporären Projekten. Geschützte Datenbanken werden nicht verwendet.
+//! Diagnostics and upgrades use disposable projects. Protected databases are not touched.
 
 use std::path::{Path, PathBuf};
 use std::process::Command;
