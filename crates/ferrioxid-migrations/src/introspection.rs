@@ -1,4 +1,4 @@
-//! Liest ein vorhandenes SQLite-Schema. Die logischen Ferrioxid-Typen bleiben die Vergleichsgrundlage.
+//! Reads an existing SQLite schema. Ferrioxid logical types are used for comparisons.
 
 use crate::error::MigrationError;
 use crate::snapshot::{LogicalType, OnDelete, SchemaSnapshot};
@@ -42,7 +42,7 @@ pub async fn introspect_sqlite(
 ) -> Result<Vec<LiveTable>, MigrationError> {
     if db.get_database_backend() != DatabaseBackend::Sqlite {
         return Err(MigrationError::new(
-            "Schema-Introspektion für Baseline ist nur für SQLite implementiert.".to_owned(),
+            "Schema introspection for baselining is implemented only for SQLite.".to_owned(),
         ));
     }
     let rows = db
@@ -55,7 +55,7 @@ pub async fn introspect_sqlite(
     let mut tables = Vec::new();
     for row in rows {
         let name: String = row.try_get("", "name").map_err(|error| {
-            MigrationError::new(format!("Tabellenname ist nicht lesbar: {error}"))
+            MigrationError::new(format!("Could not read table name: {error}"))
         })?;
         if name.starts_with("_ferrum_") {
             continue;
@@ -76,7 +76,7 @@ async fn table_info(
 ) -> Result<Vec<LiveColumn>, MigrationError> {
     if !crate::snapshot::is_identifier(table) {
         return Err(MigrationError::new(format!(
-            "Ungültiger Tabellenname `{table}`."
+            "Invalid table name `{table}`."
         )));
     }
     let rows = db
@@ -94,10 +94,10 @@ async fn table_info(
         let primary = read_i64(&row, "pk")?;
         columns.push(LiveColumn {
             name: row.try_get("", "name").map_err(|error| {
-                MigrationError::new(format!("Spaltenname ist nicht lesbar: {error}"))
+                MigrationError::new(format!("Could not read column name: {error}"))
             })?,
             type_name: row.try_get("", "type").map_err(|error| {
-                MigrationError::new(format!("Spaltentyp ist nicht lesbar: {error}"))
+                MigrationError::new(format!("Could not read column type: {error}"))
             })?,
             nullable: notnull == 0,
             primary_key: primary > 0,
@@ -124,14 +124,14 @@ async fn index_info(
     for row in rows {
         let name: String = row
             .try_get("", "name")
-            .map_err(|error| MigrationError::new(format!("Indexname ist nicht lesbar: {error}")))?;
+            .map_err(|error| MigrationError::new(format!("Could not read index name: {error}")))?;
         let origin: String = row.try_get("", "origin").unwrap_or_default();
         if origin == "pk" || name.starts_with("sqlite_autoindex_") {
             continue;
         }
         if !crate::snapshot::is_identifier(&name) {
             return Err(MigrationError::new(format!(
-                "Ungültiger Indexname `{name}`."
+                "Invalid index name `{name}`."
             )));
         }
         let columns = db
@@ -148,7 +148,7 @@ async fn index_info(
             let column_name: Option<String> = column.try_get("", "name").unwrap_or(None);
             let Some(column_name) = column_name else {
                 return Err(MigrationError::new(format!(
-                    "Index `{name}` enthält einen Ausdruck und kann nicht mit dem Snapshot verglichen werden."
+                    "Index `{name}` contains an expression and cannot be compared with the snapshot."
                 )));
             };
             named.push(column_name);
@@ -180,13 +180,13 @@ async fn foreign_key_info(
         let id = read_i64(&row, "id")?;
         let seq = read_i64(&row, "seq")?;
         let referenced_table: String = row.try_get("", "table").map_err(|error| {
-            MigrationError::new(format!("Fremdschlüsseltabelle ist nicht lesbar: {error}"))
+            MigrationError::new(format!("Could not read foreign-key table: {error}"))
         })?;
         let from: String = row.try_get("", "from").map_err(|error| {
-            MigrationError::new(format!("Fremdschlüsselspalte ist nicht lesbar: {error}"))
+            MigrationError::new(format!("Could not read foreign-key column: {error}"))
         })?;
         let to: String = row.try_get("", "to").map_err(|error| {
-            MigrationError::new(format!("Referenzspalte ist nicht lesbar: {error}"))
+            MigrationError::new(format!("Could not read referenced column: {error}"))
         })?;
         let on_delete: String = row.try_get("", "on_delete").unwrap_or_default();
         let on_update: String = row.try_get("", "on_update").unwrap_or_default();
@@ -215,7 +215,7 @@ fn read_i64(row: &sea_orm::QueryResult, column: &str) -> Result<i64, MigrationEr
     row.try_get::<i64>("", column)
         .or_else(|_| row.try_get::<i32>("", column).map(i64::from))
         .map_err(|error| {
-            MigrationError::new(format!("PRAGMA-Wert `{column}` ist nicht lesbar: {error}"))
+            MigrationError::new(format!("Could not read PRAGMA value `{column}`: {error}"))
         })
 }
 
@@ -223,7 +223,7 @@ pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<St
     let mut differences = Vec::new();
     for table in &expected.tables {
         let Some(found) = live.iter().find(|candidate| candidate.name == table.name) else {
-            differences.push(format!("Tabelle `{}` fehlt in der Datenbank.", table.name));
+            differences.push(format!("Table `{}` is missing from the database.", table.name));
             continue;
         };
         for column in &table.columns {
@@ -233,32 +233,32 @@ pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<St
                 .find(|candidate| candidate.name == column.name)
             else {
                 differences.push(format!(
-                    "Spalte `{}.{}` fehlt in der Datenbank.",
+                    "Column `{}.{}` is missing from the database.",
                     table.name, column.name
                 ));
                 continue;
             };
             if !type_compatible(column.logical_type, &live_column.type_name) {
                 differences.push(format!(
-                    "Spalte `{}.{}` hat den SQL-Typ `{}`, erwartet wird {:?}.",
+                    "Column `{}.{}` has SQL type `{}`; expected {:?}.",
                     table.name, column.name, live_column.type_name, column.logical_type
                 ));
             }
             if live_column.nullable != column.nullable {
                 differences.push(format!(
-                    "Spalte `{}.{}` ist nullable={}, erwartet wird {}.",
+                    "Column `{}.{}` is nullable={}; expected {}.",
                     table.name, column.name, live_column.nullable, column.nullable
                 ));
             }
             if live_column.primary_key != column.primary_key {
                 differences.push(format!(
-                    "Primärschlüssel von `{}.{}` ist {}, erwartet wird {}.",
+                    "Primary-key status of `{}.{}` is {}; expected {}.",
                     table.name, column.name, live_column.primary_key, column.primary_key
                 ));
             }
             if !default_compatible(column.default, live_column.default_sql.as_deref()) {
                 differences.push(format!(
-                    "Default von `{}.{}` ist {:?}, erwartet wird {:?}.",
+                    "Default of `{}.{}` is {:?}; expected {:?}.",
                     table.name, column.name, live_column.default_sql, column.default
                 ));
             }
@@ -270,7 +270,7 @@ pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<St
                 .any(|column| column.name == live_column.name)
             {
                 differences.push(format!(
-                    "Zusätzliche Spalte `{}.{}` blockiert die Baseline.",
+                    "Additional column `{}.{}` prevents baselining.",
                     table.name, live_column.name
                 ));
             }
@@ -281,7 +281,7 @@ pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<St
             });
             if !matched {
                 differences.push(format!(
-                    "Unique-Constraint `{}` auf `{}` fehlt in der Datenbank.",
+                    "Unique constraint `{}` on `{}` is missing from the database.",
                     unique.name, table.name
                 ));
             }
@@ -292,7 +292,7 @@ pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<St
             });
             if !matched {
                 differences.push(format!(
-                    "Index `{}` auf `{}` fehlt in der Datenbank.",
+                    "Index `{}` on `{}` is missing from the database.",
                     index.name, table.name
                 ));
             }
@@ -306,7 +306,7 @@ pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<St
             });
             if !expected_unique && !expected_index {
                 differences.push(format!(
-                    "Zusätzlicher Index `{}` auf `{}` blockiert die Baseline.",
+                    "Additional index `{}` on `{}` prevents baselining.",
                     live.name, table.name
                 ));
             }
@@ -322,14 +322,14 @@ pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<St
             });
             if !matched {
                 differences.push(format!(
-                    "Fremdschlüssel `{}` auf `{}` fehlt oder weicht ab.",
+                    "Foreign key `{}` on `{}` is missing or differs.",
                     foreign_key.name, table.name
                 ));
             }
         }
         if found.foreign_keys.len() != table.foreign_keys.len() {
             differences.push(format!(
-                "Tabelle `{}` hat {} Fremdschlüssel, erwartet werden {}.",
+                "Table `{}` has {} foreign keys; expected {}.",
                 table.name,
                 found.foreign_keys.len(),
                 table.foreign_keys.len()
