@@ -19,7 +19,7 @@ The main flow is: Rust model → `FerrioxidModel` metadata and repository method
 | Database | Implemented and planned | [database.md](database.md) | Typed repositories, connections and SQL |
 | CLI | Implemented | [cli.md](cli.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generation, diagnostics, upgrades, builds and development server |
 | Example | Implemented | [example-myshop.md](example-myshop.md) | The myshop integration example |
-| Settings | Implemented, v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrum.toml`, environment overrides and custom sections |
+| Settings | Implemented, v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrioxid.toml`, environment overrides and custom sections |
 | URLs and views | Implemented, v0.24 | [urls.md](urls.md), [routing.md](routing.md), [views.md](views.md), [templates.md](templates.md), [project-structure.md](project-structure.md) | Named Axum routes, responses, templates and project layout |
 | Jobs | Implemented, v0.27.1 | [jobs.md](jobs.md), [workers.md](workers.md), [job-retries.md](job-retries.md), [job-security.md](job-security.md), [job-mail-integration.md](job-mail-integration.md) | Persistent queue, application workers, hidden payloads and mail without reset tokens |
 | Apps | Implemented, v0.26 | [apps.md](apps.md), [app-registry.md](app-registry.md), [app-migrations.md](app-migrations.md), [app-lifecycle.md](app-lifecycle.md), [reusable-apps.md](reusable-apps.md), [create-app.md](create-app.md) | Typed registration, startup checks and app migrations |
@@ -58,6 +58,8 @@ The main flow is: Rust model → `FerrioxidModel` metadata and repository method
 Implementation evidence comes from `crates/*/src/*`, `examples/myshop/src/*`, `examples/myshop/tests/postgres_api.rs`, `Cargo.toml`, `.github/workflows/ci.yml` and `compose.yaml`. The workspace test run includes SQLite HTTP tests. Ignored PostgreSQL tests count as passed only when actually run against a disposable server.
 
 ## Maintainer records
+
+- [Breaking configuration and schema naming change](ferrum-legacy-removal.md)
 
 - [GitHub maintenance](github-maintenance.md)
 - [Historical rename plan and compatibility policy](ferrioxid-rename-plan.md)

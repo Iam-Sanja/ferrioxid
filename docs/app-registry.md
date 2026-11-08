@@ -29,7 +29,7 @@ The migration graph is only checked here because a later installed app can fulfi
 
 `try_into_router` and `into_router` pick up `seal` when apps are installed or `[app.<name>]` is declared. An error prevents the start. An explicit `seal` remains valid and is not executed twice. Without apps and without declaration, the previous starting path remains.
 
-## ferrum.toml
+## ferrioxid.toml
 
 There is no `[apps] enabled = ["shop"]` section. A string would not load an unknown app, and a silent ignoring would be misleading.
 
@@ -46,4 +46,4 @@ currency = "EUR"
 
 `[app]` without a name is an error. The path must be relative and must not contain `..`. If `migrations` is missing, this is also an error.
 
-If either migration list is nonempty, `seal` requires matching app names, `depends_on` values and directories. Missing `with_settings` produces `app.migration.undeclared`; differing declarations produce `app.migration.mismatch`. `ferrioxid check`, `ferrioxid doctor` and `ferrioxid migrate status` only read `ferrum.toml` and report `app.migration.runtime`; they do not verify the Rust registration.
+If either migration list is nonempty, `seal` requires matching app names, `depends_on` values and directories. Missing `with_settings` produces `app.migration.undeclared`; differing declarations produce `app.migration.mismatch`. `ferrioxid check`, `ferrioxid doctor` and `ferrioxid migrate status` only read `ferrioxid.toml` and report `app.migration.runtime`; they do not verify the Rust registration.

@@ -4,7 +4,7 @@
 
 ## 1. First understand the existing code
 
-Read `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md), [i18n.md](i18n.md), [error-codes.md](error-codes.md) and [testing.md](testing.md), in that order, before changing the relevant crate. **Do not claim a feature is complete based on a planned-design document.** Auth tables use `apply_directory_with_history` and `_ferrum_auth_migrations`. Do not edit `0001_initial.json`. v0.12 adds forms, static files, local storage and middleware. Upload metadata remains in sidecar JSON to preserve migration checksums. Do not describe S3 or virus scanning as implemented.
+Read `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md), [i18n.md](i18n.md), [error-codes.md](error-codes.md) and [testing.md](testing.md), in that order, before changing the relevant crate. **Do not claim a feature is complete based on a planned-design document.** Auth tables use `apply_directory_with_history` and `_ferrioxid_auth_migrations`. Do not edit `0001_initial.json`. v0.12 adds forms, static files, local storage and middleware. Upload metadata remains in sidecar JSON to preserve migration checksums. Do not describe S3 or virus scanning as implemented.
 
 ## 2. Respect for module boundaries
 

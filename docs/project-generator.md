@@ -4,7 +4,7 @@
 
 ## Purpose
 
-`ferrioxid new` creates an independent Ferrioxid project. It compiles outside the Ferrioxid workspace, uses SQLite and registers an example model. Fullstack projects transfer branding and currency to `AdminRegistry::with_branding` and do not need Node.js for the admin. The homepage contains fixed language links and a localized 500 text. Already created projects do not automatically take over. Since v0.12, the generator is `static/css/app.css`, `static/js/app.js` and `media/.gitkeep`. `media/*` is ignored. `ferrum.toml` contains `[static]` and `[storage]`. Fullstack projects have `/contact`. The API template does not mount the form.
+`ferrioxid new` creates an independent Ferrioxid project. It compiles outside the Ferrioxid workspace, uses SQLite and registers an example model. Fullstack projects transfer branding and currency to `AdminRegistry::with_branding` and do not need Node.js for the admin. The homepage contains fixed language links and a localized 500 text. Already created projects do not automatically take over. Since v0.12, the generator is `static/css/app.css`, `static/js/app.js` and `media/.gitkeep`. `media/*` is ignored. `ferrioxid.toml` contains `[static]` and `[storage]`. Fullstack projects have `/contact`. The API template does not mount the form.
 
 ## Responsible files
 
@@ -24,7 +24,7 @@ The default template is `fullstack`. Until the crates are published, `--ferrioxi
 
 ## Configuration
 
-Generated `ferrum.toml` files configure project, database, server, admin, auth, templates and branding. Templates include `base.html`, `index.html` and `errors/`. The database defaults to `sqlite://db.sqlite3?mode=rwc` and the server to `127.0.0.1:3000`. Secrets are not stored in this file. `.env.example` lists `DATABASE_URL`, `BIND_ADDRESS`, and commented guidance for `FERRUM_CSRF_SECRET` and `FERRUM_PASSWORD`.
+Generated `ferrioxid.toml` files configure project, database, server, admin, auth, templates and branding. Templates include `base.html`, `index.html` and `errors/`. The database defaults to `sqlite://db.sqlite3?mode=rwc` and the server to `127.0.0.1:3000`. Secrets are not stored in this file. `.env.example` lists `DATABASE_URL`, `BIND_ADDRESS`, and commented guidance for `FERRIOXID_CSRF_SECRET` and `FERRIOXID_PASSWORD`.
 
 ## Data flow
 
@@ -57,7 +57,7 @@ ferrioxid admin create-user --email admin@example.com --staff --superuser
 ferrioxid dev
 ```
 
-`create-user` prompts for a password without echoing it. For automation, set `FERRUM_PASSWORD` to a password of at least 12 characters. There is no default password.
+`create-user` prompts for a password without echoing it. For automation, set `FERRIOXID_PASSWORD` to a password of at least 12 characters. There is no default password.
 
 ## Tests
 

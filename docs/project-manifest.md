@@ -2,7 +2,7 @@
 
 [Overview](index.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · Legacy: [legacy-projects.md](legacy-projects.md)
 
-**Implemented:** `crates/ferrioxid-migrations/src/manifest.rs`, stored in `.ferrum/project.json`. The Cargo version remains `0.1.0`; the independent current template version is `0.24`. The preserved JSON example below shows the older `0.21` manifest format, which remains readable.
+**Implemented:** `crates/ferrioxid-migrations/src/manifest.rs`, stored in `.ferrioxid/project.json`. The Cargo version remains `0.1.0`; the independent current template version is `0.24`. The preserved JSON example below shows the older `0.21` manifest format, which remains readable.
 
 ## Schema
 

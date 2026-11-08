@@ -18,7 +18,7 @@ ferrioxid dev
 ferrioxid build
 ```
 
-Both commands read `ferrum.toml` in the working directory or a parent directory.
+Both commands read `ferrioxid.toml` in the working directory or a parent directory.
 
 ## Configuration
 
@@ -34,7 +34,7 @@ Restarting reloads Tera templates. `dev` launches the binary from `target/debug`
 
 | Case | Behavior |
 |---|---|
-| Missing `ferrum.toml` | Exit with a diagnostic |
+| Missing `ferrioxid.toml` | Exit with a diagnostic |
 | Compilation errors | Report that the previous process has stopped; retry on the next change |
 |The admin is missing in the binary|This is not due to a lack of frontend. A compile error of Rust remains a compile error.|
 |Address starts with `0.0.0.0`|The generated application ends|
@@ -59,8 +59,8 @@ Finish in both cases with Ctrl+C.
 
 ## Tests
 
-The integration into `crates/ferrioxid-cli/tests/generator.rs` sets `FERRUM_DEV_EXIT_MS` and checks that the server is listening and the process ends afterwards. A unit test checks that paths under `target` and `node_modules` are not relevant. Another unit test ends a child process.
+The integration into `crates/ferrioxid-cli/tests/generator.rs` sets `FERRIOXID_DEV_EXIT_MS` and checks that the server is listening and the process ends afterwards. A unit test checks that paths under `target` and `node_modules` are not relevant. Another unit test ends a child process.
 
 ## Limitations
 
-Templates and CSS change with the next Rust build. `FERRUM_DEV_EXIT_MS` is only a test aid and not a user command.
+Templates and CSS change with the next Rust build. `FERRIOXID_DEV_EXIT_MS` is only a test aid and not a user command.

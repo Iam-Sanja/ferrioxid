@@ -12,7 +12,7 @@ Admin changes to users, roles and permissions use `*_on` methods to run in the s
 
 `ferrioxid-auth` depends on `ferrioxid-core`, `ferrioxid-db` and `ferrioxid-migrations`, not `ferrioxid-api`. `ferrioxid-api` depends on `ferrioxid-auth` and registers the Auth routes along with the model routes. The CLI calls the same service methods.
 
-Passwords use Argon2id and must contain 12 to 128 characters. The CLI reads passwords without echoing them, or from `FERRUM_PASSWORD`. Only a SHA-256 hex digest of each session token is stored. Object policies call `can_create` before inserting a row; assigning the owner ID from the session is planned. The CSRF token is derived from the key and session when needed, and only its hash is stored. HTML forms pass it as the `csrf_token` field to `authenticate_csrf`. Roles and permissions are read from the database on every authorization check.
+Passwords use Argon2id and must contain 12 to 128 characters. The CLI reads passwords without echoing them, or from `FERRIOXID_PASSWORD`. Only a SHA-256 hex digest of each session token is stored. Object policies call `can_create` before inserting a row; assigning the owner ID from the session is planned. The CSRF token is derived from the key and session when needed, and only its hash is stored. HTML forms pass it as the `csrf_token` field to `authenticate_csrf`. Roles and permissions are read from the database on every authorization check.
 
 ## Responsible files
 
@@ -56,9 +56,9 @@ A new password has 12 to 128 characters. The hash uses Argon2id, version `0x13`,
 - A password change through the CLI or admin revokes all user sessions. The admin uses `validate_new_password` and `hash_password`, never displays the hash and never puts the password in a redirect URL.
 - The admin writes staff and role changes to the same user record. The next `authenticate_token` check reads the updated flags without deleting the session.
 - Login is limited to five failed attempts per process in 15 minutes. The key is peer plus normalized email.
-- `X-Forwarded-For` applies only if `FERRUM_TRUST_PROXY` is expressly `1` or `true`. The first hop is evaluated.
+- `X-Forwarded-For` applies only if `FERRIOXID_TRUST_PROXY` is expressly `1` or `true`. The first hop is evaluated.
 - Security logs never include passwords, session tokens, login CSRF cookies or form tokens.
-- Without `FERRUM_ALLOWED_ORIGINS`, `AuthConfig::apply_bound_address` replaces the development allowlist with loopback origins for the bound address. Public hosts and request Host headers are never added. `Origin: null` is invalid except for the explicit same-origin browser case documented in [csrf.md](csrf.md). Requests without Origin or Referer still require the login CSRF cookie and token.
+- Without `FERRIOXID_ALLOWED_ORIGINS`, `AuthConfig::apply_bound_address` replaces the development allowlist with loopback origins for the bound address. Public hosts and request Host headers are never added. `Origin: null` is invalid except for the explicit same-origin browser case documented in [csrf.md](csrf.md). Requests without Origin or Referer still require the login CSRF cookie and token.
 
 ## Error cases
 
@@ -85,7 +85,7 @@ POST /auth/login
 {"email":"admin@example.com","password":"example-password"}
 ```
 
-The response sets `Set-Cookie: ferrum_session=...` and returns `user` and `csrf_token`. The session token is not included in the JSON.
+The response sets `Set-Cookie: ferrioxid_session=...` and returns `user` and `csrf_token`. The session token is not included in the JSON.
 
 ## Tests
 

@@ -2,6 +2,8 @@
 
 Tracking: #9. **Historical implementation plan:** the framework and CLI rename was merged in PR #18. The crates and executable are now named Ferrioxid. The checklist below records the original scope and compatibility policy; it is not a claim that the rename is still pending.
 
+> **Superseded compatibility policy:** this page records PR #18 only. The subsequent [legacy-name removal](ferrum-legacy-removal.md) intentionally removes all configuration, environment, cookie and database aliases. The compatibility rules below are historical, not current implementation instructions.
+
 ## Identity
 
 - Brand: **Ferrioxid**; facade crate: `ferrioxid`; CLI executable: `ferrioxid`; CLI package: `ferrioxid-cli`.
@@ -40,4 +42,4 @@ Tracking: #9. **Historical implementation plan:** the framework and CLI rename w
 - Legacy config / persisted schema compatibility tests.
 - GitHub CI on both Windows and Ubuntu, PostgreSQL and the complete guarded Security audit.
 
-The rename was implemented on `feat/framework-rename` and merged into `main` through PR #18. Subsequent fixes must continue to preserve legacy configuration and persisted data.
+The rename was implemented on `feat/framework-rename` and merged into `main` through PR #18. Its compatibility policy was superseded by the later legacy-name removal; no old configuration or persisted-data compatibility is now promised.

@@ -2,7 +2,7 @@
 
 [Overview](index.md) · Routes: [admin-routing.md](admin-routing.md) Templates: [admin-templates.md](admin-templates.md) Design: [admin-design-system.md](admin-design-system.md)
 
-**Milestone:** v0.22. The Cargo version remains `0.1.0`. Custom pages under `/admin/pages/{key}` share the native server-rendered layout. React, Vite and Node.js are not required. Allowed login origins follow the bind address from `ferrum.toml` or `BIND_ADDRESS`. Drafts, has-many inlines, opt-in parent-child forms, bulk actions, history and date hierarchy work without JavaScript. `admin.js` uses `defer` and is not required for submission. Date fields use `type="date"`, `type="time"` and `type="datetime-local"` with a UTC hint.
+**Milestone:** v0.22. The Cargo version remains `0.1.0`. Custom pages under `/admin/pages/{key}` share the native server-rendered layout. React, Vite and Node.js are not required. Allowed login origins follow the bind address from `ferrioxid.toml` or `BIND_ADDRESS`. Drafts, has-many inlines, opt-in parent-child forms, bulk actions, history and date hierarchy work without JavaScript. `admin.js` uses `defer` and is not required for submission. Date fields use `type="date"`, `type="time"` and `type="datetime-local"` with a UTC hint.
 
 ## Purpose
 
@@ -50,7 +50,7 @@ The JSON API remains under `/admin/api`. It uses the same models, permissions an
 
 ## Branding
 
-`AdminBranding` reads `ferrum.toml`. Titles, headers and application names must not contain HTML. `primary_color` accepts `#rgb` or `#rrggbb`; languages are `de` and `en`, and currency is a three-uppercase-letter code. `--brand` colors the light sidebar only if white text reaches at least 4.5:1 contrast; otherwise it remains `#0f172a`. The dark sidebar does not use `--brand`. Tera escapes values, and database content never uses the `safe` filter. The JSON API returns the configured color.
+`AdminBranding` reads `ferrioxid.toml`. Titles, headers and application names must not contain HTML. `primary_color` accepts `#rgb` or `#rrggbb`; languages are `de` and `en`, and currency is a three-uppercase-letter code. `--brand` colors the light sidebar only if white text reaches at least 4.5:1 contrast; otherwise it remains `#0f172a`. The dark sidebar does not use `--brand`. Tera escapes values, and database content never uses the `safe` filter. The JSON API returns the configured color.
 
 ## Language and presentation
 

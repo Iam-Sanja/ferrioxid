@@ -39,12 +39,12 @@ Logout, password change and expiration revoke or discard the session. After that
 ## Security rules
 
 - Tokens are not in URLs and are not logged. A rejected HTML login internally only calls `origin_rejected`, `form_token_missing`, `login_csrf_missing` or `login_csrf_mismatch`.
-- If the browser sends `Origin` or `Referer`, the value must match exactly the permitted origins. The list comes from `FERRUM_ALLOWED_ORIGINS` or the loopback bind address, not the host header. `http://127.0.0.1:3000` only applies if the process is really tied to port 3000 or the variable calls it.
+- If the browser sends `Origin` or `Referer`, the value must match exactly the permitted origins. The list comes from `FERRIOXID_ALLOWED_ORIGINS` or the loopback bind address, not the host header. `http://127.0.0.1:3000` only applies if the process is really tied to port 3000 or the variable calls it.
 - `Referrer-Policy: no-referrer` allows browsers to send `Origin: null` to an HTML form POST, even if the page is same-origin. This only applies if `Sec-Fetch-Site: same-origin` is additionally available. One side cannot set this header itself. `null` with `cross-site`, `same-site` or without this header remains rejected. `null` is not on the Allowlist.
 - The session cookie remains `HttpOnly`.
 - The comparison uses `constant_eq`.
-- Development uses the fixed key `ferrioxid-dev-csrf-secret-32-bytes!`.
-- `FERRUM_CSRF_SECRET` is 64 hex characters. Otherwise, Ferrioxid reads `.ferrum/csrf.key` and creates the file once if it is missing. Production should set the environment variable so that a restart does not invalidate all sessions.
+- Development uses the fixed key `ferrioxid-dev-csrf-key-32-bytes!`.
+- `FERRIOXID_CSRF_SECRET` is 64 hex characters. Otherwise, Ferrioxid reads `.ferrioxid/csrf.key` and creates the file once if it is missing. Production should set the environment variable so that a restart does not invalidate all sessions.
 - Anonymous demo writing routes do not check CSRF. They are not attached to the cookie.
 
 ## Error cases
@@ -58,7 +58,7 @@ Logout, password change and expiration revoke or discard the session. After that
 
 ## Example
 
-The preserved HTTP example uses `ferrioxid_session` as a placeholder. Send the default `ferrum_session` cookie or your configured cookie name instead; it is not an alias.
+The HTTP example uses the default `ferrioxid_session` cookie name.
 
 ```rust
 let token = auth.refresh_csrf(&session_token).await?;
@@ -81,4 +81,4 @@ x-csrf-token: ...
 
 ## Limitations
 
-All tabs in a session share a token. Logout therefore ends all tabs of this session. There is no token list with single revocation. The key in `.ferrum/csrf.key` is in the working directory and is only the development source if no environment variable is set.
+All tabs in a session share a token. Logout therefore ends all tabs of this session. There is no token list with single revocation. The key in `.ferrioxid/csrf.key` is in the working directory and is only the development source if no environment variable is set.

@@ -2,7 +2,7 @@
 
 [Overview](index.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · Diagnostics: [migration-diagnostics.md](migration-diagnostics.md)
 
-A project without `.ferrum/project.json` is a legacy project. That is not a mistake. `ferrioxid check` reports `project.template.legacy` as a warning. Without `--strict`, the exit code remains 0.
+A project without `.ferrioxid/project.json` is a legacy project. That is not a mistake. `ferrioxid check` reports `project.template.legacy` as a warning. Without `--strict`, the exit code remains 0.
 
 ## Detection
 
@@ -27,7 +27,7 @@ This step is deliberately not part of `ferrioxid upgrade`.
 
 ## Files
 
-Without a manifest containing file hashes, Ferrioxid cannot classify a file as unchanged. `ferrioxid upgrade --yes` creates only `.ferrum/project.json` with `origin: legacy` and an empty file list. Models, routes, templates, static files, migrations and custom files remain byte-for-byte unchanged.
+Without a manifest containing file hashes, Ferrioxid cannot classify a file as unchanged. `ferrioxid upgrade --yes` creates only `.ferrioxid/project.json` with `origin: legacy` and an empty file list. Models, routes, templates, static files, migrations and custom files remain byte-for-byte unchanged.
 
 A second `ferrioxid upgrade --yes` finds the manifest and does not change it.
 
@@ -40,4 +40,4 @@ These points remain manual, even after the Legacy Manifest:
 - Users, roles and passwords
 - already applied migration files
 
-`ferrioxid doctor` does not infer missing storage routes from a `[storage]` section in `ferrum.toml`. It reports a missing directory as `project.file.missing` and explains that route registration cannot be determined from source code.
+`ferrioxid doctor` does not infer missing storage routes from a `[storage]` section in `ferrioxid.toml`. It reports a missing directory as `project.file.missing` and explains that route registration cannot be determined from source code.

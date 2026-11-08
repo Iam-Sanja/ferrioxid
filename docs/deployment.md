@@ -11,9 +11,9 @@ cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-A generated project starts with `ferrioxid dev` in the project directory. Windows and Linux use the same command. The server starts without automatic migration. First run `ferrioxid migrate up`. Generated applications do not bind to `0.0.0.0`. `myshop --bootstrap` does not change the file. The file `db.sqlite3` is in the working directory. An older bootstrap file without `_ferrum_migrations` is not taken over and not deleted.
+A generated project starts with `ferrioxid dev` in the project directory. Windows and Linux use the same command. The server starts without automatic migration. First run `ferrioxid migrate up`. Generated applications do not bind to `0.0.0.0`. `myshop --bootstrap` does not change the file. The file `db.sqlite3` is in the working directory. An older bootstrap file without `_ferrioxid_migrations` is not taken over and not deleted.
 
-The admin does not need a node process. `cargo build` is sufficient. Put `FERRUM_CSRF_SECRET` into production. The `.ferrum/csrf.key` file is only the local source.
+The admin does not need a node process. `cargo build` is sufficient. Put `FERRIOXID_CSRF_SECRET` into production. The `.ferrioxid/csrf.key` file is only the local source.
 
 A different `BIND_ADDRESS`, in particular `0.0.0.0:3000`, can make the service accessible on other networks. With the anonymous demo model, this is not an Internet deployment.
 

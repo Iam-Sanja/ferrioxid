@@ -2,7 +2,7 @@
 
 [Overview](index.md) · **Implemented:** `examples/myshop/src/main.rs`, `crates/ferrioxid-db/src/lib.rs`, `.env.example`, `compose.yaml`.
 
-`FERRUM_LOCALE` accepts `de` or `en` for central CLI messages. The admin stores language in the HttpOnly `ferrioxid_locale` cookie. Public branding, `[static]` and `[storage]` settings are described in [settings.md](settings.md). Uploads in `media/` do not belong in Git.
+`FERRIOXID_LOCALE` accepts `de` or `en` for central CLI messages. The admin stores language in the HttpOnly `ferrioxid_locale` cookie. Public branding, `[static]` and `[storage]` settings are described in [settings.md](settings.md). Uploads in `media/` do not belong in Git.
 
 ## Actual variables (Implemented)
 
@@ -12,10 +12,10 @@
 | `BIND_ADDRESS` | `myshop/src/main.rs` | `127.0.0.1:3000` | TCP-Listener |
 | `POSTGRES_PASSWORD` | Docker Compose | `ferrioxid_dev_only` |Only the optional Postgres container|
 | `RUST_LOG` |Tracing subscriber via the environment filter preset `info`| `info` in `.env.example` |Log level when the process sees it exported|
-| `FERRUM_ENV` | `AuthConfig::from_env` | `development` |`production` sets `Secure` as default and empties permitted origins if no list is set|
-| `FERRUM_COOKIE_SECURE` | `AuthConfig::from_env` |Only true in production|`1` or `true` enforces `Secure`. Not derived from `BIND_ADDRESS`|
-| `FERRUM_ALLOWED_ORIGINS` | `AuthConfig::from_env` |Loopback of the bind address|comma separated origins. If the variable is set, it replaces the list completely. Otherwise, `apply_bound_address` puts `http://127.0.0.1:{port}` and `http://localhost:{port}` from `BIND_ADDRESS` or `ferrum.toml`. The host header is not taken over.|
-| `FERRUM_TRUST_PROXY` | `AuthConfig::from_env` | false |only then applies the first `X-Forwarded-For` hop|
+| `FERRIOXID_ENV` | `AuthConfig::from_env` | `development` |`production` sets `Secure` as default and empties permitted origins if no list is set|
+| `FERRIOXID_COOKIE_SECURE` | `AuthConfig::from_env` |Only true in production|`1` or `true` enforces `Secure`. Not derived from `BIND_ADDRESS`|
+| `FERRIOXID_ALLOWED_ORIGINS` | `AuthConfig::from_env` |Loopback of the bind address|comma separated origins. If the variable is set, it replaces the list completely. Otherwise, `apply_bound_address` puts `http://127.0.0.1:{port}` and `http://localhost:{port}` from `BIND_ADDRESS` or `ferrioxid.toml`. The host header is not taken over.|
+| `FERRIOXID_TRUST_PROXY` | `AuthConfig::from_env` | false |only then applies the first `X-Forwarded-For` hop|
 
 `.env.example` is not automatically loaded. Values must be set in the shell. A set `DATABASE_URL` replaces SQLite:
 
@@ -27,7 +27,7 @@ Tests can use `sqlite::memory:` to create a private in-memory database. For ever
 
 The SQLite file `db.sqlite3` as well as journal, WAL and SHM files are excluded from Git. Anyone who starts myshop from another working directory will receive a different file.
 
-The full Settings description is in [settings.md](settings.md). `ferrum.toml` is not a secret file. The workspace file continues to name only `migrations_dir` and `schema_command`. Generated projects may additionally contain `[project]`, `[database]`, `[server]` and `[admin]`. Unknown sections and keys are errors. `database.url` is standard `sqlite://db.sqlite3?mode=rwc`, `server.host` is `127.0.0.1`, `server.port` is 3000. `DATABASE_URL` replaces the file URL at runtime and is not printed by `migrate status`. The CLI starts `schema_command` in the directory of the TOML file and reads the schema of stdout.
+The full Settings description is in [settings.md](settings.md). `ferrioxid.toml` is not a secret file. The workspace file continues to name only `migrations_dir` and `schema_command`. Generated projects may additionally contain `[project]`, `[database]`, `[server]` and `[admin]`. Unknown sections and keys are errors. `database.url` is standard `sqlite://db.sqlite3?mode=rwc`, `server.host` is `127.0.0.1`, `server.port` is 3000. `DATABASE_URL` replaces the file URL at runtime and is not printed by `migrate status`. The CLI starts `schema_command` in the directory of the TOML file and reads the schema of stdout.
 
 `migrate baseline` reads the same URL. Without `--confirm`, the command does not write anything. For PostgreSQL, it ends with an unsupported message. Column and table names for `rename-column` and `rename-table` come from the CLI arguments and are tested as identifiers. They are not taken from HTTP requests.
 
@@ -45,4 +45,4 @@ The localhost default remains `127.0.0.1:3000`. `0.0.0.0` is not a production-re
 
 ## Admin
 
-`FERRUM_ADMIN_DIST` is no longer read; CSS and templates are embedded in the binary. `FERRUM_CSRF_SECRET` is optional but must contain 64 hex characters when set. Otherwise, Ferrioxid uses `.ferrum/csrf.key`. `FERRUM_COOKIE_SECURE` and `FERRUM_ENV=production` apply to the admin session too. Theme and locale use `ferrioxid_theme` and `ferrioxid_locale` cookies.
+`FERRIOXID_ADMIN_DIST` is no longer read; CSS and templates are embedded in the binary. `FERRIOXID_CSRF_SECRET` is optional but must contain 64 hex characters when set. Otherwise, Ferrioxid uses `.ferrioxid/csrf.key`. `FERRIOXID_COOKIE_SECURE` and `FERRIOXID_ENV=production` apply to the admin session too. Theme and locale use `ferrioxid_theme` and `ferrioxid_locale` cookies.

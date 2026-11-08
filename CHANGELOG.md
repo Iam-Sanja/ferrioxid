@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Ferrioxid names only (breaking)
+
+- Configuration discovery and generation use `ferrioxid.toml`; metadata and runtime CSRF keys use `.ferrioxid/`. Environment settings use `FERRIOXID_*`, and the default session cookie is `ferrioxid_session`. No old-name aliases are read or generated.
+- Auth, jobs and all migration histories use `_ferrioxid_*` tables. The five built-in migration definitions were renamed and resealed together; migration IDs remain unchanged. Existing database histories are incompatible and require fresh disposable databases, not automatic conversion.
+- Generator, CLI help, examples, tests and current documentation use the new names. Secret exclusions and the model markers introduced in PR #24 remain intact.
+- See [the breaking-change record](docs/ferrum-legacy-removal.md). Milestones below are historical records: names and behavior describe those earlier implementations, not current setup instructions.
+
 ## Unreleased — Admin 2.0 (v0.28)
 
 - Die Seitenleiste gruppiert Modelle und eigene Admin-Seiten unter der App, die sie registriert hat. Modelle ohne App stehen unter dem Projektnamen. Übersicht, Benutzer, Rollen und Historie sind keine Modelle.

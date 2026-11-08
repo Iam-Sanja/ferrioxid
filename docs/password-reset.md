@@ -22,15 +22,15 @@ The pages are server-rendered HTML without external file and without JavaScript.
 
 ## Token
 
-32 bytes from `getrandom`, encoded as Base64 URL without padding. That's 256 bits. Only SHA-256-Hex is stored in `_ferrum_password_resets`. The raw value is in the process memory and in the e-mail. Audit, session log and the outbox do not save it.
+32 bytes from `getrandom`, encoded as Base64 URL without padding. That's 256 bits. Only SHA-256-Hex is stored in `_ferrioxid_password_resets`. The raw value is in the process memory and in the e-mail. Audit, session log and the outbox do not save it.
 
-The reset token belongs to `user_id`, is single-use and expires after `reset_ttl_secs`. A GET does not consume it, so an email scanner cannot invalidate the link. Instead, it creates an entry in `_ferrum_password_reset_exchanges`. The 32-byte exchange secret is stored only as a hash and expires after at most ten minutes, never later than the reset token. The form submits the exchange cookie rather than the email token.
+The reset token belongs to `user_id`, is single-use and expires after `reset_ttl_secs`. A GET does not consume it, so an email scanner cannot invalidate the link. Instead, it creates an entry in `_ferrioxid_password_reset_exchanges`. The 32-byte exchange secret is stored only as a hash and expires after at most ten minutes, never later than the reset token. The form submits the exchange cookie rather than the email token.
 
 A maximum of three unused, unexpired tokens remain per user. A new request consumes older excess tokens in the same transaction. The rate limit is in the process, separate from the login: `reset-ip:{adresse}` with four times `login_max_attempts`, `reset-mail:{adresse}` with `login_max_attempts`, window `login_window_secs`. Every request counts, even an unknown address.
 
 ## Completion
 
-`complete_reset` checks password confirmation, `validate_new_password` and whether the new password differs from the current Argon2id hash. It creates the hash before `begin`, then conditionally updates the reset row with `used_at IS NULL AND expires_at > now`. Only `rows_affected = 1` permits the password change, session revocation, consumption of remaining tokens, deletion of exchange rows and audit entry; otherwise, the transaction rolls back. Concurrent attempts allow at most one success. The audit uses model `_ferrum_users`, action `password_reset`, outcome `ok` and summary `password reset completed`.
+`complete_reset` checks password confirmation, `validate_new_password` and whether the new password differs from the current Argon2id hash. It creates the hash before `begin`, then conditionally updates the reset row with `used_at IS NULL AND expires_at > now`. Only `rows_affected = 1` permits the password change, session revocation, consumption of remaining tokens, deletion of exchange rows and audit entry; otherwise, the transaction rolls back. Concurrent attempts allow at most one success. The audit uses model `_ferrioxid_users`, action `password_reset`, outcome `ok` and summary `password reset completed`.
 
 The reset URL is created from `public_origin`, never from the host header.
 
