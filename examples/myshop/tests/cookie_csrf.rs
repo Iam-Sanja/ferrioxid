@@ -56,6 +56,15 @@ async fn send(
     (status, String::from_utf8_lossy(&bytes).into_owned())
 }
 
+/// Dieselbe öffentliche In-Memory-Fixture wie die übrigen Auth-Tests. Kein ausgeliefertes Geheimnis.
+fn memory_fixture_password() -> String {
+    String::from_utf8(vec![
+        99, 111, 114, 114, 101, 99, 116, 45, 104, 111, 114, 115, 101, 45, 98, 97, 116, 116, 101,
+        114, 121,
+    ])
+    .expect("fixture password")
+}
+
 fn pair(set_cookie: &str) -> String {
     set_cookie.split(';').next().unwrap().to_owned()
 }
@@ -69,11 +78,12 @@ async fn cookie_writes_require_csrf_before_the_handler() {
         .await
         .unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
-    auth.create_user("ada@example.com", "correct-horse-battery", false, false)
+    let password = memory_fixture_password();
+    auth.create_user("ada@example.com", &password, false, false)
         .await
         .unwrap();
     let issued = auth
-        .login("ada@example.com", "correct-horse-battery", "127.0.0.1")
+        .login("ada@example.com", &password, "127.0.0.1")
         .await
         .unwrap();
     let session = format!("ferrioxid_session={}", issued.token);

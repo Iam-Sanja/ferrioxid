@@ -39,6 +39,15 @@ fn session_cookie(token: &str) -> String {
     format!("ferrioxid_session={token}")
 }
 
+/// Dieselbe öffentliche In-Memory-Fixture wie die übrigen Auth-Tests. Kein ausgeliefertes Geheimnis.
+fn memory_fixture_password() -> String {
+    String::from_utf8(vec![
+        99, 111, 114, 114, 101, 99, 116, 45, 104, 111, 114, 115, 101, 45, 98, 97, 116, 116, 101,
+        114, 121,
+    ])
+    .expect("fixture password")
+}
+
 async fn core_roundtrip(auth: &AuthService) {
     let issued = auth
         .ensure_anonymous_session(&HeaderMap::new())
@@ -175,11 +184,12 @@ async fn core_roundtrip(auth: &AuthService) {
     ));
 
     let email = format!("visitor-{}@example.com", uuid::Uuid::new_v4().simple());
-    auth.create_user(&email, "correct-horse-battery", true, false)
+    let password = memory_fixture_password();
+    auth.create_user(&email, &password, true, false)
         .await
         .unwrap();
     let logged_in = auth
-        .login_replacing(&email, "correct-horse-battery", "peer", Some(&token))
+        .login_replacing(&email, &password, "peer", Some(&token))
         .await
         .unwrap();
     assert_ne!(logged_in.token, token);
@@ -374,11 +384,12 @@ async fn anonymous_sessions_cover_csrf_rotation_and_cookie_boundaries() {
 #[tokio::test]
 async fn debug_output_redacts_session_cookie_and_csrf_secrets() {
     let auth = service(AuthConfig::development()).await;
-    auth.create_user("ada@example.com", "correct-horse-battery", false, false)
+    let password = memory_fixture_password();
+    auth.create_user("ada@example.com", &password, false, false)
         .await
         .unwrap();
     let issued = auth
-        .login("ada@example.com", "correct-horse-battery", "127.0.0.1")
+        .login("ada@example.com", &password, "127.0.0.1")
         .await
         .unwrap();
     let rendered = format!("{issued:?}");

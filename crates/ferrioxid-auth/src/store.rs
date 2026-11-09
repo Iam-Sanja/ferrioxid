@@ -371,7 +371,7 @@ pub async fn insert_anonymous(
             Alias::new("revoked_at"),
         ])
         .values_panic([
-            text(&session.id.to_string()),
+            uuid_expr(db.get_database_backend(), session.id),
             text(&session.token_hash),
             text(&session.csrf_token_hash),
             opt_text(session.state.as_deref()),
@@ -414,7 +414,7 @@ pub async fn touch_anonymous(
     query
         .table(Alias::new(ANONYMOUS_SESSIONS))
         .values([(Alias::new("last_seen_at"), number(last_seen_at))])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
     execute(db, &query).await
 }
 
@@ -427,7 +427,7 @@ pub async fn revoke_anonymous(
     query
         .table(Alias::new(ANONYMOUS_SESSIONS))
         .values([(Alias::new("revoked_at"), number(revoked_at))])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)))
         .and_where(Expr::col(Alias::new("revoked_at")).is_null());
     execute(db, &query).await
 }
@@ -441,7 +441,7 @@ pub async fn write_anonymous_state(
     query
         .table(Alias::new(ANONYMOUS_SESSIONS))
         .values([(Alias::new("state"), text(state))])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)))
         .and_where(Expr::col(Alias::new("revoked_at")).is_null());
     execute(db, &query).await
 }
@@ -930,6 +930,7 @@ fn read_user(row: &QueryResult) -> Result<UserRow, AuthError> {
 }
 
 fn read_anonymous(row: &QueryResult) -> Result<AnonymousRow, AuthError> {
+    // `required_uuid` akzeptiert den PostgreSQL-Typ UUID und den SQLite-Typ TEXT.
     Ok(AnonymousRow {
         id: required_uuid(row, "id")?,
         token_hash: required_text(row, "token_hash")?,
@@ -1013,6 +1014,14 @@ fn required_flag(row: &QueryResult, column: &str) -> Result<bool, AuthError> {
 
 fn text(value: &str) -> sea_orm::sea_query::SimpleExpr {
     Expr::value(value)
+}
+
+/// PostgreSQL-Spalten vom Typ UUID bekommen einen UUID-Parameter. SQLite speichert dieselbe Spalte als TEXT.
+fn uuid_expr(backend: DatabaseBackend, id: Uuid) -> sea_orm::sea_query::SimpleExpr {
+    match backend {
+        DatabaseBackend::Postgres => Expr::value(Value::Uuid(Some(Box::new(id)))),
+        DatabaseBackend::Sqlite | DatabaseBackend::MySql => Expr::value(id.to_string()),
+    }
 }
 
 fn opt_text(value: Option<&str>) -> sea_orm::sea_query::SimpleExpr {
@@ -1110,4 +1119,62 @@ fn unique_violation(error: &sea_orm::DbErr) -> bool {
         return false;
     };
     database.kind() == sea_orm::sqlx::error::ErrorKind::UniqueViolation
+}
+
+#[cfg(test)]
+mod anonymous_binding_tests {
+    use super::*;
+    use sea_orm::sea_query::QueryStatementWriter;
+
+    fn bound(backend: DatabaseBackend, query: &impl QueryStatementWriter) -> Vec<Value> {
+        let (_sql, values) = match backend {
+            DatabaseBackend::Postgres => query.build(PostgresQueryBuilder),
+            DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
+            DatabaseBackend::MySql => unreachable!("MySQL is not supported"),
+        };
+        values.0
+    }
+
+    fn assert_id(backend: DatabaseBackend, value: &Value) {
+        match backend {
+            DatabaseBackend::Postgres => assert!(matches!(value, Value::Uuid(Some(_)))),
+            DatabaseBackend::Sqlite => {
+                let expected = Uuid::nil().to_string();
+                assert!(matches!(value, Value::String(Some(text)) if text.as_str() == expected));
+            }
+            DatabaseBackend::MySql => unreachable!("MySQL is not supported"),
+        }
+    }
+
+    #[test]
+    fn anonymous_id_binds_as_uuid_on_postgres_and_text_on_sqlite() {
+        let id = Uuid::nil();
+        for backend in [DatabaseBackend::Postgres, DatabaseBackend::Sqlite] {
+            let mut insert = Query::insert();
+            insert
+                .into_table(Alias::new(ANONYMOUS_SESSIONS))
+                .columns([Alias::new("id"), Alias::new("state")])
+                .values_panic([uuid_expr(backend, id), opt_text(None)]);
+            let values = bound(backend, &insert);
+            assert_id(backend, &values[0]);
+
+            let mut update = Query::update();
+            update
+                .table(Alias::new(ANONYMOUS_SESSIONS))
+                .values([(Alias::new("state"), text("{\"cart\":\"cable\"}"))])
+                .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(backend, id)))
+                .and_where(Expr::col(Alias::new("revoked_at")).is_null());
+            let values = bound(backend, &update);
+            let id_text = Uuid::nil().to_string();
+            let id_value = values
+                .iter()
+                .find(|value| match value {
+                    Value::Uuid(_) => true,
+                    Value::String(Some(text)) => text.as_str() == id_text,
+                    _ => false,
+                })
+                .expect("id parameter");
+            assert_id(backend, id_value);
+        }
+    }
 }

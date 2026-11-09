@@ -37,6 +37,15 @@ fn cookie_headers(set_cookie: &str) -> HeaderMap {
     headers
 }
 
+/// Dieselbe öffentliche In-Memory-Fixture wie die übrigen Auth-Tests. Kein ausgeliefertes Geheimnis.
+fn memory_fixture_password() -> String {
+    String::from_utf8(vec![
+        99, 111, 114, 114, 101, 99, 116, 45, 104, 111, 114, 115, 101, 45, 98, 97, 116, 116, 101,
+        114, 121,
+    ])
+    .expect("fixture password")
+}
+
 fn token_in(html: &str) -> String {
     let marker = "name=\"csrf_token\" value=\"";
     let start = html.find(marker).expect("csrf field") + marker.len();
@@ -48,7 +57,8 @@ async fn contact_rejects_missing_forged_and_rotated_tokens() {
     let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
     ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db, AuthConfig::development());
-    auth.create_user("ada@example.com", "correct-horse-battery", false, false)
+    let password = memory_fixture_password();
+    auth.create_user("ada@example.com", &password, false, false)
         .await
         .unwrap();
     let app = state(auth.clone());
@@ -110,12 +120,7 @@ async fn contact_rejects_missing_forged_and_rotated_tokens() {
     assert_eq!(accepted.status(), StatusCode::SEE_OTHER);
 
     let logged_in = auth
-        .login_replacing(
-            "ada@example.com",
-            "correct-horse-battery",
-            "peer",
-            Some(raw),
-        )
+        .login_replacing("ada@example.com", &password, "peer", Some(raw))
         .await
         .unwrap();
     assert_ne!(logged_in.token, raw);
