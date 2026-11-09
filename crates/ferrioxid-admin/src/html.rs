@@ -80,7 +80,10 @@ pub fn routes(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSt
             .route("/admin/directory/users/{id}/active", post(user_active))
             .route("/admin/directory/users/{id}/staff", post(user_staff))
             .route("/admin/directory/roles", get(roles).post(role_create))
-            .route("/admin/directory/roles/new", get(role_new).post(role_create))
+            .route(
+                "/admin/directory/roles/new",
+                get(role_new).post(role_create),
+            )
             .route("/admin/directory/permissions", get(permissions_page))
             .route(
                 "/admin/directory/roles/{role}/permissions",
@@ -1403,10 +1406,11 @@ async fn role_new(
         &registry.branding().default_locale,
         &registry.branding().fallback_locale,
     );
-    let user = match require_directory(&state, &headers, &registry, "/admin/directory/roles/new").await {
-        Ok(user) => user,
-        Err(response) => return response,
-    };
+    let user =
+        match require_directory(&state, &headers, &registry, "/admin/directory/roles/new").await {
+            Ok(user) => user,
+            Err(response) => return response,
+        };
     let csrf = session_csrf(state.auth.as_ref().unwrap(), &headers).await;
     page_as(
         &state,
@@ -1415,7 +1419,9 @@ async fn role_new(
         "role_new.html",
         &locale,
         theme_of(&headers),
-        catalog(&locale)["add_role"].as_str().unwrap_or("New record"),
+        catalog(&locale)["add_role"]
+            .as_str()
+            .unwrap_or("New record"),
         true,
         true,
         &user.email,
