@@ -1042,7 +1042,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         #[serde(crate = "::ferrioxid::serde", deny_unknown_fields)]
         pub struct #create_dto { #(#dto_fields,)* }
 
-        #[derive(::ferrioxid::serde::Deserialize)]
+        #[derive(::core::default::Default, ::ferrioxid::serde::Deserialize)]
         #[serde(crate = "::ferrioxid::serde", deny_unknown_fields)]
         pub struct #update_dto { #(#update_fields,)* }
 
