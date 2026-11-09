@@ -32,8 +32,8 @@
 </thead>
 <tbody>
 {% for user in users %}
-<tr>
-<td class="is-lead">{{ user.email }}</td>
+<tr data-record-href="/admin/directory/users/{{ user.id }}{% if user.can_edit %}/edit{% endif %}">
+<td class="is-lead"><a href="/admin/directory/users/{{ user.id }}{% if user.can_edit %}/edit{% endif %}">{{ user.email }}</a></td>
 <td><span class="flag">{% if user.is_active %}{{ i18n.active }}{% else %}{{ i18n.inactive }}{% endif %}</span></td>
 <td><span class="flag">{% if user.is_staff %}{{ i18n.staff }}{% else %}{{ i18n.no_staff }}{% endif %}</span></td>
 <td><span class="flag">{% if user.is_superuser %}{{ i18n.superuser }}{% else %}{{ i18n.no_superuser }}{% endif %}</span></td>
