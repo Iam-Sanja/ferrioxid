@@ -25,10 +25,20 @@ const ACK_EN: &str =
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ResetAcknowledgement;
 
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Clone, PartialEq, Eq)]
 pub struct IssuedExchange {
     pub secret: String,
     pub cookie: String,
+}
+
+impl std::fmt::Debug for IssuedExchange {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("IssuedExchange")
+            .field("secret", &"[redacted]")
+            .field("cookie", &"[redacted]")
+            .finish()
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]

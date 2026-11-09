@@ -1,4 +1,4 @@
-//! Öffentliches Kontaktformular. Mit Auth-Service ist jede Änderung an eine anonyme oder Benutzer-Sitzung gebunden.
+//! Öffentliches Kontaktformular. Jede Änderung verlangt einen Auth-Service und eine gültige Sitzungs-CSRF.
 
 use axum::body::Bytes;
 use axum::extract::{Extension, State};
@@ -46,6 +46,16 @@ pub async fn submit(
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {
+    let Some(auth) = state.auth.as_ref() else {
+        return fail(
+            &headers,
+            None,
+            StatusCode::FORBIDDEN,
+            "form.csrf",
+            "form.csrf",
+            false,
+        );
+    };
     let values = match FormValues::parse_urlencoded(&String::from_utf8_lossy(&body)) {
         Ok(values) => values,
         Err(errors) => {
@@ -62,22 +72,20 @@ pub async fn submit(
             };
         }
     };
-    if let Some(auth) = state.auth.as_ref() {
-        let supplied = values.get("csrf_token").unwrap_or("");
-        if auth
-            .authenticate_browser_form(&headers, &Method::POST, supplied)
-            .await
-            .is_err()
-        {
-            return fail(
-                &headers,
-                None,
-                StatusCode::FORBIDDEN,
-                "form.csrf",
-                "form.csrf",
-                false,
-            );
-        }
+    let supplied = values.get("csrf_token").unwrap_or("");
+    if auth
+        .authenticate_browser_form(&headers, &Method::POST, supplied)
+        .await
+        .is_err()
+    {
+        return fail(
+            &headers,
+            None,
+            StatusCode::FORBIDDEN,
+            "form.csrf",
+            "form.csrf",
+            false,
+        );
     }
     match ContactForm::from_form(&values) {
         Ok(_form) => match routes.path("shop.thanks", &[]) {

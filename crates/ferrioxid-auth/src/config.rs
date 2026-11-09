@@ -12,7 +12,7 @@ pub enum CookieSameSite {
     Strict,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AuthConfig {
     pub environment: Environment,
     pub cookie_name: String,
@@ -28,6 +28,26 @@ pub struct AuthConfig {
     pub login_window_secs: i64,
     /// Stabiler HMAC-Schlüssel für sitzungsgebundene CSRF-Tokens. Ein Neustart darf ihn nicht neu würfeln.
     pub csrf_secret: [u8; 32],
+}
+
+impl std::fmt::Debug for AuthConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AuthConfig")
+            .field("environment", &self.environment)
+            .field("cookie_name", &self.cookie_name)
+            .field("anonymous_cookie_name", &self.anonymous_cookie_name)
+            .field("cookie_secure", &self.cookie_secure)
+            .field("same_site", &self.same_site)
+            .field("session_ttl_secs", &self.session_ttl_secs)
+            .field("idle_timeout_secs", &self.idle_timeout_secs)
+            .field("allowed_origins", &self.allowed_origins)
+            .field("trust_proxy", &self.trust_proxy)
+            .field("login_max_attempts", &self.login_max_attempts)
+            .field("login_window_secs", &self.login_window_secs)
+            .field("csrf_secret", &"[redacted]")
+            .finish()
+    }
 }
 
 impl AuthConfig {

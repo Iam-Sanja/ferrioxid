@@ -146,3 +146,59 @@ async fn contact_rejects_missing_forged_and_rotated_tokens() {
     .await;
     assert_eq!(rotated.status(), StatusCode::SEE_OTHER);
 }
+
+#[tokio::test]
+async fn contact_post_without_auth_service_is_rejected() {
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    let bare = AppState {
+        db,
+        auth: None,
+        mail: None,
+    };
+    let body =
+        Bytes::from("name=Ada+Lovelace&email=ada@shop.example&message=Hallo&csrf_token=not-issued");
+    let response = myshop::contact::submit(
+        State(bare.clone()),
+        Extension(routes()),
+        HeaderMap::new(),
+        body.clone(),
+    )
+    .await;
+    assert_eq!(response.status(), StatusCode::FORBIDDEN);
+    assert!(response
+        .headers()
+        .get(axum::http::header::LOCATION)
+        .is_none());
+    let html = String::from_utf8(
+        response
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(html.contains("form.csrf"), "{html}");
+    assert!(!html.contains("not-issued"));
+
+    let mut headers = HeaderMap::new();
+    headers.insert(
+        axum::http::header::COOKIE,
+        HeaderValue::from_static("ferrioxid_session=unchecked-session-token"),
+    );
+    let cookie_post =
+        myshop::contact::submit(State(bare), Extension(routes()), headers, body).await;
+    assert_eq!(cookie_post.status(), StatusCode::FORBIDDEN);
+    let html = String::from_utf8(
+        cookie_post
+            .into_body()
+            .collect()
+            .await
+            .unwrap()
+            .to_bytes()
+            .to_vec(),
+    )
+    .unwrap();
+    assert!(!html.contains("unchecked-session-token"));
+}

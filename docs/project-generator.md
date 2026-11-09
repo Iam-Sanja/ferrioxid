@@ -17,6 +17,8 @@ The directory/display name remains `Shop`. Its Rust package/import name is `shop
 
 Crates are not published yet. `--ferrioxid-path` points to the framework checkout; without it the generator uses its build-time checkout. Create projects outside the framework workspace. Existing target directories are refused; newly generated files use exclusive creation.
 
+Generated `main` calls `App::with_auth` and `into_router`. That router rejects POST, PUT, PATCH and DELETE when the configured session cookie or `ferrioxid_anonymous` is present and the CSRF proof does not match. Register those routes on `App` before `into_router`. A client with no session cookie, including `Authorization: Bearer`, is not blocked by this check. `allow_anonymous` still means a cookie-less request can write. The bearer value is not validated. See [csrf.md](csrf.md).
+
 ## Project and app are different
 
 Global configuration lives in `ferrioxid.toml`, global startup/settings/URLs in `src/project/`, and explicit Rust app registration in `src/apps.rs`. Apps own models, routes, views, admin extensions, migrations, templates and static files. See [project-structure.md](project-structure.md).

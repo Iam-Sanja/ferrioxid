@@ -103,6 +103,12 @@ impl AuthService {
         self.authenticate_browser_form(headers, method, field).await
     }
 
+    /// Ob die Anfrage ein konfiguriertes Benutzer- oder anonymes Session-Cookie trägt.
+    pub fn request_has_session_cookie(&self, headers: &HeaderMap) -> bool {
+        read_cookie(headers, &self.config.cookie_name).is_some()
+            || read_cookie(headers, &self.config.anonymous_cookie_name).is_some()
+    }
+
     pub async fn authenticate_anonymous_csrf(
         &self,
         headers: &HeaderMap,

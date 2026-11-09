@@ -433,7 +433,7 @@ The Rust package name is normalized; the project directory/display name is prese
 
 App templates are loaded from `<app>/templates/<appname>/`. Files in project `templates/<appname>/` explicitly override matching local names and may also exist without a local counterpart. Use `new app <name> --templates shared` to create the initial shared template. App migrations are declared in `[app.<name>]` and registered in Rust; mismatches fail startup. Removing an app requires removing both declarations; it never deletes existing tables or data.
 
-Run `migrate up` before starting the server. It applies framework auth/job migrations and only your explicit app migrations. The default bind is loopback; no user or password is preconfigured. Create an administrator explicitly with `ferrioxid admin create-user --email name@example.com --staff --superuser`. Mail is disabled by default. `.env` and `.ferrioxid/csrf.key` stay outside Git.
+Run `migrate up` before starting the server. It applies framework auth/job migrations and only your explicit app migrations. The default bind is loopback; no user or password is preconfigured. Create an administrator explicitly with `ferrioxid admin create-user --email name@example.com --staff --superuser`. Mail is disabled by default. `.env` and `.ferrioxid/csrf.key` stay outside Git. `App::into_router` checks POST, PUT, PATCH and DELETE when a session cookie is present. A client without that cookie is not blocked by the check. Register write routes on `App` before `into_router`.
 "#
     )
 }

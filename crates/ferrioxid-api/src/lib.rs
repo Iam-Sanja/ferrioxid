@@ -1,7 +1,8 @@
 //! Explizite Modellregistrierung erzeugt Listen-, Lese-, Anlage-, Änderungs- und Löschrouten.
 //!
 //! `allow_anonymous` bleibt die einzige öffentliche Freigabe. Jede andere Route prüft die
-//! Sitzung und die am Modell hinterlegte Berechtigung. Gebundene Objektregeln filtern über `QueryScope`.
+//! Sitzung und die am Modell hinterlegte Berechtigung. Cookie-Schreibzugriffe prüft zusätzlich
+//! die Schicht in `cookie_guard`, bevor ein Handler läuft. Gebundene Objektregeln filtern über `QueryScope`.
 
 use std::collections::BTreeSet;
 
@@ -19,6 +20,8 @@ use ferrioxid_db::{kind_of, render_schema, DeleteOutcome, ModelRepository};
 use ferrioxid_migrations::{history_exists, ProjectConfig};
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::json;
+
+mod cookie_guard;
 
 pub mod apps;
 pub mod pages;
@@ -272,6 +275,10 @@ impl App {
             routes
         }
         .route("/healthz", get(|| async { Json(json!({"status": "ok"})) }))
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            cookie_guard::enforce,
+        ))
         .with_state(state);
         let mut router = router;
         for mount in self.statics {

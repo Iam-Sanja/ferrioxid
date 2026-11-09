@@ -37,7 +37,6 @@ pub struct AuthUser {
     pub session_id: Uuid,
 }
 
-#[derive(Debug)]
 pub struct IssuedSession {
     pub token: String,
     pub csrf_token: String,
@@ -45,6 +44,19 @@ pub struct IssuedSession {
     /// Cookies, die der Browser zusätzlich verwerfen soll. Login löscht damit die anonyme Sitzung.
     pub clear_cookies: Vec<String>,
     pub user: PublicUser,
+}
+
+impl std::fmt::Debug for IssuedSession {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("IssuedSession")
+            .field("token", &"[redacted]")
+            .field("csrf_token", &"[redacted]")
+            .field("cookie", &"[redacted]")
+            .field("clear_cookies", &"[redacted]")
+            .field("user", &self.user)
+            .finish()
+    }
 }
 
 #[derive(Clone)]

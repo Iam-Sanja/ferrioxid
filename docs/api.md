@@ -52,7 +52,7 @@ Authentication, sessions, role permissions and object policies are implemented t
 
 ### Security boundary (implemented)
 
-If `allow_anonymous = true`, the route can be used without authentication. Only for locally bound demo processes. For real applications, no standard public CRUD endpoints without an Auth and Policy layer.
+If `allow_anonymous = true`, a request without a session cookie can be used without authentication. A request that sends the configured session cookie or `ferrioxid_anonymous` still needs a valid CSRF proof on POST, PUT, PATCH and DELETE. Only for locally bound demo processes. For real applications, no standard public CRUD endpoints without an Auth and Policy layer.
 
 ## Planned API generator
 

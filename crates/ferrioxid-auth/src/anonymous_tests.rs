@@ -372,6 +372,53 @@ async fn anonymous_sessions_cover_csrf_rotation_and_cookie_boundaries() {
 }
 
 #[tokio::test]
+async fn debug_output_redacts_session_cookie_and_csrf_secrets() {
+    let auth = service(AuthConfig::development()).await;
+    auth.create_user("ada@example.com", "correct-horse-battery", false, false)
+        .await
+        .unwrap();
+    let issued = auth
+        .login("ada@example.com", "correct-horse-battery", "127.0.0.1")
+        .await
+        .unwrap();
+    let rendered = format!("{issued:?}");
+    assert!(!rendered.contains(&issued.token));
+    assert!(!rendered.contains(&issued.csrf_token));
+    assert!(!rendered.contains(&issued.cookie));
+    for cookie in &issued.clear_cookies {
+        if !cookie.is_empty() {
+            assert!(!rendered.contains(cookie));
+        }
+    }
+    assert!(rendered.contains("ada@example.com"));
+    assert!(rendered.contains("[redacted]"));
+
+    let config = format!("{:?}", AuthConfig::development());
+    assert!(!config.contains("ferrioxid-dev-csrf-key-32-bytes!"));
+    assert!(config.contains("[redacted]"));
+    assert!(config.contains("ferrioxid_session"));
+
+    let session = auth
+        .ensure_anonymous_session(&HeaderMap::new())
+        .await
+        .unwrap();
+    let rendered = format!("{session:?}");
+    assert!(!rendered.contains(&session.csrf_token));
+    if let Some(cookie) = &session.cookie {
+        assert!(!rendered.contains(cookie));
+        assert!(!rendered.contains(&token_of(cookie)));
+    }
+
+    let exchange = crate::IssuedExchange {
+        secret: "reset-secret-value".into(),
+        cookie: "ferrioxid_reset=reset-secret-value; HttpOnly".into(),
+    };
+    let rendered = format!("{exchange:?}");
+    assert!(!rendered.contains("reset-secret-value"));
+    assert!(!rendered.contains("ferrioxid_reset="));
+}
+
+#[tokio::test]
 #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
 async fn postgres_anonymous_session_roundtrip() {
     let url = std::env::var("DATABASE_URL")

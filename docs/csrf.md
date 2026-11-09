@@ -8,7 +8,7 @@ Writing cookie requests need a CSRF token that is tied to the valid session. A r
 
 ## Architecture
 
-The token is an HMAC-SHA256 via the fixed prefix `ferrioxid-csrf-v1`, the session ID and the SHA-256 hex of the session token. The key is 32 bytes. Therefore, the same session always results in the same token. `GET /auth/csrf` does not write the database. Since v0.12, `authenticate_csrf` accepts the same token from an HTML field. `authenticate` continues to read only `x-csrf-token`. A request without a session cookie remains unchecked until the handler opts in. Opt-in anonymous forms use the same HMAC with `ferrioxid_anonymous` and `_ferrioxid_anonymous_sessions`. `guard_cookie_write` returns `Stateless` when neither cookie is present, including when `Authorization: Bearer` is set. A present session cookie is still checked. Generated `allow_anonymous` routes do not call the guard.
+The token is an HMAC-SHA256 via the fixed prefix `ferrioxid-csrf-v1`, the session ID and the SHA-256 hex of the session token. The key is 32 bytes. Therefore, the same session always results in the same token. `GET /auth/csrf` does not write the database. Since v0.12, `authenticate_csrf` accepts the same token from an HTML field. `authenticate` continues to read only `x-csrf-token`. `App::into_router` installs a default cookie-write layer before `with_state`. It covers merged routes, auth and admin routes, and generated JSON routes, including `allow_anonymous`. POST, PUT, PATCH and DELETE that send the configured session cookie or `ferrioxid_anonymous` need a matching CSRF proof. A non-empty `x-csrf-token` header is used as that proof. If the header is empty, the layer reads `csrf_token` from `application/x-www-form-urlencoded` or `multipart/form-data` and then restores the body. JSON clients send the header; a `csrf_token` property inside JSON is not a proof, because it would also be an unknown model field. `guard_cookie_write` returns `Stateless` when neither session cookie is present, including when `Authorization: Bearer` is set. The bearer value is not validated. Cookie-less public writes stay open. A present session cookie is still checked. Without an `AuthService`, the default cookie names `ferrioxid_session` and `ferrioxid_anonymous` fail closed.
 
 Logout, password change and expiration revoke or discard the session. After that, the check fails before the token is even compared. A token of another session does not fit because ID and token hash enter the HMAC.
 
@@ -19,6 +19,7 @@ Logout, password change and expiration revoke or discard the session. After that
 - `crates/ferrioxid-auth/src/routes.rs`
 - `crates/ferrioxid-auth/src/cookie.rs`
 - `crates/ferrioxid-admin/src/html.rs`
+- `crates/ferrioxid-api/src/cookie_guard.rs`
 
 ## Public APIs
 
@@ -63,8 +64,12 @@ Logout, password change and expiration revoke or discard the session. After that
 |---|---|
 |Header missing or token is wrong| 403, `csrf token is missing or invalid` |
 |Token of another session| 403 |
-|Session expired, revoked or user inactive| 401 |
+|Session expired, revoked or user inactive on a safe method| 401 |
+|Unsafe method with an expired or unknown session cookie| 403 before the handler |
 |Logout without tokens|403, the session remains|
+|Session cookie without a valid CSRF proof|403 before the handler|
+|Default session cookie and no `AuthService`|403|
+|No session cookie, including `Authorization: Bearer`|Not blocked by this layer|
 
 ## Example
 
@@ -87,8 +92,8 @@ x-csrf-token: ...
 
 ## Tests
 
-`examples/myshop/tests/admin_http.rs` checks two retrievals, a successful JSON write access, a fake token and a non-session token. `examples/myshop/tests/admin_html.rs` checks the login cookie, a wrong token, the session field, logout and an expired session. `html_login_csrf_respects_the_bound_port` checks `127.0.0.1` and `localhost` on the bound port, the old port 3000 as a foreign origin, missing and manipulated cookie, missing and incorrect form field, a foreign origin, two tabs, login, logout and login again. `examples/myshop/tests/auth.rs` checks the JSON logout. JSON `POST /auth/login` does not require a CSRF cookie.
+`examples/myshop/tests/admin_http.rs` checks two retrievals, a successful JSON write access, a fake token and a non-session token. `examples/myshop/tests/admin_html.rs` checks the login cookie, a wrong token, the session field, logout and an expired session. `html_login_csrf_respects_the_bound_port` checks `127.0.0.1` and `localhost` on the bound port, the old port 3000 as a foreign origin, missing and manipulated cookie, missing and incorrect form field, a foreign origin, two tabs, login, logout and login again. `examples/myshop/tests/auth.rs` checks the JSON logout. `examples/myshop/tests/cookie_csrf.rs` checks POST, PUT, PATCH and DELETE on a handler that does not call a guard, a generated public product route, form and multipart fields, bearer-only clients, a renamed session cookie and a router without `AuthService`. JSON `POST /auth/login` does not require CSRF when no session cookie is present. A present session cookie is checked.
 
 ## Limitations
 
-All tabs in a session share a token. Logout therefore ends all tabs of this session. There is no token list with single revocation. The key in `.ferrioxid/csrf.key` is in the working directory and is only the development source if no environment variable is set.
+All tabs in a session share a token. Logout therefore ends all tabs of this session. There is no token list with single revocation. The key in `.ferrioxid/csrf.key` is in the working directory and is only the development source if no environment variable is set. The layer reads at most 8 MiB when it has to inspect a body, and only when a session cookie is present and `x-csrf-token` is empty. Routes added after `into_router` are outside the layer. `ferrioxid_login_csrf`, `ferrioxid_reset` and `ferrioxid_locale` do not start it. Development with `cookie_secure = false` still allows a missing origin.

@@ -1,7 +1,8 @@
 //! Standard-Middleware für Axum. Die zuletzt hinzugefügte Schicht sieht die Anfrage zuerst.
 //!
 //! Reihenfolge von außen nach innen: Body-Limit, Request-ID, Access-Log, Sicherheitsheader, Route.
-//! Authentifizierung und CSRF bleiben in den Handlern und werden hier nicht ersetzt.
+//! Diese Crate ersetzt weder Authentifizierung noch Autorisierung. Den Cookie-CSRF-Schutz setzt
+//! `App::into_router`, nicht diese Schicht.
 
 use axum::extract::Request;
 use axum::http::{header, HeaderValue};
