@@ -23,8 +23,7 @@ fn generated_update_default_matches_empty_json_patch() {
 
 #[test]
 fn json_null_still_differs_from_missing_for_optional_fields() {
-    let patch: ProductUpdate =
-        ferrioxid::serde_json::from_str(r#"{"category_id":null}"#).unwrap();
+    let patch: ProductUpdate = ferrioxid::serde_json::from_str(r#"{"category_id":null}"#).unwrap();
     assert!(matches!(patch.category_id, PatchField::Null));
     assert!(matches!(patch.name, PatchField::Missing));
 }
