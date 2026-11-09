@@ -1,6 +1,6 @@
 # Ferrioxid Roadmap – Status and Next Phases
 
-[Overview](index.md) · Admin comparison: [admin-django-parity.md](admin-django-parity.md) · UX backlog: [admin-ux-backlog.md](admin-ux-backlog.md) · Capability inventory: [django-capability-matrix.md](django-capability-matrix.md)
+[Overview](index.md) · [Django 6.1 capability matrix](django-capability-matrix.md) · Admin comparison: [admin-django-parity.md](admin-django-parity.md) · UX backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
 
 **Status:** milestones through v0.28 are implemented; the Cargo version remains `0.1.0`. This roadmap distinguishes completed work from proposals. A planned phase is neither a release nor an available feature.
 
