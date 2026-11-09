@@ -1,21 +1,10 @@
 {% extends "base.html" %}
 {% block content %}
-<section>
-<h2>{{ i18n.add_role }}</h2>
-<form class="card" method="post" action="/admin/directory/roles">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<div class="field">
-<label for="role-name">{{ i18n.role }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
-<p class="hint" id="role-name-hint">{{ i18n.hint_role_name }}</p>
-<input id="role-name" name="name" required aria-describedby="role-name-hint" pattern="[A-Za-z0-9_.]+">
-</div>
-<div class="actions">
-<button type="submit">{{ i18n.save }}</button>
-</div>
-</form>
-</section>
-<section class="section">
+<div class="toolbar">
 <h2>{{ i18n.existing_roles }}</h2>
+<a class="button" href="/admin/directory/roles/new">{{ i18n.new_record }}</a>
+</div>
+<section>
 {% if roles | length == 0 %}
 <div class="empty-state"><p class="empty">{{ i18n.no_roles }}</p></div>
 {% else %}
