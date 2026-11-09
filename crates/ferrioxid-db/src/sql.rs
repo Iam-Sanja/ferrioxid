@@ -623,7 +623,7 @@ fn ensure_column(columns: &[ColumnSpec], name: &str) -> Result<(), FerrioxidErro
     }
 }
 
-fn scope_condition(
+pub(crate) fn scope_condition(
     columns: &[ColumnSpec],
     scope: &QueryScope,
 ) -> Result<Option<sea_orm::sea_query::SimpleExpr>, FerrioxidError> {
@@ -643,7 +643,7 @@ fn scope_condition(
     }
 }
 
-fn is_safe_ident(name: &str) -> bool {
+pub(crate) fn is_safe_ident(name: &str) -> bool {
     let mut chars = name.chars();
     matches!(chars.next(), Some(char) if char.is_ascii_alphabetic() || char == '_')
         && chars.all(|char| char.is_ascii_alphanumeric() || char == '_')
@@ -756,7 +756,7 @@ pub async fn delete_record(
 }
 
 pub async fn find_by_column<M>(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     column: &str,
     value: Value,
 ) -> Result<Vec<M>, FerrioxidError>
@@ -835,7 +835,7 @@ fn sqlite_or_postgres_database(
     Some(database.as_ref())
 }
 
-fn statement(
+pub(crate) fn statement(
     db: &impl ConnectionTrait,
     query: &impl sea_orm::sea_query::QueryStatementWriter,
 ) -> Result<Statement, FerrioxidError> {
@@ -848,7 +848,10 @@ fn statement(
     Ok(Statement::from_sql_and_values(backend, sql, values.0))
 }
 
-fn row_to_json(row: &QueryResult, columns: &[ColumnSpec]) -> Result<Json, FerrioxidError> {
+pub(crate) fn row_to_json(
+    row: &QueryResult,
+    columns: &[ColumnSpec],
+) -> Result<Json, FerrioxidError> {
     let mut object = Map::new();
     for column in columns {
         let value = match column.kind {

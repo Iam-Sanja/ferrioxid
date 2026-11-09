@@ -44,6 +44,10 @@ In the long term, the admin should cover the relevant functions of the Django ad
 - Validation display ([#48](https://github.com/Iam-Sanja/ferrioxid/issues/48)): one German/English catalog, field overrides, and model errors stored as stable codes. Unknown locales use English. SQL and stack traces are not shown. Status: **In PR**.
 - Error pages and named routes ([#50](https://github.com/Iam-Sanja/ferrioxid/issues/50)): status templates with a safe fallback, project `url()` across prefixes, and percent-encoded path parameters. Status: **In PR**.
 
+## ORM queries
+
+`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. PR #59 is merged; the capability matrix rows for filtering, pagination, relations and transactions stay **In PR** until a later status review, because PostgreSQL runtime tests were not a local pass. Local workspace tests cover SQLite. PostgreSQL SQL generation is asserted. Annotations, keyset pagination, many-to-many and automatic eager loading are not part of this API.
+
 ## Open after v0.27.1
 
 - Cron-Syntax.

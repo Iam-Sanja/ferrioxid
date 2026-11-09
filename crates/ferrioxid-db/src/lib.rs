@@ -1,7 +1,13 @@
 //! Typed SeaORM-backed repository contract implemented by the model derive.
 
+mod query;
 mod sql;
 mod unit;
+
+pub use query::{
+    all_of, any_of, col, load_by_ids, load_children, not, read_model, Bound, Column, Compare,
+    Direction, ModelQuery, Predicate, QueryPage, Select, IN_LIMIT, OFFSET_LIMIT, PAGE_LIMIT,
+};
 
 pub use unit::conclude;
 

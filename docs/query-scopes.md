@@ -25,6 +25,7 @@ pub enum QueryScope {
 - `crates/ferrioxid-core/src/lib.rs`
 - `crates/ferrioxid-auth/src/policy.rs`
 - `crates/ferrioxid-db/src/sql.rs`
+- `crates/ferrioxid-db/src/query.rs`
 - `crates/ferrioxid-macros/src/lib.rs`
 - `crates/ferrioxid-api/src/lib.rs`
 - `crates/ferrioxid-admin/src/registry.rs`
@@ -34,7 +35,8 @@ pub enum QueryScope {
 
 - `ObjectPolicy::read_scope` and `write_scope`
 - `ModelRepository::list_scoped`, `get_scoped`, `update_scoped`, `delete_scoped`
-- `list`, `get`, `update` and `delete` remain and use `QueryScope::All`
+- `Select::scope`, `load_by_ids`, `load_children` and `read_model`
+- `list`, `get`, `update`, `delete` and the unsuffixed relation methods remain and use `QueryScope::All`
 - Admin lists respond additionally with `total`
 
 ## Data flow

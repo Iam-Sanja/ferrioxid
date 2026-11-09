@@ -20,7 +20,8 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | Public facade | Implemented | [facade.md](facade.md) | Re-exports, prelude and stability limits |
 | Core | Implemented and planned | [core.md](core.md) | Traits, metadata and shared errors |
 | Macros | Implemented and planned | [macros.md](macros.md) | Parsing, validation and code generation |
-| Database | Implemented and planned | [database.md](database.md) | Typed repositories, connections and SQL |
+| Database | Implemented and planned | [database.md](database.md) | Typed repositories, connections, composable queries and SQL |
+| Django capability matrix | Inventory, not a completion claim | [django-capability-matrix.md](django-capability-matrix.md) | Evidence status for Django-shaped capabilities |
 | CLI | Implemented | [cli.md](cli.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generation, diagnostics, upgrades, builds and development server |
 | Example | Implemented | [example-myshop.md](example-myshop.md) | The myshop integration example |
 | Settings | Implemented, v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrioxid.toml`, environment overrides and custom sections |
@@ -33,7 +34,7 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | Tests and CI | Implemented and planned | [testing.md](testing.md) | Workspace checks, SQLite tests and separate PostgreSQL tests |
 | Migrations | Implemented with stated limits | [migrations.md](migrations.md) | Snapshots, diffs, explicit renames, checked rebuilds and baseline |
 | Constraints | Implemented | [constraints.md](constraints.md) | Unique constraints, indexes, foreign keys and error codes |
-| Relations | Implemented, lazy loading | [relations.md](relations.md) | Belongs-to, has-many and N+1 query limits |
+| Relations | Implemented, lazy and explicit batch loading | [relations.md](relations.md) | Belongs-to, has-many, batch loads and N+1 limits |
 | Auth and permissions | Implemented | [auth.md](auth.md), [password-reset.md](password-reset.md), [sessions.md](sessions.md), [permissions.md](permissions.md), [policies.md](policies.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md) | Users, sessions, reset, role permissions, object policies and query scopes |
 | Email | Implemented, v0.23 | [mail.md](mail.md), [mail-smtp.md](mail-smtp.md), [notifications.md](notifications.md), [mail-security.md](mail-security.md) | Transports, templates, typed notices and delivery limits |
 | Forms | Implemented, v0.12 | [forms.md](forms.md), [forms-validation.md](forms-validation.md) | Typed fields, Tera HTML and shared validation rules |
