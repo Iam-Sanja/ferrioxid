@@ -523,6 +523,20 @@ impl AdminRegistry {
         self.models.iter().find(|model| model.meta().key == key)
     }
 
+    /// Genau ein registriertes Modell für diese Tabelle. Zwei Treffer bleiben unaufgelöst.
+    pub fn model_for_table(&self, table: &str) -> Option<&Arc<dyn ManagedModel>> {
+        let mut found = None;
+        for model in self.models.iter() {
+            if model.descriptor().table == table {
+                if found.is_some() {
+                    return None;
+                }
+                found = Some(model);
+            }
+        }
+        found
+    }
+
     fn push(mut self, model: Arc<dyn ManagedModel>) -> Self {
         let app_scope = self.take_app_scope();
         if model.meta().key.is_empty() {
@@ -541,6 +555,13 @@ impl AdminRegistry {
         }
         self
     }
+}
+
+pub(crate) fn references_parent(column: &ColumnSpec, parent: &dyn ManagedModel) -> bool {
+    matches!(
+        column.foreign_table,
+        Some(table) if table == parent.descriptor().table || table == parent.meta().key
+    )
 }
 
 struct Plain<M>(std::marker::PhantomData<M>);

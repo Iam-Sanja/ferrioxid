@@ -14,7 +14,7 @@
 <tbody>
 {% for row in inline.rows %}
 <tr>
-<td>{{ row.text }}</td>
+<td>{% if row.relation_href %}<a href="{{ row.relation_href }}">{{ row.text }}</a>{% else %}{{ row.text }}{% endif %}</td>
 <td><a class="button ghost" href="{{ row.href }}">{{ i18n.inline_open }}</a></td>
 </tr>
 {% endfor %}

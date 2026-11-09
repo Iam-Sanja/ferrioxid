@@ -419,3 +419,76 @@ pub(crate) fn check_custom(action: &AdminAction) -> Result<(), ExtensionError> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::{ActionContext, ActionHandler, ActionOperation, AdminAction};
+    use ferrioxid_core::{AdminFieldMeta, AdminModelMeta, ColumnKind, ColumnSpec};
+    use serde_json::json;
+    use std::sync::Arc;
+    use uuid::Uuid;
+
+    struct MarkShipped;
+
+    #[async_trait::async_trait]
+    impl ActionHandler for MarkShipped {
+        async fn apply(&self, context: &mut ActionContext) -> Result<(), super::ActionError> {
+            for id in context.ids() {
+                context.set_text(id, "status", "shipped")?;
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn mark_shipped_is_an_action_and_only_writes_declared_columns() {
+        let action = AdminAction::custom("orders", "mark_shipped", Arc::new(MarkShipped))
+            .labels("Als versendet markieren", "Mark shipped")
+            .writes(&["status"]);
+        assert!(matches!(action.operation, ActionOperation::Custom(_)));
+        assert_eq!(action.permission, "update");
+        let id = Uuid::nil();
+        let outside = Uuid::from_u128(7);
+        let records = vec![json!({"id": id.to_string(), "status": "open"})];
+        let columns = [ColumnSpec {
+            name: "status",
+            kind: ColumnKind::Text,
+            nullable: false,
+            primary_key: false,
+            default_bool: None,
+            unique: false,
+            indexed: false,
+            foreign_table: None,
+            foreign_column: None,
+            on_delete: None,
+        }];
+        let fields: &'static [AdminFieldMeta] = Box::leak(Box::new([AdminFieldMeta {
+            name: "status",
+            label: "Status",
+            list_display: true,
+            list_link: false,
+            searchable: false,
+            sortable: false,
+            filterable: false,
+            readonly: false,
+            hidden: false,
+            sensitive: false,
+            fieldset: "",
+        }]));
+        let meta = AdminModelMeta {
+            key: "orders",
+            label: "Bestellungen",
+            permission: Some("orders"),
+            fields,
+            ordering: None,
+            per_page: 25,
+            fieldsets: &[],
+            inlines: &[],
+            date_hierarchy: None,
+        };
+        let mut context = ActionContext::prepare(&["status"], &columns, &meta, &records);
+        assert!(context.set_text(id, "status", "shipped").is_ok());
+        assert!(context.set_text(id, "note", "secret").is_err());
+        assert!(context.set_text(outside, "status", "shipped").is_err());
+    }
+}
