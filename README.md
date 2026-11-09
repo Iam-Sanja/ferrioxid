@@ -6,6 +6,8 @@ Ferrioxid is a pre-release Rust full-stack web framework with a Django-inspired 
 
 SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js are not required for the admin.
 
+SQLite builds use a bounded SQLx driver backport with patched bundled SQLite. New projects receive the required Cargo-root patch automatically; existing independent projects need an explicit root-manifest update and rebuild. See [SQLite security and consumer instructions](docs/security/sqlite-rustsec-2026-0459.md).
+
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Security: [SECURITY.md](SECURITY.md)
 - Governance: [GOVERNANCE.md](GOVERNANCE.md)
