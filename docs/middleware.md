@@ -4,7 +4,7 @@
 
 ## Responsibility
 
-`ferrioxid-middleware` applies Tower layers to an Axum router. Authentication, sessions and CSRF checks remain in the handlers.
+`ferrioxid-middleware` applies Tower layers to an Axum router. Authentication, anonymous sessions and CSRF checks remain in the handlers. There is no global layer that creates an anonymous session or rejects every POST. A route opts in by calling `authenticate_browser_form` or `guard_cookie_write`.
 
 ## Crates and files
 

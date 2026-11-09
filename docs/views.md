@@ -6,7 +6,7 @@
 
 `ferrioxid::views` provides the answers that an application often needs: HTML, JSON, a local redirect and stable errors. The types remain Axum-`Response` and `HeaderMap`. Tera remains the template engine.
 
-`require_mutation(auth, headers, token)` checks a POST request via `AuthService::authenticate_csrf`. If the Auth service is missing, the answer is `401` and `auth.not_configured`. There is no second CSRF mechanism. `require_user` remains a GET test. The app registration does not grant any permission.
+`require_mutation(auth, headers, token)` checks a POST request via `AuthService::authenticate_csrf`. If the Auth service is missing, the answer is `401` and `auth.not_configured`. Anonymous forms use the same HMAC through `authenticate_browser_form`. That helper is separate because it does not return a user. `require_user` remains a GET test. The app registration does not grant any permission.
 
 ## Django and Ferrioxid
 

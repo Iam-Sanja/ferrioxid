@@ -8,7 +8,7 @@ Writing cookie requests need a CSRF token that is tied to the valid session. A r
 
 ## Architecture
 
-The token is an HMAC-SHA256 via the fixed prefix `ferrioxid-csrf-v1`, the session ID and the SHA-256 hex of the session token. The key is 32 bytes. Therefore, the same session always results in the same token. `GET /auth/csrf` does not write the database. Since v0.12, `authenticate_csrf` accepts the same token from an HTML field. `authenticate` continues to read only `x-csrf-token`. A request without a session cookie remains for public forms without this check.
+The token is an HMAC-SHA256 via the fixed prefix `ferrioxid-csrf-v1`, the session ID and the SHA-256 hex of the session token. The key is 32 bytes. Therefore, the same session always results in the same token. `GET /auth/csrf` does not write the database. Since v0.12, `authenticate_csrf` accepts the same token from an HTML field. `authenticate` continues to read only `x-csrf-token`. A request without a session cookie remains unchecked until the handler opts in. Opt-in anonymous forms use the same HMAC with `ferrioxid_anonymous` and `_ferrioxid_anonymous_sessions`. `guard_cookie_write` returns `Stateless` when neither cookie is present, including when `Authorization: Bearer` is set. A present session cookie is still checked. Generated `allow_anonymous` routes do not call the guard.
 
 Logout, password change and expiration revoke or discard the session. After that, the check fails before the token is even compared. A token of another session does not fit because ID and token hash enter the HMAC.
 
@@ -23,6 +23,13 @@ Logout, password change and expiration revoke or discard the session. After that
 ## Public APIs
 
 - `AuthConfig.csrf_secret`
+- `AuthConfig.anonymous_cookie_name` (`ferrioxid_anonymous`)
+- `AuthService::ensure_anonymous_session`
+- `AuthService::authenticate_browser_form`
+- `AuthService::authenticate_anonymous_csrf`
+- `AuthService::guard_cookie_write`
+- `AuthService::login_replacing`
+- `GET /auth/anonymous`
 - `AuthService::refresh_csrf`
 - `GET /auth/csrf` returns `{ "csrf_token": "..." }`
 - Header `x-csrf-token` for unsafe JSON methods
@@ -45,7 +52,10 @@ Logout, password change and expiration revoke or discard the session. After that
 - The comparison uses `constant_eq`.
 - Development uses the fixed key `ferrioxid-dev-csrf-key-32-bytes!`.
 - `FERRIOXID_CSRF_SECRET` is 64 hex characters. Otherwise, Ferrioxid reads `.ferrioxid/csrf.key` and creates the file once if it is missing. Production should set the environment variable so that a restart does not invalidate all sessions.
-- Anonymous demo writing routes do not check CSRF. They are not attached to the cookie.
+- Anonymous browser forms that call `authenticate_browser_form` use the same HMAC. The cookie is `ferrioxid_anonymous`: HttpOnly, `Path=/`, no `Domain`, SameSite from the auth configuration, and `Secure` when `cookie_secure` is set. The raw token is not returned as JSON and is not written to the auth error text.
+- `GET /auth/anonymous` reuses or creates that session and returns only `csrf_token`. It does not authenticate a user.
+- When `cookie_secure` is true, unsafe cookie requests must present `Origin` or `Referer`. The value must be `https` and on `FERRIOXID_ALLOWED_ORIGINS`, except the existing `Origin: null` plus `Sec-Fetch-Site: same-origin` case. HTTP origins are rejected in that mode. Development with `cookie_secure = false` still allows a missing origin.
+- Login revokes the presented anonymous row and sets a new `ferrioxid_session`. The old anonymous token and its CSRF value do not authenticate the new session. Logout of an anonymous cookie requires its CSRF token.
 
 ## Error cases
 

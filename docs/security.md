@@ -15,13 +15,13 @@
 
 ## Authentication (actual, v0.7)
 
-Users, Argon2id, server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model permissions are implemented. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [permissions.md](permissions.md) and [policies.md](policies.md).
+Users, Argon2id, server-side sessions, anonymous server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model permissions are implemented. Anonymous sessions and their CSRF checks are **In PR** until this change is merged. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [csrf.md](csrf.md), [permissions.md](permissions.md) and [policies.md](policies.md).
 
 `allow_anonymous = true` remains an explicit public release. Product and category in myshop are such demo endpoints. Protected routes refuse without session and right.
 
 ## Remaining gaps (actual)
 
-OAuth, MFA and JWT for external APIs remain unimplemented; password reset is available as described in [password-reset.md](password-reset.md). Login rate limits are process-local. Object-filtered lists require explicit [query scopes](query-scopes.md). Anonymous routes do not check CSRF because they do not authorize access through a cookie. Concurrent PATCH requests have no version field to detect lost updates. Public deployment still requires appropriate proxy and operational controls.
+OAuth, MFA and JWT for external APIs remain unimplemented; password reset is available as described in [password-reset.md](password-reset.md). Login rate limits are process-local. Object-filtered lists require explicit [query scopes](query-scopes.md). Routes that do not call `authenticate_browser_form` or `guard_cookie_write` still accept a cookie-less request, including generated `allow_anonymous` JSON routes. A request that sends a session cookie is checked. `Authorization: Bearer` without a session cookie is not a browser session and is not blocked by that guard. Concurrent PATCH requests have no version field to detect lost updates. Public deployment still requires appropriate proxy and operational controls. When `Secure` is on, an unsafe cookie request without `Origin` or `Referer` is rejected. The proxy must forward those headers. `X-Forwarded-For` is used only for the login rate-limit key when `FERRIOXID_TRUST_PROXY` is set. It is not an origin.
 
 ## Planned threat model
 

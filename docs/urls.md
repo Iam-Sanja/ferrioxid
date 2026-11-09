@@ -86,7 +86,7 @@ async fn go(Extension(names): Extension<Arc<RouteMap>>) -> axum::response::Respo
 
 Paths start with `/`, are at most 256 characters long and do not contain `//`, `\`, `..`, `://`, `?`, `#`, spaces or control characters.
 
-The following paths, and all paths under `/admin` or `/auth`, are rejected with `url.reserved`: `/healthz`, `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/csrf`, `/auth/change-password`, `/auth/password-reset`, `/auth/password-reset/confirm`, `/auth/password-reset/choose`, `/admin` and `/admin/login`.
+The following paths, and all paths under `/admin` or `/auth`, are rejected with `url.reserved`: `/healthz`, `/auth/login`, `/auth/logout`, `/auth/me`, `/auth/csrf`, `/auth/anonymous`, `/auth/change-password`, `/auth/password-reset`, `/auth/password-reset/confirm`, `/auth/password-reset/choose`, `/admin` and `/admin/login`.
 
 A second name or path in the same `UrlSet` or when merging into `App::urls` is `url.duplicate`. `/` is reserved for the start page of `mount_pages` when templates are active. The fullstack template therefore places its own page on `/home`.
 

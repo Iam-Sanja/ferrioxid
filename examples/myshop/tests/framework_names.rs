@@ -24,7 +24,7 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
     );
     assert_eq!(
         ferrioxid::auth::apply_migrations(db).await.unwrap().len(),
-        4
+        5
     );
     assert_eq!(
         ferrioxid::jobs::apply_migrations(db).await.unwrap().len(),
@@ -43,6 +43,7 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
     for name in [
         "_ferrioxid_users",
         "_ferrioxid_sessions",
+        "_ferrioxid_anonymous_sessions",
         "_ferrioxid_roles",
         "_ferrioxid_permissions",
         "_ferrioxid_user_roles",
@@ -65,7 +66,7 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
     ] {
         assert!(names.contains(name), "missing table: {name}");
     }
-    assert_eq!(names.len(), 21, "unexpected table in disposable database");
+    assert_eq!(names.len(), 22, "unexpected table in disposable database");
     assert!(!names.iter().any(|name| name.contains("ferrum")));
     assert!(ferrioxid::auth::apply_migrations(db)
         .await

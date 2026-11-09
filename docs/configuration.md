@@ -45,4 +45,4 @@ The localhost default remains `127.0.0.1:3000`. `0.0.0.0` is not a production-re
 
 ## Admin
 
-`FERRIOXID_ADMIN_DIST` is no longer read; CSS and templates are embedded in the binary. `FERRIOXID_CSRF_SECRET` is optional but must contain 64 hex characters when set. Otherwise, Ferrioxid uses `.ferrioxid/csrf.key`. `FERRIOXID_COOKIE_SECURE` and `FERRIOXID_ENV=production` apply to the admin session too. Theme and locale use `ferrioxid_theme` and `ferrioxid_locale` cookies.
+`FERRIOXID_ADMIN_DIST` is no longer read; CSS and templates are embedded in the binary. `FERRIOXID_CSRF_SECRET` is optional but must contain 64 hex characters when set. Otherwise, Ferrioxid uses `.ferrioxid/csrf.key`. `FERRIOXID_COOKIE_SECURE` and `FERRIOXID_ENV=production` apply to the admin session and to `ferrioxid_anonymous`. Anonymous sessions use `FERRIOXID_SESSION_HOURS` and `FERRIOXID_IDLE_MINUTES`. The cookie name is not an environment variable. Theme and locale use `ferrioxid_theme` and `ferrioxid_locale` cookies.

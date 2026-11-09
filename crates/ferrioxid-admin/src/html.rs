@@ -185,17 +185,22 @@ async fn login_submit(
     }
     let next =
         safe_next(form.get("next").map(String::as_str).unwrap_or("/admin")).unwrap_or("/admin");
+    let anonymous = cookie(&headers, &auth.config().anonymous_cookie_name);
     match auth
-        .login(
+        .login_replacing(
             form.get("email").map(String::as_str).unwrap_or(""),
             form.get("password").map(String::as_str).unwrap_or(""),
             &auth.client_key(&headers, "html"),
+            anonymous.as_deref(),
         )
         .await
     {
         Ok(issued) => {
             let mut response = redirect(next);
             append_cookie(&mut response, &issued.cookie);
+            for cookie in &issued.clear_cookies {
+                append_cookie(&mut response, cookie);
+            }
             append_cookie(
                 &mut response,
                 &clear_cookie("ferrioxid_login_csrf", auth.config()),

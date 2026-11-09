@@ -33,7 +33,7 @@ Forms do not have their own `ferrioxid.toml` section. The maximum URL-encoded si
 
 ## Security
 
-HTML output is escaped. Unknown fields return `validation.unknown_field` instead of being silently accepted. Validation runs on the server. A cookie-authenticated form submits the same HMAC token used by `x-csrf-token` in its `csrf_token` field. Public forms without a session do not add a separate CSRF mechanism. Obtain the token with `AuthService::csrf_from_request`.
+HTML output is escaped. Unknown fields return `validation.unknown_field` instead of being silently accepted. Validation runs on the server. A cookie-authenticated form submits the same HMAC token used by `x-csrf-token` in its `csrf_token` field. Obtain a user token with `AuthService::csrf_from_request`. An opted-in public form uses `ensure_anonymous_session` and `authenticate_browser_form`. myshop `/contact` does that when an `AuthService` is configured. Without an auth service the contact form does not create a session. Generated public JSON routes stay opt-in and are unchanged.
 
 ## Error cases
 

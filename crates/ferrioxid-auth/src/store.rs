@@ -2,8 +2,8 @@
 
 use crate::error::AuthError;
 use crate::schema::{
-    ADMIN_AUDIT, MAIL_OUTBOX, PASSWORD_RESETS, PASSWORD_RESET_EXCHANGES, PERMISSIONS, ROLES,
-    ROLE_PERMISSIONS, SESSIONS, USERS, USER_ROLES,
+    ADMIN_AUDIT, ANONYMOUS_SESSIONS, MAIL_OUTBOX, PASSWORD_RESETS, PASSWORD_RESET_EXCHANGES,
+    PERMISSIONS, ROLES, ROLE_PERMISSIONS, SESSIONS, USERS, USER_ROLES,
 };
 use sea_orm::sea_query::{Alias, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder};
 use sea_orm::{ConnectionTrait, DatabaseBackend, QueryResult, Statement, Value};
@@ -21,6 +21,18 @@ pub struct UserRow {
     pub created_at: i64,
     pub updated_at: i64,
     pub last_login: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AnonymousRow {
+    pub id: Uuid,
+    pub token_hash: String,
+    pub csrf_token_hash: String,
+    pub state: Option<String>,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub last_seen_at: i64,
+    pub revoked_at: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -338,6 +350,99 @@ pub async fn set_staff(
             (Alias::new("updated_at"), number(updated_at)),
         ])
         .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+    execute(db, &query).await
+}
+
+pub async fn insert_anonymous(
+    db: &impl ConnectionTrait,
+    session: &AnonymousRow,
+) -> Result<(), AuthError> {
+    let mut query = Query::insert();
+    query
+        .into_table(Alias::new(ANONYMOUS_SESSIONS))
+        .columns([
+            Alias::new("id"),
+            Alias::new("token_hash"),
+            Alias::new("csrf_token_hash"),
+            Alias::new("state"),
+            Alias::new("created_at"),
+            Alias::new("expires_at"),
+            Alias::new("last_seen_at"),
+            Alias::new("revoked_at"),
+        ])
+        .values_panic([
+            text(&session.id.to_string()),
+            text(&session.token_hash),
+            text(&session.csrf_token_hash),
+            opt_text(session.state.as_deref()),
+            number(session.created_at),
+            number(session.expires_at),
+            number(session.last_seen_at),
+            opt_number(session.revoked_at),
+        ]);
+    execute(db, &query).await
+}
+
+pub async fn find_anonymous_by_hash(
+    db: &impl ConnectionTrait,
+    token_hash: &str,
+) -> Result<Option<AnonymousRow>, AuthError> {
+    let mut query = Query::select();
+    query
+        .columns([
+            Alias::new("id"),
+            Alias::new("token_hash"),
+            Alias::new("csrf_token_hash"),
+            Alias::new("state"),
+            Alias::new("created_at"),
+            Alias::new("expires_at"),
+            Alias::new("last_seen_at"),
+            Alias::new("revoked_at"),
+        ])
+        .from(Alias::new(ANONYMOUS_SESSIONS))
+        .and_where(Expr::col(Alias::new("token_hash")).eq(token_hash));
+    let row = one(db, &query).await?;
+    row.map(|row| read_anonymous(&row)).transpose()
+}
+
+pub async fn touch_anonymous(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    last_seen_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(ANONYMOUS_SESSIONS))
+        .values([(Alias::new("last_seen_at"), number(last_seen_at))])
+        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+    execute(db, &query).await
+}
+
+pub async fn revoke_anonymous(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    revoked_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(ANONYMOUS_SESSIONS))
+        .values([(Alias::new("revoked_at"), number(revoked_at))])
+        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("revoked_at")).is_null());
+    execute(db, &query).await
+}
+
+pub async fn write_anonymous_state(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    state: &str,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(ANONYMOUS_SESSIONS))
+        .values([(Alias::new("state"), text(state))])
+        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("revoked_at")).is_null());
     execute(db, &query).await
 }
 
@@ -824,6 +929,19 @@ fn read_user(row: &QueryResult) -> Result<UserRow, AuthError> {
     })
 }
 
+fn read_anonymous(row: &QueryResult) -> Result<AnonymousRow, AuthError> {
+    Ok(AnonymousRow {
+        id: required_uuid(row, "id")?,
+        token_hash: required_text(row, "token_hash")?,
+        csrf_token_hash: required_text(row, "csrf_token_hash")?,
+        state: optional_text(row, "state")?,
+        created_at: required_i64(row, "created_at")?,
+        expires_at: required_i64(row, "expires_at")?,
+        last_seen_at: required_i64(row, "last_seen_at")?,
+        revoked_at: optional_i64(row, "revoked_at")?,
+    })
+}
+
 fn read_session(row: &QueryResult) -> Result<SessionRow, AuthError> {
     Ok(SessionRow {
         id: required_uuid(row, "id")?,
@@ -895,6 +1013,18 @@ fn required_flag(row: &QueryResult, column: &str) -> Result<bool, AuthError> {
 
 fn text(value: &str) -> sea_orm::sea_query::SimpleExpr {
     Expr::value(value)
+}
+
+fn opt_text(value: Option<&str>) -> sea_orm::sea_query::SimpleExpr {
+    match value {
+        Some(value) => Expr::value(value),
+        None => Expr::value(Option::<String>::None),
+    }
+}
+
+fn optional_text(row: &QueryResult, column: &str) -> Result<Option<String>, AuthError> {
+    row.try_get::<Option<String>>("", column)
+        .map_err(|_| AuthError::database(format!("column {column} is not text")))
 }
 
 fn number(value: i64) -> sea_orm::sea_query::SimpleExpr {

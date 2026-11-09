@@ -16,6 +16,8 @@ pub enum CookieSameSite {
 pub struct AuthConfig {
     pub environment: Environment,
     pub cookie_name: String,
+    /// Getrennt vom Login-Cookie. Der Name ist fest, damit eine App ihn nicht auf das Login-Cookie legt.
+    pub anonymous_cookie_name: String,
     pub cookie_secure: bool,
     pub same_site: CookieSameSite,
     pub session_ttl_secs: i64,
@@ -33,6 +35,7 @@ impl AuthConfig {
         Self {
             environment: Environment::Development,
             cookie_name: "ferrioxid_session".to_owned(),
+            anonymous_cookie_name: "ferrioxid_anonymous".to_owned(),
             cookie_secure: false,
             same_site: CookieSameSite::Lax,
             session_ttl_secs: 12 * 60 * 60,

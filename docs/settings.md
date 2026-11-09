@@ -47,7 +47,7 @@ Existing sections remain `project`, `server`, `database`, `admin`, `auth`, `temp
 | `FERRIOXID_SMTP_PASSWORD` |SMTP password. It is not in `ferrioxid.toml`|
 | `FERRIOXID_SESSION_HOURS` |Replaces the file when set. Otherwise, `auth.session_hours` applies over `apply_project_session`|
 | `FERRIOXID_IDLE_MINUTES` |Replaces the file when set. Otherwise `auth.idle_minutes` applies|
-| `FERRIOXID_COOKIE_SECURE` |`1` or `true` sets the Secure cookie. In production, the standard|
+| `FERRIOXID_COOKIE_SECURE` |`1` or `true` sets `Secure` on `ferrioxid_session` and `ferrioxid_anonymous`. In production this is the default|
 | `FERRIOXID_CSRF_SECRET` |64 Hex marks in production. The value is not logged|
 | `FERRIOXID_ALLOWED_ORIGINS` |Comma-separated origins. In production without this variable, the list is empty until `apply_bound_address` sets loopback|
 

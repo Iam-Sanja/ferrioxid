@@ -11,6 +11,7 @@ use std::path::PathBuf;
 
 pub const USERS: &str = "_ferrioxid_users";
 pub const SESSIONS: &str = "_ferrioxid_sessions";
+pub const ANONYMOUS_SESSIONS: &str = "_ferrioxid_anonymous_sessions";
 pub const ROLES: &str = "_ferrioxid_roles";
 pub const PERMISSIONS: &str = "_ferrioxid_permissions";
 pub const USER_ROLES: &str = "_ferrioxid_user_roles";
@@ -149,6 +150,51 @@ fn password_reset_migration_file() -> Result<MigrationFile, AuthError> {
         &plan,
     )
     .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
+/// Anonyme serverseitige Sitzungen. `0001` bis `0004` bleiben versiegelt.
+#[cfg(test)]
+fn anonymous_migration_file() -> Result<MigrationFile, AuthError> {
+    let previous =
+        ferrioxid_migrations::load_migration(&migrations_dir().join("0004_password_reset.json"))
+            .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let mut to = previous.to_snapshot.clone();
+    to.tables.push(anonymous_sessions());
+    to.validate()
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let plan = plan_change(&previous.to_snapshot, &to)
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    if let Some(reason) = &plan.refusal {
+        return Err(AuthError::Validation(reason.clone()));
+    }
+    seal(
+        "0005_anonymous_sessions".to_owned(),
+        "anonymous_sessions".to_owned(),
+        previous.to_snapshot,
+        to,
+        &plan,
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
+#[cfg(test)]
+fn anonymous_sessions() -> TableSnapshot {
+    table(
+        ANONYMOUS_SESSIONS,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("token_hash", LogicalType::String, false, false, None),
+            column("csrf_token_hash", LogicalType::String, false, false, None),
+            column("state", LogicalType::String, false, true, None),
+            column("created_at", LogicalType::I64, false, false, None),
+            column("expires_at", LogicalType::I64, false, false, None),
+            column("last_seen_at", LogicalType::I64, false, false, None),
+            column("revoked_at", LogicalType::I64, false, true, None),
+        ],
+        vec![unique(ANONYMOUS_SESSIONS, &["token_hash"])],
+        Vec::new(),
+        Vec::new(),
+    )
 }
 
 #[cfg(test)]
@@ -506,5 +552,22 @@ mod tests {
             .operations
             .iter()
             .any(|operation| format!("{operation:?}").contains("_ferrioxid_password_resets")));
+    }
+
+    #[test]
+    fn anonymous_session_migration_is_sealed() {
+        let file = super::anonymous_migration_file().expect("anonymous session migration");
+        let path = migrations_dir().join("0005_anonymous_sessions.json");
+        if !path.exists() {
+            ferrioxid_migrations::save_migration(&migrations_dir(), &file)
+                .expect("write migration");
+        }
+        let loaded = ferrioxid_migrations::load_migration(&path).expect("load migration");
+        assert_eq!(loaded.id, "0005_anonymous_sessions");
+        assert_eq!(loaded.checksum, file.checksum);
+        assert!(loaded
+            .operations
+            .iter()
+            .any(|operation| format!("{operation:?}").contains("_ferrioxid_anonymous_sessions")));
     }
 }

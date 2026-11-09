@@ -43,6 +43,7 @@ In the long term, the admin should cover the relevant functions of the Django ad
 - Forms ([#47](https://github.com/Iam-Sanja/ferrioxid/issues/47)): text, number, email, password, checkbox, select and textarea widgets, escaped labels and values, and model binding through an explicit column allow-list. Create and replace require every required field. Patch leaves missing keys unchanged. Formsets are still absent. Status in the capability matrix: **In PR**.
 - Validation display ([#48](https://github.com/Iam-Sanja/ferrioxid/issues/48)): one German/English catalog, field overrides, and model errors stored as stable codes. Unknown locales use English. SQL and stack traces are not shown. Status: **In PR**.
 - Error pages and named routes ([#50](https://github.com/Iam-Sanja/ferrioxid/issues/50)): status templates with a safe fallback, project `url()` across prefixes, and percent-encoded path parameters. Status: **In PR**.
+- Anonymous sessions and CSRF ([#46](https://github.com/Iam-Sanja/ferrioxid/issues/46)): server-side anonymous sessions, the same HMAC as user sessions, login rotation, and an opted-in myshop contact form. Status in the capability matrix: **In PR**. PostgreSQL runtime for `postgres_anonymous_session_roundtrip` is not a local pass.
 
 ## ORM queries
 

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-The admin and browser login uses server-side sessions. JSON Web Tokens are not the standard.
+The admin and browser login uses server-side sessions. Anonymous visitors can have a separate server-side session. JSON Web Tokens are not the standard. The cookie value is an unguessable token. Ferrioxid stores only its SHA-256 hex digest and does not treat the client value as a session id.
 
 ## Architecture
 
@@ -65,6 +65,14 @@ Answer 204 and `Set-Cookie` with empty value.
 ## Tests
 
 `sqlite_tests` checks attachment, hash, expiration, idle timeout, revocation, rotation, inactive users and the secure cookie. `examples/myshop/tests/auth.rs` checks missing, manipulated and expired cookie and logout.
+
+## Anonymous sessions
+
+`_ferrioxid_anonymous_sessions` stores an opaque id, the token hash, the CSRF hash, optional flat JSON state, and the same expiry columns. There is no `user_id`. `ensure_anonymous_session` creates a row when the cookie is missing, unknown, revoked, expired, or idle. A later GET can replace a bad cookie. A state-changing call does not.
+
+State is a JSON object of at most 32 scalar values, stored as text and bound as a parameter. It is not copied into the user session at login. Login revokes the anonymous row in the same transaction that inserts the new user session. That blocks session fixation of the anonymous id. `authenticate_token` does not accept an anonymous token.
+
+Absolute lifetime and idle timeout are `FERRIOXID_SESSION_HOURS` and `FERRIOXID_IDLE_MINUTES`, the same values as user sessions. The anonymous cookie name is not configurable. It must stay distinct from `ferrioxid_session`.
 
 ## Limitations
 

@@ -4,6 +4,9 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[dev-dependencies]
+http-body-util = "0.1"
+
 [dependencies]
 ferrioxid = { path = "../../crates/ferrioxid", features = ["admin-ui"] }
 axum.workspace = true

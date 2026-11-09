@@ -1,9 +1,9 @@
-//! Öffentliches Kontaktformular. Eine vorhandene Sitzung muss das bestehende CSRF-Token senden.
+//! Öffentliches Kontaktformular. Mit Auth-Service ist jede Änderung an eine anonyme oder Benutzer-Sitzung gebunden.
 
 use axum::body::Bytes;
 use axum::extract::{Extension, State};
-use axum::http::{HeaderMap, Method, StatusCode};
-use axum::response::{Html, IntoResponse};
+use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
+use axum::response::{Html, IntoResponse, Response};
 use ferrioxid::auth::AppState;
 use ferrioxid::forms::{
     contact_widgets, message, render_fields, render_page, ContactForm, FerrioxidForm, FormErrors,
@@ -12,16 +12,25 @@ use ferrioxid::forms::{
 use ferrioxid::views::{fail, redirect_to};
 use std::sync::Arc;
 
-pub async fn show(State(state): State<AppState>, headers: HeaderMap) -> Html<String> {
-    Html(
-        page(
-            &state,
-            &headers,
-            &FormValues::default(),
-            &FormErrors::default(),
-        )
-        .await,
+pub async fn show(State(state): State<AppState>, headers: HeaderMap) -> Response {
+    match page(
+        &state,
+        &headers,
+        &FormValues::default(),
+        &FormErrors::default(),
     )
+    .await
+    {
+        Ok((html, cookie)) => html_response(html, cookie),
+        Err(()) => fail(
+            &headers,
+            None,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "request.rejected",
+            "request rejected",
+            false,
+        ),
+    }
 }
 
 pub async fn thanks() -> Html<String> {
@@ -36,31 +45,38 @@ pub async fn submit(
     Extension(routes): Extension<Arc<ferrioxid::urls::RouteMap>>,
     headers: HeaderMap,
     body: Bytes,
-) -> impl IntoResponse {
+) -> Response {
     let values = match FormValues::parse_urlencoded(&String::from_utf8_lossy(&body)) {
         Ok(values) => values,
         Err(errors) => {
-            return Html(page(&state, &headers, &FormValues::default(), &errors).await)
-                .into_response()
+            return match page(&state, &headers, &FormValues::default(), &errors).await {
+                Ok((html, cookie)) => html_response(html, cookie),
+                Err(()) => fail(
+                    &headers,
+                    None,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "request.rejected",
+                    "request rejected",
+                    false,
+                ),
+            };
         }
     };
     if let Some(auth) = state.auth.as_ref() {
-        if auth.csrf_from_request(&headers).await.is_ok() {
-            let supplied = values.get("csrf_token").unwrap_or("");
-            if auth
-                .authenticate_csrf(&headers, &Method::POST, supplied)
-                .await
-                .is_err()
-            {
-                return fail(
-                    &headers,
-                    None,
-                    StatusCode::FORBIDDEN,
-                    "form.csrf",
-                    "form.csrf",
-                    false,
-                );
-            }
+        let supplied = values.get("csrf_token").unwrap_or("");
+        if auth
+            .authenticate_browser_form(&headers, &Method::POST, supplied)
+            .await
+            .is_err()
+        {
+            return fail(
+                &headers,
+                None,
+                StatusCode::FORBIDDEN,
+                "form.csrf",
+                "form.csrf",
+                false,
+            );
         }
     }
     match ContactForm::from_form(&values) {
@@ -75,11 +91,23 @@ pub async fn submit(
                 false,
             ),
         },
-        Err(errors) => (
-            StatusCode::UNPROCESSABLE_ENTITY,
-            Html(page(&state, &headers, &values, &errors).await),
-        )
-            .into_response(),
+        Err(errors) => match page(&state, &headers, &values, &errors).await {
+            Ok((html, cookie)) => {
+                let mut response = (StatusCode::UNPROCESSABLE_ENTITY, Html(html)).into_response();
+                if let Some(cookie) = cookie {
+                    append_set_cookie(&mut response, &cookie);
+                }
+                response
+            }
+            Err(()) => fail(
+                &headers,
+                None,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "request.rejected",
+                "request rejected",
+                false,
+            ),
+        },
     }
 }
 
@@ -88,10 +116,20 @@ async fn page(
     headers: &HeaderMap,
     values: &FormValues,
     errors: &FormErrors,
-) -> String {
-    let csrf = match state.auth.as_ref() {
-        Some(auth) => auth.csrf_from_request(headers).await.ok(),
-        None => None,
+) -> Result<(String, Option<String>), ()> {
+    let (csrf, cookie) = match state.auth.as_ref() {
+        Some(auth) => {
+            if let Ok(token) = auth.csrf_from_request(headers).await {
+                (Some(token), None)
+            } else {
+                let session = auth
+                    .ensure_anonymous_session(headers)
+                    .await
+                    .map_err(|_| ())?;
+                (Some(session.csrf_token), session.cookie)
+            }
+        }
+        None => (None, None),
     };
     let form = render_fields(
         "/contact",
@@ -101,5 +139,21 @@ async fn page(
         &contact_widgets("de"),
         "de",
     );
-    render_page("Kontakt", &form)
+    Ok((render_page("Kontakt", &form), cookie))
+}
+
+fn html_response(html: String, cookie: Option<String>) -> Response {
+    let mut response = Html(html).into_response();
+    if let Some(cookie) = cookie {
+        append_set_cookie(&mut response, &cookie);
+    }
+    response
+}
+
+fn append_set_cookie(response: &mut Response, value: &str) {
+    if let Ok(header_value) = HeaderValue::from_str(value) {
+        response
+            .headers_mut()
+            .append(header::SET_COOKIE, header_value);
+    }
 }
