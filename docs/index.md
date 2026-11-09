@@ -16,7 +16,8 @@ The main flow is: Rust model → `FerrioxidModel` metadata and repository method
 | Public facade | Implemented | [facade.md](facade.md) | Re-exports, prelude and stability limits |
 | Core | Implemented and planned | [core.md](core.md) | Traits, metadata and shared errors |
 | Macros | Implemented and planned | [macros.md](macros.md) | Parsing, validation and code generation |
-| Database | Implemented and planned | [database.md](database.md) | Typed repositories, connections and SQL |
+| Database | Implemented and planned | [database.md](database.md) | Typed repositories, connections, composable queries and SQL |
+| Django capability matrix | Inventory, not a completion claim | [django-capability-matrix.md](django-capability-matrix.md) | Evidence status for Django-shaped capabilities |
 | CLI | Implemented | [cli.md](cli.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generation, diagnostics, upgrades, builds and development server |
 | Example | Implemented | [example-myshop.md](example-myshop.md) | The myshop integration example |
 | Settings | Implemented, v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrioxid.toml`, environment overrides and custom sections |

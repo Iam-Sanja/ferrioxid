@@ -1,6 +1,6 @@
 # Ferrioxid-db – A repository layer for SQLite and PostgreSQL
 
-[Overview](index.md) · **Implemented files:** `crates/ferrioxid-db/src/lib.rs`, `crates/ferrioxid-db/src/sql.rs`. The repository implementation generates `crates/ferrioxid-macros/src/lib.rs`.
+[Overview](index.md) · **Implemented files:** `crates/ferrioxid-db/src/lib.rs`, `crates/ferrioxid-db/src/query.rs`, `crates/ferrioxid-db/src/sql.rs`. The repository implementation generates `crates/ferrioxid-macros/src/lib.rs`.
 
 ## Auth tables (v0.7)
 
@@ -66,7 +66,7 @@ SeaQuery binds values using PostgreSQL `$1`, `$2` or SQLite `?` placeholders. Id
 
 ### Delete, Get and List
 
-`DELETE` filters by the bound UUID. Zero affected rows produce `Missing`; `get` returns `Ok(None)` when no row exists. `list` orders by `"id"` and reads 101 rows, returning at most 100 objects and setting `truncated` if more exist. UUID ordering does not represent creation time. This endpoint has no pagination.
+`DELETE` filters by the bound UUID. Zero affected rows produce `Missing`; `get` returns `Ok(None)` when no row exists. `list` orders by `"id"` and reads 101 rows, returning at most 100 objects and setting `truncated` if more exist. UUID ordering does not represent creation time. The generated REST `list` response is still not a page API. Bounded pages are `Model::query()`, described below.
 
 ## Setup
 
@@ -83,6 +83,90 @@ postgres://user:password@localhost:5432/ferrioxid
 ## Error and security (Implemented)
 
 Deserialization errors and unknown SQL errors become `FerrioxidError::Database`. The HTTP layer then responds with 500 and a generic text. The database detail goes to the tracing log, not the answer. `DATABASE_URL` is not logged. `sqlx::ErrorKind::UniqueViolation` and `ForeignKeyViolation` are `Validation` and thus 422. SQLite reports `ON DELETE RESTRICT` as extended code `1811` with the fixed message `FOREIGN KEY constraint failed`. This will also be 422. Missing lines remain 404, unreleased routes 403. SQLite foreign keys are on. Models can generate unique indexes, secondary indexes and foreign keys. Relationship methods are in [relations.md](relations.md). `find_by_column` loads typed child lines. SQLite checks types weaker than PostgreSQL. Ferrioxid checks the supported values before writing in Rust.
+
+## Composable queries
+
+`Product::query()` returns a `Select<Product>`. Import `ModelQuery` so the method is in scope. The query accepts `&DatabaseConnection` and any other `&impl ConnectionTrait`, including an open `DatabaseTransaction`. It does not take a second connection from the pool.
+
+`list` and `list_scoped` are unchanged.
+
+```rust
+use ferrioxid::core::QueryScope;
+use ferrioxid::db::{any_of, col, not, Direction, ModelQuery};
+
+// 1. Active products with stock greater than zero, ordered by price.
+let available = Product::query()
+    .filter(col("active").eq(true))
+    .filter(col("stock").gt(0_i64))
+    .order_by("price_cents", Direction::Asc)
+    .all(&db)
+    .await?;
+
+// 2. The same order with the stable id tie-break appended by the query.
+let by_price = Product::query()
+    .order_by("price_cents", Direction::Asc)
+    .order_by("name", Direction::Asc)
+    .all(&db)
+    .await?;
+
+// 3. AND, OR and NOT. Values are bound parameters, not SQL text.
+// The scope comes from the object policy; this shows an equality scope.
+let matched = Product::query()
+    .filter(col("active").eq(true))
+    .filter(any_of([
+        col("name").eq("bolt"),
+        col("price_cents").lte(500_i64),
+    ]))
+    .filter(not(col("name").is_null()))
+    .scope(QueryScope::Equals {
+        column: "category_id",
+        value: ferrioxid::core::ScopeValue::Uuid(category_id),
+    })
+    .all(&db)
+    .await?;
+
+// 4. Walk more than 100 rows. Each call returns at most 100.
+let mut offset = 0_u64;
+loop {
+    let page = Product::query()
+        .order_by("price_cents", Direction::Asc)
+        .limit(40)
+        .offset(offset)
+        .page(&db)
+        .await?;
+    // `page.data` is this window. `page.total` counts the filtered rows.
+    if !page.has_more {
+        break;
+    }
+    offset += page.data.len() as u64;
+}
+```
+
+`policy_scope` is a `QueryScope` from the object policy. The default scope is `QueryScope::All`, the same default as `list`. `QueryScope::None` matches no row. `QueryScope::Equals` is AND-ed with the filters. A query does not invent a policy.
+
+| Call | Window | Result |
+|---|---|---|
+| `all` | `limit` and `offset` | At most `limit` models. Default limit 100. |
+| `page` | same window, plus a count | `QueryPage` with `data`, `limit`, `offset`, `total`, `has_more`. |
+| `count` | ignored | Filtered row count, including rows outside the page. |
+| `exists` | ignored | Whether the filter matches at least one row. |
+
+`count` and `exists` still reject an invalid `limit` or `offset` on that builder.
+
+Supported comparisons are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_in`, `is_not_in`, `is_null` and `is_not_null`. `filter` combines with AND. `all_of`, `any_of` and `not` nest AND, OR and NOT. An empty OR matches nothing. Boolean and UUID columns accept equality, inequality, `IN`, `NOT IN` and null checks. `i64`, text, date, time and datetime also accept ranges. A comparison whose value type does not match the column is `Validation`.
+
+Column names must be columns of that model and must match `[A-Za-z_][A-Za-z0-9_]*`. Unknown or unsafe names are `Validation` and are not sent to the database. Values go through SeaQuery parameters (`?` on SQLite, `$1` on PostgreSQL). `limit` and `offset` are validated integers; SeaQuery may emit them as numeric literals.
+
+Ordering can list several columns. If `id` is absent, the query appends `id ASC`. Pages of an unchanged filtered set do not overlap or skip when walked with a constant page size. An insert, delete or sort-key update between two requests can move offset pages. This is not keyset pagination and not a snapshot across requests. Read both pages inside one transaction when the set must stay still.
+
+### Limits
+
+- Page size is 1..=100 (`PAGE_LIMIT`). Offset is at most 1_000_000 (`OFFSET_LIMIT`).
+- One `IN` or `NOT IN` list holds 1..=100 values (`IN_LIMIT`). An empty list is an error, not `IN ()`.
+- `all` never scans the whole table. A result larger than 100 rows requires further pages.
+- There is no `SUM`, grouping, annotation or arbitrary SQL expression.
+- MySQL is rejected.
+- SQLite behavior is covered by `cargo test -p ferrioxid-db`. PostgreSQL SQL generation is asserted in the same crate. `postgres_filters_and_pages_runtime` is `#[ignore]` and runs only with `DATABASE_URL` and a disposable PostgreSQL database. A local workspace run does not mark that test as passed.
 
 ## Not implemented (planned)
 

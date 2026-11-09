@@ -1,6 +1,6 @@
 # Ferrioxid Roadmap – Status and Next Phases
 
-[Overview](index.md) · Admin comparison: [admin-django-parity.md](admin-django-parity.md) · UX backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
+[Overview](index.md) · Admin comparison: [admin-django-parity.md](admin-django-parity.md) · UX backlog: [admin-ux-backlog.md](admin-ux-backlog.md) · Capability inventory: [django-capability-matrix.md](django-capability-matrix.md)
 
 **Status:** milestones through v0.28 are implemented; the Cargo version remains `0.1.0`. This roadmap distinguishes completed work from proposals. A planned phase is neither a release nor an available feature.
 
@@ -37,6 +37,10 @@ In the long term, the admin should cover the relevant functions of the Django ad
 | v0.27.1 | Completed | `WorkerHost`, `ferrioxid generate worker`, app handlers and hidden job payloads | CLI workers do not load application code; no exactly-once guarantee |
 | v0.26 | Completed | Validated app startup, Rust/TOML migration matching, flat field groups and managed timestamps | Soft delete remains planned |
 | v0.28 | Completed | Admin navigation grouped by app, model links and permission-aware visibility | See [admin-navigation.md](admin-navigation.md) for limits |
+
+## ORM queries
+
+`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. Local workspace tests cover SQLite. PostgreSQL SQL generation is asserted; the PostgreSQL runtime test stays ignored without a server. Annotations, keyset pagination and many-to-many are not part of this API. Batch relation loading is still the open follow-up described in [relations.md](relations.md).
 
 ## Open after v0.27.1
 
