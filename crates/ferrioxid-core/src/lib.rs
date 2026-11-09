@@ -1,9 +1,11 @@
 //! Shared contracts, independent of HTTP and database implementations.
 
+mod messages;
 mod problem;
 pub mod temporal;
 mod validation;
 
+pub use messages::{localize_detail, message_for, message_text, FieldOverride};
 pub use problem::problem_json;
 pub use temporal::{
     hierarchy_bound, parse_date, parse_datetime_local, parse_datetime_utc, parse_time, DateBound,
@@ -270,7 +272,7 @@ pub fn check_slug(field: &str, value: &str) -> Result<(), FerrioxidError> {
         Ok(())
     } else {
         Err(FerrioxidError::Validation(format!(
-            "{field} must be a lowercase slug"
+            "field:{field}: validation.slug"
         )))
     }
 }
@@ -278,7 +280,7 @@ pub fn check_slug(field: &str, value: &str) -> Result<(), FerrioxidError> {
 pub fn check_email(field: &str, value: &str) -> Result<(), FerrioxidError> {
     let Some((local, domain)) = value.split_once('@') else {
         return Err(FerrioxidError::Validation(format!(
-            "{field} must be an email address"
+            "field:{field}: validation.email"
         )));
     };
     let labels = domain.split('.').collect::<Vec<_>>();
@@ -299,7 +301,7 @@ pub fn check_email(field: &str, value: &str) -> Result<(), FerrioxidError> {
         Ok(())
     } else {
         Err(FerrioxidError::Validation(format!(
-            "{field} must be an email address"
+            "field:{field}: validation.email"
         )))
     }
 }

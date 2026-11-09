@@ -460,43 +460,10 @@ fn take<T>(result: Result<T, FieldFailure>, errors: &mut FormErrors) -> Option<T
 }
 
 pub fn message(locale: &str, code: &str) -> &'static str {
-    let german = locale == "de";
-    match (german, code) {
-        (true, "validation.required") => "Dieses Feld ist erforderlich.",
-        (false, "validation.required") => "This field is required.",
-        (true, "validation.min_length") => "Der Text ist zu kurz.",
-        (false, "validation.min_length") => "The text is too short.",
-        (true, "validation.max_length") => "Der Text ist zu lang.",
-        (false, "validation.max_length") => "The text is too long.",
-        (true, "validation.email") => "Die E-Mail-Adresse ist ungültig.",
-        (false, "validation.email") => "The email address is invalid.",
-        (true, "validation.url") => "Die Adresse muss mit http:// oder https:// beginnen.",
-        (false, "validation.url") => "The address must start with http:// or https://.",
-        (true, "validation.invalid_type") => "Der Wert hat den falschen Typ.",
-        (false, "validation.invalid_type") => "The value has the wrong type.",
-        (true, "validation.min_value") => "Der Wert ist zu klein.",
-        (false, "validation.min_value") => "The value is too small.",
-        (true, "validation.max_value") => "Der Wert ist zu groß.",
-        (false, "validation.max_value") => "The value is too large.",
-        (true, "validation.uuid") => "Die Kennung ist ungültig.",
-        (false, "validation.uuid") => "The identifier is invalid.",
-        (true, "validation.unknown_field") => "Dieses Feld ist nicht erlaubt.",
-        (false, "validation.unknown_field") => "This field is not allowed.",
-        (true, "validation.mismatch") => {
-            "Name und E-Mail dürfen nicht denselben lokalen Teil haben."
-        }
-        (false, "validation.mismatch") => "The name and email must not share the same local part.",
-        (true, "form.csrf") => "Die Sicherheitsprüfung ist fehlgeschlagen.",
-        (false, "form.csrf") => "The security check failed.",
-        (true, "form.thanks") => "Danke. Die Nachricht wurde geprüft und nicht versendet.",
-        (false, "form.thanks") => "Thank you. The message was checked and was not sent.",
-        (true, "validation.choice") => "Wählen Sie einen der vorgegebenen Werte.",
-        (false, "validation.choice") => "Choose one of the listed values.",
-        (true, "validation.postal") => "Die Postleitzahl muss fünf Ziffern haben.",
-        (false, "validation.postal") => "The postal code must contain five digits.",
-        _ => "missing message",
-    }
+    ferrioxid_core::message_text(locale, code)
 }
+
+pub use ferrioxid_core::{localize_detail, message_for, FieldOverride};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Widget {
@@ -584,6 +551,18 @@ pub fn render_fields(
     fields: &[Field],
     locale: &str,
 ) -> String {
+    render_fields_with(action, csrf, values, errors, fields, locale, &[])
+}
+
+pub fn render_fields_with(
+    action: &str,
+    csrf: Option<&str>,
+    values: &FormValues,
+    errors: &FormErrors,
+    fields: &[Field],
+    locale: &str,
+    overrides: &[FieldOverride],
+) -> String {
     let mut html = format!("<form method=\"post\" action=\"{}\">", escape(action));
     if let Some(token) = csrf {
         html.push_str(&format!(
@@ -594,7 +573,7 @@ pub fn render_fields(
     if let Some(code) = errors.for_field("") {
         html.push_str(&format!(
             "<p role=\"alert\">{}</p>",
-            escape(message(locale, code))
+            escape(&message_for(locale, "", code, &[], overrides))
         ));
     }
     for field in fields {
@@ -612,7 +591,7 @@ pub fn render_fields(
         if let Some(code) = errors.for_field(field.name) {
             html.push_str(&format!(
                 "<p id=\"{name}-error\" role=\"alert\">{text}</p>",
-                text = escape(message(locale, code))
+                text = escape(&message_for(locale, field.name, code, &[], overrides))
             ));
         }
         if !field.help.is_empty() {

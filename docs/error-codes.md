@@ -18,7 +18,7 @@
 }
 ```
 
-`field` is missing if there is no `field:<name>:` prefix. `name` shall contain only letters, numbers and `_` and shall not exceed 64 characters in length. `detail` is retained for existing clients. The status codes are unchanged.
+`field` is missing if there is no `field:<name>:` prefix. `name` shall contain only letters, numbers and `_` and shall not exceed 64 characters in length. `detail` is retained for existing clients. Model checks now store `field:<name>: validation.<code>` and, when a limit is part of the rule, `field:<name>: validation.<code>:<number>`. `params` then contains `min` or `max`. The number is accepted only when it is one to eight digits. The status codes are unchanged. HTML views translate the code; the JSON `detail` stays the stored text.
 
 ## Codes
 

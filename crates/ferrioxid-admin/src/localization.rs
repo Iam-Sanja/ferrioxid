@@ -406,21 +406,21 @@ pub fn bulk_notice(locale: &str, count: u32) -> String {
 
 pub fn validation_text(locale: &str, detail: &str) -> String {
     let german = locale == "de";
-    if detail.contains("must not be blank") {
+    if detail.contains("must not be blank") || detail.contains("validation.null") {
         return if german {
             "Pflichtfeld.".into()
         } else {
             "Required.".into()
         };
     }
-    if detail.contains("must have at least") {
+    if detail.contains("must have at least") || detail.contains("validation.min_length") {
         return if german {
             "Der Wert ist zu kurz.".into()
         } else {
             "The value is too short.".into()
         };
     }
-    if detail.contains("may have at most") {
+    if detail.contains("may have at most") || detail.contains("validation.max_length") {
         return if german {
             "Der Wert ist zu lang.".into()
         } else {
@@ -451,6 +451,21 @@ pub fn validation_text(locale: &str, detail: &str) -> String {
             .as_str()
             .unwrap_or(detail)
             .to_owned();
+    }
+    if detail.contains("validation.min_value") || detail.contains("must be >=") {
+        return ferrioxid_core::message_text(locale, "validation.min_value").to_owned();
+    }
+    if detail.contains("validation.email") || detail.contains("must be an email") {
+        return ferrioxid_core::message_text(locale, "validation.email").to_owned();
+    }
+    if detail.contains("validation.slug") || detail.contains("lowercase slug") {
+        return ferrioxid_core::message_text(locale, "validation.slug").to_owned();
+    }
+    if detail.contains("validation.choice") {
+        return ferrioxid_core::message_text(locale, "validation.choice").to_owned();
+    }
+    if detail.contains("validation.postal") {
+        return ferrioxid_core::message_text(locale, "validation.postal").to_owned();
     }
     if detail.contains("validation.required") {
         return if german {

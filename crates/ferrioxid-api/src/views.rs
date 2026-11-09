@@ -5,7 +5,7 @@ use axum::http::{header, HeaderMap, StatusCode};
 use axum::response::{Html, IntoResponse, Redirect, Response};
 use axum::Json;
 use ferrioxid_auth::{AuthService, AuthUser, ObjectPolicy};
-use ferrioxid_core::problem_json;
+use ferrioxid_core::{localize_detail, problem_json};
 use ferrioxid_middleware::RequestId;
 use tera::Context;
 
@@ -239,7 +239,7 @@ fn respond(
             "<!DOCTYPE html><html lang=\"{locale}\"><head><meta charset=\"utf-8\"><title>{}</title></head><body><h1>{}</h1><p>{}</p></body></html>",
             escape(title),
             escape(title),
-            escape(&public_detail)
+            escape(&localize_detail(locale, &public_detail))
         );
         (status, Html(body)).into_response()
     } else {

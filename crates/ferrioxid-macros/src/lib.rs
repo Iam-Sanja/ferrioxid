@@ -764,12 +764,12 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             if nullable {
                 checks.push(quote! { if let ::core::option::Option::Some(value) = payload.#ident {
                     if value < #minimum {
-                        return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} must be >= {}", #field_name, #minimum)));
+                        return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_value:{}", #field_name, #minimum)));
                     }
                 } });
             } else {
                 checks.push(quote! { if payload.#ident < #minimum {
-                    return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} must be >= {}", #field_name, #minimum)));
+                    return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_value:{}", #field_name, #minimum)));
                 } });
             }
         }
@@ -1669,14 +1669,14 @@ fn push_string_checks(
         if let Some(lo) = min_length {
             checks.push(quote! { if let ::core::option::Option::Some(value) = payload.#ident.as_ref() {
                 if value.trim().chars().count() < #lo {
-                    return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} must have at least {} characters", #field_name, #lo)));
+                    return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_length:{}", #field_name, #lo)));
                 }
             } });
         }
         if let Some(hi) = max_length {
             checks.push(quote! { if let ::core::option::Option::Some(value) = payload.#ident.as_ref() {
                 if value.trim().chars().count() > #hi {
-                    return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} may have at most {} characters", #field_name, #hi)));
+                    return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.max_length:{}", #field_name, #hi)));
                 }
             } });
         }
@@ -1684,17 +1684,17 @@ fn push_string_checks(
     }
     if required {
         checks.push(quote! { if payload.#ident.trim().is_empty() {
-            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} must not be blank", #field_name)));
+            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.required", #field_name)));
         } });
     }
     if let Some(lo) = min_length {
         checks.push(quote! { if payload.#ident.trim().chars().count() < #lo {
-            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} must have at least {} characters", #field_name, #lo)));
+            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_length:{}", #field_name, #lo)));
         } });
     }
     if let Some(hi) = max_length {
         checks.push(quote! { if payload.#ident.trim().chars().count() > #hi {
-            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} may have at most {} characters", #field_name, #hi)));
+            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.max_length:{}", #field_name, #hi)));
         } });
     }
 }
@@ -1727,17 +1727,17 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
     if type_name == "String" {
         if required {
             value_checks.push(quote! { if value.trim().is_empty() {
-                return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} must not be blank", #field_name)));
+                return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.required", #field_name)));
             } });
         }
         if let Some(lo) = min_length {
             value_checks.push(quote! { if value.trim().chars().count() < #lo {
-                return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} must have at least {} characters", #field_name, #lo)));
+                return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_length:{}", #field_name, #lo)));
             } });
         }
         if let Some(hi) = max_length {
             value_checks.push(quote! { if value.trim().chars().count() > #hi {
-                return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} may have at most {} characters", #field_name, #hi)));
+                return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.max_length:{}", #field_name, #hi)));
             } });
         }
         if let Some(kind) = format {
@@ -1750,7 +1750,7 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
     }
     if let Some(minimum) = min {
         value_checks.push(quote! { if value < #minimum {
-            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} must be >= {}", #field_name, #minimum)));
+            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_value:{}", #field_name, #minimum)));
         } });
     }
     let null_arm = if nullable {
@@ -1759,7 +1759,7 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
     } else {
         quote! {
             ::ferrioxid::db::PatchField::Null => {
-                return Err(::ferrioxid::core::FerrioxidError::Validation(format!("{} cannot be null", #field_name)));
+                return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.null", #field_name)));
             }
         }
     };

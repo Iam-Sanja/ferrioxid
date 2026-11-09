@@ -4,23 +4,26 @@
 
 ## Responsibility
 
-`ferrioxid-core::validation` is the common rule kernel for form fields. `FerrioxidModel` retains the previously generated checks so that existing CRUD responses remain unchanged.
+`ferrioxid-core::validation` is the common rule kernel for form fields. Generated model checks now emit the same stable codes, with an optional numeric suffix, instead of English sentences.
 
 ## Crates and files
 
 - `crates/ferrioxid-core/src/validation.rs`
 - Caller: `crates/ferrioxid-forms/src/lib.rs`
-- Model macro, unchanged: `crates/ferrioxid-macros/src/lib.rs`
+- Display catalog: `crates/ferrioxid-core/src/messages.rs`
+- Model macro: `crates/ferrioxid-macros/src/lib.rs`
 
 ## Public API
 
-`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` and `is_http_url` return stable codes rather than localized sentences. `ferrioxid::forms::message` translates those codes.
+`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` and `is_http_url` return stable codes rather than localized sentences. `ferrioxid::forms::message` and `message_for` translate those codes. `FieldOverride` replaces one field and code. Placeholders such as `{min}` are replaced only from the supplied parameters. A parameter longer than 32 characters, or one that contains anything except ASCII letters, digits, space, `.`, `_` and `-`, is dropped. Unknown locales use English. An unknown code returns `missing message`.
 
 ## Data flow
 
 ```text
-FerrioxidModel-Makro → eigene Meldungen (unverändert)
+FerrioxidModel-Makro → field:<name>: validation.<code>[:<zahl>]
 ferrioxid-forms → text_code / parse_* → Feldcode → message(locale, code)
+HTML → localize_detail(locale, detail)
+JSON → problem_json behält detail und setzt code plus params
 ```
 
 Optional text fields convert empty input to `None` before required-field validation. Missing numbers and UUIDs produce `validation.required` when the required-field helper is used.
