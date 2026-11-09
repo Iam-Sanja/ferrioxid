@@ -85,7 +85,7 @@ let lines_for_carts = load_children::<CartLine>(&db, "cart_id", &cart_ids, &scop
 
 `scope` is the `QueryScope` from the object policy. `QueryScope::None` returns no rows and does not query. `QueryScope::Equals` is part of the statement. An identifier that is missing or outside the scope is absent from the vector. The caller cannot tell those two cases apart.
 
-`load_by_ids` and `load_children` accept `&impl ConnectionTrait`. They send at most 100 identifiers per statement. Twenty identifiers are one statement. 101 identifiers are two. `load_by_ids` orders by primary key across those statements. `load_children` orders by `id` inside one statement. A has-many result that spans more than one statement is concatenated in parent-id order, not resorted into one global `id` sequence. `load_children` rejects a column that is not a UUID column of the child model.
+`load_by_ids` and `load_children` accept `&impl ConnectionTrait`. They send at most 100 identifiers per statement. Twenty identifiers are one statement. 101 identifiers are two. Both functions return the combined rows ordered by `id`. A child whose parent falls in a later statement is still placed by its own `id`, not after that statement's other rows. `load_children` rejects a column that is not a UUID column of the child model.
 
 The returned child set is not limited to 100 rows. A parent with a very large collection should be read with `CartLine::query().filter(...).page(&db)` instead.
 

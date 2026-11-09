@@ -605,7 +605,8 @@ where
 /// Loads child rows whose `column` is one of `parent_ids`.
 ///
 /// `column` must be a UUID column of `M`. One statement carries at most
-/// [`IN_LIMIT`] parent identifiers. A single statement orders rows by `id`.
+/// [`IN_LIMIT`] parent identifiers. The combined rows are ordered by `id`,
+/// including when the parent list spans more than one statement.
 /// The number of returned child rows is not capped; page a [`Select`] when the
 /// child set can be large. [`QueryScope`] is applied and cannot be skipped.
 pub async fn load_children<M>(
@@ -673,9 +674,49 @@ where
             query.and_where(condition);
         }
         query.order_by(Alias::new("id"), Order::Asc);
-        found.extend(fetch_models(db, &query).await?);
+        found.extend(fetch_json::<M, _>(db, &query).await?);
     }
-    Ok(found)
+    let mut keyed = Vec::with_capacity(found.len());
+    for json in found {
+        let id = json_id(&json)?;
+        keyed.push((id, json));
+    }
+    keyed.sort_by_key(|row| row.0);
+    keyed
+        .into_iter()
+        .map(|(_, json)| serde_json::from_value(json).map_err(FerrioxidError::database))
+        .collect()
+}
+
+async fn fetch_json<M, C>(
+    db: &C,
+    query: &SelectStatement,
+) -> Result<Vec<serde_json::Value>, FerrioxidError>
+where
+    M: FerrioxidModel,
+    C: ConnectionTrait,
+{
+    note_statement();
+    let rows = db
+        .query_all(render(db.get_database_backend(), query)?)
+        .await
+        .map_err(FerrioxidError::database)?;
+    rows.into_iter()
+        .map(|row| row_to_json(&row, M::columns()))
+        .collect()
+}
+
+fn json_id(json: &serde_json::Value) -> Result<Uuid, FerrioxidError> {
+    let text = json
+        .get("id")
+        .and_then(serde_json::Value::as_str)
+        .ok_or_else(|| {
+            FerrioxidError::database(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                "row has no id",
+            ))
+        })?;
+    Uuid::parse_str(text).map_err(FerrioxidError::database)
 }
 
 fn note_statement() {
@@ -1414,6 +1455,56 @@ mod tests {
             .unwrap();
         assert_eq!(products.len(), 20);
         assert_eq!(db.queries.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn load_children_orders_interleaved_ids_across_parent_chunks() {
+        let db = Counting::new(memory().await);
+        let mut parents = Vec::new();
+        for parent in 1_u128..=101 {
+            parents.push(Uuid::from_u128(parent));
+        }
+        let mut rows = Vec::new();
+        rows.push((200_u128, 1_u128));
+        for parent in 2_u128..=100 {
+            rows.push((parent, parent));
+        }
+        rows.push((1, 101));
+        rows.push((150, 101));
+        for (child, parent) in &rows {
+            let name = format!("child-{child}");
+            insert(
+                &db,
+                NewItem {
+                    id: *child,
+                    name: &name,
+                    stock: 1,
+                    active: true,
+                    price: 1,
+                    category: None,
+                    owner: *parent,
+                },
+            )
+            .await;
+        }
+        db.queries.store(0, std::sync::atomic::Ordering::Relaxed);
+        let loaded = load_children::<Item>(&db, "owner_id", &parents, &QueryScope::All)
+            .await
+            .unwrap();
+        assert_eq!(db.queries.load(std::sync::atomic::Ordering::Relaxed), 2);
+        let ids: Vec<_> = loaded.iter().map(|row| row.id).collect();
+        let mut expected: Vec<_> = rows
+            .iter()
+            .map(|(child, _)| Uuid::from_u128(*child))
+            .collect();
+        expected.sort();
+        assert_eq!(ids, expected);
+        assert_eq!(loaded[0].id, Uuid::from_u128(1));
+        assert_eq!(loaded[0].owner_id, Uuid::from_u128(101));
+        assert_eq!(loaded[100].id, Uuid::from_u128(150));
+        assert_eq!(loaded[100].owner_id, Uuid::from_u128(101));
+        assert_eq!(loaded[101].id, Uuid::from_u128(200));
+        assert_eq!(loaded[101].owner_id, Uuid::from_u128(1));
     }
 
     #[tokio::test]
