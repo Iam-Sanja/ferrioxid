@@ -241,10 +241,23 @@ async fn core_roundtrip(auth: &AuthService) {
         .await,
         Err(AuthError::Unauthenticated)
     ));
-    let logged_out = auth.logout(Some(&logged_in.token)).await.unwrap();
-    assert!(logged_out.contains("Max-Age=0"));
+    let first_session = auth.authenticate_token(&logged_in.token).await.unwrap();
+    let rotated = auth.rotate_session(&logged_in.token).await.unwrap();
+    assert_ne!(rotated.token, logged_in.token);
     assert!(matches!(
         auth.authenticate_token(&logged_in.token).await,
+        Err(AuthError::Unauthenticated)
+    ));
+    let rotated_headers = headers(&[("cookie", &session_cookie(&rotated.token))]);
+    assert!(matches!(
+        auth.authenticate_csrf(&rotated_headers, &Method::POST, &rotated.csrf_token)
+            .await,
+        Ok(user) if user.is_staff && user.session_id != first_session.session_id
+    ));
+    let logged_out = auth.logout(Some(&rotated.token)).await.unwrap();
+    assert!(logged_out.contains("Max-Age=0"));
+    assert!(matches!(
+        auth.authenticate_token(&rotated.token).await,
         Err(AuthError::Unauthenticated)
     ));
 }
