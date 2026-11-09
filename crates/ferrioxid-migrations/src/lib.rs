@@ -10,6 +10,7 @@ mod fixtures;
 mod history;
 mod inspect;
 mod introspection;
+mod management;
 mod manifest;
 mod packages;
 mod project;
@@ -34,6 +35,9 @@ pub use history::{history_exists, table_exists, AUTH_HISTORY_TABLE};
 pub use inspect::{
     dev_notice, inspect_migrations, inspect_migrations_with_packages, readonly_database_url,
     render_diagnosis, Diagnostic, DualReport, Level, MigrationScope, PackageStatus,
+};
+pub use management::{
+    is_command_name, ArgSpec, CommandError, CommandSpec, Invocation, ManagementCommand, Registry,
 };
 pub use manifest::{
     load_manifest, manifest_json, ProjectManifest, TrackedFile, MANIFEST_RELATIVE, TEMPLATE_VERSION,

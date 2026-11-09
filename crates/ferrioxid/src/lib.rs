@@ -33,6 +33,13 @@ pub use ferrioxid_jobs as jobs;
 pub use ferrioxid_mail as mail;
 pub use ferrioxid_middleware as middleware;
 pub use ferrioxid_migrations as migrations;
+
+pub mod management {
+    pub use ferrioxid_migrations::{
+        is_command_name, ArgSpec, CommandError, CommandSpec, Invocation, ManagementCommand,
+        Registry,
+    };
+}
 pub use ferrioxid_static as static_files;
 pub use ferrioxid_storage as storage;
 pub use sea_orm;

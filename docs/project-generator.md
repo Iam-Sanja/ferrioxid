@@ -32,6 +32,10 @@ ferrioxid dev
 
 Model generation creates only the model requested by the developer. New models require authentication and their model permissions, including API-template models. Table/API names are explicit model attributes and are not automatically prefixed by app names. Choose distinct names across apps.
 
+## Management commands
+
+A new project contains `src/project/management.rs` and `src/bin/ferrioxid-manage.rs`. `ferrioxid manage about` runs the compiled sample command. It does not open the database. Add further commands in that registry. The invocation rules and the myshop `seed-shop` command are in [management-commands.md](management-commands.md). Existing checkouts, including `examples/notes`, do not receive the binary until those files are added.
+
 ## Placement and templates
 
 `--apps-dir apps` (default) creates `apps/<name>/`; `--apps-dir .` creates `<name>/` directly in the project root. The choice is stored as `project.apps_dir` and affects only subsequently generated apps. Each is a module in the same Cargo package, connected with an explicit `#[path]` declaration in `src/apps.rs`. Cargo does not discover arbitrary directories. Moving an app requires updating its Rust module path and its runtime/TOML migration and asset paths together.

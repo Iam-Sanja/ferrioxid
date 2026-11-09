@@ -50,6 +50,10 @@ In the long term, the admin should cover the relevant functions of the Django ad
 
 `dumpdata` and `loaddata` are described in [fixtures.md](fixtures.md). myshop `fixtures/catalog.json` loads one category and two priced products. A second plain load does not create duplicates, and a conflicting file rolls back. This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. `postgres_fixture_roundtrip` stays ignored without a server. Natural keys are not implemented.
 
+## Management commands
+
+Project commands live in the compiled `ferrioxid-manage` binary. `ferrioxid manage` only checks the command name and starts that binary with separate arguments. The contract is in [management-commands.md](management-commands.md). myshop's `seed-shop` upserts `fixtures/catalog.json` and can be run again without adding rows. This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. The sample command was exercised on SQLite. It was not run against PostgreSQL locally.
+
 ## Open after v0.27.1
 
 - Cron-Syntax.
@@ -61,7 +65,7 @@ In the long term, the admin should cover the relevant functions of the Django ad
 
 - Soft Delete, including queries, restores, audits and foreign keys.
 - `merge` of a raw router does not see route names.
-- The CLI does not execute app code. The adjustment is made by the process start.
+- The CLI does not load app Rust into its own process. `ferrioxid manage` starts the project's compiled binary. See [management-commands.md](management-commands.md).
 
 ## Open after v0.25
 

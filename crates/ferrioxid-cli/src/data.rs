@@ -76,17 +76,30 @@ pub fn dumpdata(
     }
 }
 
-pub fn loaddata(
-    file: PathBuf,
-    dry_run: bool,
-    upsert: bool,
-    truncate: bool,
-    yes: bool,
-    model: Option<String>,
-    app: Option<String>,
-    schema_file: Option<PathBuf>,
-    database_url: Option<String>,
-) -> Result<String, DataError> {
+pub struct LoadOptions {
+    pub file: PathBuf,
+    pub dry_run: bool,
+    pub upsert: bool,
+    pub truncate: bool,
+    pub yes: bool,
+    pub model: Option<String>,
+    pub app: Option<String>,
+    pub schema_file: Option<PathBuf>,
+    pub database_url: Option<String>,
+}
+
+pub fn loaddata(options: LoadOptions) -> Result<String, DataError> {
+    let LoadOptions {
+        file,
+        dry_run,
+        upsert,
+        truncate,
+        yes,
+        model,
+        app,
+        schema_file,
+        database_url,
+    } = options;
     if truncate && !yes {
         return Err(DataError::usage(
             "loaddata --truncate deletes every row in the selected tables. Repeat the command with --yes to confirm. Nothing was written.",

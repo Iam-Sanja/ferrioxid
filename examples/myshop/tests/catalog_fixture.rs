@@ -90,8 +90,10 @@ async fn catalog_fixture_roundtrips_and_a_conflict_rolls_back() {
         .await;
         assert!(duplicate.unwrap_err().0.contains("does not overwrite"));
 
-        let mut upsert = LoadRequest::default();
-        upsert.upsert = true;
+        let upsert = LoadRequest {
+            upsert: true,
+            ..LoadRequest::default()
+        };
         load_catalog(&db, &upsert).await;
 
         let conflict = parse_fixture(

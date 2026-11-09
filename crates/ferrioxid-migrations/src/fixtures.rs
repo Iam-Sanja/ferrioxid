@@ -31,23 +31,12 @@ pub struct FixtureRecord {
     pub fields: Map<String, Json>,
 }
 
-#[derive(Clone, Debug)]
+#[derive(Clone, Debug, Default)]
 pub struct LoadRequest {
     pub tables: Option<BTreeSet<String>>,
     pub upsert: bool,
     pub truncate: bool,
     pub dry_run: bool,
-}
-
-impl Default for LoadRequest {
-    fn default() -> Self {
-        Self {
-            tables: None,
-            upsert: false,
-            truncate: false,
-            dry_run: false,
-        }
-    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -984,14 +973,18 @@ mod tests {
         assert!(again.unwrap_err().0.contains("does not overwrite"));
         assert_eq!(count(&db, "products").await, 1);
 
-        let mut dry = LoadRequest::default();
-        dry.dry_run = true;
+        let dry = LoadRequest {
+            dry_run: true,
+            ..LoadRequest::default()
+        };
         let preview = load_fixture(&db, &schema, &file, &dry).await.unwrap_err();
         assert!(preview.0.contains("does not overwrite"));
         assert_eq!(count(&db, "categories").await, 1);
 
-        let mut upsert = LoadRequest::default();
-        upsert.upsert = true;
+        let upsert = LoadRequest {
+            upsert: true,
+            ..LoadRequest::default()
+        };
         load_fixture(&db, &schema, &file, &upsert)
             .await
             .expect("upsert");
@@ -1058,8 +1051,10 @@ mod tests {
         assert!(error.0.contains("missing"));
         assert_eq!(count(&db, "products").await, 1);
 
-        let mut replace = LoadRequest::default();
-        replace.truncate = true;
+        let replace = LoadRequest {
+            truncate: true,
+            ..LoadRequest::default()
+        };
         let replaced = parse_fixture(
             r#"{
               "ferrioxid": 1,

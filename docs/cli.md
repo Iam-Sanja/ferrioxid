@@ -31,6 +31,9 @@ ferrioxid loaddata fixtures/catalog.json
 ferrioxid loaddata fixtures/catalog.json --dry-run
 ferrioxid loaddata fixtures/catalog.json --upsert
 ferrioxid loaddata fixtures/catalog.json --truncate --yes
+ferrioxid manage
+ferrioxid manage seed-shop
+ferrioxid manage about --name Shop
 ferrioxid check --strict
 ferrioxid upgrade --check
 ferrioxid upgrade --dry-run
@@ -70,6 +73,7 @@ ferrioxid
 ├─ upgrade --check|--dry-run|--yes   IST, nur ein fehlendes Legacy-Manifest
 ├─ migrate make|up|status      IST, siehe migrations.md
 ├─ dumpdata / loaddata         IST, siehe fixtures.md
+├─ manage <command>            IST, siehe management-commands.md
 ├─ migrate rename-column       IST, explizite Spaltenumbenennung
 ├─ migrate rename-table        IST, explizite Tabellenumbenennung
 ├─ migrate reseal              IST, Checksum einer noch nicht angewendeten Datei

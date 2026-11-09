@@ -60,8 +60,10 @@ Exit code `0` means the command finished. Exit code `2` means the invocation its
 use ferrioxid::migrations::{dump_fixture, load_fixture, parse_fixture, LoadRequest};
 
 let file = parse_fixture(include_str!("../fixtures/catalog.json"))?;
-let mut request = LoadRequest::default();
-request.upsert = true;
+let request = LoadRequest {
+    upsert: true,
+    ..LoadRequest::default()
+};
 let report = load_fixture(&db, &schema, &file, &request).await?;
 assert!(report.written);
 ```

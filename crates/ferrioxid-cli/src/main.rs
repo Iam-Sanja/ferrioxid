@@ -5,6 +5,7 @@ mod data;
 mod develop;
 mod diagnose;
 mod jobs;
+mod manage;
 mod models;
 mod scaffold;
 mod text;
@@ -131,6 +132,11 @@ enum Command {
         schema_file: Option<PathBuf>,
         #[arg(long)]
         database_url: Option<String>,
+    },
+    /// Runs a command compiled into this project's ferrioxid-manage binary.
+    Manage {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 }
 
@@ -529,7 +535,7 @@ fn main() -> ExitCode {
             app,
             schema_file,
             database_url,
-        } => match data::loaddata(
+        } => match data::loaddata(data::LoadOptions {
             file,
             dry_run,
             upsert,
@@ -539,7 +545,7 @@ fn main() -> ExitCode {
             app,
             schema_file,
             database_url,
-        ) {
+        }) {
             Ok(message) => {
                 println!("{message}");
                 ExitCode::SUCCESS
@@ -549,6 +555,7 @@ fn main() -> ExitCode {
                 ExitCode::from(error.code())
             }
         },
+        Command::Manage { args } => manage::manage(args),
     }
 }
 
