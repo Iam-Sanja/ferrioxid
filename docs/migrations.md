@@ -190,7 +190,7 @@ Deletion risks (`drop_table`, `drop_column`) indicate `--allow-destructive` to t
 
 ## 8. SQLite
 
-SQLite is the tested backend. `connect` keeps a connection and sets `PRAGMA foreign_keys=ON`. Tests use temporary files. `PRAGMA foreign_keys` is not switched inside a transaction, because SQLite would ignore that change. A table rebuild turns enforcement off immediately before its transaction and back on after commit or rollback. `PRAGMA foreign_key_check` must be empty before the history row is committed.
+SQLite is the tested backend. `connect` keeps a connection and sets `PRAGMA foreign_keys=ON`. Tests use temporary files. `PRAGMA foreign_keys` is not switched inside a transaction, because SQLite would ignore that change. A table rebuild turns enforcement off and back on around its transaction on the same physical connection. That connection is not returned to the pool while enforcement is off; if it cannot be restored, it is closed. `PRAGMA foreign_key_check` must be empty before the history row is committed.
 
 `CREATE TABLE` including Foreign Keys, `CREATE UNIQUE INDEX`, `CREATE INDEX`, secure `ADD COLUMN` optionally with `REFERENCES`, `DROP INDEX`, `RENAME TABLE`, `RENAME COLUMN`, as well as `DROP TABLE` and `DROP COLUMN` only after express approval. Each migration runs in a transaction along with the history entry. A unique index that violates existing lines rolls back this transaction.
 
@@ -199,7 +199,7 @@ SQLite is the tested backend. `connect` keeps a connection and sets `PRAGMA fore
 SQLite implements `string` ↔ `i64` conversions and changes to nullability or Boolean defaults by rebuilding the table, since it cannot generally perform them with `ALTER COLUMN`. The sequence in `rebuild.rs` is:
 
 1. Check initial and target columns. Unsupported pairs, primary key changes and type changes without verified conversion are rejected.
-2. A view that belongs to the table aborts the rebuild before DDL. Indexes and unique constraints are recreated from the target snapshot. Trigger SQL is read from `sqlite_master` and executed again after the rename. `PRAGMA defer_foreign_keys = ON` allows the table swap while `PRAGMA foreign_keys` stays `ON`; `foreign_key_check` must be empty before commit.
+2. A view that belongs to the table aborts the rebuild before DDL. Indexes and unique constraints are recreated from the target snapshot. Trigger SQL is read from `sqlite_master` and executed again after the rename. The runner suspends foreign-key enforcement on the connection that owns the transaction. `PRAGMA defer_foreign_keys = ON` covers the table swap, and `foreign_key_check` must be empty before commit.
 3. If restricted to `NOT NULL`, count the existing `NULL` values. If the number is greater than 0, it is aborted. No substitute value is used.
 4. Read and validate the affected column in Rust. Preserve `NULL`. Values must match the logical type; Booleans must be `0` or `1`. Converting `i64` to `string` uses decimal notation. Converting `string` to `i64` requires an exact round trip through `i64::to_string`, rejecting `01`, `+1`, `1.0`, `-0` and empty text. A successful SQL `CAST` alone is insufficient.
 5. Create `ferrioxid_rebuild_<tabelle>` with the target schema.

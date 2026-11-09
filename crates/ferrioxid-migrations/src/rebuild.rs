@@ -1,6 +1,11 @@
 //! Controlled rebuild. SQLite copies rows with `INSERT INTO ... SELECT`; PostgreSQL alters columns directly.
 //!
-//! `PRAGMA foreign_keys` stays ON. A rebuild defers checks until commit and then runs `foreign_key_check`.
+//! SQLite cannot add a foreign key with `ALTER TABLE`. The runner therefore turns
+//! `PRAGMA foreign_keys` off on one physical connection, runs this rebuild in that
+//! connection's transaction, and turns enforcement back on before the connection
+//! returns to the pool. A failed restore closes the connection instead of returning
+//! it with enforcement disabled. Inside the transaction, `PRAGMA defer_foreign_keys = ON`
+//! and `PRAGMA foreign_key_check` still run. This module does not change `PRAGMA foreign_keys`.
 //! CREATE, INSERT, DROP, and RENAME run in the migration transaction and are rolled back on errors.
 
 use crate::diff::{alter_is_supported, backfill_literal, BackfillLiteral, MigrationOperation};
