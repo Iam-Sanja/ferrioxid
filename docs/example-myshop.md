@@ -4,7 +4,7 @@
 
 ## Purpose
 
-`myshop` demonstrates the public Ferrioxid APIs through the same facade used by other applications. It enables `admin-ui`. Use `ferrioxid new` for an independent project; see [project-generator.md](project-generator.md). Products and categories have anonymous demo routes without object policies; create policies are covered separately in `auth.rs` and `admin_http.rs`. The example serves `/`, `/static/css/app.css` and a `/contact` form that validates without sending email. Uploads require a session. `ferrioxid-middleware` supplies request IDs and security headers.
+`myshop` demonstrates the public Ferrioxid APIs through the same facade used by other applications. It enables `admin-ui`. Use `ferrioxid new project` for an independent project; see [project-generator.md](project-generator.md). Products and categories have anonymous demo routes without object policies; create policies are covered separately in `auth.rs` and `admin_http.rs`. The example serves `/`, `/static/css/app.css` and a `/contact` form that validates without sending email. Uploads require a session. `ferrioxid-middleware` supplies request IDs and security headers.
 
 ## Model (Implemented)
 

@@ -2,12 +2,15 @@
 
 [Overview](index.md) · Registry: [app-registry.md](app-registry.md) · Migrations: [app-migrations.md](app-migrations.md) · Reuse: [reusable-apps.md](reusable-apps.md) · Generator: [create-app.md](create-app.md)
 
-**Implemented.** Milestone v0.25. The Cargo version remains `0.1.0`. The template version of new projects remains `0.24`. An app is a Rust type that passes models, routes, admins, migrations, templates, and static files to the existing engines. There is no second router, auth, model or admin engine and no reloading of unknown crates.
+**Implemented.** Milestone v0.25. The Cargo version remains `0.1.0`. New projects use template version `0.25` and layout 2; existing projects are unchanged. An app is a Rust type that passes models, routes, admins, migrations, templates, and static files to the existing engines. There is no second router, auth, model or admin engine and no reloading of unknown crates.
+
+Create a project with `ferrioxid new project Shop` and a business module with `ferrioxid new app produkte`. See [structure](project-structure.md) and [CLI migration](project-generator.md#migration-from-old-clilayouts).
 
 ## Django and Ferrioxid
 
 | Django | Ferrioxid |
 |---|---|
+| Project settings and root URLconf | `ferrioxid.toml` and `src/project/{settings,urls}.rs` |
 | `INSTALLED_APPS` |`App::install` with a type that implements `FerrioxidApplication`|
 | `AppConfig` | `AppConfig::new("shop").label(...).prefix(...).depends_on(...)` |
 | `apps.py` and dynamic imports | Rust code compiled into the binary; `ferrioxid.toml` does not load code |
@@ -64,7 +67,7 @@ let router = app.into_router();
 - `model`: the existing `FerrioxidModel` repository. An already occupied table is `app.model.duplicate`.
 - `admin_model`, `admin_view`, `admin_action`, `admin_filter`, `admin_widget`: the existing `AdminRegistry`.
 - `migrations`: a relative directory without `..`.
-- `templates`: HTML under `{app}/`. `TemplateMode::Isolated` rejects a project file of the same name. `ProjectOverride` reads them instead.
+- `templates`: HTML under `{app}/`. `TemplateMode::Isolated` rejects a project file of the same name. `ProjectOverride` overlays project `templates/<appname>/` on local templates and supports shared-only files. New generated apps explicitly use this mode.
 - `static_files`: files under `/static/{app}`.
 - `project`: the `ProjectConfig` supplied by `with_settings`. Read app-specific `[custom.shop]` values through `custom_settings`.
 

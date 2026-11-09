@@ -5,6 +5,8 @@ edition.workspace = true
 license.workspace = true
 
 [dependencies]
+# This bound makes missing root-level SQLx patches fail resolution instead of using vulnerable SQLite.
+libsqlite3-sys.workspace = true
 ferrioxid-core = { path = "../ferrioxid-core" }
 sea-orm.workspace = true
 serde_json.workspace = true
@@ -12,3 +14,6 @@ async-trait.workspace = true
 serde.workspace = true
 chrono.workspace = true
 uuid.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

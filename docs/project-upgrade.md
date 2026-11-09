@@ -38,7 +38,7 @@ Without `--yes` nothing is written. The consent is this flag, not a question.
 | `upgrade.plan.add .ferrioxid/project.json` | The legacy manifest is missing and may be created. |
 | `upgrade.unchanged` | The file matches its recorded hash, or the legacy manifest already exists |
 | `project.template.legacy` |Unknown origin. Existing files remain|
-| `project.template.outdated` |The template version is not `0.24`. Nothing is replaced|
+| `project.template.outdated` |The template version is not `0.25`. Nothing is replaced|
 | `project.file.modified` |conflict. The file remains|
 | `project.file.missing` |conflict. The file is not recreated|
 | `project.file.unknown` |An additional file is not touched|
@@ -69,4 +69,4 @@ Pending migrations produce a recommendation to run `ferrioxid migrate up`; they 
 
 ## Limitations
 
-Upgrade does not update templates to version `0.24`. A project using template version `0.21` receives `project.template.outdated` and keeps its files. Upgrade does not add `src/settings.rs` or `src/urls.rs`. Modified and unrecognized files require manual changes; the command reports their codes and paths without replacing them.
+Upgrade does not update templates to version `0.25`. A project using template version `0.21` receives `project.template.outdated` and keeps its files. Upgrade does not convert project layouts or add `src/project/` or `src/apps.rs`. See [manual migration](project-generator.md#migration-from-old-clilayouts). Modified and unrecognized files require manual changes; the command reports their codes and paths without replacing them.

@@ -163,6 +163,8 @@ a { color: var(--focus); text-underline-offset: 0.15em; }
 .tools { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
 .tools form, .toolbar, .actions, .pager, .filter-actions, .row-actions { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
 .toolbar { margin-bottom: var(--space-5); align-items: stretch; }
+/* Keep create actions at control height even when filter fields make the toolbar taller. */
+.toolbar > .button { align-self: flex-end; }
 div.toolbar { justify-content: space-between; }
 .toolbar form, .filters { flex: 1 1 18rem; display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
 .filter-fields { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; flex: 1 1 auto; }

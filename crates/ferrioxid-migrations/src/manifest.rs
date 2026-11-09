@@ -5,7 +5,7 @@ use serde::{Deserialize, Serialize};
 use std::path::Path;
 
 pub const MANIFEST_FORMAT: u32 = 1;
-pub const TEMPLATE_VERSION: &str = "0.24";
+pub const TEMPLATE_VERSION: &str = "0.25";
 pub const MANIFEST_RELATIVE: &str = ".ferrioxid/project.json";
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
