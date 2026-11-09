@@ -20,7 +20,10 @@ mod store;
 mod upgrade;
 
 pub use baseline::baseline_database;
-pub use diff::{plan_change, ApplyClass, MigrationOperation, MigrationPlan, MigrationRisk};
+pub use diff::{
+    plan_change, plan_change_with_backfills, ApplyClass, BackfillLiteral, ColumnBackfill,
+    MigrationOperation, MigrationPlan, MigrationRisk,
+};
 pub use error::MigrationError;
 pub use history::{history_exists, table_exists, AUTH_HISTORY_TABLE};
 pub use inspect::{
@@ -50,8 +53,8 @@ pub use snapshot::{
 };
 pub use store::sha256_hex;
 pub use store::{
-    inspect_directory, load_migration, make_migration, reseal_migration, save_migration, seal,
-    write_explicit_migration, MakeOutcome, MigrationFile,
+    inspect_directory, load_migration, make_migration, make_migration_with_backfills,
+    reseal_migration, save_migration, seal, write_explicit_migration, MakeOutcome, MigrationFile,
 };
 pub use upgrade::{
     apply_upgrade, contained_target, ferrioxid_dependency, plan_upgrade, render_plan,

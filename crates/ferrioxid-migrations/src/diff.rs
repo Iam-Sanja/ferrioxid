@@ -21,6 +21,9 @@ pub enum MigrationOperation {
         column: ColumnSnapshot,
         #[serde(default, skip_serializing_if = "Option::is_none")]
         foreign_key: Option<ForeignKeySnapshot>,
+        /// Wert nur für bestehende Zeilen. Kein dauerhafter Default und keine erfundenen Werte.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        backfill: Option<BackfillLiteral>,
     },
     DropColumn {
         table: String,
@@ -64,6 +67,21 @@ pub enum MigrationOperation {
         table: String,
         name: String,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(tag = "kind", content = "value", rename_all = "snake_case")]
+pub enum BackfillLiteral {
+    Bool(bool),
+    I64(i64),
+    Text(String),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct ColumnBackfill {
+    pub table: String,
+    pub column: String,
+    pub value: BackfillLiteral,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
@@ -133,9 +151,22 @@ pub fn plan_change(
     from: &SchemaSnapshot,
     to: &SchemaSnapshot,
 ) -> Result<MigrationPlan, MigrationError> {
+    plan_change_with_backfills(from, to, &[])
+}
+
+pub fn plan_change_with_backfills(
+    from: &SchemaSnapshot,
+    to: &SchemaSnapshot,
+    backfills: &[ColumnBackfill],
+) -> Result<MigrationPlan, MigrationError> {
     from.validate()?;
     to.validate()?;
     if from.semantically_eq(to) {
+        if !backfills.is_empty() {
+            return Err(MigrationError::new(
+                "Backfill was supplied, but the schema has no new required column. No migration was written and no values were invented.".to_owned(),
+            ));
+        }
         return Ok(MigrationPlan {
             operations: Vec::new(),
             risks: Vec::new(),
@@ -174,6 +205,7 @@ pub fn plan_change(
     for table in order_drops(drops)? {
         ordered.push(MigrationOperation::DropTable { name: table });
     }
+    attach_backfills(&mut ordered, backfills)?;
     let risks = risks_for(&ordered);
     let refusal = refusal_for(&ordered);
     Ok(MigrationPlan {
@@ -181,6 +213,98 @@ pub fn plan_change(
         risks,
         refusal,
     })
+}
+
+fn attach_backfills(
+    operations: &mut [MigrationOperation],
+    backfills: &[ColumnBackfill],
+) -> Result<(), MigrationError> {
+    let mut used = vec![false; backfills.len()];
+    for operation in operations.iter_mut() {
+        let MigrationOperation::AddColumn {
+            table,
+            column,
+            backfill,
+            ..
+        } = operation
+        else {
+            continue;
+        };
+        let Some(index) = backfills
+            .iter()
+            .position(|item| item.table == *table && item.column == column.name)
+        else {
+            continue;
+        };
+        if used[index] {
+            return Err(MigrationError::new(format!(
+                "Backfill for `{}.{}` was supplied twice.",
+                table, column.name
+            )));
+        }
+        if column.nullable || column.default.is_some() {
+            return Err(MigrationError::new(format!(
+                "Backfill for `{}.{}` is unnecessary because the column is nullable or already has a default. No migration was written.",
+                table, column.name
+            )));
+        }
+        if !backfill_matches(column.logical_type, &backfills[index].value) {
+            return Err(MigrationError::new(format!(
+                "Backfill for `{}.{}` does not match {:?}. No value was invented.",
+                table, column.name, column.logical_type
+            )));
+        }
+        *backfill = Some(backfills[index].value.clone());
+        used[index] = true;
+    }
+    for (item, was_used) in backfills.iter().zip(used) {
+        if !was_used {
+            return Err(MigrationError::new(format!(
+                "Backfill for `{}.{}` does not match a new NOT NULL column without a default. No migration was written and no values were invented.",
+                item.table, item.column
+            )));
+        }
+    }
+    Ok(())
+}
+
+pub fn backfill_matches(logical_type: LogicalType, value: &BackfillLiteral) -> bool {
+    match (logical_type, value) {
+        (LogicalType::Bool, BackfillLiteral::Bool(_)) => true,
+        (LogicalType::I64, BackfillLiteral::I64(_)) => true,
+        (
+            LogicalType::String
+            | LogicalType::Uuid
+            | LogicalType::Date
+            | LogicalType::Time
+            | LogicalType::DateTime,
+            BackfillLiteral::Text(_),
+        ) => true,
+        _ => false,
+    }
+}
+
+pub fn backfill_literal(
+    kind: ferrioxid_core::DatabaseKind,
+    value: &BackfillLiteral,
+) -> Result<String, MigrationError> {
+    match value {
+        BackfillLiteral::Bool(boolean) => Ok(match kind {
+            ferrioxid_core::DatabaseKind::Postgres => {
+                if *boolean { "TRUE" } else { "FALSE" }.to_owned()
+            }
+            ferrioxid_core::DatabaseKind::Sqlite => if *boolean { "1" } else { "0" }.to_owned(),
+        }),
+        BackfillLiteral::I64(number) => Ok(number.to_string()),
+        BackfillLiteral::Text(text) => {
+            if text.contains('\0') {
+                return Err(MigrationError::new(
+                    "A text backfill cannot contain a NUL byte.".to_owned(),
+                ));
+            }
+            Ok(format!("'{}'", text.replace('\'', "''")))
+        }
+    }
 }
 
 fn diff_table(
@@ -302,6 +426,7 @@ fn attach_new_foreign_keys(
                     table,
                     column,
                     foreign_key: slot,
+                    ..
                 } if table == &next.name
                     && column.name == foreign_key.columns[0]
                     && slot.is_none() =>
@@ -411,6 +536,7 @@ fn diff_columns(
                 table: next.name.clone(),
                 column: column.clone(),
                 foreign_key: None,
+                backfill: None,
             }),
             (Some(column), None) => operations.push(MigrationOperation::DropColumn {
                 table: previous.name.clone(),
@@ -468,18 +594,36 @@ fn risks_for(operations: &[MigrationOperation]) -> Vec<MigrationRisk> {
                     from.name
                 ),
             }),
-            MigrationOperation::AddColumn { table, column, .. }
-                if column.primary_key || (!column.nullable && column.default.is_none()) =>
+            MigrationOperation::AddColumn {
+                table,
+                column,
+                backfill,
+                ..
+            } if column.primary_key
+                || (!column.nullable && column.default.is_none() && backfill.is_none()) =>
             {
                 Some(MigrationRisk {
                     operation_index: index,
                     code: "unsafe_add_column".to_owned(),
                     message: format!(
-                        "Column `{table}.{}` cannot safely populate existing rows.",
+                        "Column `{table}.{}` cannot safely populate existing rows. Supply an explicit backfill, or add it as nullable, fill the rows, and then set NOT NULL.",
                         column.name
                     ),
                 })
             }
+            MigrationOperation::AddColumn {
+                table,
+                column,
+                backfill: Some(_),
+                ..
+            } => Some(MigrationRisk {
+                operation_index: index,
+                code: "backfill_column".to_owned(),
+                message: format!(
+                    "Existing rows in `{table}.{}` receive the explicit backfill. No other value is invented.",
+                    column.name
+                ),
+            }),
             MigrationOperation::DropUniqueConstraint { table, name } => Some(MigrationRisk {
                 operation_index: index,
                 code: "drop_unique".to_owned(),
@@ -506,11 +650,14 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
                 "Adding primary-key column `{table}.{}` is blocked.",
                 column.name
             )),
-            MigrationOperation::AddColumn { table, column, .. }
-                if !column.nullable && column.default.is_none() =>
-            {
+            MigrationOperation::AddColumn {
+                table,
+                column,
+                backfill,
+                ..
+            } if !column.nullable && column.default.is_none() && backfill.is_none() => {
                 reasons.push(format!(
-                    "NOT NULL without a default for `{table}.{}` is blocked because existing rows have no safe value.",
+                    "NOT NULL without a default for `{table}.{}` is blocked because existing rows have no safe value. Supply an explicit backfill, or add the column as nullable, backfill existing rows, and then set NOT NULL. No value is invented.",
                     column.name
                 ))
             }
@@ -525,12 +672,9 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
             | MigrationOperation::DropUniqueConstraint { .. }
             | MigrationOperation::AddIndex { .. }
             | MigrationOperation::DropIndex { .. } => {}
-            MigrationOperation::AddForeignKey { table, foreign_key } => reasons.push(format!(
-                "Foreign key `{}` on `{table}` cannot be added to an existing column. SQLite requires a table rebuild, which is blocked for foreign keys.",
-                foreign_key.name
-            )),
+            MigrationOperation::AddForeignKey { .. } => {}
             MigrationOperation::DropForeignKey { table, name } => reasons.push(format!(
-                "Foreign key `{name}` on `{table}` cannot be dropped or have its delete rule changed. SQLite would require a table rebuild, which is blocked for foreign keys."
+                "Foreign key `{name}` on `{table}` cannot be dropped or have its delete rule changed. Existing rows and migration files stay unchanged."
             )),
         }
     }
@@ -616,14 +760,15 @@ pub fn classify(
             ApplyClass::Unsupported,
             Some("A primary-key column cannot safely be added to an existing table.".into()),
         ),
-        MigrationOperation::AddColumn { column, .. }
-            if !column.nullable && column.default.is_none() =>
-        {
-            (
-                ApplyClass::Unsupported,
-                Some("NOT NULL without a default cannot safely populate existing rows.".into()),
-            )
-        }
+        MigrationOperation::AddColumn {
+            column, backfill, ..
+        } if !column.nullable && column.default.is_none() && backfill.is_none() => (
+            ApplyClass::Unsupported,
+            Some(
+                "NOT NULL without a default cannot safely populate existing rows. Supply an explicit backfill or use a nullable column first. No value is invented."
+                    .into(),
+            ),
+        ),
         MigrationOperation::AddColumn { .. } => (ApplyClass::Safe, None),
         MigrationOperation::DropTable { .. } => (ApplyClass::Destructive, None),
         MigrationOperation::DropColumn { table, name } => {
@@ -663,10 +808,7 @@ pub fn classify(
         | MigrationOperation::AddIndex { .. }
         | MigrationOperation::DropIndex { .. } => (ApplyClass::Safe, None),
         MigrationOperation::DropUniqueConstraint { .. } => (ApplyClass::Safe, None),
-        MigrationOperation::AddForeignKey { .. } => (
-            ApplyClass::Unsupported,
-            Some("Adding a foreign key to an existing column is not supported.".to_owned()),
-        ),
+        MigrationOperation::AddForeignKey { .. } => (ApplyClass::Safe, None),
         MigrationOperation::DropForeignKey { .. } => (
             ApplyClass::Unsupported,
             Some(

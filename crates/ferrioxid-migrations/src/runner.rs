@@ -427,13 +427,86 @@ async fn apply_one(
 ) -> Result<(), MigrationError> {
     let backend = db.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
+    let suspend_foreign_keys = matches!(kind, DatabaseKind::Sqlite)
+        && file.operations.iter().any(|operation| {
+            crate::rebuild::backfill_parts(operation).is_some()
+                || crate::rebuild::added_foreign_key(operation).is_some()
+                || crate::rebuild::alter_parts(operation).is_some()
+        });
+    if suspend_foreign_keys {
+        db.execute(Statement::from_string(backend, "PRAGMA foreign_keys = OFF"))
+            .await
+            .map_err(|error| {
+                MigrationError::new(format!(
+                    "Could not suspend foreign keys before rebuilding: {error}"
+                ))
+            })?;
+    }
+    let outcome = apply_one_in_transaction(db, file, history_table, history_id).await;
+    if suspend_foreign_keys {
+        let restored = db
+            .execute(Statement::from_string(backend, "PRAGMA foreign_keys = ON"))
+            .await
+            .map_err(|error| {
+                MigrationError::new(format!(
+                    "Could not restore foreign key enforcement after rebuilding: {error}"
+                ))
+            });
+        if outcome.is_err() {
+            return outcome;
+        }
+        restored?;
+    }
+    outcome
+}
+
+async fn apply_one_in_transaction(
+    db: &DatabaseConnection,
+    file: &MigrationFile,
+    history_table: &str,
+    history_id: &str,
+) -> Result<(), MigrationError> {
+    let backend = db.get_database_backend();
+    let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
     let transaction = db
         .begin()
         .await
         .map_err(|error| MigrationError::new(format!("Could not start transaction: {error}")))?;
     let mut schema = file.from_snapshot.clone();
     for operation in &file.operations {
-        if let Some((table, from, to)) = crate::rebuild::alter_parts(operation) {
+        if let Some((table, column, backfill, foreign_key)) =
+            crate::rebuild::backfill_parts(operation)
+        {
+            crate::rebuild::apply_backfill_column(
+                &transaction,
+                kind,
+                &schema,
+                table,
+                column,
+                backfill,
+                foreign_key,
+            )
+            .await
+            .map_err(|error| {
+                MigrationError::new(format!(
+                    "Migration {} was rolled back at `{}`: {}",
+                    file.id,
+                    operation.summary(),
+                    error.0
+                ))
+            })?;
+        } else if let Some((table, foreign_key)) = crate::rebuild::added_foreign_key(operation) {
+            crate::rebuild::apply_add_foreign_key(&transaction, kind, &schema, table, foreign_key)
+                .await
+                .map_err(|error| {
+                    MigrationError::new(format!(
+                        "Migration {} was rolled back at `{}`: {}",
+                        file.id,
+                        operation.summary(),
+                        error.0
+                    ))
+                })?;
+        } else if let Some((table, from, to)) = crate::rebuild::alter_parts(operation) {
             crate::rebuild::apply_alter(&transaction, kind, &schema, table, from, to)
                 .await
                 .map_err(|error| {
@@ -543,6 +616,7 @@ fn render_operation(
             table,
             column,
             foreign_key,
+            backfill: _,
         } => {
             let physical = physical_column(column)?;
             let clause = foreign_key.as_ref().map(|foreign_key| ForeignKeyClause {
@@ -592,9 +666,15 @@ fn render_operation(
                 false,
             )]
         }
-        MigrationOperation::AddForeignKey { .. } | MigrationOperation::DropForeignKey { .. } => {
+        MigrationOperation::AddForeignKey { .. } => {
             return Err(MigrationError::new(
-                "Adding foreign keys to existing columns is not supported.".to_owned(),
+                "Adding a foreign key is handled by the verified table rebuild, not as standalone DDL."
+                    .to_owned(),
+            ));
+        }
+        MigrationOperation::DropForeignKey { .. } => {
+            return Err(MigrationError::new(
+                "Dropping a foreign key or changing its delete rule is not supported.".to_owned(),
             ));
         }
         MigrationOperation::AlterColumn { .. } => {

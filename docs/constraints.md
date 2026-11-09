@@ -120,13 +120,13 @@ SQLite implements `ON DELETE RESTRICT` internally with `RAISE`, producing extend
 
 ## SQLite table rebuild
 
-Tables with user index, trigger, view, outgoing or incoming foreign key are not rebuilt. The primary key auto index (`sql IS NULL`) does not count as a user index. A supported conversion only checks the changed column and then copies it with `INSERT INTO ... SELECT`. A type change `string` ↔ `i64` uses `CAST`, but only after the previous value check. Invalid values roll back the transaction.
+A view still blocks a rebuild. Indexes, unique constraints, triggers, and foreign keys are preserved: indexes are recreated from the snapshot, triggers are replayed from `sqlite_master`, and foreign keys are part of the rebuilt table. `PRAGMA defer_foreign_keys` covers the swap; `foreign_key_check` must pass before commit. A supported conversion checks the changed column and then copies it with `INSERT INTO ... SELECT`. A type change `string` ↔ `i64` uses `CAST`, but only after the previous value check. Invalid values roll back the transaction.
 
 ## Not implemented
 
 - Multicolumn foreign keys
 - `ON UPDATE` except `NO ACTION`
 - `NULLS NOT DISTINCT`
-- Subsequent creation, removal or switching of a foreign key on an existing column
+- Removal or switching of a foreign key on an existing column. Adding one is supported after the existing values match.
 - Partial index, expression index, sorting direction
 - Automatic index on each field
