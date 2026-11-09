@@ -229,6 +229,11 @@ const DATABASE_TEST: &str = r#"use ferrioxid::sea_orm::{ConnectionTrait, DbBacke
 #[tokio::test]
 async fn only_framework_and_explicit_business_tables_exist() {
     let db = ferrioxid::db::connect(&std::env::var("DATABASE_URL").unwrap()).await.unwrap();
+    let version = db.query_one(Statement::from_string(DbBackend::Sqlite,
+        "SELECT sqlite_version() AS version".to_owned())).await.unwrap().unwrap();
+    let version: String = version.try_get("", "version").unwrap();
+    let parts: Vec<u32> = version.split('.').map(|part| part.parse().unwrap()).collect();
+    assert!(parts.as_slice() >= [3, 54, 1].as_slice(), "Vulnerable SQLite in generated project: {version}");
     let rows = db.query_all(Statement::from_string(DbBackend::Sqlite,
         "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'".to_owned())).await.unwrap();
     let names: Vec<String> = rows.iter().map(|row| row.try_get("", "name").unwrap()).collect();

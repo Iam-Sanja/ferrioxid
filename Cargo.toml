@@ -1,5 +1,6 @@
 [workspace]
 resolver = "2"
+exclude = ["vendor/sqlx-sqlite"]
 members = [
   "crates/ferrioxid", "crates/ferrioxid-core", "crates/ferrioxid-macros",
   "crates/ferrioxid-db", "crates/ferrioxid-api", "crates/ferrioxid-cli",
@@ -16,6 +17,8 @@ license = "MIT"
 version = "0.1.0"
 
 [workspace.dependencies]
+# Keep every consumer on patched bundled SQLite, even if its Cargo root omits the driver patch.
+libsqlite3-sys = { version = "0.39.1", default-features = false, features = ["bundled"] }
 axum = "0.8"
 tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
 sea-orm = { version = "1.1", default-features = false, features = ["sqlx-postgres", "sqlx-sqlite", "runtime-tokio-rustls", "with-uuid", "with-json", "with-chrono"] }
@@ -32,3 +35,7 @@ tera = "1"
 sha2 = "0.10"
 argon2 = "0.5"
 rpassword = "7"
+
+# Backport the upstream SQLite bound fix without replacing SeaORM/SQLx APIs.
+[patch.crates-io]
+sqlx-sqlite = { path = "vendor/sqlx-sqlite" }
