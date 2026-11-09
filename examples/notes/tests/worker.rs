@@ -59,10 +59,11 @@ async fn notes_worker_binary_runs_restarts_and_leaves_unknown_jobs() {
 
     let retry = enqueue_retry(&url).await;
     let mut running = spawn(&root, &url);
-    wait_for(&url, retry, JobStatus::Retry, &mut running).await;
-    stop(&mut running);
-    let mut running = spawn(&root, &url);
+    // Retry is a transient state: with a fast worker it may already have
+    // succeeded by the time the test polls. Assert the durable outcome instead.
     wait_for(&url, retry, JobStatus::Succeeded, &mut running).await;
+    let retried = fetch(&url, retry).await;
+    assert_eq!(retried.attempts, 2, "the handler must retry once");
     stop(&mut running);
 
     let unknown = enqueue_unknown(&url).await;

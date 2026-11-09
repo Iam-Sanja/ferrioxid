@@ -13,6 +13,10 @@ pub struct ProjectConfig {
     pub schema_command: Option<String>,
     pub name: Option<String>,
     pub template: Option<String>,
+    /// Generator layout. Existing projects remain layout 1 unless explicitly rebuilt.
+    pub layout_version: u32,
+    /// Default placement for newly created app modules, relative to the project root.
+    pub apps_dir: String,
     pub default_locale: String,
     pub fallback_locale: String,
     pub database_url: String,
@@ -262,6 +266,8 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let mut schema_command = None;
     let mut name = None;
     let mut template = None;
+    let mut layout_version = 1;
+    let mut apps_dir = "apps".to_owned();
     let mut database_url = ferrioxid_db::DEFAULT_SQLITE_URL.to_owned();
     let mut host = "127.0.0.1".to_owned();
     let mut port = 3000_u16;
@@ -441,6 +447,24 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "schema_command" | "project.schema_command" => schema_command = Some(value),
             "project.name" => name = Some(value),
             "project.template" => template = Some(value),
+            "project.layout_version" => {
+                layout_version = value.parse().map_err(|_| {
+                    MigrationError::new("project.layout_version must be 1 or 2.".to_owned())
+                })?;
+                if !matches!(layout_version, 1 | 2) {
+                    return Err(MigrationError::new(
+                        "project.layout_version must be 1 or 2.".to_owned(),
+                    ));
+                }
+            }
+            "project.apps_dir" => {
+                if !matches!(value.as_str(), "." | "apps") {
+                    return Err(MigrationError::new(
+                        "project.apps_dir must be \".\" or \"apps\".".to_owned(),
+                    ));
+                }
+                apps_dir = value;
+            }
             "project.default_locale" => default_locale = value,
             "project.fallback_locale" => fallback_locale = value,
             "database.url" => database_url = value,
@@ -731,6 +755,8 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         schema_command,
         name,
         template,
+        layout_version,
+        apps_dir,
         default_locale,
         fallback_locale,
         database_url,
@@ -1125,6 +1151,28 @@ primary_color = "#0f172a"
         let unknown = write_manifest("migrations_dir = \"migrations\"\nsecret = \"no\"\n");
         assert!(parse_manifest(&unknown).is_err());
         let _ = fs::remove_dir_all(unknown.parent().unwrap());
+    }
+
+    #[test]
+    fn project_layout_is_explicit_and_paths_are_restricted() {
+        for (text, version, apps) in [
+            ("migrations_dir = \"migrations\"\n", 1, "apps"),
+            ("migrations_dir = \"migrations\"\n[project]\nlayout_version = 2\napps_dir = \".\"\n", 2, "."),
+        ] {
+            let path = write_manifest(text);
+            let config = parse_manifest(&path).unwrap();
+            assert_eq!(config.layout_version, version);
+            assert_eq!(config.apps_dir, apps);
+            fs::remove_dir_all(path.parent().unwrap()).unwrap();
+        }
+        for text in [
+            "[project]\nlayout_version = 3\n",
+            "[project]\napps_dir = \"../outside\"\n",
+        ] {
+            let path = write_manifest(text);
+            assert!(parse_manifest(&path).is_err());
+            fs::remove_dir_all(path.parent().unwrap()).unwrap();
+        }
     }
 
     #[test]

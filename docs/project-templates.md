@@ -1,84 +1,26 @@
 # Project templates
 
-[Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/scaffold.rs`.
+[Overview](index.md) · [Generator](project-generator.md) · [Structure](project-structure.md)
 
-## Purpose
-
-The API template provides a minimal API application; the fullstack template adds authentication and admin registration. Both include static files and an empty media directory. Only fullstack projects register `/contact` and the admin. Uploads are not made public automatically.
-
-## Responsible files
-
-- `crates/ferrioxid-cli/src/scaffold.rs`
-- `crates/ferrioxid-cli/src/models.rs`
-- `crates/ferrioxid/Cargo.toml` (`admin-ui`)
-- `crates/ferrioxid-admin/Cargo.toml` (`embedded-admin`)
-
-## Public interface
-
-| Command | Contents |
+| Template | Behavior |
 |---|---|
-| `--template api` | Registry, CRUD, SQLite and migrations; no admin feature |
-| `--template fullstack` |Additional Auth, Admin Registry, Feature `admin-ui`|
+| `fullstack` (default) | Empty fullstack project with authentication and native server-rendered admin |
+| `api` | Empty project with authentication, homepage and ping API; no admin registration |
 
-The standard is `fullstack`.
-
-## Structure
-
-```text
-meinprojekt/
-├── Cargo.toml
-├── ferrioxid.toml
-├── .gitignore
-├── .env.example
-├── README.md
-├── .ferrioxid/project.json
-├── src/main.rs
-├── src/lib.rs
-├── src/settings.rs
-├── src/urls.rs
-├── src/views/mod.rs
-├── src/views/home.rs
-├── src/models/mod.rs
-├── src/models/product.rs
-├── templates/
-├── static/css/
-├── static/js/
-├── migrations/0001_initial.json
-└── tests/api.rs
-```
-
-Only `--template fullstack` generates `src/views/` and `templates/home.html`. The API template registers `api.ping` and retains the HTML homepage. See [project-structure.md](project-structure.md) for the exact file list. The template version is `0.24`.
-
-`Cargo.lock` is created in the first cargo run.
-
-## Configuration
-
-Both templates enable Tera and a homepage. In the API template, `admin.enabled` and `embedded_assets` are `false`, and there is no admin link. In fullstack projects, admin and auth are enabled. Both include an anonymous product API; fullstack projects also expose the model in the admin. The generated binary rejects bind addresses starting with `0.0.0.0`.
-
-## Data flow
-
-`ferrioxid generate model Customer` writes `src/models/customer.rs` and inserts lines before the `ferrioxid:models`, `ferrioxid:uses`, `ferrioxid:schema`, `ferrioxid:registry` and, when present, `ferrioxid:admin` markers. The table is named `customers`. Repeating the command for the same name returns an error without replacing the existing model.
-
-## Error cases
-
-An invalid model name, missing marker or duplicate registration aborts generation. Files remain unchanged if writing has not started. The generator does not modify Rust code outside the designated marker locations.
-
-## Security rules
-
-The API template does not require the admin feature and does not include admin routes. Fullstack projects activate the empty feature `admin-ui` and register the admin. Both templates compile without Node.js. The frontend directory `apps/admin-ui` no longer exists.
-
-## Example
+Both use SQLite by default, support PostgreSQL, serve static assets and require no Node.js. Neither creates business models, business migrations, seeded data or users. Fullstack adds admin branding from project settings; admin access remains protected. Mail is disabled by default. Bind defaults to `127.0.0.1:3000`; existing production/secret validation remains enforced.
 
 ```powershell
-ferrioxid new shop --template api --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
-cd shop
-ferrioxid generate model Customer
+ferrioxid new project Shop --template api --apps-dir apps
+cd Shop
+ferrioxid new app customers
+ferrioxid generate model Customer --app customers
+ferrioxid migrate make initial --app customers
+ferrioxid migrate up
+ferrioxid dev
 ```
 
-## Tests
+New API/fullstack models require their declared model permissions. They do not grant staff status or anonymous access. Apps do not automatically namespace SQL table/API names; review attributes before applying migrations.
 
-`generator.rs` checks both templates with `cargo check`, the model registration by a second `cargo check` and the rejection of a duplicate name.
+Project templates live in `templates/`. App templates live in `<app>/templates/<appname>/` with explicit project overrides in `templates/<appname>/`. Overrides apply to that namespace only. Apps cannot replace admin/login/base templates. Project `templates/base.html` can be inherited by app pages.
 
-## Limitations
-
-Owner fields are not assigned from the session automatically. The example product API is anonymous and has no object policy. Configure users and roles for a fullstack project, starting with `ferrioxid admin create-user`.
+Generated files use internal template version `0.25` and layout version `2`; the Cargo version remains `0.1.0`. See [compatibility](project-generator.md#migration-from-old-clilayouts).

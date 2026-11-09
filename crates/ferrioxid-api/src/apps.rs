@@ -437,44 +437,56 @@ fn collect_templates(
     mode: TemplateMode,
     settings: Option<&ProjectConfig>,
 ) -> Result<Vec<(String, String)>, AppError> {
-    if !directory.is_dir() {
+    let mut files = Vec::new();
+    if directory.is_dir() {
+        let root = directory
+            .canonicalize()
+            .map_err(|error| AppError::new("app.template.path", error.to_string()))?;
+        walk_templates(app, &root, &root, &mut files)?;
+    } else if mode == TemplateMode::Isolated || directory.exists() {
         return Err(AppError::new(
             "app.template.path",
-            format!("Das Vorlagenverzeichnis von `{app}` fehlt."),
+            format!("Template directory for {app} is missing or invalid."),
         ));
     }
-    let root = directory.canonicalize().map_err(|error| {
-        AppError::new(
-            "app.template.path",
-            format!("Vorlagenpfad ist nicht lesbar: {error}"),
-        )
-    })?;
-    let mut files = Vec::new();
-    walk_templates(app, &root, &root, &mut files)?;
     if let Some(settings) = settings {
         let project = settings.templates_directory();
-        for (name, body) in &mut files {
-            let override_path = project.join(&*name);
-            if override_path.is_file() {
-                match mode {
-                    TemplateMode::Isolated => {
-                        return Err(AppError::new(
-                            "app.template.conflict",
-                            format!("`{name}` liegt schon im Projekt. Ein Override muss ausdrücklich erlaubt werden."),
-                        ));
-                    }
-                    TemplateMode::ProjectOverride => {
-                        *body = std::fs::read_to_string(&override_path)
-                            .map_err(|error| AppError::new("app.template", error.to_string()))?;
+        if project.is_dir() {
+            let root = project
+                .canonicalize()
+                .map_err(|error| AppError::new("app.template.path", error.to_string()))?;
+            let shared = root.join(app);
+            if shared.exists() {
+                let mut overrides = Vec::new();
+                walk_templates(app, &root, &shared, &mut overrides)?;
+                for (name, body) in overrides {
+                    if let Some((_, existing)) = files.iter_mut().find(|(local, _)| local == &name)
+                    {
+                        if mode == TemplateMode::Isolated {
+                            return Err(AppError::new("app.template.conflict",
+                                format!("{name} already exists in the project. Overrides must be explicitly enabled.")));
+                        }
+                        *existing = body;
+                    } else if mode == TemplateMode::ProjectOverride {
+                        files.push((name, body));
                     }
                 }
             }
-        }
-        let base = project.join("base.html");
-        if base.is_file() {
-            let body = std::fs::read_to_string(&base)
-                .map_err(|error| AppError::new("app.template", error.to_string()))?;
-            files.push(("base.html".to_owned(), body));
+            let base = root.join("base.html");
+            if base.is_file() {
+                let canonical = base
+                    .canonicalize()
+                    .map_err(|error| AppError::new("app.template.path", error.to_string()))?;
+                if !canonical.starts_with(&root) {
+                    return Err(AppError::new(
+                        "app.template.path",
+                        "The base template escapes the project templates directory.",
+                    ));
+                }
+                let body = std::fs::read_to_string(base)
+                    .map_err(|error| AppError::new("app.template", error.to_string()))?;
+                files.push(("base.html".to_owned(), body));
+            }
         }
     }
     Ok(files)
@@ -486,6 +498,20 @@ fn walk_templates(
     directory: &Path,
     files: &mut Vec<(String, String)>,
 ) -> Result<(), AppError> {
+    let canonical = directory
+        .canonicalize()
+        .map_err(|error| AppError::new("app.template.path", error.to_string()))?;
+    if !canonical.starts_with(root)
+        || std::fs::symlink_metadata(directory)
+            .map_err(|error| AppError::new("app.template.path", error.to_string()))?
+            .file_type()
+            .is_symlink()
+    {
+        return Err(AppError::new(
+            "app.template.path",
+            "Template directories must not escape their root or contain links.",
+        ));
+    }
     for entry in std::fs::read_dir(directory)
         .map_err(|error| AppError::new("app.template.path", error.to_string()))?
     {
@@ -769,6 +795,94 @@ mod tests {
         });
         assert!(matches!(installed, Err(error) if error.code == "app.template.conflict"));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn project_templates_override_local_and_support_shared_only_files() {
+        let root = std::env::temp_dir().join(format!("ferrioxid-overlay-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("templates/shop")).unwrap();
+        std::fs::create_dir_all(root.join("local/shop")).unwrap();
+        std::fs::write(
+            root.join("ferrioxid.toml"),
+            "migrations_dir = \"migrations\"\n",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("templates/base.html"),
+            "<main>{% block content %}{% endblock %}</main>",
+        )
+        .unwrap();
+        std::fs::write(
+            root.join("templates/shop/index.html"),
+            "{% extends \"base.html\" %}{% block content %}shared {{ value }}{% endblock %}",
+        )
+        .unwrap();
+        std::fs::write(root.join("templates/shop/extra.html"), "extra").unwrap();
+        std::fs::write(root.join("local/shop/index.html"), "local").unwrap();
+        std::fs::write(root.join("local/shop/fallback.html"), "fallback").unwrap();
+        let settings = ferrioxid_migrations::discover_project(&root).unwrap();
+        for directory in [root.join("local"), root.join("missing")] {
+            let files = super::collect_templates(
+                "shop",
+                &directory,
+                TemplateMode::ProjectOverride,
+                Some(&settings),
+            )
+            .unwrap();
+            let site =
+                crate::pages::Site::from_named(&files, &crate::urls::RouteMap::default()).unwrap();
+            let mut context = tera::Context::new();
+            context.insert("value", "<script>");
+            let html = site.render("shop/index.html", &context).unwrap();
+            assert!(html.contains("shared"));
+            assert!(html.contains("&lt;script&gt;"));
+            assert!(!html.contains("<script>"));
+            assert_eq!(site.render("shop/extra.html", &context).unwrap(), "extra");
+        }
+        let files = super::collect_templates(
+            "shop",
+            &root.join("local"),
+            TemplateMode::ProjectOverride,
+            Some(&settings),
+        )
+        .unwrap();
+        assert!(files
+            .iter()
+            .any(|(name, body)| name == "shop/fallback.html" && body == "fallback"));
+        std::fs::create_dir_all(root.join("templates/shop/admin")).unwrap();
+        std::fs::write(root.join("templates/shop/admin/login.html"), "reserved").unwrap();
+        assert!(super::collect_templates(
+            "shop",
+            &root.join("local"),
+            TemplateMode::ProjectOverride,
+            Some(&settings)
+        )
+        .is_err());
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn shared_templates_reject_links_and_directory_cycles() {
+        let root =
+            std::env::temp_dir().join(format!("ferrioxid-template-link-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(root.join("templates/shop")).unwrap();
+        std::fs::write(
+            root.join("ferrioxid.toml"),
+            "migrations_dir = \"migrations\"\n",
+        )
+        .unwrap();
+        std::os::unix::fs::symlink(root.join("templates"), root.join("templates/shop/loop"))
+            .unwrap();
+        let settings = ferrioxid_migrations::discover_project(&root).unwrap();
+        assert!(super::collect_templates(
+            "shop",
+            &root.join("missing"),
+            TemplateMode::ProjectOverride,
+            Some(&settings)
+        )
+        .is_err());
+        std::fs::remove_dir_all(root).unwrap();
     }
 
     struct Migrated;
