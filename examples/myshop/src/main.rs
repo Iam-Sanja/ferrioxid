@@ -112,6 +112,11 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         .with_auth(auth)
         .with_mail(mail)
         .with_admin(admin)
+        .urls(ferrioxid::urls::UrlSet::new().route(
+            "shop.thanks",
+            "/contact/thanks",
+            axum::routing::get(contact::thanks),
+        )?)?
         .merge(
             axum::Router::new()
                 .route("/", axum::routing::get(home))

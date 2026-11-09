@@ -27,7 +27,7 @@ Generated model validators check required fields, string length, `min` and expli
 | JSON | State | `NOT NULL` column | Nullable column (`Option<T>`) |
 |---|---|---|---|
 |Key missing| `Missing` |Previous value remains|Previous value remains|
-| `null` | `Null` | HTTP 422, Detail `{feld} cannot be null` | SQL `NULL` |
+| `null` | `Null` | HTTP 422, Detail `field:<feld>: validation.null` | SQL `NULL` |
 | Value | `Value` |Validate, then store original value|Validate, then store original value|
 
 `{}` is the case where each field is `Missing`. The answer is HTTP 200 with the unchanged record, if the UUID exists. Strings are not stored trimmed. `required` rejects empty and pure whitespace texts in the `Value` arm.

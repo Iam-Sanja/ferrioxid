@@ -500,7 +500,8 @@ pub async fn run() -> Result<(), Box<dyn std::error::Error>> {{
     let app = ferrioxid::App::new(db).with_settings(settings.clone()).with_auth(auth).with_mail(ferrioxid::mail_for(&settings)).urls(urls::routes()?)?;
     {admin}
     let app = crate::apps::install(app)?;
-    let router = ferrioxid::pages::mount_pages(app.try_into_router()?, &settings)?;
+    let names = app.route_names().clone();
+    let router = ferrioxid::pages::mount_pages_with(app.try_into_router()?, &settings, &names)?;
     let router = ferrioxid::web::prepare(router, &settings);
     let listener = tokio::net::TcpListener::bind(&address).await?;
     println!("Ferrioxid lauscht auf http://{{address}}");

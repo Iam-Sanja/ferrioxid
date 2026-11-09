@@ -5,7 +5,7 @@
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use ferrioxid_core::{
     parse_bool, parse_date, parse_datetime_local, parse_datetime_utc, parse_i64, parse_time,
-    parse_uuid, text_code,
+    parse_uuid, text_code, AdminFieldMeta, ColumnKind, ColumnSpec,
 };
 use std::collections::BTreeMap;
 
@@ -283,6 +283,63 @@ pub fn optional_uuid(
     required_uuid(values, name).map(Some)
 }
 
+pub fn required_choice<'a>(
+    values: &'a FormValues,
+    name: &'static str,
+    options: &[&str],
+) -> Result<&'a str, FieldFailure> {
+    let value = values.get(name).unwrap_or("").trim();
+    if value.is_empty() {
+        return Err(FieldFailure {
+            field: name.to_owned(),
+            code: "validation.required",
+        });
+    }
+    if options.contains(&value) {
+        Ok(value)
+    } else {
+        Err(FieldFailure {
+            field: name.to_owned(),
+            code: "validation.choice",
+        })
+    }
+}
+
+pub fn optional_choice<'a>(
+    values: &'a FormValues,
+    name: &'static str,
+    options: &[&str],
+) -> Result<Option<&'a str>, FieldFailure> {
+    let value = values.get(name).unwrap_or("").trim();
+    if value.is_empty() {
+        return Ok(None);
+    }
+    required_choice(values, name, options).map(Some)
+}
+
+/// Fünf Ziffern. Kürzere oder längere Werte behalten die Längencodes.
+pub fn required_postal(values: &FormValues, name: &'static str) -> Result<String, FieldFailure> {
+    let value = required_text(
+        values,
+        TextSpec {
+            name,
+            required: true,
+            min_length: Some(5),
+            max_length: Some(5),
+            email: false,
+            url: false,
+        },
+    )?;
+    if value.bytes().all(|byte| byte.is_ascii_digit()) {
+        Ok(value)
+    } else {
+        Err(FieldFailure {
+            field: name.to_owned(),
+            code: "validation.postal",
+        })
+    }
+}
+
 /// Nur der exakte Checkbox-Wert `1` gilt. Andere Werte sind ungültig, ein fehlender Wert ist keine Bestätigung.
 pub fn require_confirmation(values: &FormValues) -> Result<(), FormErrors> {
     let mut errors = FormErrors::default();
@@ -308,12 +365,15 @@ pub struct ContactForm {
     pub email: String,
     pub message: String,
     pub website: Option<String>,
+    pub topic: Option<String>,
 }
 
 impl FerrioxidForm for ContactForm {
     fn from_form(values: &FormValues) -> Result<Self, FormErrors> {
         let mut errors = FormErrors::default();
-        if let Err(unknown) = reject_unknown(values, &["name", "email", "message", "website"]) {
+        if let Err(unknown) =
+            reject_unknown(values, &["name", "email", "message", "website", "topic"])
+        {
             errors.fields.extend(unknown.fields);
         }
         let name = required_text(
@@ -364,6 +424,12 @@ impl FerrioxidForm for ContactForm {
         let email = take(email, &mut errors);
         let message = take(message, &mut errors);
         let website = take(website, &mut errors).flatten();
+        let topic = take(
+            optional_choice(values, "topic", &["order", "product", "other"]),
+            &mut errors,
+        )
+        .flatten()
+        .map(str::to_owned);
         if let (Some(name), Some(email)) = (&name, &email) {
             let local = email.split('@').next().unwrap_or("");
             if name.eq_ignore_ascii_case(local) {
@@ -378,6 +444,7 @@ impl FerrioxidForm for ContactForm {
             email: email.unwrap(),
             message: message.unwrap(),
             website,
+            topic,
         })
     }
 }
@@ -393,37 +460,66 @@ fn take<T>(result: Result<T, FieldFailure>, errors: &mut FormErrors) -> Option<T
 }
 
 pub fn message(locale: &str, code: &str) -> &'static str {
-    let german = locale == "de";
-    match (german, code) {
-        (true, "validation.required") => "Dieses Feld ist erforderlich.",
-        (false, "validation.required") => "This field is required.",
-        (true, "validation.min_length") => "Der Text ist zu kurz.",
-        (false, "validation.min_length") => "The text is too short.",
-        (true, "validation.max_length") => "Der Text ist zu lang.",
-        (false, "validation.max_length") => "The text is too long.",
-        (true, "validation.email") => "Die E-Mail-Adresse ist ungültig.",
-        (false, "validation.email") => "The email address is invalid.",
-        (true, "validation.url") => "Die Adresse muss mit http:// oder https:// beginnen.",
-        (false, "validation.url") => "The address must start with http:// or https://.",
-        (true, "validation.invalid_type") => "Der Wert hat den falschen Typ.",
-        (false, "validation.invalid_type") => "The value has the wrong type.",
-        (true, "validation.min_value") => "Der Wert ist zu klein.",
-        (false, "validation.min_value") => "The value is too small.",
-        (true, "validation.max_value") => "Der Wert ist zu groß.",
-        (false, "validation.max_value") => "The value is too large.",
-        (true, "validation.uuid") => "Die Kennung ist ungültig.",
-        (false, "validation.uuid") => "The identifier is invalid.",
-        (true, "validation.unknown_field") => "Dieses Feld ist nicht erlaubt.",
-        (false, "validation.unknown_field") => "This field is not allowed.",
-        (true, "validation.mismatch") => {
-            "Name und E-Mail dürfen nicht denselben lokalen Teil haben."
+    ferrioxid_core::message_text(locale, code)
+}
+
+pub use ferrioxid_core::{localize_detail, message_for, FieldOverride};
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Widget {
+    Text,
+    Email,
+    Password,
+    Number,
+    Url,
+    Checkbox,
+    Textarea,
+    Select,
+}
+
+/// Sichtbares Feld. `required` ist nur ein Hinweis; die Prüfung bleibt serverseitig.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Field {
+    pub name: &'static str,
+    pub label: &'static str,
+    pub widget: Widget,
+    pub required: bool,
+    pub help: &'static str,
+    pub placeholder: &'static str,
+    pub options: &'static [(&'static str, &'static str)],
+}
+
+impl Field {
+    pub const fn new(
+        name: &'static str,
+        label: &'static str,
+        widget: Widget,
+        required: bool,
+    ) -> Self {
+        Self {
+            name,
+            label,
+            widget,
+            required,
+            help: "",
+            placeholder: "",
+            options: &[],
         }
-        (false, "validation.mismatch") => "The name and email must not share the same local part.",
-        (true, "form.csrf") => "Die Sicherheitsprüfung ist fehlgeschlagen.",
-        (false, "form.csrf") => "The security check failed.",
-        (true, "form.thanks") => "Danke. Die Nachricht wurde geprüft und nicht versendet.",
-        (false, "form.thanks") => "Thank you. The message was checked and was not sent.",
-        _ => "missing message",
+    }
+
+    pub const fn help(mut self, help: &'static str) -> Self {
+        self.help = help;
+        self
+    }
+
+    pub const fn placeholder(mut self, placeholder: &'static str) -> Self {
+        self.placeholder = placeholder;
+        self
+    }
+
+    pub const fn options(mut self, options: &'static [(&'static str, &'static str)]) -> Self {
+        self.options = options;
+        self
     }
 }
 
@@ -443,6 +539,30 @@ pub fn render_form(
     fields: &[InputSpec],
     locale: &str,
 ) -> String {
+    let owned: Vec<Field> = fields.iter().map(field_from_input).collect();
+    render_fields(action, csrf, values, errors, &owned, locale)
+}
+
+pub fn render_fields(
+    action: &str,
+    csrf: Option<&str>,
+    values: &FormValues,
+    errors: &FormErrors,
+    fields: &[Field],
+    locale: &str,
+) -> String {
+    render_fields_with(action, csrf, values, errors, fields, locale, &[])
+}
+
+pub fn render_fields_with(
+    action: &str,
+    csrf: Option<&str>,
+    values: &FormValues,
+    errors: &FormErrors,
+    fields: &[Field],
+    locale: &str,
+    overrides: &[FieldOverride],
+) -> String {
     let mut html = format!("<form method=\"post\" action=\"{}\">", escape(action));
     if let Some(token) = csrf {
         html.push_str(&format!(
@@ -453,32 +573,31 @@ pub fn render_form(
     if let Some(code) = errors.for_field("") {
         html.push_str(&format!(
             "<p role=\"alert\">{}</p>",
-            escape(message(locale, code))
+            escape(&message_for(locale, "", code, &[], overrides))
         ));
     }
     for field in fields {
         let value = values.get(field.name).unwrap_or("");
+        let name = escape(field.name);
         html.push_str(&format!(
             "<label for=\"{name}\">{label}",
-            name = escape(field.name),
             label = escape(field.label)
         ));
         if field.required {
             html.push_str("<span aria-hidden=\"true\">*</span>");
         }
         html.push_str("</label>");
-        let required = if field.required { " required" } else { "" };
-        html.push_str(&format!(
-            "<input id=\"{name}\" name=\"{name}\" type=\"{kind}\" value=\"{value}\"{required}>",
-            name = escape(field.name),
-            kind = escape(field.input_type),
-            value = escape(value),
-        ));
+        html.push_str(&control(field, value, errors));
         if let Some(code) = errors.for_field(field.name) {
             html.push_str(&format!(
                 "<p id=\"{name}-error\" role=\"alert\">{text}</p>",
-                name = escape(field.name),
-                text = escape(message(locale, code))
+                text = escape(&message_for(locale, field.name, code, &[], overrides))
+            ));
+        }
+        if !field.help.is_empty() {
+            html.push_str(&format!(
+                "<p id=\"{name}-help\">{text}</p>",
+                text = escape(field.help)
             ));
         }
     }
@@ -486,6 +605,99 @@ pub fn render_form(
     html.push_str(if locale == "de" { "Senden" } else { "Send" });
     html.push_str("</button></form>");
     html
+}
+
+fn field_from_input(spec: &InputSpec) -> Field {
+    let widget = match spec.input_type {
+        "email" => Widget::Email,
+        "password" => Widget::Password,
+        "number" => Widget::Number,
+        "checkbox" => Widget::Checkbox,
+        "url" => Widget::Url,
+        "textarea" => Widget::Textarea,
+        _ => Widget::Text,
+    };
+    Field::new(spec.name, spec.label, widget, spec.required)
+}
+
+fn control(field: &Field, value: &str, errors: &FormErrors) -> String {
+    let name = escape(field.name);
+    let described = described_by(field, errors);
+    let invalid = if errors.for_field(field.name).is_some() {
+        " aria-invalid=\"true\""
+    } else {
+        ""
+    };
+    let required = if field.required { " required" } else { "" };
+    let placeholder = if field.placeholder.is_empty() {
+        String::new()
+    } else {
+        format!(" placeholder=\"{}\"", escape(field.placeholder))
+    };
+    match field.widget {
+        Widget::Textarea => format!(
+            "<textarea id=\"{name}\" name=\"{name}\"{required}{placeholder}{described}{invalid}>{value}</textarea>",
+            value = escape(value)
+        ),
+        Widget::Select => {
+            let mut html = format!(
+                "<select id=\"{name}\" name=\"{name}\"{required}{described}{invalid}>"
+            );
+            if !field.required {
+                html.push_str("<option value=\"\"></option>");
+            }
+            for (option, label) in field.options {
+                let selected = if *option == value { " selected" } else { "" };
+                html.push_str(&format!(
+                    "<option value=\"{option}\"{selected}>{label}</option>",
+                    option = escape(option),
+                    label = escape(label)
+                ));
+            }
+            html.push_str("</select>");
+            html
+        }
+        Widget::Checkbox => {
+            let checked = if matches!(value, "true" | "1" | "on") {
+                " checked"
+            } else {
+                ""
+            };
+            format!(
+                "<input id=\"{name}\" name=\"{name}\" type=\"checkbox\" value=\"on\"{checked}{required}{described}{invalid}>"
+            )
+        }
+        Widget::Password => format!(
+            "<input id=\"{name}\" name=\"{name}\" type=\"password\" value=\"\"{required}{placeholder}{described}{invalid}>"
+        ),
+        other => {
+            let kind = match other {
+                Widget::Email => "email",
+                Widget::Number => "number",
+                Widget::Url => "url",
+                _ => "text",
+            };
+            format!(
+                "<input id=\"{name}\" name=\"{name}\" type=\"{kind}\" value=\"{value}\"{required}{placeholder}{described}{invalid}>",
+                value = escape(value)
+            )
+        }
+    }
+}
+
+fn described_by(field: &Field, errors: &FormErrors) -> String {
+    let mut ids = Vec::new();
+    if errors.for_field(field.name).is_some() {
+        ids.push(format!("{}-error", field.name));
+    }
+    if !field.help.is_empty() {
+        ids.push(format!("{}-help", field.name));
+    }
+    if ids.is_empty() {
+        String::new()
+    } else {
+        format!(" aria-describedby=\"{}\"", escape(&ids.join(" ")))
+    }
 }
 
 pub fn render_page(title: &str, body: &str) -> String {
@@ -554,6 +766,205 @@ pub fn contact_fields(locale: &str) -> [InputSpec; 4] {
     }
 }
 
+const TOPICS: &[(&str, &str)] = &[
+    ("order", "Bestellung"),
+    ("product", "Produkt"),
+    ("other", "Sonstiges"),
+];
+
+const TOPICS_EN: &[(&str, &str)] = &[
+    ("order", "Order"),
+    ("product", "Product"),
+    ("other", "Other"),
+];
+
+pub fn contact_widgets(locale: &str) -> [Field; 5] {
+    let german = locale == "de";
+    let topics = if german { TOPICS } else { TOPICS_EN };
+    [
+        Field::new("name", "Name", Widget::Text, true).placeholder("Ada"),
+        Field::new(
+            "email",
+            if german { "E-Mail" } else { "Email" },
+            Widget::Email,
+            true,
+        ),
+        Field::new(
+            "topic",
+            if german { "Thema" } else { "Topic" },
+            Widget::Select,
+            false,
+        )
+        .options(topics),
+        Field::new(
+            "message",
+            if german { "Nachricht" } else { "Message" },
+            Widget::Textarea,
+            true,
+        )
+        .help(if german {
+            "Höchstens 2000 Zeichen."
+        } else {
+            "At most 2000 characters."
+        }),
+        Field::new("website", "Website", Widget::Url, false),
+    ]
+}
+
+/// `Create` und `Replace` verlangen jedes Pflichtfeld. `Patch` lässt fehlende Schlüssel unverändert.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SubmitMode {
+    Create,
+    Replace,
+    Patch,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ModelField {
+    pub name: &'static str,
+    pub kind: ColumnKind,
+    pub required: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FormSetupError {
+    pub code: &'static str,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum BoundValue {
+    Unchanged,
+    Null,
+    Text(String),
+    Integer(i64),
+    Boolean(bool),
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct BoundField {
+    pub name: &'static str,
+    pub value: BoundValue,
+}
+
+/// Nur Namen aus `allow` werden Felder. Primärschlüssel sowie sensitive, schreibgeschützte und versteckte Admin-Felder werden abgelehnt.
+pub fn model_fields(
+    columns: &[ColumnSpec],
+    admin: &[AdminFieldMeta],
+    allow: &[&str],
+) -> Result<Vec<ModelField>, FormSetupError> {
+    let mut fields = Vec::new();
+    for name in allow {
+        if fields.iter().any(|field: &ModelField| field.name == *name) {
+            return Err(FormSetupError {
+                code: "form.duplicate_column",
+            });
+        }
+        let Some(column) = columns.iter().find(|column| column.name == *name) else {
+            return Err(FormSetupError {
+                code: "form.unknown_column",
+            });
+        };
+        if column.primary_key {
+            return Err(FormSetupError {
+                code: "form.protected_column",
+            });
+        }
+        if admin
+            .iter()
+            .any(|meta| meta.name == *name && (meta.sensitive || meta.readonly || meta.hidden))
+        {
+            return Err(FormSetupError {
+                code: "form.protected_column",
+            });
+        }
+        fields.push(ModelField {
+            name: column.name,
+            kind: column.kind,
+            required: !column.nullable && column.default_bool.is_none(),
+        });
+    }
+    Ok(fields)
+}
+
+pub fn model_widget(field: &ModelField, label: &'static str) -> Field {
+    let widget = match field.kind {
+        ColumnKind::BigInt => Widget::Number,
+        ColumnKind::Boolean => Widget::Checkbox,
+        _ => Widget::Text,
+    };
+    Field::new(field.name, label, widget, field.required)
+}
+
+/// `choices` begrenzt einzelne Felder auf erlaubte Werte. Zusätzliche Eingabefelder werden abgelehnt.
+pub fn bind_model(
+    mode: SubmitMode,
+    fields: &[ModelField],
+    values: &FormValues,
+    choices: &[(&str, &[&str])],
+) -> Result<Vec<BoundField>, FormErrors> {
+    let mut errors = FormErrors::default();
+    for name in values.names() {
+        if name != "csrf_token" && !fields.iter().any(|field| field.name == name) {
+            errors.push(name, "validation.unknown_field");
+        }
+    }
+    let mut bound = Vec::new();
+    for field in fields {
+        match bind_one(mode, field, values, choices) {
+            Ok(value) => bound.push(BoundField {
+                name: field.name,
+                value,
+            }),
+            Err(code) => errors.push(field.name, code),
+        }
+    }
+    if errors.is_empty() {
+        Ok(bound)
+    } else {
+        Err(errors)
+    }
+}
+
+fn bind_one(
+    mode: SubmitMode,
+    field: &ModelField,
+    values: &FormValues,
+    choices: &[(&str, &[&str])],
+) -> Result<BoundValue, &'static str> {
+    let Some(raw) = values.get(field.name) else {
+        if mode == SubmitMode::Patch {
+            return Ok(BoundValue::Unchanged);
+        }
+        return if field.required {
+            Err("validation.required")
+        } else {
+            Ok(BoundValue::Null)
+        };
+    };
+    let raw = raw.trim();
+    if raw.is_empty() {
+        return if field.required {
+            Err("validation.required")
+        } else {
+            Ok(BoundValue::Null)
+        };
+    }
+    if let Some((_, options)) = choices.iter().find(|(name, _)| *name == field.name) {
+        if !options.contains(&raw) {
+            return Err("validation.choice");
+        }
+    }
+    match field.kind {
+        ColumnKind::BigInt => parse_i64(raw, None, None).map(BoundValue::Integer),
+        ColumnKind::Boolean => parse_bool(raw).map(BoundValue::Boolean),
+        ColumnKind::Uuid => parse_uuid(raw).map(|id| BoundValue::Text(id.to_string())),
+        ColumnKind::Date => parse_date(raw).map(|_| BoundValue::Text(raw.to_owned())),
+        ColumnKind::Time => parse_time(raw).map(|_| BoundValue::Text(raw.to_owned())),
+        ColumnKind::DateTime => parse_datetime_utc(raw).map(|_| BoundValue::Text(raw.to_owned())),
+        ColumnKind::Text => Ok(BoundValue::Text(raw.to_owned())),
+    }
+}
+
 pub fn escape(value: &str) -> String {
     let mut output = String::new();
     for char in value.chars() {
@@ -609,9 +1020,11 @@ fn decode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        escape, require_confirmation, required_i64, required_uuid, ContactForm, FerrioxidForm,
-        FormValues,
+        bind_model, escape, model_fields, render_fields, require_confirmation, required_choice,
+        required_i64, required_postal, required_uuid, BoundValue, ContactForm, FerrioxidForm,
+        Field, FormErrors, FormValues, SubmitMode, Widget,
     };
+    use ferrioxid_core::{AdminFieldMeta, ColumnKind, ColumnSpec};
 
     #[test]
     fn confirmation_accepts_only_the_checkbox_value() {
@@ -683,5 +1096,177 @@ mod tests {
             FormValues::parse_urlencoded("name=Ada+Lovelace&email=ada%40example.com").unwrap();
         assert_eq!(values.get("name"), Some("Ada Lovelace"));
         assert_eq!(values.get("email"), Some("ada@example.com"));
+    }
+
+    #[test]
+    fn widgets_escape_values_labels_and_reject_unknown_options() {
+        let mut values = FormValues::default();
+        values.insert("note", "<script>");
+        values.insert("topic", "\"><img>");
+        values.insert("secret", "hunter2");
+        let mut errors = FormErrors::default();
+        errors.push("note", "validation.required");
+        let fields = [
+            Field::new("note", "<b>Notiz</b>", Widget::Textarea, true)
+                .help("Hilfe <i>")
+                .placeholder("\"hier\""),
+            Field::new("topic", "Thema", Widget::Select, true).options(&[("order", "<ok>")]),
+            Field::new("secret", "Geheim", Widget::Password, true),
+        ];
+        let html = render_fields("/save", None, &values, &errors, &fields, "de");
+        assert!(html.contains("&lt;script&gt;"));
+        assert!(!html.contains("<script>"));
+        assert!(html.contains("&lt;b&gt;Notiz&lt;/b&gt;"));
+        assert!(html.contains("Hilfe &lt;i&gt;"));
+        assert!(html.contains("placeholder=\"&quot;hier&quot;\""));
+        assert!(html.contains("aria-describedby=\"note-error note-help\""));
+        assert!(html.contains("<option value=\"order\">&lt;ok&gt;</option>"));
+        assert!(!html.contains("\"><img>"));
+        assert!(html.contains("type=\"password\" value=\"\""));
+        assert!(!html.contains("hunter2"));
+        assert_eq!(
+            required_choice(&values, "topic", &["order"])
+                .unwrap_err()
+                .code,
+            "validation.choice"
+        );
+    }
+
+    #[test]
+    fn prefilled_values_remain_after_a_failed_submit() {
+        let mut values = FormValues::default();
+        values.insert("title", "Entwurf");
+        values.insert("topic", "order");
+        let mut errors = FormErrors::default();
+        errors.push("title", "validation.min_length");
+        let fields = [
+            Field::new("title", "Titel", Widget::Text, true),
+            Field::new("topic", "Thema", Widget::Select, true).options(&[("order", "Bestellung")]),
+        ];
+        let html = render_fields("/save", None, &values, &errors, &fields, "en");
+        assert!(html.contains("value=\"Entwurf\""));
+        assert!(html.contains("value=\"order\" selected"));
+        assert!(html.contains("The text is too short."));
+    }
+
+    #[test]
+    fn model_binding_rejects_unlisted_and_protected_fields() {
+        let columns = [
+            column("id", ColumnKind::Uuid, false, true),
+            column("title", ColumnKind::Text, false, false),
+            column("stock", ColumnKind::BigInt, true, false),
+            column("secret", ColumnKind::Text, true, false),
+        ];
+        let admin = [admin_field("secret", true, false, false)];
+        assert_eq!(
+            model_fields(&columns, &admin, &["id"]).unwrap_err().code,
+            "form.protected_column"
+        );
+        assert_eq!(
+            model_fields(&columns, &admin, &["secret"])
+                .unwrap_err()
+                .code,
+            "form.protected_column"
+        );
+        assert_eq!(
+            model_fields(&columns, &admin, &["role"]).unwrap_err().code,
+            "form.unknown_column"
+        );
+        let fields = model_fields(&columns, &admin, &["title", "stock"]).unwrap();
+        let mut posted = FormValues::default();
+        posted.insert("title", "Stift");
+        posted.insert("role", "admin");
+        let errors = bind_model(SubmitMode::Create, &fields, &posted, &[]).unwrap_err();
+        assert_eq!(errors.for_field("role"), Some("validation.unknown_field"));
+        let mut clean = FormValues::default();
+        clean.insert("title", "Stift");
+        let bound = bind_model(SubmitMode::Create, &fields, &clean, &[]).unwrap();
+        assert_eq!(bound[0].value, BoundValue::Text("Stift".to_owned()));
+        assert_eq!(bound[1].value, BoundValue::Null);
+        let patched = bind_model(SubmitMode::Patch, &fields, &FormValues::default(), &[]).unwrap();
+        assert_eq!(patched[0].value, BoundValue::Unchanged);
+        let mut missing = FormValues::default();
+        missing.insert("stock", "2");
+        assert_eq!(
+            bind_model(SubmitMode::Replace, &fields, &missing, &[])
+                .unwrap_err()
+                .for_field("title"),
+            Some("validation.required")
+        );
+        let mut invalid = FormValues::default();
+        invalid.insert("title", "Stift");
+        invalid.insert("stock", "nope");
+        assert_eq!(
+            bind_model(SubmitMode::Replace, &fields, &invalid, &[])
+                .unwrap_err()
+                .for_field("stock"),
+            Some("validation.invalid_type")
+        );
+        let mut choice = FormValues::default();
+        choice.insert("title", "nope");
+        assert_eq!(
+            bind_model(
+                SubmitMode::Replace,
+                &fields,
+                &choice,
+                &[("title", &["Stift"])]
+            )
+            .unwrap_err()
+            .for_field("title"),
+            Some("validation.choice")
+        );
+    }
+
+    #[test]
+    fn postal_code_uses_its_own_code() {
+        let mut values = FormValues::default();
+        values.insert("postal_code", "ABCDE");
+        assert_eq!(
+            required_postal(&values, "postal_code").unwrap_err().code,
+            "validation.postal"
+        );
+        values.insert("postal_code", "10115");
+        assert_eq!(required_postal(&values, "postal_code").unwrap(), "10115");
+    }
+
+    fn column(
+        name: &'static str,
+        kind: ColumnKind,
+        nullable: bool,
+        primary_key: bool,
+    ) -> ColumnSpec {
+        ColumnSpec {
+            name,
+            kind,
+            nullable,
+            primary_key,
+            default_bool: None,
+            unique: false,
+            indexed: false,
+            foreign_table: None,
+            foreign_column: None,
+            on_delete: None,
+        }
+    }
+
+    fn admin_field(
+        name: &'static str,
+        sensitive: bool,
+        readonly: bool,
+        hidden: bool,
+    ) -> AdminFieldMeta {
+        AdminFieldMeta {
+            name,
+            label: name,
+            list_display: false,
+            list_link: false,
+            searchable: false,
+            sortable: false,
+            filterable: false,
+            readonly,
+            hidden,
+            sensitive,
+            fieldset: "",
+        }
     }
 }

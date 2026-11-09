@@ -8,7 +8,7 @@ pub fn problem_json(status: u16, title: &str, detail: &str) -> serde_json::Value
         "title": title,
         "status": status,
         "detail": safe_detail,
-        "params": {}
+        "params": coded_params(detail)
     });
     if let Some(name) = field {
         body["field"] = serde_json::Value::String(name);
@@ -21,7 +21,31 @@ fn classify(detail: &str) -> (&'static str, Option<String>, String) {
     if looks_sensitive(message) {
         return ("request.rejected", None, "Request rejected".to_owned());
     }
-    let code = match message {
+    let code = match message.split(':').next().unwrap_or(message) {
+        "validation.required" => "validation.required",
+        "validation.min_length" => "validation.min_length",
+        "validation.max_length" => "validation.max_length",
+        "validation.min_value" => "validation.min_value",
+        "validation.max_value" => "validation.max_value",
+        "validation.email" => "validation.email",
+        "validation.slug" => "validation.slug",
+        "validation.null" => "validation.null",
+        "validation.choice" => "validation.choice",
+        "validation.postal" => "validation.postal",
+        "validation.invalid_type" => "validation.invalid_type",
+        "validation.uuid" => "validation.uuid",
+        "validation.unknown_field" => "validation.unknown_field",
+        "validation.date" => "validation.date",
+        "validation.time" => "validation.time",
+        "validation.datetime_offset" => "validation.datetime_offset",
+        "validation.datetime" => "validation.datetime",
+        _ => legacy_code(message, field.is_some()),
+    };
+    (code, field, detail.to_owned())
+}
+
+fn legacy_code(message: &str, has_field: bool) -> &'static str {
+    match message {
         "Field is required" | "active is required" | "email and role are required" => {
             "validation.required"
         }
@@ -53,10 +77,29 @@ fn classify(detail: &str) -> (&'static str, Option<String>, String) {
         "relation options require a registered admin model without an object policy" => {
             "list.relation"
         }
-        _ if field.is_some() => "validation.field",
+        _ if has_field => "validation.field",
         _ => "request.failed",
+    }
+}
+
+fn coded_params(detail: &str) -> serde_json::Value {
+    let (_, message) = split_field(detail);
+    let Some((head, raw)) = message.split_once(':') else {
+        return serde_json::json!({});
     };
-    (code, field, detail.to_owned())
+    if raw.is_empty()
+        || raw.len() > 8
+        || !raw.chars().all(|char| char.is_ascii_digit())
+        || head.contains(':')
+    {
+        return serde_json::json!({});
+    }
+    let key = match head {
+        "validation.min_length" | "validation.min_value" => "min",
+        "validation.max_length" | "validation.max_value" => "max",
+        _ => return serde_json::json!({}),
+    };
+    serde_json::json!({ key: raw })
 }
 
 fn split_field(detail: &str) -> (Option<String>, &str) {
@@ -103,6 +146,19 @@ mod tests {
         assert_eq!(unknown["code"], "auth.invalid_credentials");
         assert_eq!(unknown["detail"], "Invalid email or password");
         assert!(unknown.get("field").is_none());
+    }
+
+    #[test]
+    fn coded_model_errors_keep_the_detail_and_a_safe_param() {
+        let body = problem_json(
+            422,
+            "Validation failed",
+            "field:title: validation.min_length:3",
+        );
+        assert_eq!(body["code"], "validation.min_length");
+        assert_eq!(body["field"], "title");
+        assert_eq!(body["detail"], "field:title: validation.min_length:3");
+        assert_eq!(body["params"]["min"], "3");
     }
 
     #[test]
