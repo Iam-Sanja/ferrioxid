@@ -322,6 +322,564 @@ struct HtmlAppointment {
     created_at: DateTime<Utc>,
 }
 
+#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
+#[ferrioxid(
+    table = "editor_records",
+    api = "/api/v1/editor_records",
+    admin = true,
+    permissions = "records",
+    object_policy = true
+)]
+struct EditorRecord {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(required)]
+    #[admin(list_display, label = "Name")]
+    name: String,
+    #[field(required)]
+    #[admin(readonly)]
+    locked: String,
+}
+
+struct RecordPolicy;
+impl ObjectPolicy<EditorRecord> for RecordPolicy {
+    fn can_read(_user: &AuthUser, _record: &EditorRecord) -> bool {
+        true
+    }
+    fn can_update(_user: &AuthUser, record: &EditorRecord) -> bool {
+        record.name != "Object readonly"
+    }
+    fn can_delete(_user: &AuthUser, record: &EditorRecord) -> bool {
+        record.name != "Object readonly"
+    }
+    fn read_scope(_user: &AuthUser) -> QueryScope {
+        QueryScope::All
+    }
+    fn write_scope(_user: &AuthUser) -> QueryScope {
+        QueryScope::All
+    }
+    fn can_create(_user: &AuthUser, _input: &EditorRecordCreate) -> bool {
+        true
+    }
+}
+
+async fn editor_call(
+    port: u16,
+    method: &'static str,
+    path: String,
+    body: Option<String>,
+    session: &str,
+) -> Reply {
+    let extra = if session.is_empty() {
+        String::new()
+    } else {
+        cookie_header(session)
+    };
+    {
+        let mut reply =
+            tokio::task::spawn_blocking(move || http(port, method, &path, body.as_deref(), &extra))
+                .await
+                .unwrap();
+        reply.body = reply.body.replace("&#x2F;", "/");
+        reply
+    }
+}
+
+async fn editor_login(port: u16, email: &str) -> String {
+    let login = editor_call(port, "GET", "/admin/login".into(), None, "").await;
+    let csrf = cookie_value(&login.headers, "ferrioxid_login_csrf");
+    let body = form(&[
+        ("csrf_token", &csrf),
+        ("email", email),
+        ("password", "correct-horse-battery"),
+        ("next", "/admin"),
+    ]);
+    let reply = tokio::task::spawn_blocking(move || {
+        http(
+            port,
+            "POST",
+            "/admin/login",
+            Some(&body),
+            &format!("Cookie: ferrioxid_login_csrf={csrf}\r\n"),
+        )
+    })
+    .await
+    .unwrap();
+    assert_eq!(reply.status, 303);
+    cookie_value(&reply.headers, "ferrioxid_session")
+}
+
+#[tokio::test]
+async fn canonical_editors_preserve_permissions_readonly_fields_roles_and_navigation() {
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let auth = AuthService::new(db.clone(), AuthConfig::development());
+    let root = auth
+        .create_user(
+            "editor-root@example.com",
+            "correct-horse-battery",
+            true,
+            true,
+        )
+        .await
+        .unwrap();
+    let target = auth
+        .create_user(
+            "editor-target@example.com",
+            "correct-horse-battery",
+            false,
+            false,
+        )
+        .await
+        .unwrap();
+    for (role, actions) in [
+        ("reader", vec!["read"]),
+        ("writer", vec!["read", "update"]),
+        ("eraser", vec!["read", "delete"]),
+        ("write_only", vec!["update"]),
+    ] {
+        auth.create_user(
+            &format!("{role}@example.com"),
+            "correct-horse-battery",
+            true,
+            false,
+        )
+        .await
+        .unwrap();
+        auth.ensure_role(role).await.unwrap();
+        for action in actions {
+            auth.grant_permission(role, &format!("records.{action}"))
+                .await
+                .unwrap();
+        }
+        auth.assign_role(&format!("{role}@example.com"), role)
+            .await
+            .unwrap();
+    }
+    auth.assign_role(&target.email, "reader").await.unwrap();
+    let app = ferrioxid::App::new(db.clone())
+        .with_auth(auth.clone())
+        .with_admin(AdminRegistry::new().add_policy::<EditorRecord, RecordPolicy>())
+        .register_policy::<EditorRecord, RecordPolicy>();
+    app.bootstrap_schema().await.unwrap();
+    let record = EditorRecord::create(
+        &db,
+        EditorRecordCreate {
+            name: "Original".into(),
+            locked: "Immutable".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let protected = EditorRecord::create(
+        &db,
+        EditorRecordCreate {
+            name: "Object readonly".into(),
+            locked: "Immutable".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
+    let reader = editor_login(port, "reader@example.com").await;
+    let writer = editor_login(port, "writer@example.com").await;
+    let eraser = editor_login(port, "eraser@example.com").await;
+    let root_session = editor_login(port, &root.email).await;
+    let record_path = format!("/admin/models/editor_records/{}", record.id);
+    let listing = editor_call(
+        port,
+        "GET",
+        "/admin/models/editor_records".into(),
+        None,
+        &reader,
+    )
+    .await;
+    assert!(listing
+        .body
+        .contains(&format!("data-record-href=\"{record_path}\"")));
+    assert!(listing
+        .body
+        .contains(&format!("<a href=\"{record_path}\">")));
+    assert!(!listing.body.contains("role=\"button\""));
+    let readonly = editor_call(port, "GET", record_path.clone(), None, &reader).await;
+    assert_eq!(readonly.status, 200, "{}", readonly.body);
+    assert!(readonly.body.contains("Immutable"));
+    assert!(!readonly.body.contains("name=\"name\""));
+    assert!(!readonly.body.contains("/delete"));
+    let denied = editor_call(
+        port,
+        "POST",
+        record_path.clone(),
+        Some(form(&[
+            ("csrf_token", &field_value(&readonly.body, "csrf_token")),
+            ("name", "Unauthorized"),
+        ])),
+        &reader,
+    )
+    .await;
+    assert_eq!(denied.status, 403);
+    let write_only = editor_login(port, "write_only@example.com").await;
+    for path in [record_path.clone(), format!("{record_path}/edit")] {
+        assert_eq!(
+            editor_call(port, "GET", path, None, &write_only)
+                .await
+                .status,
+            404
+        );
+    }
+
+    let editable = editor_call(port, "GET", record_path.clone(), None, &writer).await;
+    assert_eq!(editable.status, 200, "{}", editable.body);
+    assert!(editable.body.contains(&format!("action=\"{record_path}\"")));
+    assert!(editable.body.contains("name=\"name\""));
+    assert!(editable.body.contains("Immutable"));
+    assert!(!editable.body.contains("name=\"locked\""));
+    assert!(!editable.body.contains("value=\"new\""));
+    assert!(!editable.body.contains("/delete"));
+    let csrf = field_value(&editable.body, "csrf_token");
+    let protected_path = format!("/admin/models/editor_records/{}", protected.id);
+    let protected_view = editor_call(port, "GET", protected_path.clone(), None, &writer).await;
+    assert_eq!(protected_view.status, 200);
+    assert!(!protected_view.body.contains("name=\"name\""));
+    assert!(!protected_view.body.contains("/delete"));
+    let protected_write = editor_call(
+        port,
+        "POST",
+        protected_path,
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("name", "Bypassed object policy"),
+        ])),
+        &writer,
+    )
+    .await;
+    assert_eq!(protected_write.status, 404);
+
+    assert_eq!(
+        editor_call(
+            port,
+            "POST",
+            record_path.clone(),
+            Some(form(&[("name", "No CSRF")])),
+            &writer
+        )
+        .await
+        .status,
+        403
+    );
+    let forged = editor_call(
+        port,
+        "POST",
+        record_path.clone(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("name", "Forged"),
+            ("locked", "Changed"),
+        ])),
+        &writer,
+    )
+    .await;
+    assert_eq!(forged.status, 422);
+    assert_eq!(
+        EditorRecord::get(&db, record.id)
+            .await
+            .unwrap()
+            .unwrap()
+            .locked,
+        "Immutable"
+    );
+    let saved_to_list = editor_call(
+        port,
+        "POST",
+        record_path.clone(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("name", "Saved"),
+            ("save", "list"),
+        ])),
+        &writer,
+    )
+    .await;
+    assert_eq!(saved_to_list.status, 303);
+    assert!(location(&saved_to_list.headers).starts_with("/admin/models/editor_records?notice="));
+    for action in ["detail", "edit"] {
+        let saved = editor_call(
+            port,
+            "POST",
+            record_path.clone(),
+            Some(form(&[
+                ("csrf_token", &csrf),
+                ("name", "Saved"),
+                ("save", action),
+            ])),
+            &writer,
+        )
+        .await;
+        assert_eq!(saved.status, 303, "{}", saved.body);
+        assert!(location(&saved.headers).starts_with(&record_path));
+        assert!(!location(&saved.headers).contains(&format!("{record_path}/edit")));
+    }
+    assert_eq!(
+        editor_call(port, "GET", format!("{record_path}/edit"), None, &writer)
+            .await
+            .status,
+        200
+    );
+    let deletion = editor_call(port, "GET", record_path.clone(), None, &eraser).await;
+    assert!(deletion
+        .body
+        .contains(&format!("href=\"{record_path}/delete\"")));
+    assert!(!deletion.body.contains("name=\"name\""));
+
+    let user_path = format!("/admin/directory/users/{}", target.id);
+    let user = editor_call(port, "GET", user_path.clone(), None, &root_session).await;
+    assert_eq!(user.status, 200, "{}", user.body);
+    assert!(user.body.contains("name=\"email\""));
+    assert!(user.body.contains("id=\"roles\""));
+    assert!(user.body.contains("/admin/directory/assignments"));
+    assert!(user.body.contains("reader"));
+    assert!(!user.body.contains("/delete"));
+    assert!(!user.body.contains("password_hash"));
+    assert_eq!(
+        editor_call(port, "GET", user_path.clone(), None, &reader)
+            .await
+            .status,
+        403
+    );
+    let root_view = editor_call(
+        port,
+        "GET",
+        format!("/admin/directory/users/{}", root.id),
+        None,
+        &root_session,
+    )
+    .await;
+    assert!(!root_view.body.contains("name=\"email\""));
+    let user_csrf = field_value(&user.body, "csrf_token");
+    let protected_user_write = editor_call(
+        port,
+        "POST",
+        format!("/admin/directory/users/{}", root.id),
+        Some(form(&[
+            ("csrf_token", &user_csrf),
+            ("confirm", "1"),
+            ("email", &root.email),
+            ("active", "false"),
+            ("staff", "false"),
+        ])),
+        &root_session,
+    )
+    .await;
+    assert_eq!(protected_user_write.status, 403);
+    assert!(auth.get_user(root.id).await.unwrap().unwrap().is_active);
+
+    let forbidden = editor_call(
+        port,
+        "POST",
+        user_path.clone(),
+        Some(form(&[
+            ("csrf_token", &user_csrf),
+            ("confirm", "1"),
+            ("email", &target.email),
+            ("active", "true"),
+            ("staff", "false"),
+            ("is_superuser", "true"),
+        ])),
+        &root_session,
+    )
+    .await;
+    assert_eq!(forbidden.status, 422);
+    let updated = editor_call(
+        port,
+        "POST",
+        user_path.clone(),
+        Some(form(&[
+            ("csrf_token", &user_csrf),
+            ("confirm", "1"),
+            ("email", &target.email),
+            ("active", "false"),
+            ("staff", "false"),
+            ("save", "continue"),
+        ])),
+        &root_session,
+    )
+    .await;
+    assert_eq!(updated.status, 303, "{}", updated.body);
+    assert!(location(&updated.headers).starts_with(&user_path));
+    assert!(!auth.get_user(target.id).await.unwrap().unwrap().is_active);
+    assert!(auth
+        .list_user_role_names()
+        .await
+        .unwrap()
+        .iter()
+        .any(|(id, role)| *id == target.id && role == "reader"));
+
+    let role_id = auth
+        .list_roles()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|(_, role)| role == "reader")
+        .unwrap()
+        .0;
+    let role_path = format!("/admin/directory/roles/{role_id}");
+    let roles = editor_call(
+        port,
+        "GET",
+        "/admin/directory/roles".into(),
+        None,
+        &root_session,
+    )
+    .await;
+    assert!(roles
+        .body
+        .contains(&format!("data-record-href=\"{role_path}\"")));
+    assert!(roles.body.contains("/admin/directory/roles/new"));
+    let role = editor_call(port, "GET", role_path.clone(), None, &root_session).await;
+    assert_eq!(role.status, 200, "{}", role.body);
+    assert!(role.body.contains("records.read"));
+    assert!(role.body.contains("return_to"));
+    assert!(!role.body.contains("name=\"name\""));
+    assert_eq!(
+        editor_call(port, "GET", role_path.clone(), None, &reader)
+            .await
+            .status,
+        403
+    );
+    assert_eq!(
+        editor_call(
+            port,
+            "GET",
+            format!("/admin/directory/roles/{}", Uuid::new_v4()),
+            None,
+            &root_session
+        )
+        .await
+        .status,
+        404
+    );
+    let role_csrf = field_value(&role.body, "csrf_token");
+    let role_without_csrf = editor_call(
+        port,
+        "POST",
+        "/admin/directory/roles/reader/permissions".into(),
+        Some(form(&[
+            ("confirm", "1"),
+            ("code", "records.update"),
+            ("action", "grant"),
+        ])),
+        &root_session,
+    )
+    .await;
+    assert_eq!(role_without_csrf.status, 403);
+    let forged_role = editor_call(
+        port,
+        "POST",
+        "/admin/directory/roles/reader/permissions".into(),
+        Some(form(&[
+            ("csrf_token", &role_csrf),
+            ("confirm", "1"),
+            ("code", "records.update"),
+            ("action", "grant"),
+            ("name", "renamed"),
+        ])),
+        &root_session,
+    )
+    .await;
+    assert_eq!(forged_role.status, 422);
+
+    for action in ["grant", "revoke"] {
+        let result = editor_call(
+            port,
+            "POST",
+            "/admin/directory/roles/reader/permissions".into(),
+            Some(form(&[
+                ("csrf_token", &role_csrf),
+                ("confirm", "1"),
+                ("code", "records.update"),
+                ("action", action),
+                ("return_to", "record"),
+            ])),
+            &root_session,
+        )
+        .await;
+        assert_eq!(result.status, 303, "{}", result.body);
+        assert!(location(&result.headers).starts_with(&role_path));
+    }
+    if let Some(directory) = std::env::var_os("FERRIOXID_BROWSER_FIXTURES") {
+        let directory = std::path::PathBuf::from(directory);
+        std::fs::create_dir(&directory).expect("browser fixture directory must not already exist");
+        let root_list = editor_call(
+            port,
+            "GET",
+            "/admin/models/editor_records".into(),
+            None,
+            &root_session,
+        )
+        .await;
+        let root_editor = editor_call(port, "GET", record_path.clone(), None, &root_session).await;
+        let user_list = editor_call(
+            port,
+            "GET",
+            "/admin/directory/users".into(),
+            None,
+            &root_session,
+        )
+        .await;
+        for (name, html) in [
+            ("list.html", root_list.body),
+            ("record.html", root_editor.body),
+            ("readonly.html", readonly.body),
+            ("users.html", user_list.body),
+            ("user.html", user.body),
+            ("roles.html", roles.body),
+            ("role.html", role.body),
+        ] {
+            std::fs::write(directory.join(name), html).unwrap();
+        }
+        std::fs::write(directory.join("routes.json"), ferrioxid::serde_json::to_vec(&ferrioxid::serde_json::json!({
+            "model": "/admin/models/editor_records", "record": record_path, "user": user_path, "role": role_path
+        })).unwrap()).unwrap();
+    }
+    assert!(!auth
+        .list_role_permissions("reader")
+        .await
+        .unwrap()
+        .contains(&"records.update".to_owned()));
+    let audit = db.query_one(Statement::from_string(DatabaseBackend::Sqlite,
+        "SELECT count(*) AS count FROM _ferrioxid_admin_audit WHERE action IN ('permission_grant', 'permission_revoke')".to_owned())).await.unwrap().unwrap();
+    assert_eq!(audit.try_get::<i64>("", "count").unwrap(), 2);
+    let confirmation =
+        editor_call(port, "GET", format!("{record_path}/delete"), None, &eraser).await;
+    assert_eq!(confirmation.status, 200);
+    let delete_csrf = field_value(&confirmation.body, "csrf_token");
+    assert_eq!(
+        editor_call(
+            port,
+            "POST",
+            format!("{record_path}/delete"),
+            Some(form(&[])),
+            &eraser
+        )
+        .await
+        .status,
+        403
+    );
+    let removed = editor_call(
+        port,
+        "POST",
+        format!("{record_path}/delete"),
+        Some(form(&[("csrf_token", &delete_csrf)])),
+        &eraser,
+    )
+    .await;
+    assert_eq!(removed.status, 303);
+    assert!(EditorRecord::get(&db, record.id).await.unwrap().is_none());
+    server.abort();
+}
+
 #[tokio::test]
 async fn html_admin_works_without_javascript() {
     let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
@@ -1088,6 +1646,9 @@ async fn html_admin_works_without_javascript() {
     );
     assert!(!missing_relation.body.contains("Obst"));
     assert!(missing_relation.body.contains(&category_id));
+    assert!(missing_relation
+        .body
+        .contains(&format!("<option value=\"{category_id}\" selected>")));
 
     let confirm = call(
         "GET",
@@ -1278,7 +1839,7 @@ async fn html_admin_works_without_javascript() {
     assert!(!users.body.contains("name=\"role\""));
     assert!(!users.body.contains("id=\"assign-role\""));
     assert!(!users.body.contains("id=\"assign-email\""));
-    assert!(users.body.contains("/edit#roles"));
+    assert!(users.body.contains("#roles"));
     assert!(!users.body.contains("Nein · Superuser"));
     assert!(!users.body.contains("Rolle anlegen"));
     assert!(users.body.contains("Benutzer und Zugang"));
@@ -1921,7 +2482,7 @@ async fn html_admin_works_without_javascript() {
     assert_eq!(continued.status, 303, "{}", continued.body);
     let continued_at = location(&continued.headers);
     assert!(
-        continued_at.contains("/edit?notice=created"),
+        continued_at.contains("?notice=created") && !continued_at.contains("/edit"),
         "{continued_at}"
     );
     let another = call(

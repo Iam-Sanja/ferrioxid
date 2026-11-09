@@ -32,8 +32,8 @@
 </thead>
 <tbody>
 {% for user in users %}
-<tr data-record-href="/admin/directory/users/{{ user.id }}{% if user.can_edit %}/edit{% endif %}">
-<td class="is-lead"><a href="/admin/directory/users/{{ user.id }}{% if user.can_edit %}/edit{% endif %}">{{ user.email }}</a></td>
+<tr data-record-href="/admin/directory/users/{{ user.id }}">
+<td class="is-lead"><a href="/admin/directory/users/{{ user.id }}">{{ user.email }}</a></td>
 <td><span class="flag">{% if user.is_active %}{{ i18n.active }}{% else %}{{ i18n.inactive }}{% endif %}</span></td>
 <td><span class="flag">{% if user.is_staff %}{{ i18n.staff }}{% else %}{{ i18n.no_staff }}{% endif %}</span></td>
 <td><span class="flag">{% if user.is_superuser %}{{ i18n.superuser }}{% else %}{{ i18n.no_superuser }}{% endif %}</span></td>
@@ -44,8 +44,7 @@
 <div class="menu-panel">
 <a href="/admin/directory/users/{{ user.id }}">{{ i18n.view }}</a>
 {% if user.can_edit %}
-<a href="/admin/directory/users/{{ user.id }}/edit">{{ i18n.edit }}</a>
-<a href="/admin/directory/users/{{ user.id }}/edit#roles">{{ i18n.manage_roles }}</a>
+<a href="/admin/directory/users/{{ user.id }}#roles">{{ i18n.manage_roles }}</a>
 {% else %}<span class="hint">{{ i18n.blocked }}</span>{% endif %}
 <a href="/admin/audit?model=_ferrioxid_users&amp;record={{ user.id }}">{{ i18n.history }}</a>
 {% if user.mutable %}

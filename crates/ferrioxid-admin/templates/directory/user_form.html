@@ -3,6 +3,13 @@
 <nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="/admin/directory/users">{{ i18n.users }}</a></nav>
 <form class="card" method="post" action="{{ action }}" {% if not creating %}data-track-dirty="record"{% endif %}>
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{% if not creating %}
+<dl>
+<dt>{{ i18n.record }} <span class="hint">{{ i18n.readonly }}</span></dt><dd class="uuid">{{ id }}</dd>
+<dt>{{ i18n.superuser }} <span class="hint">{{ i18n.readonly }}</span></dt><dd>{{ i18n.no_superuser }}</dd>
+<dt>{{ i18n.permissions }} <span class="hint">{{ i18n.readonly }}</span></dt><dd>{% if permissions | length == 0 %}{{ i18n.no_permissions }}{% else %}{{ permissions | join(sep=", ") }}{% endif %}</dd>
+</dl>
+{% endif %}
 <div class="field">
 <label for="user-email">{{ i18n.email }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
 <input id="user-email" name="email" type="email" required autocomplete="off" value="{{ email }}" {% if email_error %}aria-invalid="true" aria-describedby="user-email-error"{% endif %}>
@@ -49,7 +56,11 @@
 {% endif %}
 <label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
 <div class="actions">
-<button class="js-save" type="submit">{{ i18n.save }}</button>
+{% if creating %}<button class="js-save" type="submit">{{ i18n.save }}</button>{% else %}
+<button class="js-save" type="submit" name="save" value="list">{{ i18n.save }}</button>
+<button class="js-save" type="submit" name="save" value="continue">{{ i18n.save_continue }}</button>
+<a class="button ghost" href="/admin/audit?model=_ferrioxid_users&amp;record={{ id }}">{{ i18n.history }}</a>
+{% endif %}
 <a class="button ghost" href="/admin/directory/users">{{ i18n.cancel }}</a>
 </div>
 </form>

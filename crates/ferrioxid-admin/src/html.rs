@@ -57,10 +57,13 @@ pub fn routes(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSt
                 "/admin/models/{model}/{id}/inline/{inline}/new",
                 get(inline_new).post(inline_create),
             )
-            .route("/admin/models/{model}/{id}", get(model_detail))
+            .route(
+                "/admin/models/{model}/{id}",
+                get(model_detail).post(model_update),
+            )
             .route(
                 "/admin/models/{model}/{id}/edit",
-                get(model_edit).post(model_update),
+                get(model_detail).post(model_update),
             )
             .route(
                 "/admin/models/{model}/{id}/delete",
@@ -71,7 +74,10 @@ pub fn routes(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSt
                 "/admin/directory/users/new",
                 get(user_new).post(user_create),
             )
-            .route("/admin/directory/users/{id}", get(user_detail))
+            .route(
+                "/admin/directory/users/{id}",
+                get(user_detail).post(user_update),
+            )
             .route(
                 "/admin/directory/users/{id}/edit",
                 get(user_edit).post(user_update),
@@ -84,6 +90,7 @@ pub fn routes(router: Router<AppState>, registry: AdminRegistry) -> Router<AppSt
                 "/admin/directory/roles/new",
                 get(role_new).post(role_create),
             )
+            .route("/admin/directory/roles/{id}", get(role_detail))
             .route("/admin/directory/permissions", get(permissions_page))
             .route(
                 "/admin/directory/roles/{role}/permissions",
@@ -898,6 +905,24 @@ async fn model_detail(
         )
         .await;
     };
+    let can_update = gate(&state, &user, model.as_ref(), "update").await.is_ok()
+        && read_visible(&state, &user, model.as_ref(), id, "update")
+            .await
+            .is_some();
+    if can_update {
+        return record_form(
+            State(state),
+            headers,
+            Extension(registry),
+            Path((model_key, id)),
+            Query(query),
+        )
+        .await;
+    }
+    let can_delete = gate(&state, &user, model.as_ref(), "delete").await.is_ok()
+        && read_visible(&state, &user, model.as_ref(), id, "delete")
+            .await
+            .is_some();
     redact(model.meta(), &mut record);
     let relations = relation_names(&registry, &state, &user, model.columns(), &[record.clone()])
         .await
@@ -937,15 +962,15 @@ async fn model_detail(
             "id": id.to_string(),
             "history_href": history_href(model.meta().key, &id.to_string()),
             "fields": fields,
-            "can_update": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "update").await.is_ok(),
-            "can_delete": permit(state.auth.as_ref().unwrap(), &user, model.meta(), "delete").await.is_ok(),
-            "inlines": inline_sections(&state, &registry, &user, model.as_ref(), id, &query).await
+            "can_update": false,
+            "can_delete": can_delete,
+            "inlines": inline_sections(&state, &registry, &user, model.as_ref(), id, &query, false).await
         }),
     )
     .await
 }
 
-async fn model_edit(
+async fn record_form(
     State(state): State<AppState>,
     headers: HeaderMap,
     Extension(registry): Extension<AdminRegistry>,
@@ -956,7 +981,7 @@ async fn model_edit(
         &state,
         &headers,
         &registry,
-        &format!("/admin/models/{model_key}/{id}/edit"),
+        &format!("/admin/models/{model_key}/{id}"),
     )
     .await
     {
@@ -980,6 +1005,7 @@ async fn model_edit(
         )
         .await;
     };
+    record.insert("_inline_query".to_owned(), json!(params));
     if params.contains_key("draft") {
         record.insert(
             "_draft".to_owned(),
@@ -1368,9 +1394,10 @@ async fn roles(
         .unwrap_or_default();
     let roles: Vec<Value> = listed
         .into_iter()
-        .map(|(_, name)| {
+        .map(|(id, name)| {
             json!({
                 "name": name,
+                "href": format!("/admin/directory/roles/{id}"),
                 "history": history_href("_ferrioxid_users", &name)
             })
         })
@@ -1492,6 +1519,26 @@ async fn permissions_page(
     Extension(registry): Extension<AdminRegistry>,
     Query(params): Query<HashMap<String, String>>,
 ) -> Response {
+    role_permissions_page(state, headers, registry, params, None).await
+}
+
+async fn role_detail(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+    Extension(registry): Extension<AdminRegistry>,
+    Path(id): Path<Uuid>,
+    Query(params): Query<HashMap<String, String>>,
+) -> Response {
+    role_permissions_page(state, headers, registry, params, Some(id)).await
+}
+
+async fn role_permissions_page(
+    state: AppState,
+    headers: HeaderMap,
+    registry: AdminRegistry,
+    params: HashMap<String, String>,
+    record_id: Option<Uuid>,
+) -> Response {
     let locale = locale_of(
         &headers,
         &registry.branding().default_locale,
@@ -1506,21 +1553,39 @@ async fn permissions_page(
     let auth = state.auth.as_ref().unwrap();
     let listed = auth.list_roles().await.unwrap_or_default();
     let mut roles = Vec::new();
-    for (_, name) in listed {
-        if let Some(selected) = params.get("role") {
-            if selected != &name {
-                continue;
+    for (id, name) in listed {
+        if record_id.is_some_and(|selected| selected != id) {
+            continue;
+        }
+        if record_id.is_none() {
+            if let Some(selected) = params.get("role") {
+                if selected != &name {
+                    continue;
+                }
             }
         }
         let permissions = auth.list_role_permissions(&name).await.unwrap_or_default();
-        roles.push(json!({ "name": name, "permissions": permissions }));
+        roles.push(json!({ "id": id, "name": name, "permissions": permissions }));
+    }
+    if record_id.is_some() && roles.is_empty() {
+        return error_page(
+            &state,
+            &headers,
+            &registry,
+            &locale,
+            StatusCode::NOT_FOUND,
+            "not_found",
+            true,
+            &user.email,
+        )
+        .await;
     }
     let csrf = session_csrf(auth, &headers).await;
     page_as(
         &state,
         &user,
         &registry,
-        "permissions.html",
+        if record_id.is_some() { "role_detail.html" } else { "permissions.html" },
         &locale,
         theme_of(&headers),
         catalog(&locale)["permissions"]
@@ -1531,9 +1596,10 @@ async fn permissions_page(
         &user.email,
         &csrf,
         "/admin/directory/permissions",
+        &flash(&locale, params.get("notice").map(String::as_str).unwrap_or("")),
         "",
-        "",
-        json!({ "roles": roles }),
+        json!({ "roles": roles, "record_role": record_id.is_some(),
+            "history_href": roles.first().and_then(|role| role["name"].as_str()).map(|name| history_href("_ferrioxid_users", name)).unwrap_or_default() }),
     )
     .await
 }
@@ -1556,7 +1622,19 @@ async fn permission_change(
     };
     let form = parse_form(&body);
     let code = form.get("code").cloned().unwrap_or_default();
-    if !identifier(&role) || !identifier(&code) {
+    if !identifier(&role)
+        || !identifier(&code)
+        || !matches!(
+            form.get("action").map(String::as_str),
+            Some("grant" | "revoke")
+        )
+        || form.keys().any(|key| {
+            !matches!(
+                key.as_str(),
+                "csrf_token" | "confirm" | "code" | "action" | "return_to"
+            )
+        })
+    {
         return error_page(
             &state,
             &headers,
@@ -1597,6 +1675,13 @@ async fn permission_change(
             &user.email,
         )
         .await;
+    }
+    if form.get("return_to").map(String::as_str) == Some("record") {
+        if let Ok(roles) = auth.list_roles().await {
+            if let Some((id, _)) = roles.iter().find(|(_, name)| name == &role) {
+                return redirect(&format!("/admin/directory/roles/{id}?notice=updated"));
+            }
+        }
     }
     redirect("/admin/directory/permissions?notice=updated")
 }
@@ -1731,7 +1816,7 @@ async fn pick_page(
         &registry.branding().fallback_locale,
     );
     let back = match record_id {
-        Some(id) => format!("/admin/models/{model_key}/{id}/edit"),
+        Some(id) => format!("/admin/models/{model_key}/{id}"),
         None => format!("/admin/models/{model_key}/new"),
     };
     let user = match require_get(state, headers, registry, &back).await {
@@ -2062,6 +2147,10 @@ async fn form_page(
         .await;
     }
     let mut values = values;
+    let inline_query: HashMap<String, String> = values
+        .remove("_inline_query")
+        .and_then(|value| serde_json::from_value(value).ok())
+        .unwrap_or_default();
     let draft_id = take_draft(state, &user, model_key, id, &mut values).await;
     if let Some(id) = id {
         values
@@ -2090,7 +2179,7 @@ async fn form_page(
         (Vec::new(), String::new())
     };
     let action = custom_action.unwrap_or_else(|| match id {
-        Some(id) => format!("/admin/models/{model_key}/{id}/edit"),
+        Some(id) => format!("/admin/models/{model_key}/{id}"),
         None => format!("/admin/models/{model_key}/new"),
     });
     let list_path = back.clone();
@@ -2098,11 +2187,8 @@ async fn form_page(
         .get("_cancel")
         .and_then(Value::as_str)
         .map(str::to_owned)
-        .unwrap_or_else(|| {
-            id.map(|value| format!("/admin/models/{model_key}/{value}"))
-                .unwrap_or_else(|| back.clone())
-        });
-    page_as(
+        .unwrap_or_else(|| back.clone());
+    let mut response = page_as(
         state,
         &user,
         registry,
@@ -2120,10 +2206,13 @@ async fn form_page(
         json!({
             "model_key": model_key,
             "existing": id.is_some(),
+            "can_create": gate(state, &user, model.as_ref(), "create").await.is_ok(),
+            "inlines": if let Some(record_id) = id {
+                inline_sections(state, registry, &user, model.as_ref(), record_id, &inline_query, true).await
+            } else { Vec::new() },
             "delete_href": if let Some(record_id) = id {
-                permit(state.auth.as_ref().unwrap(), &user, model.meta(), "delete")
-                    .await
-                    .is_ok()
+                (gate(state, &user, model.as_ref(), "delete").await.is_ok()
+                    && read_visible(state, &user, model.as_ref(), record_id, "delete").await.is_some())
                     .then(|| format!("/admin/models/{model_key}/{record_id}/delete"))
             } else {
                 None
@@ -2139,7 +2228,11 @@ async fn form_page(
             "basis": basis
         }),
     )
-    .await
+    .await;
+    if !feedback.alert.is_empty() {
+        *response.status_mut() = StatusCode::UNPROCESSABLE_ENTITY;
+    }
+    response
 }
 
 async fn save_form(
@@ -2245,7 +2338,7 @@ async fn save_form(
         {
             Ok(draft) => {
                 let target = match id {
-                    Some(id) => format!("/admin/models/{model_key}/{id}/edit?draft={draft}"),
+                    Some(id) => format!("/admin/models/{model_key}/{id}?draft={draft}"),
                     None => format!("/admin/models/{model_key}/new?draft={draft}"),
                 };
                 redirect(&target)
@@ -2265,7 +2358,7 @@ async fn save_form(
             }
         };
     }
-    if !matches!(save, "detail" | "edit" | "new") {
+    if !matches!(save, "detail" | "edit" | "new" | "list") {
         return error_page(
             state,
             headers,
@@ -2321,7 +2414,8 @@ async fn save_form(
                 }
                 let notice = if id.is_some() { "saved" } else { "created" };
                 let target = match save {
-                    "edit" => format!("/admin/models/{model_key}/{saved}/edit?notice={notice}"),
+                    "list" => format!("/admin/models/{model_key}?notice={notice}"),
+                    "edit" => format!("/admin/models/{model_key}/{saved}?notice={notice}"),
                     "new" => format!("/admin/models/{model_key}/new?notice={notice}"),
                     _ => format!("/admin/models/{model_key}/{saved}?notice={notice}"),
                 };
@@ -2440,7 +2534,8 @@ async fn save_form(
                 .get("id")
                 .and_then(Value::as_str)
                 .map(|value| match save {
-                    "edit" => format!("/admin/models/{model_key}/{value}/edit?notice={notice}"),
+                    "list" => format!("/admin/models/{model_key}?notice={notice}"),
+                    "edit" => format!("/admin/models/{model_key}/{value}?notice={notice}"),
                     "new" => format!("/admin/models/{model_key}/new?notice={notice}"),
                     _ => format!("/admin/models/{model_key}/{value}?notice={notice}"),
                 })
@@ -2652,6 +2747,17 @@ async fn input_fields(
                 current.as_str().unwrap_or(""),
             )
             .await;
+            // Retain an unavailable current relation instead of silently selecting NULL.
+            if let Some(id) = current.as_str().filter(|id| !id.is_empty()) {
+                if let Some(options) = input["options"].as_array_mut() {
+                    if !options.iter().any(|option| option["selected"] == true) {
+                        options.insert(0, json!({
+                            "id": id, "selected": true,
+                            "label": catalog(locale)[if user.is_superuser { "missing_relation" } else { "hidden_relation" }]
+                        }));
+                    }
+                }
+            }
             input["input"] = json!("text");
         } else if column.kind == ColumnKind::Boolean {
             input["kind"] = json!("boolean");
@@ -3346,7 +3452,7 @@ async fn user_new(
     headers: HeaderMap,
     Extension(registry): Extension<AdminRegistry>,
 ) -> Response {
-    user_form(&state, &headers, &registry, None, None, "").await
+    user_form(&state, &headers, &registry, None, None, "", "").await
 }
 
 async fn user_create(
@@ -3457,7 +3563,7 @@ async fn user_create(
         if password != password_confirm {
             draft.password_error = message.to_owned();
         }
-        return user_form(&state, &headers, &registry, None, Some(draft), message).await;
+        return user_form(&state, &headers, &registry, None, Some(draft), message, "").await;
     }
     let auth = state.auth.as_ref().unwrap();
     let known = role_names(auth).await;
@@ -3498,7 +3604,7 @@ async fn user_create(
                 .to_owned();
             let mut draft = user_draft(&values, Some(roles.clone()));
             draft.password_error = text.clone();
-            return user_form(&state, &headers, &registry, None, Some(draft), &text).await;
+            return user_form(&state, &headers, &registry, None, Some(draft), &text, "").await;
         }
         Err(ferrioxid_core::FerrioxidError::Validation(_)) => {
             let text = catalog(&locale)["email_taken"]
@@ -3507,7 +3613,7 @@ async fn user_create(
                 .to_owned();
             let mut draft = user_draft(&values, Some(roles.clone()));
             draft.email_error = text.clone();
-            return user_form(&state, &headers, &registry, None, Some(draft), &text).await;
+            return user_form(&state, &headers, &registry, None, Some(draft), &text, "").await;
         }
         Err(_) => {
             return error_page(
@@ -3560,6 +3666,21 @@ async fn user_detail(
         )
         .await;
     };
+    if !target.is_superuser {
+        return user_form(
+            &state,
+            &headers,
+            &registry,
+            Some(id),
+            None,
+            "",
+            &flash(
+                &locale,
+                params.get("notice").map(String::as_str).unwrap_or(""),
+            ),
+        )
+        .await;
+    }
     let roles = auth
         .list_user_role_names()
         .await
@@ -3607,7 +3728,7 @@ async fn user_edit(
     Extension(registry): Extension<AdminRegistry>,
     Path(id): Path<Uuid>,
 ) -> Response {
-    user_form(&state, &headers, &registry, Some(id), None, "").await
+    user_form(&state, &headers, &registry, Some(id), None, "", "").await
 }
 
 async fn user_update(
@@ -3682,7 +3803,7 @@ async fn user_update(
             .await
         }
     };
-    if reject_unknown(&values, &["confirm", "email", "active", "staff"]).is_err() {
+    if reject_unknown(&values, &["confirm", "email", "active", "staff", "save"]).is_err() {
         return error_page(
             &state,
             &headers,
@@ -3725,7 +3846,16 @@ async fn user_update(
         if email_invalid {
             draft.email_error = message.clone();
         }
-        return user_form(&state, &headers, &registry, Some(id), Some(draft), &message).await;
+        return user_form(
+            &state,
+            &headers,
+            &registry,
+            Some(id),
+            Some(draft),
+            &message,
+            "",
+        )
+        .await;
     };
     if actor.id == id && (!active || !staff && target.is_staff) {
         return error_page(
@@ -3741,7 +3871,11 @@ async fn user_update(
         .await;
     }
     match crate::directory::update_user(auth, actor.id, id, &email, active, staff).await {
-        Ok(_) => redirect(&format!("/admin/directory/users/{id}?notice=updated")),
+        Ok(_) => redirect(&if values.get("save") == Some("list") {
+            "/admin/directory/users?notice=updated".to_owned()
+        } else {
+            format!("/admin/directory/users/{id}?notice=updated")
+        }),
         Err(ferrioxid_core::FerrioxidError::Forbidden) => {
             error_page(
                 &state,
@@ -3762,7 +3896,16 @@ async fn user_update(
                 .to_owned();
             let mut draft = user_draft(&values, None);
             draft.email_error = text.clone();
-            user_form(&state, &headers, &registry, Some(id), Some(draft), &text).await
+            user_form(
+                &state,
+                &headers,
+                &registry,
+                Some(id),
+                Some(draft),
+                &text,
+                "",
+            )
+            .await
         }
         Err(_) => {
             error_page(
@@ -3871,6 +4014,7 @@ async fn user_password(
                 password_error: text.clone(),
             }),
             &text,
+            "",
         )
         .await;
     }
@@ -3914,6 +4058,7 @@ async fn user_password(
                     password_error: text.clone(),
                 }),
                 &text,
+                "",
             )
             .await
         }
@@ -3965,6 +4110,7 @@ async fn user_form(
     id: Option<Uuid>,
     draft: Option<UserDraft>,
     alert: &str,
+    notice: &str,
 ) -> Response {
     let locale = locale_of(
         headers,
@@ -4058,7 +4204,7 @@ async fn user_form(
         .unwrap_or_default();
     let csrf = session_csrf(auth, headers).await;
     let action = match id {
-        Some(id) => format!("/admin/directory/users/{id}/edit"),
+        Some(id) => format!("/admin/directory/users/{id}"),
         None => "/admin/directory/users/new".to_owned(),
     };
     let mut response = page_as(
@@ -4076,7 +4222,7 @@ async fn user_form(
         &actor.email,
         &csrf,
         "/admin/directory/users",
-        "",
+        notice,
         alert,
         json!({
             "id": id.map(|value| value.to_string()).unwrap_or_default(),
@@ -4090,7 +4236,8 @@ async fn user_form(
             "self_edit": id == Some(actor.id),
             "roles": known_roles,
             "role_checks": role_checks,
-            "assigned": assigned
+            "assigned": assigned,
+            "permissions": if let Some(id) = id { auth.list_user_permissions(id).await.unwrap_or_default() } else { Vec::new() }
         }),
     )
     .await;
@@ -5131,9 +5278,13 @@ async fn inline_sections(
     parent: &dyn ManagedModel,
     parent_id: Uuid,
     query: &HashMap<String, String>,
+    editing: bool,
 ) -> Vec<Value> {
     let mut sections = Vec::new();
     for spec in parent.meta().inlines {
+        if editing && spec.form {
+            continue;
+        }
         let Some(child) = child_inline(registry, parent, spec.name) else {
             continue;
         };

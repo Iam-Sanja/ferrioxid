@@ -39,6 +39,18 @@ pub fn render(template: &str, value: Value, extra: &[(&str, &str)]) -> Result<St
 
 const TEMPLATES: &[(&str, &str)] = &[
     ("base.html", include_str!("../templates/base.html")),
+    (
+        "permission_fields.html",
+        include_str!("../templates/partials/permissions.html"),
+    ),
+    (
+        "role_detail.html",
+        include_str!("../templates/directory/role_detail.html"),
+    ),
+    (
+        "inlines.html",
+        include_str!("../templates/partials/inlines.html"),
+    ),
     ("login.html", include_str!("../templates/login.html")),
     (
         "dashboard.html",

@@ -87,3 +87,5 @@ SQLite: `cargo test -p myshop --test admin_http` and `cargo test -p myshop --tes
 `examples/myshop/tests/framework_names.rs` initializes all auth, job and myshop migrations in an empty database, checks the 21 expected tables, and reapplies the migrations to verify idempotency. SQLite runs in memory during the workspace suite. The PostgreSQL variant is ignored locally and runs first in the dedicated PostgreSQL CI job against its empty disposable database; on success it drops only the verified tables created by the test.
 
 The generator integration checks both API and fullstack outputs for current framework names, the project manifest, absence of a pre-generated CSRF key, secret exclusions and the model markers introduced in PR #24. Both templates compile, and model insertion is compiled again. `doctor`, `check`, `dev` and release builds remain part of that integration run.
+
+See [Unified admin record editor](admin-record-editor.md) for canonical routes, permissions, navigation and regression checks.
