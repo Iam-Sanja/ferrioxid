@@ -385,13 +385,13 @@ async fn editor_call(
     }
 }
 
-async fn editor_login(port: u16, email: &str) -> String {
+async fn editor_login(port: u16, email: &str, password: &str) -> String {
     let login = editor_call(port, "GET", "/admin/login".into(), None, "").await;
     let csrf = cookie_value(&login.headers, "ferrioxid_login_csrf");
     let body = form(&[
         ("csrf_token", &csrf),
         ("email", email),
-        ("password", "correct-horse-battery"),
+        ("password", password),
         ("next", "/admin"),
     ]);
     let reply = tokio::task::spawn_blocking(move || {
@@ -414,10 +414,12 @@ async fn canonical_editors_preserve_permissions_readonly_fields_roles_and_naviga
     let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
     ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
+    // Create a unique test credential instead of hard-coding a password.
+    let password = format!("test-{}", ferrioxid::uuid::Uuid::new_v4());
     let root = auth
         .create_user(
             "editor-root@example.com",
-            "correct-horse-battery",
+            &password,
             true,
             true,
         )
@@ -426,7 +428,7 @@ async fn canonical_editors_preserve_permissions_readonly_fields_roles_and_naviga
     let target = auth
         .create_user(
             "editor-target@example.com",
-            "correct-horse-battery",
+            &password,
             false,
             false,
         )
@@ -440,7 +442,7 @@ async fn canonical_editors_preserve_permissions_readonly_fields_roles_and_naviga
     ] {
         auth.create_user(
             &format!("{role}@example.com"),
-            "correct-horse-battery",
+            &password,
             true,
             false,
         )
@@ -483,10 +485,10 @@ async fn canonical_editors_preserve_permissions_readonly_fields_roles_and_naviga
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
-    let reader = editor_login(port, "reader@example.com").await;
-    let writer = editor_login(port, "writer@example.com").await;
-    let eraser = editor_login(port, "eraser@example.com").await;
-    let root_session = editor_login(port, &root.email).await;
+    let reader = editor_login(port, "reader@example.com", &password).await;
+    let writer = editor_login(port, "writer@example.com", &password).await;
+    let eraser = editor_login(port, "eraser@example.com", &password).await;
+    let root_session = editor_login(port, &root.email, &password).await;
     let record_path = format!("/admin/models/editor_records/{}", record.id);
     let listing = editor_call(
         port,
@@ -520,7 +522,7 @@ async fn canonical_editors_preserve_permissions_readonly_fields_roles_and_naviga
     )
     .await;
     assert_eq!(denied.status, 403);
-    let write_only = editor_login(port, "write_only@example.com").await;
+    let write_only = editor_login(port, "write_only@example.com", &password).await;
     for path in [record_path.clone(), format!("{record_path}/edit")] {
         assert_eq!(
             editor_call(port, "GET", path, None, &write_only)
