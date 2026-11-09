@@ -38,6 +38,10 @@ In the long term, the admin should cover the relevant functions of the Django ad
 | v0.26 | Completed | Validated app startup, Rust/TOML migration matching, flat field groups and managed timestamps | Soft delete remains planned |
 | v0.28 | Completed | Admin navigation grouped by app, model links and permission-aware visibility | See [admin-navigation.md](admin-navigation.md) for limits |
 
+## In review
+
+- Forms ([#47](https://github.com/Iam-Sanja/ferrioxid/issues/47)): text, number, email, password, checkbox, select and textarea widgets, escaped labels and values, and model binding through an explicit column allow-list. Create and replace require every required field. Patch leaves missing keys unchanged. Formsets are still absent. Status in the capability matrix: **In PR**.
+
 ## Open after v0.27.1
 
 - Cron-Syntax.

@@ -6,7 +6,7 @@ use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{Html, IntoResponse};
 use ferrioxid::auth::AppState;
 use ferrioxid::forms::{
-    contact_fields, message, render_form, render_page, ContactForm, FerrioxidForm, FormErrors,
+    contact_widgets, message, render_fields, render_page, ContactForm, FerrioxidForm, FormErrors,
     FormValues,
 };
 
@@ -76,12 +76,12 @@ async fn page(
         Some(auth) => auth.csrf_from_request(headers).await.ok(),
         None => None,
     };
-    let form = render_form(
+    let form = render_fields(
         "/contact",
         csrf.as_deref(),
         values,
         errors,
-        &contact_fields("de"),
+        &contact_widgets("de"),
         "de",
     );
     render_page("Kontakt", &form)
