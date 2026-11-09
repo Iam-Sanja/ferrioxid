@@ -37,7 +37,7 @@
 <td><span class="flag">{% if user.is_active %}{{ i18n.active }}{% else %}{{ i18n.inactive }}{% endif %}</span></td>
 <td><span class="flag">{% if user.is_staff %}{{ i18n.staff }}{% else %}{{ i18n.no_staff }}{% endif %}</span></td>
 <td><span class="flag">{% if user.is_superuser %}{{ i18n.superuser }}{% else %}{{ i18n.no_superuser }}{% endif %}</span></td>
-<td>{{ user.roles }}</td>
+<td>{% if user.roles %}{{ user.roles }}{% else %}-{% endif %}</td>
 <td>
 <details class="menu">
 <summary>{{ i18n.actions }}</summary>
@@ -75,41 +75,4 @@
 {% if previous %}<a href="{{ previous }}">{{ i18n.previous }}</a>{% else %}<span class="hint">{{ i18n.previous }}</span>{% endif %}
 {% if next_page %}<a href="{{ next_page }}">{{ i18n.next }}</a>{% else %}<span class="hint">{{ i18n.next }}</span>{% endif %}
 </nav>
-<section class="section">
-<h2>{{ i18n.assign_heading }}</h2>
-{% if role_choices | length == 0 %}
-<div class="empty-state">
-<p class="empty">{{ i18n.no_roles }}</p>
-<p><a href="/admin/directory/roles">{{ i18n.roles }}</a></p>
-</div>
-{% else %}
-<form class="card" method="post" action="/admin/directory/assignments">
-<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-<p class="hint">{{ i18n.hint_role }}</p>
-<div class="field">
-<label for="assign-email">{{ i18n.email }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
-<select id="assign-email" name="email" required>
-<option value="">{{ i18n.choose }}</option>
-{% for email in emails %}
-<option value="{{ email }}">{{ email }}</option>
-{% endfor %}
-</select>
-</div>
-<div class="field">
-<label for="assign-role">{{ i18n.role }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
-<select id="assign-role" name="role" required>
-<option value="">{{ i18n.choose }}</option>
-{% for role in role_choices %}
-<option value="{{ role }}">{{ role }}</option>
-{% endfor %}
-</select>
-</div>
-<label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
-<div class="actions">
-<button name="action" value="assign" type="submit">{{ i18n.assign }}</button>
-<button name="action" value="revoke" type="submit" class="ghost danger">{{ i18n.revoke }}</button>
-</div>
-</form>
-{% endif %}
-</section>
 {% endblock %}

@@ -78,6 +78,10 @@ const TEMPLATES: &[(&str, &str)] = &[
         include_str!("../templates/directory/roles.html"),
     ),
     (
+        "role_new.html",
+        include_str!("../templates/directory/role_new.html"),
+    ),
+    (
         "permissions.html",
         include_str!("../templates/directory/permissions.html"),
     ),

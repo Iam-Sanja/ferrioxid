@@ -1,6 +1,6 @@
 //! Generates an app in the project without changing existing files.
 
-use crate::models::insert_line;
+use crate::models::insert_text;
 use ferrioxid_migrations::discover_project;
 use std::path::{Path, PathBuf};
 
@@ -76,84 +76,114 @@ impl JobHandler for ExampleHandler {
 }
 "#;
 
-pub fn generate_app(name: &str) -> Result<PathBuf, String> {
-    validate_app_name(name)?;
-    let project = discover_project(&std::env::current_dir().map_err(|error| error.to_string())?)
-        .map_err(|error| error.0)?;
-    generate_into(&project.root, name)
+pub fn generate_app(name: &str, templates: &str) -> Result<PathBuf, String> {
+    let root = std::env::current_dir().map_err(|error| error.to_string())?;
+    generate_into(&root, name, templates)
 }
 
-pub(crate) fn generate_into(root: &Path, name: &str) -> Result<PathBuf, String> {
+pub(crate) fn generate_into(root: &Path, name: &str, templates: &str) -> Result<PathBuf, String> {
     validate_app_name(name)?;
-    let app_dir = root.join("src/apps").join(name);
-    if app_dir.exists() {
+    if !matches!(templates, "local" | "shared") {
+        return Err("Template placement must be local or shared.".to_owned());
+    }
+    let project = discover_project(root).map_err(|error| error.0)?;
+    if project.layout_version != 2 {
+        return Err("new app requires a layout-2 project. Existing projects are not restructured. See docs/project-generator.md for manual migration.".to_owned());
+    }
+    if project.apps.iter().any(|app| app.name == name) {
+        return Err(format!("App {name} is already declared."));
+    }
+    let relative = if project.apps_dir == "." {
+        name.to_owned()
+    } else {
+        format!("apps/{name}")
+    };
+    let app_dir = project.root.join(&relative);
+    if app_dir.exists() || app_dir.symlink_metadata().is_ok() {
         return Err(format!(
-            "App `{name}` already exists and will not be overwritten."
+            "App {name} already exists and will not be overwritten."
         ));
     }
-    std::fs::create_dir_all(app_dir.join("migrations")).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(app_dir.join("templates").join(name))
-        .map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(app_dir.join("static").join(name))
-        .map_err(|error| error.to_string())?;
-    write_new(&app_dir.join("mod.rs"), &module_source(name))?;
+    ensure_project_directory(&project.root, app_dir.parent().expect("app parent"))?;
+    let template_path = if templates == "shared" {
+        project
+            .templates_directory()
+            .join(format!("{name}/index.html"))
+    } else {
+        app_dir.join(format!("templates/{name}/index.html"))
+    };
+    if template_path.exists() || template_path.symlink_metadata().is_ok() {
+        return Err(format!(
+            "{} already exists and will not be overwritten.",
+            template_path.display()
+        ));
+    }
+    ensure_project_directory(
+        &project.root,
+        template_path.parent().expect("template parent"),
+    )?;
+    let registry_path = project.root.join("src/apps.rs");
+    ensure_project_directory(&project.root, &registry_path)?;
+    let mut registry =
+        std::fs::read_to_string(&registry_path).map_err(|error| error.to_string())?;
+    registry = insert_text(
+        &registry,
+        "// ferrioxid:app-modules:end",
+        &format!("#[path = \"../{relative}/mod.rs\"]\npub mod {name};"),
+    )?;
+    registry = insert_text(
+        &registry,
+        "// ferrioxid:apps:end",
+        &format!("        .install({name}::{}App)?", pascal(name)),
+    )?;
+    registry = insert_text(&registry, "// ferrioxid:app-schema:end",
+        &format!("        Some(\"{name}\") => Ok(ferrioxid::migrations::SchemaSnapshot::from_registered(&{name}::models::schema())?),"))?;
+    let config_path = project.root.join("ferrioxid.toml");
+    let config = std::fs::read_to_string(&config_path).map_err(|error| error.to_string())?;
+    let config = format!("{config}\n[app.{name}]\nmigrations = \"{relative}/migrations\"\n");
+    for directory in ["models", "migrations", "templates", "static"] {
+        std::fs::create_dir_all(app_dir.join(directory)).map_err(|error| error.to_string())?;
+    }
+    write_new(&app_dir.join("mod.rs"), &module_source(name, &relative))?;
     write_new(&app_dir.join("urls.rs"), &urls_source(name))?;
     write_new(&app_dir.join("views.rs"), &views_source(name))?;
-    write_new(&app_dir.join("admin.rs"), "pub fn attach() {}\n")?;
-    write_new(
-        &app_dir.join("models.rs"),
-        "// Models continue to use the FerrioxidModel derive macro.\n",
-    )?;
-    write_new(
-        &app_dir.join(format!("templates/{name}/index.html")),
-        &format!("<p>{name}</p>\n"),
-    )?;
+    write_new(&app_dir.join("admin.rs"), REGISTER_SOURCE)?;
+    write_new(&app_dir.join("models/mod.rs"), MODELS_SOURCE)?;
+    write_new(&app_dir.join("migrations/.gitkeep"), "")?;
     write_new(
         &app_dir.join(format!("static/{name}/{name}.css")),
-        "/* app static */\n",
+        "/* App styles. */\n",
     )?;
-    let module = root.join("src/apps/mod.rs");
-    if module.exists() {
-        let text = std::fs::read_to_string(&module).map_err(|error| error.to_string())?;
-        let line = format!("pub mod {name};");
-        if !text.contains(&line) {
-            std::fs::write(&module, format!("{text}{line}\n"))
-                .map_err(|error| error.to_string())?;
-        }
-    } else {
-        write_new(&module, &format!("pub mod {name};\n"))?;
-    }
-    let main = root.join("src/main.rs");
-    if main.is_file() {
-        let text = std::fs::read_to_string(&main).map_err(|error| error.to_string())?;
-        if text.contains("// ferrioxid:apps:end") {
-            insert_line(
-                &main,
-                "// ferrioxid:apps:end",
-                &format!("        .install({name}::{}App)?", pascal(name)),
-            )?;
-        } else {
-            println!(
-                "The app is not registered in main.rs yet. Add .install({name}::{pascal}App)? before startup.",
-                pascal = pascal(name)
-            );
-        }
-    }
-    println!("Declare app migrations under [app.{name}] in ferrioxid.toml. This entry does not load Rust code.");
+    write_new(
+        &template_path,
+        &format!(
+            "{{% extends \"base.html\" %}}{{% block content %}}<h1>{name}</h1>{{% endblock %}}\n"
+        ),
+    )?;
+    // Only explicit registration markers and the app declaration are updated.
+    std::fs::write(registry_path, registry).map_err(|error| error.to_string())?;
+    std::fs::write(config_path, config).map_err(|error| error.to_string())?;
     Ok(app_dir)
 }
 
-fn write_new(path: &Path, contents: &str) -> Result<(), String> {
-    if path.exists() {
-        return Err(format!(
-            "{} already exists and will not be overwritten.",
-            path.display()
-        ));
+pub(crate) fn ensure_project_directory(root: &Path, directory: &Path) -> Result<(), String> {
+    let root = root.canonicalize().map_err(|error| error.to_string())?;
+    let mut ancestor = directory;
+    while !ancestor.exists() {
+        ancestor = ancestor.parent().ok_or("Missing parent directory.")?;
     }
+    let ancestor = ancestor.canonicalize().map_err(|error| error.to_string())?;
+    if !ancestor.starts_with(&root) {
+        return Err("Generated files must remain inside the project directory.".to_owned());
+    }
+    Ok(())
+}
+
+fn write_new(path: &Path, contents: &str) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         std::fs::create_dir_all(parent).map_err(|error| error.to_string())?;
     }
-    std::fs::write(path, contents).map_err(|error| error.to_string())
+    crate::scaffold::write(path, contents)
 }
 
 pub(crate) fn validate_app_name(name: &str) -> Result<(), String> {
@@ -162,32 +192,44 @@ pub(crate) fn validate_app_name(name: &str) -> Result<(), String> {
         && chars.all(|char| char.is_ascii_lowercase() || char.is_ascii_digit() || char == '_')
         && (1..=32).contains(&name.len());
     if !ok
+        || crate::scaffold::reserved_identifier(name)
         || matches!(
             name,
-            "admin" | "auth" | "api" | "static" | "healthz" | "uploads"
+            "admin"
+                | "auth"
+                | "api"
+                | "static"
+                | "healthz"
+                | "uploads"
+                | "apps"
+                | "project"
+                | "src"
+                | "templates"
+                | "migrations"
+                | "target"
+                | "tests"
+                | "media"
+                | "ferrioxid"
+                | "cargo"
         )
     {
-        return Err(format!("`{name}` is not a valid app name."));
-    }
-    if name.contains('/') || name.contains('\\') || name.contains("..") {
-        return Err("The app name cannot be a filesystem path.".to_owned());
+        return Err(format!("{name} is not a valid app name."));
     }
     Ok(())
 }
 
 fn pascal(name: &str) -> String {
-    let mut chars = name.chars();
-    match chars.next() {
-        Some(first) => first.to_ascii_uppercase().to_string() + chars.as_str(),
-        None => String::new(),
-    }
+    name.split('_')
+        .filter(|part| !part.is_empty())
+        .map(|part| part[..1].to_ascii_uppercase() + &part[1..])
+        .collect()
 }
 
-fn module_source(name: &str) -> String {
+fn module_source(name: &str, relative: &str) -> String {
     let type_name = pascal(name);
     format!(
         r#"mod admin;
-mod models;
+pub mod models;
 mod urls;
 mod views;
 
@@ -201,10 +243,13 @@ impl FerrioxidApplication for {type_name}App {{
     }}
 
     fn contribute(&self, registry: &mut Registration<'_>) -> Result<(), AppError> {{
-        registry.routes(urls::routes())?;
-        registry.templates(std::path::Path::new("src/apps/{name}/templates"), TemplateMode::Isolated)?;
-        registry.static_files(std::path::Path::new("src/apps/{name}/static/{name}"))?;
-        admin::attach();
+        let root = registry.project()?.root.clone();
+        models::register(registry)?;
+        admin::register(registry)?;
+        registry.routes(urls::routes()?)?;
+        registry.migrations("{relative}/migrations")?;
+        registry.templates(root.join("{relative}/templates"), TemplateMode::ProjectOverride)?;
+        registry.static_files(root.join("{relative}/static/{name}"))?;
         Ok(())
     }}
 }}
@@ -212,13 +257,33 @@ impl FerrioxidApplication for {type_name}App {{
     )
 }
 
+const REGISTER_SOURCE: &str = r#"pub fn register(_registry: &mut ferrioxid::apps::Registration<'_>) -> Result<(), ferrioxid::apps::AppError> {
+    // ferrioxid:admin:end
+    Ok(())
+}
+"#;
+
+const MODELS_SOURCE: &str = r#"// ferrioxid:models:end
+
+pub fn register(_registry: &mut ferrioxid::apps::Registration<'_>) -> Result<(), ferrioxid::apps::AppError> {
+    // ferrioxid:registry:end
+    Ok(())
+}
+
+pub fn schema() -> Vec<ferrioxid::migrations::RegisteredModel> {
+    vec![
+        // ferrioxid:schema:end
+    ]
+}
+"#;
+
 fn urls_source(name: &str) -> String {
     format!(
         r#"use axum::routing::get;
 use ferrioxid::urls::{{UrlError, UrlSet}};
 
 pub fn routes() -> Result<UrlSet, UrlError> {{
-    UrlSet::new().route("{name}.index", "/", get(crate::apps::{name}::views::index))
+    UrlSet::new().route("{name}.index", "/", get(super::views::index))
 }}
 "#
     )
@@ -226,8 +291,20 @@ pub fn routes() -> Result<UrlSet, UrlError> {{
 
 fn views_source(name: &str) -> String {
     format!(
-        r#"pub async fn index() -> axum::response::Response {{
-    ferrioxid::views::json(&ferrioxid::serde_json::json!({{"app": "{name}"}}))
+        r#"use axum::{{Extension, http::HeaderMap, response::{{Html, IntoResponse, Response}}}};
+use std::sync::Arc;
+
+pub async fn index(
+    Extension(catalog): Extension<Arc<ferrioxid::apps::TemplateCatalog>>,
+    Extension(settings): Extension<Arc<ferrioxid::migrations::ProjectConfig>>,
+    headers: HeaderMap,
+) -> Response {{
+    let context = ferrioxid::pages::home_context(&settings);
+    match catalog.render("{name}/index.html", &context) {{
+        Ok(html) => Html(html).into_response(),
+        Err(error) => ferrioxid::views::fail(&headers, None, axum::http::StatusCode::INTERNAL_SERVER_ERROR,
+            "page.render", &error.to_string(), settings.resolved_debug().unwrap_or(false)),
+    }}
 }}
 "#
     )
@@ -235,37 +312,64 @@ fn views_source(name: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{generate_into, generate_worker_into, validate_app_name};
+    use super::*;
 
-    #[test]
-    fn generate_writes_once_and_rejects_bad_names() {
-        assert!(validate_app_name("Admin").is_err());
-        assert!(validate_app_name("..").is_err());
-        assert!(validate_app_name("admin").is_err());
-        let root = std::env::temp_dir().join(format!(
-            "ferrioxid-generate-app-{}",
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
-                .as_nanos()
-        ));
+    fn fixture() -> PathBuf {
+        let root = std::env::temp_dir().join(format!("ferrioxid-app-{}", uuid::Uuid::new_v4()));
         std::fs::create_dir_all(root.join("src")).unwrap();
-        let created = generate_into(&root, "shop").unwrap();
-        assert!(created.join("mod.rs").is_file());
-        assert!(created.join("urls.rs").is_file());
-        assert!(root.join("src/apps/mod.rs").is_file());
-        assert!(generate_into(&root, "shop").is_err());
+        std::fs::write(root.join("src/apps.rs"), crate::scaffold::APPS_REGISTRY).unwrap();
         std::fs::write(
             root.join("ferrioxid.toml"),
-            "migrations_dir = \"migrations\"\n",
+            "migrations_dir = \"migrations\"\n[project]\nlayout_version = 2\napps_dir = \"apps\"\n",
         )
         .unwrap();
+        root
+    }
+
+    #[test]
+    fn app_registration_is_explicit_and_preflighted() {
+        for invalid in ["Admin", "..", "admin", "type", "self", "con", "apps", "src"] {
+            assert!(validate_app_name(invalid).is_err());
+        }
+        assert_eq!(pascal("order_items"), "OrderItems");
+        let root = fixture();
+        let created = generate_into(&root, "shop", "local").unwrap();
+        assert!(created.join("models/mod.rs").is_file());
+        assert!(created.join("migrations/.gitkeep").is_file());
+        let config = discover_project(&root).unwrap();
+        assert_eq!(config.apps[0].name, "shop");
+        assert!(generate_into(&root, "shop", "local").is_err());
+        let before = std::fs::read(root.join("ferrioxid.toml")).unwrap();
+        std::fs::write(root.join("src/apps.rs"), "// no markers\n").unwrap();
+        assert!(generate_into(&root, "other", "local").is_err());
+        assert!(!root.join("apps/other").exists());
+        assert_eq!(std::fs::read(root.join("ferrioxid.toml")).unwrap(), before);
         let worker = generate_worker_into(&root).unwrap();
-        let source = std::fs::read_to_string(&worker).unwrap();
-        assert!(source.contains("WorkerHost"));
-        assert!(source.contains("register_jobs"));
-        assert!(!source.contains("into_router"));
+        assert!(std::fs::read_to_string(worker)
+            .unwrap()
+            .contains("WorkerHost"));
         assert!(generate_worker_into(&root).is_err());
-        let _ = std::fs::remove_dir_all(root);
+        std::fs::remove_dir_all(root).unwrap();
+    }
+
+    #[test]
+    fn root_apps_and_shared_templates_preserve_existing_files() {
+        let root = fixture();
+        std::fs::write(
+            root.join("ferrioxid.toml"),
+            "migrations_dir = \"migrations\"\n[project]\nlayout_version = 2\napps_dir = \".\"\n",
+        )
+        .unwrap();
+        std::fs::create_dir_all(root.join("templates/shop")).unwrap();
+        std::fs::write(root.join("templates/shop/index.html"), "keep").unwrap();
+        assert!(generate_into(&root, "shop", "shared").is_err());
+        assert!(!root.join("shop").exists());
+        std::fs::remove_file(root.join("templates/shop/index.html")).unwrap();
+        assert_eq!(
+            generate_into(&root, "shop", "shared").unwrap(),
+            root.join("shop")
+        );
+        assert!(root.join("templates/shop/index.html").is_file());
+        std::fs::remove_dir_all(root).unwrap();
     }
 }

@@ -6,6 +6,8 @@ Ferrioxid is a pre-release Rust full-stack web framework with a Django-inspired 
 
 SQLite is the default database. PostgreSQL is optional. React, Vite, and Node.js are not required for the admin.
 
+SQLite builds use a bounded SQLx driver backport with patched bundled SQLite. New projects receive the required Cargo-root patch automatically; existing independent projects need an explicit root-manifest update and rebuild. See [SQLite security and consumer instructions](docs/security/sqlite-rustsec-2026-0459.md).
+
 - Contributing: [CONTRIBUTING.md](CONTRIBUTING.md)
 - Security: [SECURITY.md](SECURITY.md)
 - Governance: [GOVERNANCE.md](GOVERNANCE.md)
@@ -25,12 +27,14 @@ Create a standalone project outside the framework workspace. Start in the Ferrio
 cargo install --path crates/ferrioxid-cli
 $ferrioxidRepo = (Get-Location).Path
 Set-Location ..
-ferrioxid new demo --template fullstack --ferrioxid-path $ferrioxidRepo
+ferrioxid new project demo --template fullstack --ferrioxid-path $ferrioxidRepo
 Set-Location demo
 ferrioxid migrate up
 ferrioxid admin create-user --email admin@example.com --staff --superuser
 ferrioxid dev
 ```
+
+The generated project has no business models or product tables. Add an app with `ferrioxid new app produkte`. See the [project/app guide](docs/project-generator.md).
 
 The generated project is a sibling of the framework repository, so Cargo does not treat it as an unlisted workspace member. The CLI prompts for a password. `FERRIOXID_PASSWORD` is an optional automation input with no default value.
 

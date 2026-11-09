@@ -2,41 +2,44 @@
 
 [Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/main.rs`.
 
+Install the CLI from the framework checkout as shown in the [README](../README.md). Run project creation outside the framework workspace and subsequent commands inside the generated project.
+
 ## Actual Functionality (Implemented)
 
 `ferrioxid doctor` and `ferrioxid check` check tools, files, both migration areas, `settings.runtime` and the mail form. The runtime test does not open a connection. `settings.runtime` becomes `ERROR` when production and debug coincide, `FERRIOXID_DEBUG` is neither `true` nor `false`, or `BIND_ADDRESS` begins with `0.0.0.0`. `disabled` does not expect an SMTP server. `console` and `memory` remain local. `smtp` is not connected. If `FERRIOXID_SMTP_PASSWORD` is missing, the `mail.credentials` warning arises without showing the value. Details are available in [cli-doctor.md](cli-doctor.md) and [migration-diagnostics.md](migration-diagnostics.md). `ferrioxid upgrade` describes [project-upgrade.md](project-upgrade.md). Generator, templates and the development server are available in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) and [development-server.md](development-server.md).
 
 ```powershell
-cargo run -p ferrioxid-cli -- new myproject --template fullstack --ferrioxid-path .
-cargo run -p ferrioxid-cli -- doctor
-cargo run -p ferrioxid-cli -- check
-cargo run -p ferrioxid-cli -- dev
-cargo run -p ferrioxid-cli -- build
-cargo run -p ferrioxid-cli -- generate model Customer
-cargo run -p ferrioxid-cli -- generate model Product --timestamps
-cargo run -p ferrioxid-cli -- worker
-cargo run -p ferrioxid-cli -- jobs list
-cargo run -p ferrioxid-cli -- generate app shop
-cargo run -p ferrioxid-cli -- generate worker
-cargo run -p ferrioxid-cli -- jobs inspect <id>
-cargo run -p ferrioxid-cli -- jobs inspect <id> --show-payload
-cargo run -p ferrioxid-cli -- migrate make <name>
-cargo run -p ferrioxid-cli -- migrate up
-cargo run -p ferrioxid-cli -- migrate status
-cargo run -p ferrioxid-cli -- check --strict
-cargo run -p ferrioxid-cli -- upgrade --check
-cargo run -p ferrioxid-cli -- upgrade --dry-run
-cargo run -p ferrioxid-cli -- upgrade --yes
+ferrioxid new project Shop --template fullstack
+cd Shop
+ferrioxid new app shop
+ferrioxid doctor
+ferrioxid check
+ferrioxid dev
+ferrioxid build
+ferrioxid generate model Customer --app shop
+ferrioxid generate model Product --app shop --timestamps
+ferrioxid worker
+ferrioxid jobs list
+ferrioxid generate worker
+ferrioxid jobs inspect <id>
+ferrioxid jobs inspect <id> --show-payload
+ferrioxid migrate make <name> --app shop
+ferrioxid migrate up
+ferrioxid migrate status
+ferrioxid check --strict
+ferrioxid upgrade --check
+ferrioxid upgrade --dry-run
+ferrioxid upgrade --yes
 ```
 
 `migrate` reads `ferrioxid.toml` or the flags `--schema-file`, `--migrations-dir` and `--database-url`. The execution describes [migrations.md](migrations.md). `--bootstrap` belongs to the `myshop` binary, is legacy and does not perform a migration.
 
 ```powershell
-cargo run -p ferrioxid-cli -- admin create-user --email admin@example.com --superuser
-cargo run -p ferrioxid-cli -- auth list-users
-cargo run -p ferrioxid-cli -- auth create-role editor
-cargo run -p ferrioxid-cli -- auth grant-permission notes.read --role editor
-cargo run -p ferrioxid-cli -- auth assign-role --email admin@example.com --role editor
+ferrioxid admin create-user --email admin@example.com --staff --superuser
+ferrioxid auth list-users
+ferrioxid auth create-role editor
+ferrioxid auth grant-permission notes.read --role editor
+ferrioxid auth assign-role --email admin@example.com --role editor
 ```
 
 `create-user` prompts for a password without echoing it and asks for confirmation. It accepts no password argument. `FERRIOXID_PASSWORD` can supply a password of at least 12 characters for automation; there is no default. `migrate up` applies auth migrations first. Auth commands that write data also create missing auth tables. `list-users` never prints hashes.
@@ -47,11 +50,14 @@ cargo run -p ferrioxid-cli -- auth assign-role --email admin@example.com --role 
 
 Exit codes of the test: `0` without error, warnings included. `1` for conflicts, an unreadable existing database or a failed `cargo check`. `migrate status` also uses `1` if the SQLite file is missing and does not create it. `check --strict` uses `2` if only warnings remain. `upgrade` uses `1` for file conflicts and then does not write anything.
 
-## Planned CLI structure
+In layout 2, create an app before generating its models. Old implicit `new <name>` and `generate app` calls return migration guidance. Layout-1 root models keep working. See [migration instructions](project-generator.md#migration-from-old-clilayouts).
+
+## CLI structure
 
 ```text
 ferrioxid
-├─ new <name>                  Projekt-Template erstellen
+├─ new project <name>          Create an empty project
+├─ new app <name>              Create and register a business app
 ├─ doctor                      Reale Umgebungsprüfung
 ├─ dev                         Entwicklungsprozess starten
 ├─ generate model <name>       Kompilierbare Modelldatei erstellen
