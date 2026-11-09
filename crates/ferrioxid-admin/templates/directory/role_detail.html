@@ -1,0 +1,6 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="/admin/directory/roles">{{ i18n.roles }}</a></nav>
+{% include "permission_fields.html" %}
+<div class="actions section"><a class="button ghost" href="/admin/directory/roles">{{ i18n.back }}</a><a class="button ghost" href="{{ history_href }}">{{ i18n.history }}</a></div>
+{% endblock %}

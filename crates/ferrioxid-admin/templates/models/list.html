@@ -106,7 +106,7 @@
 </thead>
 <tbody>
 {% for row in rows %}
-<tr>
+<tr data-record-href="{{ list_path }}/{{ row.id }}">
 {% if actions %}<td><label class="check"><input type="checkbox" name="ids" value="{{ row.id }}"><span class="sr-only">{{ i18n.select }}</span></label></td>{% endif %}
 {% for cell in row.cells %}
 <td class="{% if cell.lead %}is-lead{% endif %}{% if cell.uuid %} is-uuid{% endif %}">{% if cell.link %}<a href="{{ list_path }}/{{ row.id }}">{% endif %}{% if cell.relation %}<span>{{ cell.text }}</span> <span class="uuid" title="{{ cell.ref }}">{{ cell.short }}</span>{% elif cell.uuid %}<span class="uuid" title="{{ cell.text }}">{{ cell.short }}</span>{% else %}{{ cell.text }}{% endif %}{% if cell.link %}</a>{% endif %}</td>
@@ -116,7 +116,6 @@
 <summary>{{ i18n.actions }}</summary>
 <div class="menu-panel">
 <a href="{{ list_path }}/{{ row.id }}">{{ i18n.detail }}</a>
-{% if can_update %}<a href="{{ list_path }}/{{ row.id }}/edit">{{ i18n.edit }}</a>{% endif %}
 <a href="/admin/audit?model={{ model_key }}&amp;record={{ row.id }}">{{ i18n.history }}</a>
 {% if can_delete %}<a class="danger-link" href="{{ list_path }}/{{ row.id }}/delete">{{ i18n.delete }}</a>{% endif %}
 </div>

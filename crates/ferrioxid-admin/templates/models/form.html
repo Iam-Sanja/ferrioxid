@@ -4,7 +4,7 @@
 <form class="card" method="post" action="{{ action }}" {% if existing %}data-track-dirty="record"{% endif %}>
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 {% if draft %}<input type="hidden" name="_draft" value="{{ draft }}">{% endif %}
-<button class="sr-only js-save" type="submit" name="save" value="detail" tabindex="-1">{{ i18n.save }}</button>
+<button class="sr-only js-save" type="submit" name="save" value="list" tabindex="-1">{{ i18n.save }}</button>
 {% for section in sections %}
 {% if section.fields | length == 0 %}
 {% elif section.optional %}
@@ -54,11 +54,13 @@
 {% endfor %}
 {% if basis %}<input type="hidden" name="basis" value="{{ basis }}">{% endif %}
 <div class="actions">
-<button class="js-save" type="submit" name="save" value="detail">{{ i18n.save }}</button>
+<button class="js-save" type="submit" name="save" value="list">{{ i18n.save }}</button>
 <button class="js-save" type="submit" name="save" value="edit">{{ i18n.save_continue }}</button>
-<button class="js-save" type="submit" name="save" value="new">{{ i18n.save_add }}</button>
+{% if can_create %}<button class="js-save" type="submit" name="save" value="new">{{ i18n.save_add }}</button>{% endif %}
 <a class="button ghost" href="{{ cancel }}">{{ i18n.cancel }}</a>
 {% if history_href %}<a class="button ghost" href="{{ history_href }}">{{ i18n.history }}</a>{% endif %}
+{% if delete_href %}<a class="button danger" href="{{ delete_href }}">{{ i18n.delete }}</a>{% endif %}
 </div>
 </form>
+{% include "inlines.html" %}
 {% endblock %}

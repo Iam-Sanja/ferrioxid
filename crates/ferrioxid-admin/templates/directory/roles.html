@@ -19,13 +19,13 @@
 </thead>
 <tbody>
 {% for role in roles %}
-<tr>
-<td class="is-lead">{{ role.name }}</td>
+<tr data-record-href="{{ role.href }}">
+<td class="is-lead"><a href="{{ role.href }}">{{ role.name }}</a></td>
 <td>
 <details class="menu">
 <summary>{{ i18n.actions }}</summary>
 <div class="menu-panel">
-<a href="/admin/directory/permissions?role={{ role.name }}">{{ i18n.permissions }}</a>
+<a href="{{ role.href }}">{{ i18n.permissions }}</a>
 <a href="{{ role.history }}">{{ i18n.history }}</a>
 </div>
 </details>

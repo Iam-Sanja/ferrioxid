@@ -37,6 +37,7 @@ function track(form) {
         form.dataset.dirty = dirty ? "1" : "0";
     };
     apply();
+    window.addEventListener("pageshow", apply);
     form.addEventListener("input", apply);
     form.addEventListener("change", apply);
     // A successful native submit may navigate away. Do not warn that the form
@@ -61,4 +62,21 @@ window.addEventListener("beforeunload", (event) => {
     }
     event.preventDefault();
     event.returnValue = "";
+});
+
+// Table row navigation is progressive enhancement. The first cell remains
+// a normal keyboard-accessible link. Native controls must keep their behavior.
+document.addEventListener("click", (event) => {
+    if (event.defaultPrevented || event.button !== 0 || event.ctrlKey || event.metaKey
+        || event.shiftKey || event.altKey || window.getSelection()?.toString()
+        || !(event.target instanceof Element)) {
+        return;
+    }
+    if (event.target.closest("a, button, input, select, textarea, label, summary, details, [role='button'], [role='link'], [contenteditable]:not([contenteditable='false']), [tabindex]:not([tabindex='-1'])")) {
+        return;
+    }
+    const row = event.target.closest("tr[data-record-href]");
+    if (row instanceof HTMLTableRowElement && row.dataset.recordHref) {
+        window.location.assign(row.dataset.recordHref);
+    }
 });

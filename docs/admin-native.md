@@ -67,3 +67,5 @@ There are no invented key figures on the overview. Foreign key selections load a
 Lists and detail pages resolve record labels with `query_labels`, using one parameterized query per target table and page for up to 100 IDs under the target’s query scope. Missing target registration, read permission or a text display field prevents label resolution. Empty references display a dash. Superusers see missing targets as “Not present”; other users see “Not visible” without an existence-check query.
 
 Bool filters are `Alle`, `Ja` and `Nein`. Foreign key filters are the same limited, authorized selection. Number filters are `type="number"`. Other types remain a text field. The filter parser remains server-side. Sorting is preserved as a hidden field. A new filtering sets the page back.
+
+See [Unified admin record editor](admin-record-editor.md) for canonical routes, permissions, navigation and regression checks.

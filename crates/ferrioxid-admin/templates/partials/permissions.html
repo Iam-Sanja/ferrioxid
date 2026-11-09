@@ -1,0 +1,51 @@
+<p class="hint">{{ i18n.hint_permission }}</p>
+{% if roles | length == 0 %}
+<div class="empty-state">
+<p class="empty">{{ i18n.no_roles }}</p>
+<a class="button" href="/admin/directory/roles">{{ i18n.add_role }}</a>
+</div>
+{% else %}
+<div class="stack">
+{% for role in roles %}
+<section class="card">
+{% if record_role %}
+<dl><dt>{{ i18n.role }} <span class="hint">{{ i18n.readonly }}</span></dt><dd>{{ role.name }}</dd>
+<dt>{{ i18n.record }} <span class="hint">{{ i18n.readonly }}</span></dt><dd class="uuid">{{ role.id }}</dd></dl>
+{% else %}<h2>{{ role.name }}</h2>{% endif %}
+{% if role.permissions | length == 0 %}
+<p class="empty">{{ i18n.empty }}</p>
+{% else %}
+<ul class="perm-list">
+{% for code in role.permissions %}
+<li>
+<span>{{ code }}</span>
+<form method="post" action="/admin/directory/roles/{{ role.name }}/permissions">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{% if record_role %}<input type="hidden" name="return_to" value="record">{% endif %}
+<input type="hidden" name="code" value="{{ code }}">
+<input type="hidden" name="action" value="revoke">
+<label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
+<button class="ghost danger" type="submit" aria-label="{{ i18n.revoke }} {{ code }}">{{ i18n.revoke }}</button>
+</form>
+</li>
+{% endfor %}
+</ul>
+{% endif %}
+<form method="post" action="/admin/directory/roles/{{ role.name }}/permissions">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+{% if record_role %}<input type="hidden" name="return_to" value="record">{% endif %}
+<input type="hidden" name="action" value="grant">
+<div class="field">
+<label for="code-{{ role.name }}">{{ i18n.permission_code }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
+<input id="code-{{ role.name }}" name="code" required pattern="[A-Za-z0-9_.]+" aria-describedby="code-hint-{{ role.name }}">
+<p class="hint" id="code-hint-{{ role.name }}">{{ i18n.hint_permission }}</p>
+</div>
+<label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
+<div class="actions">
+<button type="submit">{{ i18n.grant }}</button>
+</div>
+</form>
+</section>
+{% endfor %}
+</div>
+{% endif %}
