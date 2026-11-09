@@ -646,13 +646,24 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 .map_err(|error| syn::Error::new_spanned(&ident, error))?;
             let method = syn::Ident::new(&method_name, ident.span());
             let field_ident = ident.clone();
+            let scoped = syn::Ident::new(&format!("{method_name}_scoped"), ident.span());
             relation_methods.push(if nullable {
                 quote! {
-                    pub async fn #method(&self, db: &::ferrioxid::sea_orm::DatabaseConnection) -> ::core::result::Result<::core::option::Option<#ty>, ::ferrioxid::core::FerrioxidError> {
+                    pub async fn #method<C>(&self, db: &C) -> ::core::result::Result<::core::option::Option<#ty>, ::ferrioxid::core::FerrioxidError>
+                    where
+                        C: ::ferrioxid::sea_orm::ConnectionTrait,
+                    {
+                        self.#scoped(db, &::ferrioxid::core::QueryScope::All).await
+                    }
+
+                    pub async fn #scoped<C>(&self, db: &C, scope: &::ferrioxid::core::QueryScope) -> ::core::result::Result<::core::option::Option<#ty>, ::ferrioxid::core::FerrioxidError>
+                    where
+                        C: ::ferrioxid::sea_orm::ConnectionTrait,
+                    {
                         let ::core::option::Option::Some(id) = self.#field_ident else {
                             return ::core::result::Result::Ok(::core::option::Option::None);
                         };
-                        match <#ty as ::ferrioxid::db::ModelRepository>::get(db, id).await? {
+                        match ::ferrioxid::db::read_model::<#ty>(db, id, scope).await? {
                             ::core::option::Option::Some(value) => ::core::result::Result::Ok(::core::option::Option::Some(value)),
                             ::core::option::Option::None => ::core::result::Result::Err(::ferrioxid::core::FerrioxidError::NotFound),
                         }
@@ -660,8 +671,18 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 }
             } else {
                 quote! {
-                    pub async fn #method(&self, db: &::ferrioxid::sea_orm::DatabaseConnection) -> ::core::result::Result<#ty, ::ferrioxid::core::FerrioxidError> {
-                        match <#ty as ::ferrioxid::db::ModelRepository>::get(db, self.#field_ident).await? {
+                    pub async fn #method<C>(&self, db: &C) -> ::core::result::Result<#ty, ::ferrioxid::core::FerrioxidError>
+                    where
+                        C: ::ferrioxid::sea_orm::ConnectionTrait,
+                    {
+                        self.#scoped(db, &::ferrioxid::core::QueryScope::All).await
+                    }
+
+                    pub async fn #scoped<C>(&self, db: &C, scope: &::ferrioxid::core::QueryScope) -> ::core::result::Result<#ty, ::ferrioxid::core::FerrioxidError>
+                    where
+                        C: ::ferrioxid::sea_orm::ConnectionTrait,
+                    {
+                        match ::ferrioxid::db::read_model::<#ty>(db, self.#field_ident, scope).await? {
                             ::core::option::Option::Some(value) => ::core::result::Result::Ok(value),
                             ::core::option::Option::None => ::core::result::Result::Err(::ferrioxid::core::FerrioxidError::NotFound),
                         }
@@ -813,9 +834,20 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let ty: syn::Path =
             syn::parse_str(type_path).map_err(|error| syn::Error::new_spanned(&name, error))?;
         let method_ident = syn::Ident::new(method, name.span());
+        let scoped_ident = syn::Ident::new(&format!("{method}_scoped"), name.span());
         relation_methods.push(quote! {
-            pub async fn #method_ident(&self, db: &::ferrioxid::sea_orm::DatabaseConnection) -> ::core::result::Result<::std::vec::Vec<#ty>, ::ferrioxid::core::FerrioxidError> {
-                ::ferrioxid::db::find_by_column::<#ty>(db, #column, ::ferrioxid::sea_orm::Value::from(self.id)).await
+            pub async fn #method_ident<C>(&self, db: &C) -> ::core::result::Result<::std::vec::Vec<#ty>, ::ferrioxid::core::FerrioxidError>
+            where
+                C: ::ferrioxid::sea_orm::ConnectionTrait,
+            {
+                self.#scoped_ident(db, &::ferrioxid::core::QueryScope::All).await
+            }
+
+            pub async fn #scoped_ident<C>(&self, db: &C, scope: &::ferrioxid::core::QueryScope) -> ::core::result::Result<::std::vec::Vec<#ty>, ::ferrioxid::core::FerrioxidError>
+            where
+                C: ::ferrioxid::sea_orm::ConnectionTrait,
+            {
+                ::ferrioxid::db::load_children::<#ty>(db, #column, &[self.id], scope).await
             }
         });
     }

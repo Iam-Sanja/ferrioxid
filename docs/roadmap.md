@@ -38,6 +38,10 @@ In the long term, the admin should cover the relevant functions of the Django ad
 | v0.26 | Completed | Validated app startup, Rust/TOML migration matching, flat field groups and managed timestamps | Soft delete remains planned |
 | v0.28 | Completed | Admin navigation grouped by app, model links and permission-aware visibility | See [admin-navigation.md](admin-navigation.md) for limits |
 
+## ORM queries
+
+`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. Local workspace tests cover SQLite. PostgreSQL SQL generation is asserted; the PostgreSQL runtime tests stay ignored without a server. Annotations, keyset pagination, many-to-many and automatic eager loading are not part of this API.
+
 ## Open after v0.27.1
 
 - Cron-Syntax.
