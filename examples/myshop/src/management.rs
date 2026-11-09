@@ -42,8 +42,6 @@ impl ManagementCommand for SeedShop {
     }
 
     async fn run(&self, invocation: &Invocation<'_>) -> Result<(), CommandError> {
-        let db = invocation.database().await?;
-        apply_directory(&db, &invocation.project.migrations_dir, false).await?;
         let relative = invocation
             .options
             .get("file")
@@ -54,6 +52,8 @@ impl ManagementCommand for SeedShop {
             CommandError::new(format!("Could not read {}: {error}", path.display()))
         })?;
         let file = parse_fixture(&text)?;
+        let db = invocation.database().await?;
+        apply_directory(&db, &invocation.project.migrations_dir, false).await?;
         let request = LoadRequest {
             upsert: !invocation.flags.contains("insert"),
             ..LoadRequest::default()
@@ -111,30 +111,39 @@ fn catalog_schema() -> Result<SchemaSnapshot, CommandError> {
     .map_err(CommandError::from)
 }
 
-fn fixture_path(root: &Path, relative: &str) -> Result<PathBuf, CommandError> {
-    let relative_path = Path::new(relative);
-    let escapes = relative_path.is_absolute()
-        || relative_path
+fn fixture_path(root: &Path, raw: &str) -> Result<PathBuf, CommandError> {
+    let candidate = Path::new(raw);
+    if raw.trim().is_empty()
+        || candidate
             .components()
-            .any(|component| matches!(component, Component::ParentDir | Component::Prefix(_)));
-    if escapes {
+            .any(|component| matches!(component, Component::ParentDir))
+    {
         return Err(CommandError::usage(
-            "The fixture path must stay inside the project. Nothing was written.",
+            "The fixture path must stay inside the project or the system temp directory. Nothing was written.",
         ));
     }
-    let path = root.join(relative_path);
-    let root = root.canonicalize().map_err(|error| {
-        CommandError::new(format!("Could not resolve the project root: {error}"))
+    let path = if candidate.is_absolute() {
+        candidate.to_path_buf()
+    } else {
+        root.join(candidate)
+    };
+    let parent = path.parent().ok_or_else(|| {
+        CommandError::usage("The fixture path must name a file. Nothing was written.")
     })?;
-    let parent = path.parent().unwrap_or(Path::new("."));
     let parent = parent.canonicalize().map_err(|error| {
         CommandError::new(format!("Could not resolve {}: {error}", path.display()))
     })?;
-    if parent.starts_with(&root) {
+    let root = root.canonicalize().map_err(|error| {
+        CommandError::new(format!("Could not resolve the project root: {error}"))
+    })?;
+    let temp = std::env::temp_dir().canonicalize().map_err(|error| {
+        CommandError::new(format!("Could not resolve the temp directory: {error}"))
+    })?;
+    if parent.starts_with(&root) || parent.starts_with(&temp) {
         Ok(path)
     } else {
         Err(CommandError::usage(
-            "The fixture path must stay inside the project. Nothing was written.",
+            "The fixture path must stay inside the project or the system temp directory. Nothing was written.",
         ))
     }
 }

@@ -39,13 +39,11 @@ impl RouteMap {
                     detail: format!("`{key}` gehört nicht zu `{name}`."),
                 });
             }
-            if !safe_param(value) {
-                return Err(UrlError {
-                    code: "url.parameter",
-                    detail: "Ein URL-Parameter enthält unzulässige Zeichen.".to_owned(),
-                });
-            }
-            path = path.replace(&token, value);
+            let encoded = encode_param(value).map_err(|_| UrlError {
+                code: "url.parameter",
+                detail: "Ein URL-Parameter enthält unzulässige Zeichen.".to_owned(),
+            })?;
+            path = path.replace(&token, &encoded);
         }
         if path.contains('{') {
             return Err(UrlError {
@@ -235,12 +233,28 @@ fn join(prefix: &str, path: &str) -> String {
     )
 }
 
-fn safe_param(value: &str) -> bool {
-    !value.is_empty()
-        && value.len() <= 80
-        && value
-            .chars()
-            .all(|char| char.is_ascii_alphanumeric() || char == '-' || char == '_')
+fn encode_param(value: &str) -> Result<String, ()> {
+    if value.is_empty()
+        || value.len() > 80
+        || value.contains("..")
+        || value.contains('/')
+        || value.contains('\\')
+        || value.contains('?')
+        || value.contains('#')
+        || value.chars().any(|char| char.is_control())
+    {
+        return Err(());
+    }
+    let mut encoded = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                encoded.push(byte as char);
+            }
+            _ => encoded.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    Ok(encoded)
 }
 
 #[cfg(test)]
@@ -272,6 +286,40 @@ mod tests {
         );
         assert!(names.path("missing.route", &[]).is_err());
         assert!(names.path("shop.detail", &[("id", "../x")]).is_err());
+        assert_eq!(
+            names.path("shop.detail", &[("id", "a b")]).unwrap(),
+            "/catalog/a%20b"
+        );
+        assert!(names.path("shop.detail", &[("id", "a/b")]).is_err());
+        let nested = UrlSet::new()
+            .nest(
+                "/shop",
+                UrlSet::new()
+                    .nest(
+                        "/items",
+                        UrlSet::new().route("shop.item", "/{id}", get(ok)).unwrap(),
+                    )
+                    .unwrap(),
+            )
+            .unwrap();
+        assert_eq!(
+            nested
+                .into_parts()
+                .1
+                .path("shop.item", &[("id", "a b")])
+                .unwrap(),
+            "/shop/items/a%20b"
+        );
+        let duplicate_name = UrlSet::new()
+            .route("shop.detail", "/shop", get(ok))
+            .unwrap()
+            .nest(
+                "/catalog",
+                UrlSet::new()
+                    .route("shop.detail", "/{id}", get(ok))
+                    .unwrap(),
+            );
+        assert!(matches!(duplicate_name, Err(error) if error.code == "url.duplicate"));
         let reserved = UrlSet::new().route("auth.login", "/auth/login", get(ok));
         assert!(matches!(reserved, Err(error) if error.code == "url.reserved"));
         let duplicate = UrlSet::new()

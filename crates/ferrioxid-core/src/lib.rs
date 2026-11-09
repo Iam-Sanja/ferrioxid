@@ -2,6 +2,7 @@
 
 pub mod choice;
 pub mod decimal;
+mod messages;
 mod problem;
 pub mod temporal;
 mod validation;
@@ -11,6 +12,7 @@ pub use decimal::{
     decimal_sql_literal, decode_decimal, encode_decimal, format_decimal, format_decimal_text,
     parse_decimal, prepare_decimal, validate_decimal_meta, DecimalError,
 };
+pub use messages::{localize_detail, message_for, message_text, FieldOverride};
 pub use problem::problem_json;
 pub use rust_decimal::Decimal;
 pub use temporal::{
@@ -288,7 +290,7 @@ pub fn check_slug(field: &str, value: &str) -> Result<(), FerrioxidError> {
         Ok(())
     } else {
         Err(FerrioxidError::Validation(format!(
-            "{field} must be a lowercase slug"
+            "field:{field}: validation.slug"
         )))
     }
 }
@@ -296,7 +298,7 @@ pub fn check_slug(field: &str, value: &str) -> Result<(), FerrioxidError> {
 pub fn check_email(field: &str, value: &str) -> Result<(), FerrioxidError> {
     let Some((local, domain)) = value.split_once('@') else {
         return Err(FerrioxidError::Validation(format!(
-            "{field} must be an email address"
+            "field:{field}: validation.email"
         )));
     };
     let labels = domain.split('.').collect::<Vec<_>>();
@@ -317,7 +319,7 @@ pub fn check_email(field: &str, value: &str) -> Result<(), FerrioxidError> {
         Ok(())
     } else {
         Err(FerrioxidError::Validation(format!(
-            "{field} must be an email address"
+            "field:{field}: validation.email"
         )))
     }
 }

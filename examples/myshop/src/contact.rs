@@ -1,14 +1,16 @@
 //! Öffentliches Kontaktformular. Eine vorhandene Sitzung muss das bestehende CSRF-Token senden.
 
 use axum::body::Bytes;
-use axum::extract::State;
+use axum::extract::{Extension, State};
 use axum::http::{HeaderMap, Method, StatusCode};
 use axum::response::{Html, IntoResponse};
 use ferrioxid::auth::AppState;
 use ferrioxid::forms::{
-    contact_fields, message, render_form, render_page, ContactForm, FerrioxidForm, FormErrors,
+    contact_widgets, message, render_fields, render_page, ContactForm, FerrioxidForm, FormErrors,
     FormValues,
 };
+use ferrioxid::views::{fail, redirect_to};
+use std::sync::Arc;
 
 pub async fn show(State(state): State<AppState>, headers: HeaderMap) -> Html<String> {
     Html(
@@ -22,8 +24,16 @@ pub async fn show(State(state): State<AppState>, headers: HeaderMap) -> Html<Str
     )
 }
 
+pub async fn thanks() -> Html<String> {
+    Html(render_page(
+        "Kontakt",
+        &format!("<p role=\"status\">{}</p>", message("de", "form.thanks")),
+    ))
+}
+
 pub async fn submit(
     State(state): State<AppState>,
+    Extension(routes): Extension<Arc<ferrioxid::urls::RouteMap>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> impl IntoResponse {
@@ -42,22 +52,29 @@ pub async fn submit(
                 .await
                 .is_err()
             {
-                let mut errors = FormErrors::default();
-                errors.push("", "form.csrf");
-                return (
+                return fail(
+                    &headers,
+                    None,
                     StatusCode::FORBIDDEN,
-                    Html(page(&state, &headers, &values, &errors).await),
-                )
-                    .into_response();
+                    "form.csrf",
+                    "form.csrf",
+                    false,
+                );
             }
         }
     }
     match ContactForm::from_form(&values) {
-        Ok(_form) => Html(render_page(
-            "Kontakt",
-            &format!("<p role=\"status\">{}</p>", message("de", "form.thanks")),
-        ))
-        .into_response(),
+        Ok(_form) => match routes.path("shop.thanks", &[]) {
+            Ok(target) => redirect_to(&target).unwrap_or_else(|error| error.into_response()),
+            Err(_) => fail(
+                &headers,
+                None,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "url.unknown",
+                "Internal server error",
+                false,
+            ),
+        },
         Err(errors) => (
             StatusCode::UNPROCESSABLE_ENTITY,
             Html(page(&state, &headers, &values, &errors).await),
@@ -76,12 +93,12 @@ async fn page(
         Some(auth) => auth.csrf_from_request(headers).await.ok(),
         None => None,
     };
-    let form = render_form(
+    let form = render_fields(
         "/contact",
         csrf.as_deref(),
         values,
         errors,
-        &contact_fields("de"),
+        &contact_widgets("de"),
         "de",
     );
     render_page("Kontakt", &form)

@@ -67,7 +67,7 @@ An existing project does not gain this binary by itself. Add the two files, or g
 
 ## myshop
 
-`examples/myshop` registers `seed-shop`. It applies the myshop migrations and then upserts `fixtures/catalog.json`. The fixture path is resolved from the myshop crate directory and cannot leave that directory. Running the command again updates the same primary keys and does not add rows. `--insert` switches to the insert-only fixture mode, so an existing primary key fails and the transaction rolls the file back. `--database-url` selects the database for that run. In this workspace, `ferrioxid.toml` lives at the repository root and points its migrations directory at `examples/myshop/migrations`.
+`examples/myshop` registers `seed-shop`. It applies the myshop migrations and then upserts `fixtures/catalog.json`. A relative fixture path is resolved from the myshop crate directory and cannot contain `..`. An absolute path is accepted only when its parent is the system temp directory, so tests can use a unique file without writing into the source tree. Running the command again updates the same primary keys and does not add rows. `--insert` switches to the insert-only fixture mode, so an existing primary key fails and the transaction rolls the file back. `--database-url` selects the database for that run. In this workspace, `ferrioxid.toml` lives at the repository root and points its migrations directory at `examples/myshop/migrations`.
 
 ```powershell
 ferrioxid manage seed-shop

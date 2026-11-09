@@ -99,9 +99,12 @@ fn forms_render_choice_labels_and_reject_unknown_values() {
     assert!(html.contains("value=\"active\" selected"));
     let mut values = forms::FormValues::default();
     values.insert("status", "active");
-    assert_eq!(forms::required_choice(&values, status).unwrap(), "active");
+    assert_eq!(
+        forms::required_column_choice(&values, status).unwrap(),
+        "active"
+    );
     values.insert("status", "nope");
-    assert!(forms::required_choice(&values, status).is_err());
+    assert!(forms::required_column_choice(&values, status).is_err());
     values.insert("price", "0.10");
     assert_eq!(
         forms::required_decimal(&values, "price", 12, 2).unwrap(),

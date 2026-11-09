@@ -132,15 +132,28 @@ pub fn negotiate_locale(
         .unwrap_or_else(|| "en".to_owned())
 }
 
-/// Hängt Startseite und 404 an den Router, wenn Vorlagen aktiv sind.
+/// Hängt Startseite und Fehlerseiten an den Router, wenn Vorlagen aktiv sind.
 pub fn mount_pages(router: Router, settings: &ProjectConfig) -> Result<Router, PageError> {
+    mount_pages_with(router, settings, &crate::urls::RouteMap::default())
+}
+
+/// Wie `mount_pages`, und die Projektvorlagen erhalten dieselbe `url`-Funktion wie App-Vorlagen.
+pub fn mount_pages_with(
+    router: Router,
+    settings: &ProjectConfig,
+    routes: &crate::urls::RouteMap,
+) -> Result<Router, PageError> {
     if !settings.templates_enabled {
         return Ok(router);
     }
-    let site = Arc::new(Site::open(&settings.templates_directory())?);
+    let mut opened = Site::open(&settings.templates_directory())?;
+    opened.set_routes(routes.clone());
+    let site = Arc::new(opened);
     let settings = settings.clone();
     let index_site = site.clone();
     let index_settings = settings.clone();
+    let method_site = site.clone();
+    let method_settings = settings.clone();
     let missing_site = site;
     let missing_settings = settings;
     Ok(router
@@ -167,6 +180,23 @@ pub fn mount_pages(router: Router, settings: &ProjectConfig) -> Result<Router, P
                     axum::http::StatusCode::NOT_FOUND,
                 )
             }
+        })
+        .method_not_allowed_fallback({
+            let site = method_site;
+            let settings = method_settings;
+            move |request: Request| {
+                let site = site.clone();
+                let settings = settings.clone();
+                async move {
+                    let context = context_for_request(&settings, &request);
+                    render_named(
+                        &site,
+                        "errors/405.html",
+                        &context,
+                        axum::http::StatusCode::METHOD_NOT_ALLOWED,
+                    )
+                }
+            }
         }))
 }
 
@@ -178,15 +208,71 @@ fn render_named(
 ) -> Response {
     match site.render(name, context) {
         Ok(body) => (status, Html(body)).into_response(),
+        Err(_) if name.starts_with("errors/") => builtin_status(status, context),
         Err(_) => match site.render("errors/500.html", context) {
             Ok(body) => (axum::http::StatusCode::INTERNAL_SERVER_ERROR, Html(body)).into_response(),
-            Err(_) => (
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "Die Seite konnte nicht erzeugt werden.",
-            )
-                .into_response(),
+            Err(_) => builtin_status(axum::http::StatusCode::INTERNAL_SERVER_ERROR, context),
         },
     }
+}
+
+pub fn render_status_template(
+    site: &Site,
+    name: &str,
+    locale: &str,
+    title: &str,
+    detail: &str,
+    status: u16,
+) -> Option<String> {
+    let mut context = Context::new();
+    context.insert("locale", locale);
+    context.insert("title", title);
+    context.insert("detail", detail);
+    context.insert("status", &status);
+    site.render(name, &context).ok()
+}
+
+fn builtin_status(status: axum::http::StatusCode, context: &Context) -> Response {
+    let locale = context
+        .get("locale")
+        .and_then(|value| value.as_str())
+        .unwrap_or("de");
+    let title = message(locale, status_key(status));
+    let body = format!(
+        "<!DOCTYPE html><html lang=\"{locale}\"><head><meta charset=\"utf-8\"><title>{}</title></head><body><h1>{}</h1><p>{}</p></body></html>",
+        escape(title),
+        escape(title),
+        escape(title)
+    );
+    (status, Html(body)).into_response()
+}
+
+fn status_key(status: axum::http::StatusCode) -> &'static str {
+    match status.as_u16() {
+        400 => "bad_request",
+        401 => "unauthorized",
+        403 => "forbidden",
+        404 => "not_found",
+        405 => "method_not_allowed",
+        409 => "conflict",
+        422 => "validation",
+        _ => "server_error",
+    }
+}
+
+fn escape(value: &str) -> String {
+    let mut output = String::new();
+    for char in value.chars() {
+        match char {
+            '&' => output.push_str("&amp;"),
+            '<' => output.push_str("&lt;"),
+            '>' => output.push_str("&gt;"),
+            '"' => output.push_str("&quot;"),
+            '\'' => output.push_str("&#39;"),
+            _ => output.push(char),
+        }
+    }
+    output
 }
 
 fn context_for_request(settings: &ProjectConfig, request: &Request) -> Context {
@@ -256,6 +342,7 @@ pub fn message(locale: &str, key: &str) -> &'static str {
         ("de", "unauthorized") => "Anmeldung erforderlich.",
         ("de", "validation") => "Die Eingabe ist ungültig.",
         ("de", "bad_request") => "Die Anfrage ist ungültig.",
+        ("de", "method_not_allowed") => "Diese Methode ist hier nicht erlaubt.",
         ("de", "conflict") => "Der Stand hat sich geändert.",
         ("de", "welcome") => "Willkommen",
         ("en", "running") => "Ferrioxid is running. The local database is SQLite.",
@@ -270,6 +357,7 @@ pub fn message(locale: &str, key: &str) -> &'static str {
         ("en", "unauthorized") => "Authentication required.",
         ("en", "validation") => "The input is invalid.",
         ("en", "bad_request") => "The request is invalid.",
+        ("en", "method_not_allowed") => "This method is not allowed.",
         ("en", "conflict") => "The record changed.",
         ("en", "welcome") => "Welcome",
         _ => "missing message",
@@ -327,7 +415,7 @@ impl tera::Function for UrlFunction {
 
 #[cfg(test)]
 mod tests {
-    use super::{home_context, message, negotiate_locale, Site};
+    use super::{home_context, message, negotiate_locale, render_named, Site};
     use ferrioxid_migrations::discover_project;
     use std::fs;
 
@@ -387,6 +475,119 @@ mod tests {
             .to_string();
         assert!(error.contains("missing"), "{error}");
         assert!(!error.contains("shop.detail"), "{error}");
+        let routes = crate::urls::UrlSet::new()
+            .nest(
+                "/shop",
+                crate::urls::UrlSet::new()
+                    .route(
+                        "shop.detail",
+                        "/{id}",
+                        axum::routing::get(|| async { "ok" }),
+                    )
+                    .unwrap(),
+            )
+            .unwrap()
+            .into_parts()
+            .1;
+        let home = Site::from_named(
+            &[(
+                "index.html".to_owned(),
+                "{{ url(name=\"shop.detail\", id=sku) }}".to_owned(),
+            )],
+            &routes,
+        )
+        .unwrap();
+        let mut home_context = tera::Context::new();
+        home_context.insert("sku", "a b");
+        assert_eq!(
+            home.render("index.html", &home_context).unwrap(),
+            "&#x2F;shop&#x2F;a%20b"
+        );
+    }
+
+    #[tokio::test]
+    async fn error_pages_use_templates_or_a_safe_fallback() {
+        use http_body_util::BodyExt;
+        let mut context = tera::Context::new();
+        context.insert("locale", "en");
+        let missing = Site::from_named(
+            &[("index.html".to_owned(), "home".to_owned())],
+            &crate::urls::RouteMap::default(),
+        )
+        .unwrap();
+        let response = render_named(
+            &missing,
+            "errors/404.html",
+            &context,
+            axum::http::StatusCode::NOT_FOUND,
+        );
+        assert_eq!(response.status(), axum::http::StatusCode::NOT_FOUND);
+        let body = String::from_utf8(
+            response
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(body.contains("does not exist"), "{body}");
+        assert!(!body.contains("Vorlage"), "{body}");
+        assert!(!body.contains("stack"), "{body}");
+        let custom = Site::from_named(
+            &[
+                (
+                    "errors/404.html".to_owned(),
+                    "<p>custom-missing</p>".to_owned(),
+                ),
+                (
+                    "errors/500.html".to_owned(),
+                    "<p>custom-down</p>".to_owned(),
+                ),
+                (
+                    "index.html".to_owned(),
+                    "{{ url(name=\"missing.route\") }}".to_owned(),
+                ),
+            ],
+            &crate::urls::RouteMap::default(),
+        )
+        .unwrap();
+        let found = render_named(
+            &custom,
+            "errors/404.html",
+            &context,
+            axum::http::StatusCode::NOT_FOUND,
+        );
+        let found_body = String::from_utf8(
+            found
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(found_body.contains("custom-missing"));
+        let broken = render_named(&custom, "index.html", &context, axum::http::StatusCode::OK);
+        assert_eq!(
+            broken.status(),
+            axum::http::StatusCode::INTERNAL_SERVER_ERROR
+        );
+        let broken_body = String::from_utf8(
+            broken
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(broken_body.contains("custom-down"), "{broken_body}");
+        assert!(!broken_body.contains("missing.route"), "{broken_body}");
+        assert!(!broken_body.to_ascii_lowercase().contains("stack"));
     }
 
     #[test]

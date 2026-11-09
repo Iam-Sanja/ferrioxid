@@ -38,9 +38,15 @@ In the long term, the admin should cover the relevant functions of the Django ad
 | v0.26 | Completed | Validated app startup, Rust/TOML migration matching, flat field groups and managed timestamps | Soft delete remains planned |
 | v0.28 | Completed | Admin navigation grouped by app, model links and permission-aware visibility | See [admin-navigation.md](admin-navigation.md) for limits |
 
+## In review
+
+- Forms ([#47](https://github.com/Iam-Sanja/ferrioxid/issues/47)): text, number, email, password, checkbox, select and textarea widgets, escaped labels and values, and model binding through an explicit column allow-list. Create and replace require every required field. Patch leaves missing keys unchanged. Formsets are still absent. Status in the capability matrix: **In PR**.
+- Validation display ([#48](https://github.com/Iam-Sanja/ferrioxid/issues/48)): one German/English catalog, field overrides, and model errors stored as stable codes. Unknown locales use English. SQL and stack traces are not shown. Status: **In PR**.
+- Error pages and named routes ([#50](https://github.com/Iam-Sanja/ferrioxid/issues/50)): status templates with a safe fallback, project `url()` across prefixes, and percent-encoded path parameters. Status: **In PR**.
+
 ## ORM queries
 
-`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. Local workspace tests cover SQLite. PostgreSQL SQL generation is asserted; the PostgreSQL runtime tests stay ignored without a server. Annotations, keyset pagination, many-to-many and automatic eager loading are not part of this API.
+`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. PR #59 is merged; the capability matrix rows for filtering, pagination, relations and transactions stay **In PR** until a later status review, because PostgreSQL runtime tests were not a local pass. Local workspace tests cover SQLite. PostgreSQL SQL generation is asserted. Annotations, keyset pagination, many-to-many and automatic eager loading are not part of this API.
 
 ## Decimal fields and typed choices
 
@@ -69,14 +75,12 @@ Project commands live in the compiled `ferrioxid-manage` binary. `ferrioxid mana
 
 ## Open after v0.25
 
-- `views::fail` uses its own HTML page and not `templates/errors/`.
 - `require_user` continues to authenticate with GET. Mutations use `require_mutation`.
 - Since v0.26, the process start compares both lists. The CLI remains with `ferrioxid.toml`.
 - `ferrioxid new` does not yet generate `src/apps/`.
 
 ## Open after v0.24
 
-- `views::fail` uses its own HTML page and not `templates/errors/`.
 - `require_user` authenticates with GET and does not check CSRF.
 - The API template continues to write `templates/index.html` because the start page remains active.
 

@@ -14,7 +14,7 @@ Normal pages outside the admin are rendered on the server side with Tera. The ad
 
 ## Public interface
 
-`ferrioxid::pages::Site::open` loads `**/*.html`, and `render` renders a template. `home_context` supplies the project name, locale, admin flag and standard text. When `templates.enabled` is true, `mount_pages` adds `/` and an HTML 404 fallback. `negotiate_locale` selects the language for each request. `message` provides German and English text, including welcome, 404 and 500 messages. Unknown locales fall back to English and never become file paths.
+`ferrioxid::pages::Site::open` loads `**/*.html`, and `render` renders a template. `home_context` supplies the project name, locale, admin flag and standard text. When `templates.enabled` is true, `mount_pages` adds `/`, an HTML 404 fallback and a 405 fallback. `mount_pages_with` also registers `url()` on those pages. `negotiate_locale` selects the language for each request. `message` provides German and English text, including welcome, 404 and 500 messages. Unknown locales fall back to English and never become file paths.
 
 ## Configuration
 
