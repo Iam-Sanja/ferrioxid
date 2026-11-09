@@ -6,6 +6,7 @@
 mod baseline;
 mod diff;
 mod error;
+mod fixtures;
 mod history;
 mod inspect;
 mod introspection;
@@ -25,6 +26,10 @@ pub use diff::{
     MigrationOperation, MigrationPlan, MigrationRisk,
 };
 pub use error::MigrationError;
+pub use fixtures::{
+    dump_fixture, fixture_to_json, load_fixture, parse_fixture, prepare_records, FixtureFile,
+    FixtureRecord, LoadReport, LoadRequest, FIXTURE_VERSION,
+};
 pub use history::{history_exists, table_exists, AUTH_HISTORY_TABLE};
 pub use inspect::{
     dev_notice, inspect_migrations, inspect_migrations_with_packages, readonly_database_url,
@@ -47,9 +52,9 @@ pub use runner::{
     migration_status_in, namespaced_status, reseal_unapplied, ApplyReport, StatusReport,
 };
 pub use snapshot::{
-    ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType,
-    OnDelete, RegisteredModel, SchemaSnapshot, TableSnapshot, UniqueConstraintSnapshot,
-    FORMAT_VERSION,
+    is_identifier, ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, IndexSnapshot,
+    LogicalType, OnDelete, RegisteredModel, SchemaSnapshot, TableSnapshot,
+    UniqueConstraintSnapshot, FORMAT_VERSION,
 };
 pub use store::sha256_hex;
 pub use store::{

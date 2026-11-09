@@ -170,6 +170,10 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 - MySQL is rejected.
 - SQLite behavior is covered by `cargo test -p ferrioxid-db`. PostgreSQL SQL generation is asserted in the same crate. `postgres_filters_and_pages_runtime` is `#[ignore]` and runs only with `DATABASE_URL` and a disposable PostgreSQL database. A local workspace run does not mark that test as passed.
 
+## Fixtures
+
+`ferrioxid dumpdata` and `ferrioxid loaddata` read and write versioned JSON through the schema snapshot. Decimal values travel as strings and are stored as the same 16-byte coefficient used by model inserts. The default load inserts new primary keys and rolls back the whole file when any row conflicts. Details, the confirmed `--truncate` flag and the cycle limit are in [fixtures.md](fixtures.md).
+
 ## Not implemented (planned)
 
 - `migrate down`. Explicit renames, SQLite table rebuilds and SQLite baselining are described in [migrations.md](migrations.md). Multi-model transactions are described in [transactions.md](transactions.md).

@@ -18,6 +18,8 @@ Rust-Modelle
 
 The engine does not parse Rust source and depends on neither Axum nor the admin frontend. CRUD and migrations share the type mappings in `crates/ferrioxid-db/src/sql.rs`.
 
+Row import and export are fixtures, not migrations. A fixture never changes a table and never rewrites an applied migration checksum. See [fixtures.md](fixtures.md).
+
 App packages use the same migration-history table. An entry is namespaced as `shop:0001_initial`, while the file ID remains `0001_initial`; see [app-migrations.md](app-migrations.md). Existing unqualified history rows are not rewritten. Startup compares `registry.migrations` with `[app.<name>]`; the CLI reads only the TOML declaration and reports that limit. A field group creates no table on its own: its fields appear in `columns()` of concrete models and therefore in schema diffs.
 
 Auth files are in `crates/ferrioxid-auth/migrations/` and write the history `_ferrioxid_auth_migrations`. `ferrioxid migrate up` applies this directory before the application files. The application history remains `_ferrioxid_migrations`. As a result, `0001_auth_schema` does not collide with `0001_initial`. The server start does not migrate. `0001_initial.json` remains unchanged.

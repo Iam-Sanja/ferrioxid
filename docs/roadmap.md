@@ -46,6 +46,10 @@ In the long term, the admin should cover the relevant functions of the Django ad
 
 `Decimal` and `FerrioxidChoice` are described in [models.md](models.md). myshop migration `0006_prices_and_status` adds a precise product price, `ProductStatus`, and optional `Order.state`. This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. Local tests cover SQLite. `postgres_decimal_and_choice_roundtrip` stays ignored without a server.
 
+## Fixtures
+
+`dumpdata` and `loaddata` are described in [fixtures.md](fixtures.md). myshop `fixtures/catalog.json` loads one category and two priced products. A second plain load does not create duplicates, and a conflicting file rolls back. This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. `postgres_fixture_roundtrip` stays ignored without a server. Natural keys are not implemented.
+
 ## Open after v0.27.1
 
 - Cron-Syntax.
