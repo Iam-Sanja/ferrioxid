@@ -62,3 +62,18 @@ window.addEventListener("beforeunload", (event) => {
     event.preventDefault();
     event.returnValue = "";
 });
+
+// Table row navigation is progressive enhancement. The first cell remains
+// a normal keyboard-accessible link. Native controls must keep their behavior.
+document.addEventListener("click", (event) => {
+    if (!(event.target instanceof Element)) {
+        return;
+    }
+    if (event.target.closest("a, button, input, select, textarea, label, summary, details, [role='button'], [contenteditable='true']")) {
+        return;
+    }
+    const row = event.target.closest("tr[data-record-href]");
+    if (row instanceof HTMLTableRowElement && row.dataset.recordHref) {
+        window.location.assign(row.dataset.recordHref);
+    }
+});
