@@ -5,7 +5,6 @@ use ferrioxid_migrations::{
     apply_directory, baseline_database, make_migration, plan_change, write_explicit_migration,
     ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType, MakeOutcome,
     MigrationOperation, OnDelete, SchemaSnapshot, TableSnapshot, UniqueConstraintSnapshot,
-    FORMAT_VERSION,
 };
 use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use std::path::{Path, PathBuf};
@@ -63,10 +62,7 @@ fn table(
 }
 
 fn schema(tables: Vec<TableSnapshot>) -> SchemaSnapshot {
-    SchemaSnapshot {
-        format_version: FORMAT_VERSION,
-        tables,
-    }
+    SchemaSnapshot::from_tables(tables)
 }
 
 fn parent(name: &str) -> TableSnapshot {

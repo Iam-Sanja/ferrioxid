@@ -12,8 +12,9 @@ use clap::{Parser, Subcommand};
 use ferrioxid_migrations::{
     apply_directory, apply_packages, baseline_database, discover_project,
     inspect_migrations_with_packages, load_schema_from_command, make_migration,
-    readonly_database_url, render_diagnosis, reseal_unapplied, runtime_contract_note,
-    write_explicit_migration, MakeOutcome, MigrationOperation, PackageMigration, SchemaSnapshot,
+    readonly_database_url, render_diagnosis, reseal_unapplied, resolve_installed_schemas,
+    runtime_contract_note, write_explicit_migration, InstalledApp, MakeOutcome, MigrationOperation,
+    PackageMigration, SchemaSnapshot,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -748,18 +749,37 @@ fn resolve_app_schema(name: &str) -> Result<(PathBuf, SchemaSnapshot), String> {
     if project.layout_version != 2 {
         return Err("--app schema selection requires a layout-2 project. Existing projects can use --schema-file and --migrations-dir explicitly.".to_owned());
     }
-    let app = project
-        .apps
-        .iter()
-        .find(|app| app.name == name)
-        .ok_or_else(|| format!("App `{name}` is not declared in ferrioxid.toml."))?;
+    if !project.apps.iter().any(|app| app.name == name) {
+        return Err(format!("App `{name}` is not declared in ferrioxid.toml."));
+    }
     let command = project
         .schema_command
         .as_ref()
         .ok_or("schema_command is missing")?;
-    let schema = load_schema_from_command(&project.root, &format!("{command} --app {name}"))
-        .map_err(|error| error.0)?;
-    Ok((app.migrations.clone(), schema))
+    let mut installed = Vec::with_capacity(project.apps.len());
+    for app in &project.apps {
+        let schema =
+            load_schema_from_command(&project.root, &format!("{command} --app {}", app.name))
+                .map_err(|error| error.0)?;
+        installed.push(InstalledApp {
+            name: app.name.clone(),
+            depends_on: app.depends_on.clone(),
+            schema,
+        });
+    }
+    let resolved = resolve_installed_schemas(&installed).map_err(|error| error.0)?;
+    let app = resolved
+        .into_iter()
+        .find(|app| app.name == name)
+        .expect("declared app is present after resolution");
+    let directory = project
+        .apps
+        .iter()
+        .find(|candidate| candidate.name == name)
+        .expect("app was declared")
+        .migrations
+        .clone();
+    Ok((directory, app.schema))
 }
 
 fn resolve_schema(

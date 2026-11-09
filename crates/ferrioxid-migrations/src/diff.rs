@@ -680,7 +680,7 @@ pub fn classify(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::snapshot::{ColumnSnapshot, LogicalType, TableSnapshot, FORMAT_VERSION};
+    use crate::snapshot::{ColumnSnapshot, LogicalType, TableSnapshot};
 
     fn column(
         name: &str,
@@ -708,16 +708,13 @@ mod tests {
     }
 
     fn table(name: &str, columns: Vec<ColumnSnapshot>) -> SchemaSnapshot {
-        SchemaSnapshot {
-            format_version: FORMAT_VERSION,
-            tables: vec![TableSnapshot {
-                name: name.to_owned(),
-                columns,
-                unique_constraints: Vec::new(),
-                indexes: Vec::new(),
-                foreign_keys: Vec::new(),
-            }],
-        }
+        SchemaSnapshot::from_tables(vec![TableSnapshot {
+            name: name.to_owned(),
+            columns,
+            unique_constraints: Vec::new(),
+            indexes: Vec::new(),
+            foreign_keys: Vec::new(),
+        }])
     }
 
     fn products(extra: Vec<ColumnSnapshot>) -> SchemaSnapshot {

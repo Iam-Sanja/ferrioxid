@@ -4,7 +4,7 @@ use crate::error::AuthError;
 use ferrioxid_migrations::{
     apply_directory_with_history, plan_change, seal, ColumnSnapshot, ForeignKeySnapshot,
     IndexSnapshot, LogicalType, MigrationFile, OnDelete, SchemaSnapshot, TableSnapshot,
-    UniqueConstraintSnapshot, AUTH_HISTORY_TABLE, FORMAT_VERSION,
+    UniqueConstraintSnapshot, AUTH_HISTORY_TABLE,
 };
 use sea_orm::DatabaseConnection;
 use std::path::PathBuf;
@@ -26,17 +26,14 @@ pub fn migrations_dir() -> PathBuf {
 }
 
 pub fn schema() -> Result<SchemaSnapshot, AuthError> {
-    let snapshot = SchemaSnapshot {
-        format_version: FORMAT_VERSION,
-        tables: vec![
-            users(),
-            roles(),
-            permissions(),
-            sessions(),
-            user_roles(),
-            role_permissions(),
-        ],
-    };
+    let snapshot = SchemaSnapshot::from_tables(vec![
+        users(),
+        roles(),
+        permissions(),
+        sessions(),
+        user_roles(),
+        role_permissions(),
+    ]);
     snapshot
         .validate()
         .map_err(|error| AuthError::Validation(error.to_string()))?;

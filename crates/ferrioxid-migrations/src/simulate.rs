@@ -13,7 +13,7 @@ pub fn apply_operations(
     for operation in operations {
         apply_one(&mut schema, operation)?;
     }
-    schema.validate()?;
+    schema.validate_owned()?;
     Ok(schema)
 }
 

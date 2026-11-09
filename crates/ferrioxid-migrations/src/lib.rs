@@ -31,7 +31,8 @@ pub use manifest::{
     load_manifest, manifest_json, ProjectManifest, TrackedFile, MANIFEST_RELATIVE, TEMPLATE_VERSION,
 };
 pub use packages::{
-    apply_packages, package_order, package_reports, runtime_contract_note, same_migration_contract,
+    apply_packages, package_order, package_reports, resolve_installed_schemas,
+    runtime_contract_note, same_migration_contract, validate_package_graph, InstalledApp,
     PackageMigration,
 };
 pub use project::{
@@ -43,8 +44,9 @@ pub use runner::{
     migration_status_in, namespaced_status, reseal_unapplied, ApplyReport, StatusReport,
 };
 pub use snapshot::{
-    ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType, OnDelete, RegisteredModel,
-    SchemaSnapshot, TableSnapshot, UniqueConstraintSnapshot, FORMAT_VERSION,
+    ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType,
+    OnDelete, RegisteredModel, SchemaSnapshot, TableSnapshot, UniqueConstraintSnapshot,
+    FORMAT_VERSION,
 };
 pub use store::sha256_hex;
 pub use store::{

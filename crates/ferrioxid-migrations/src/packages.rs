@@ -158,11 +158,151 @@ pub fn package_order(packages: &[PackageMigration]) -> Result<Vec<usize>, Migrat
         }
     }
     if order.len() != packages.len() {
-        return Err(MigrationError::new(
-            "App dependencies contain a cycle.".to_owned(),
-        ));
+        let involved = indegree
+            .iter()
+            .enumerate()
+            .filter_map(|(index, degree)| (*degree > 0).then_some(packages[index].name.as_str()))
+            .collect::<Vec<_>>()
+            .join(", ");
+        return Err(MigrationError::new(format!(
+            "App dependencies contain a cycle involving {involved}. No migration was applied and existing files were not changed."
+        )));
     }
     Ok(order)
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct InstalledApp {
+    pub name: String,
+    pub depends_on: Vec<String>,
+    pub schema: crate::snapshot::SchemaSnapshot,
+}
+
+pub fn resolve_installed_schemas(
+    apps: &[InstalledApp],
+) -> Result<Vec<InstalledApp>, MigrationError> {
+    let packages = apps
+        .iter()
+        .map(|app| PackageMigration {
+            name: app.name.clone(),
+            directory: PathBuf::new(),
+            depends_on: normalize_dependencies(&app.depends_on),
+        })
+        .collect::<Vec<_>>();
+    let order = package_order(&packages)?;
+    let mut owners = BTreeMap::<String, String>::new();
+    for app in apps {
+        for table in &app.schema.tables {
+            if let Some(previous) = owners.insert(table.name.clone(), app.name.clone()) {
+                return Err(MigrationError::new(format!(
+                    "Table `{}` is declared by both `{previous}` and `{}`. Keep the table in one installed app so foreign keys stay unambiguous. Existing migration files were not changed.",
+                    table.name, app.name
+                )));
+            }
+        }
+    }
+    let mut resolved = Vec::with_capacity(order.len());
+    for index in order {
+        let app = &apps[index];
+        let depends_on = normalize_dependencies(&app.depends_on);
+        let mut schema = app.schema.clone();
+        schema.depends_on = depends_on.clone();
+        schema.external_tables.clear();
+        let mut external = Vec::new();
+        for table in &schema.tables {
+            for foreign_key in &table.foreign_keys {
+                if schema
+                    .tables
+                    .iter()
+                    .any(|candidate| candidate.name == foreign_key.referenced_table)
+                {
+                    continue;
+                }
+                let Some(owner) = owners.get(&foreign_key.referenced_table) else {
+                    return Err(MigrationError::new(format!(
+                        "Foreign key `{}` references unknown table `{}`. No installed app owns that table. Declare the target model or remove the foreign key. Existing migration files were not changed.",
+                        foreign_key.name, foreign_key.referenced_table
+                    )));
+                };
+                if !depends_on.iter().any(|dependency| dependency == owner) {
+                    let column = foreign_key
+                        .referenced_columns
+                        .first()
+                        .map(String::as_str)
+                        .unwrap_or("?");
+                    return Err(MigrationError::new(format!(
+                        "Foreign key `{}` references `{}.{}` in app `{owner}`, but `{}` does not declare that dependency. Add `{owner}` to depends_on so migration order is valid. Existing migration files were not changed.",
+                        foreign_key.name, foreign_key.referenced_table, column, app.name
+                    )));
+                }
+                if external
+                    .iter()
+                    .any(|item: &crate::snapshot::ExternalTableSnapshot| {
+                        item.table.name == foreign_key.referenced_table
+                    })
+                {
+                    continue;
+                }
+                let source = apps
+                    .iter()
+                    .find(|candidate| candidate.name == *owner)
+                    .expect("owner is an installed app");
+                let referenced = source
+                    .schema
+                    .tables
+                    .iter()
+                    .find(|candidate| candidate.name == foreign_key.referenced_table)
+                    .expect("owner table was indexed")
+                    .clone();
+                external.push(crate::snapshot::ExternalTableSnapshot {
+                    app: owner.clone(),
+                    table: referenced,
+                });
+            }
+        }
+        external.sort_by(|left, right| left.table.name.cmp(&right.table.name));
+        schema.external_tables = external;
+        schema.validate()?;
+        resolved.push(InstalledApp {
+            name: app.name.clone(),
+            depends_on,
+            schema,
+        });
+    }
+    Ok(resolved)
+}
+
+fn normalize_dependencies(names: &[String]) -> Vec<String> {
+    let mut values = names.to_vec();
+    values.sort();
+    values.dedup();
+    values
+}
+
+pub fn validate_package_graph(packages: &[PackageMigration]) -> Result<(), MigrationError> {
+    let mut apps = Vec::with_capacity(packages.len());
+    for package in packages {
+        let schema = if package.directory.exists() {
+            let state = crate::store::inspect_directory(&package.directory);
+            if !state.conflicts.is_empty() {
+                return Err(MigrationError::new(state.conflicts.join("\n")));
+            }
+            state
+                .files
+                .last()
+                .map(|file| file.to_snapshot.clone())
+                .unwrap_or_else(crate::snapshot::SchemaSnapshot::empty)
+        } else {
+            crate::snapshot::SchemaSnapshot::empty()
+        };
+        apps.push(InstalledApp {
+            name: package.name.clone(),
+            depends_on: package.depends_on.clone(),
+            schema,
+        });
+    }
+    resolve_installed_schemas(&apps)?;
+    Ok(())
 }
 
 pub async fn apply_packages(
@@ -170,6 +310,7 @@ pub async fn apply_packages(
     packages: &[PackageMigration],
     allow_destructive: bool,
 ) -> Result<Vec<String>, MigrationError> {
+    validate_package_graph(packages)?;
     let order = package_order(packages)?;
     let mut applied = Vec::new();
     for index in order {
@@ -186,6 +327,7 @@ pub async fn package_reports(
     db: &sea_orm::DatabaseConnection,
     packages: &[PackageMigration],
 ) -> Result<Vec<(String, crate::runner::StatusReport)>, MigrationError> {
+    validate_package_graph(packages)?;
     let order = package_order(packages)?;
     let mut reports = Vec::new();
     for index in order {
@@ -213,22 +355,19 @@ mod tests {
 
     fn write_initial(directory: &Path, table: &str) -> Result<(), MigrationError> {
         let from = SchemaSnapshot::empty();
-        let to = SchemaSnapshot {
-            format_version: 1,
-            tables: vec![TableSnapshot {
-                name: table.to_owned(),
-                columns: vec![ColumnSnapshot {
-                    name: "id".to_owned(),
-                    logical_type: LogicalType::String,
-                    primary_key: true,
-                    nullable: false,
-                    default: None,
-                }],
-                unique_constraints: Vec::new(),
-                indexes: Vec::new(),
-                foreign_keys: Vec::new(),
+        let to = SchemaSnapshot::from_tables(vec![TableSnapshot {
+            name: table.to_owned(),
+            columns: vec![ColumnSnapshot {
+                name: "id".to_owned(),
+                logical_type: LogicalType::String,
+                primary_key: true,
+                nullable: false,
+                default: None,
             }],
-        };
+            unique_constraints: Vec::new(),
+            indexes: Vec::new(),
+            foreign_keys: Vec::new(),
+        }]);
         let plan = plan_change(&from, &to)?;
         let file = seal(
             "0001_initial".to_owned(),

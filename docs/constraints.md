@@ -82,7 +82,7 @@ PostgreSQL uses the same `CREATE INDEX` statements and `ALTER TABLE ... ADD COLU
 
 In addition, `SchemaSnapshot::validate` checks:
 
-- The destination table is registered in the same snapshot.
+- The destination table is registered in this snapshot or in an installed app listed in `depends_on`. A cross-app target requires that direct dependency; a transitive dependency is not enough. Missing apps, cycles, ambiguous table names and a dependency removal that would leave a foreign key unresolved stop schema generation and migration execution. Applied migration files and their checksums stay unchanged.
 - The target column exists.
 - The logical types agree.
 - The target column is a primary key or a single-column unique constraint.
