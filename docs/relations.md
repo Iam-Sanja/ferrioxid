@@ -1,6 +1,6 @@
 # Typed model relationships
 
-[Overview](index.md) · **Implemented** for Belongs-To and Has-Many. Many-to-Many, Eager Loading and Batch Loading are not implemented.
+[Overview](index.md) · **Implemented** for Belongs-To, Has-Many and explicit batch loading. Many-to-many and automatic eager loading are not implemented.
 
 A relationship does not only exist in Rust. The field carries a foreign key, and the database checks it. The methods load typed models. You do not return a `serde_json::Value`.
 
@@ -19,7 +19,10 @@ pub category_id: Option<Uuid>,
 
 ```rust
 let category = product.category(&db).await?;
+let visible = product.category_scoped(&db, &scope).await?;
 ```
+
+`category` uses `QueryScope::All`. `category_scoped` applies the object-policy scope. A null foreign key returns `Ok(None)` and does not query. A set key whose parent is missing or outside the scope returns `NotFound`. The two cases are not distinguished. Both methods accept `&impl ConnectionTrait`, including an open transaction.
 
 | Field |Return|
 |---|---|
@@ -51,17 +54,42 @@ The attribute syntax is `methode=Typpfad.spalte` (method name, type path and col
 
 ```rust
 let products = category.products(&db).await?;
+let visible = category.products_scoped(&db, &scope).await?;
 ```
 
-The return is `Result<Vec<Product>, FerrioxidError>`. No children make an empty vector, no error. The lines are sorted ascending according to `id`.
+The return is `Result<Vec<Product>, FerrioxidError>`. No children make an empty vector, no error. One statement orders the lines by `id`. `products` uses `QueryScope::All`. `products_scoped` applies the scope and calls `load_children`. Neither method caps the number of child rows. Page with `Product::query()` when a parent can own a large set.
 
 Mutual module references are allowed because the types are only in method signatures. `myshop` separates `category.rs` and `product.rs`.
 
 ## Loading
 
-Each relationship method performs a query when it is called. This is lazy loading. A loop about products that calls `product.category(&db)` each creates one query per product. This is the N+1 problem: one query for the list and N more for the parents.
+`product.category(&db)` and `category.products(&db)` each run one query. A loop that calls the lazy method is still N+1. The batch functions are the supported way to avoid that.
 
-Eager loading and batched parent queries with `WHERE id IN (...)` are not implemented. To load many child collections, use a custom query rather than calling `products()` in a loop.
+```rust
+use ferrioxid::db::{col, load_by_ids, load_children, ModelQuery};
+use ferrioxid::uuid::Uuid;
+
+// 5. Twenty cart lines load their products in one statement, not twenty.
+let lines = CartLine::query()
+    .filter(col("cart_id").eq(cart_id))
+    .all(&db)
+    .await?;
+let product_ids: Vec<Uuid> = lines.iter().map(|line| line.product_id).collect();
+let products = load_by_ids::<Product>(&db, &product_ids, &scope).await?;
+
+let category_ids: Vec<Uuid> = products.iter().filter_map(|product| product.category_id).collect();
+let categories = load_by_ids::<Category>(&db, &category_ids, &scope).await?;
+
+let lines_for_carts = load_children::<CartLine>(&db, "cart_id", &cart_ids, &scope).await?;
+```
+
+`scope` is the `QueryScope` from the object policy. `QueryScope::None` returns no rows and does not query. `QueryScope::Equals` is part of the statement. An identifier that is missing or outside the scope is absent from the vector. The caller cannot tell those two cases apart.
+
+`load_by_ids` and `load_children` accept `&impl ConnectionTrait`. They send at most 100 identifiers per statement. Twenty identifiers are one statement. 101 identifiers are two. `load_by_ids` orders by primary key across those statements. `load_children` orders by `id` inside one statement. A has-many result that spans more than one statement is concatenated in parent-id order, not resorted into one global `id` sequence. `load_children` rejects a column that is not a UUID column of the child model.
+
+The returned child set is not limited to 100 rows. A parent with a very large collection should be read with `CartLine::query().filter(...).page(&db)` instead.
+
+Calling `product.category(&db)` inside a loop does not become a batch. There is no many-to-many loader and no join API.
 
 The repository methods `list`, `get`, `create`, `update` and `delete` remain unchanged. The relationship methods are separate methods on the model, not new repository methods.
 
@@ -80,7 +108,7 @@ Existing product lines remain valid because the new column is nullable and does 
 ## Not implemented
 
 - Many-to-many and join tables
-- Eager Loading, `prefetch` and Batch Loading
+- Automatic eager loading when a lazy relation method is called in a loop
 - Automatic detection of the opposite direction
 - Nested HTTP routes
 - Loading a relationship within `list`

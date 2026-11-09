@@ -756,7 +756,7 @@ pub async fn delete_record(
 }
 
 pub async fn find_by_column<M>(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     column: &str,
     value: Value,
 ) -> Result<Vec<M>, FerrioxidError>

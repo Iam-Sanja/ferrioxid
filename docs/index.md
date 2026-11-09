@@ -30,7 +30,7 @@ The main flow is: Rust model → `FerrioxidModel` metadata and repository method
 | Tests and CI | Implemented and planned | [testing.md](testing.md) | Workspace checks, SQLite tests and separate PostgreSQL tests |
 | Migrations | Implemented with stated limits | [migrations.md](migrations.md) | Snapshots, diffs, explicit renames, checked rebuilds and baseline |
 | Constraints | Implemented | [constraints.md](constraints.md) | Unique constraints, indexes, foreign keys and error codes |
-| Relations | Implemented, lazy loading | [relations.md](relations.md) | Belongs-to, has-many and N+1 query limits |
+| Relations | Implemented, lazy and explicit batch loading | [relations.md](relations.md) | Belongs-to, has-many, batch loads and N+1 limits |
 | Auth and permissions | Implemented | [auth.md](auth.md), [password-reset.md](password-reset.md), [sessions.md](sessions.md), [permissions.md](permissions.md), [policies.md](policies.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md) | Users, sessions, reset, role permissions, object policies and query scopes |
 | Email | Implemented, v0.23 | [mail.md](mail.md), [mail-smtp.md](mail-smtp.md), [notifications.md](notifications.md), [mail-security.md](mail-security.md) | Transports, templates, typed notices and delivery limits |
 | Forms | Implemented, v0.12 | [forms.md](forms.md), [forms-validation.md](forms-validation.md) | Typed fields, Tera HTML and shared validation rules |

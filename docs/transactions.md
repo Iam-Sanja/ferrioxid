@@ -16,6 +16,28 @@ A write operation that changes several rows uses a `DatabaseTransaction`. `ferri
 
 `query_admin_page` takes `&impl ConnectionTrait`. A child list within the write transaction uses the same connection.
 
+`Product::query()`, `read_model`, `load_by_ids`, `load_children` and `find_by_column` also take `&impl ConnectionTrait`. Pass the open transaction. Do not call `list`, `get`, `create`, `update` or `delete` there: those methods take `&DatabaseConnection` and would check out another pool connection. On SQLite that wait does not end. Use `get_tx`, `create_tx`, `update_tx`, `delete_tx`, or the `*_in` methods.
+
+```rust
+use ferrioxid::db::{col, load_by_ids, ModelQuery};
+
+// 6. Read, insert and update share the order transaction.
+let tx = db.begin().await?;
+let available = Product::query()
+    .filter(col("active").eq(true))
+    .filter(col("stock").gt(0_i64))
+    .all(&tx)
+    .await?;
+let product_ids: Vec<_> = available.iter().map(|product| product.id).collect();
+let products = load_by_ids::<Product>(&tx, &product_ids, &scope).await?;
+let order = Order::create_tx(&tx, order_input).await?;
+OrderLine::create_tx(&tx, line_input).await?;
+let _ = (order, products);
+tx.commit().await?;
+```
+
+`scope` is the policy scope. A rollback drops the insert and the update. The SQLite test `sqlite_transaction_reads_writes_and_rolls_back_on_one_connection` opens a pool with one connection, runs a filter, `find_by_column`, an insert and an update on that transaction, then rolls back. It fails if the work is still running after five seconds, which is the deadlock from a second checkout. `postgres_transaction_query_and_rollback_runtime` is ignored unless `DATABASE_URL` points at a disposable PostgreSQL database. The local workspace run does not mark it passed.
+
 ## SQLite
 
 `ferrioxid_db::connect` sets `max_connections(1)` for SQLite. Requesting another connection from that pool while a write transaction is open will wait indefinitely. Hash passwords, validate forms and run the parent’s `ensure_relations` before `begin`. Inside the transaction, use only methods that accept the transaction connection.

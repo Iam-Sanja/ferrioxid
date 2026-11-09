@@ -172,7 +172,7 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 
 - `migrate down`. Explicit renames, SQLite table rebuilds and SQLite baselining are described in [migrations.md](migrations.md). Multi-model transactions are described in [transactions.md](transactions.md).
 - Own error codes apart from the two fixed validation texts for Unique and Foreign Key.
-- JSON columns, many-to-many relations, eager loading and MySQL.
+- JSON columns, many-to-many relations, automatic eager loading and MySQL. Batched foreign-key and has-many reads are in [relations.md](relations.md).
 - Pool sizes and timeouts as an application configuration except for the fixed SQLite limit of a connection.
 - Optimistic locking.
 

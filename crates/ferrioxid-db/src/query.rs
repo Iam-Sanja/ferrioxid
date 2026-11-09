@@ -586,6 +586,98 @@ fn render(
     Ok(Statement::from_sql_and_values(backend, sql, values.0))
 }
 
+/// Loads models by primary key on `db`, which may be an open transaction.
+///
+/// At most [`IN_LIMIT`] identifiers are sent per statement. Rows hidden by
+/// `scope`, and unknown identifiers, are omitted. The result is ordered by `id`.
+/// An empty `ids` slice performs no query. [`QueryScope::None`] performs no query.
+pub async fn load_by_ids<M>(
+    db: &impl ConnectionTrait,
+    ids: &[Uuid],
+    scope: &QueryScope,
+) -> Result<Vec<M>, FerrioxidError>
+where
+    M: FerrioxidModel + DeserializeOwned,
+{
+    load_where::<M>(db, "id", ids, scope).await
+}
+
+/// Loads child rows whose `column` is one of `parent_ids`.
+///
+/// `column` must be a UUID column of `M`. One statement carries at most
+/// [`IN_LIMIT`] parent identifiers. A single statement orders rows by `id`.
+/// The number of returned child rows is not capped; page a [`Select`] when the
+/// child set can be large. [`QueryScope`] is applied and cannot be skipped.
+pub async fn load_children<M>(
+    db: &impl ConnectionTrait,
+    column: &str,
+    parent_ids: &[Uuid],
+    scope: &QueryScope,
+) -> Result<Vec<M>, FerrioxidError>
+where
+    M: FerrioxidModel + DeserializeOwned,
+{
+    let spec = lookup(M::columns(), column)?;
+    if spec.kind != ColumnKind::Uuid {
+        return Err(FerrioxidError::Validation(format!(
+            "column {column} is not a uuid column"
+        )));
+    }
+    load_where::<M>(db, column, parent_ids, scope).await
+}
+
+/// Reads one model on `db` and applies `scope`. A hidden row is `Ok(None)`.
+pub async fn read_model<M>(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    scope: &QueryScope,
+) -> Result<Option<M>, FerrioxidError>
+where
+    M: FerrioxidModel + DeserializeOwned,
+{
+    note_statement();
+    let row = crate::sql::get_record(db, M::descriptor().table, M::columns(), id, scope).await?;
+    row.map(|json| serde_json::from_value(json).map_err(FerrioxidError::database))
+        .transpose()
+}
+
+async fn load_where<M>(
+    db: &impl ConnectionTrait,
+    column: &str,
+    ids: &[Uuid],
+    scope: &QueryScope,
+) -> Result<Vec<M>, FerrioxidError>
+where
+    M: FerrioxidModel + DeserializeOwned,
+{
+    let columns = M::columns();
+    let table = M::descriptor().table;
+    if !is_safe_ident(table) {
+        return Err(FerrioxidError::Validation(format!(
+            "table {table} is not available"
+        )));
+    }
+    lookup(columns, column)?;
+    lookup(columns, "id")?;
+    if ids.is_empty() || matches!(scope, QueryScope::None) {
+        return Ok(Vec::new());
+    }
+    let mut unique = ids.to_vec();
+    unique.sort();
+    unique.dedup();
+    let mut found = Vec::new();
+    for chunk in unique.chunks(IN_LIMIT) {
+        let mut query = select_body::<M>(None);
+        query.and_where(Expr::col(Alias::new(column)).is_in(chunk.iter().copied()));
+        if let Some(condition) = scope_condition(columns, scope)? {
+            query.and_where(condition);
+        }
+        query.order_by(Alias::new("id"), Order::Asc);
+        found.extend(fetch_models(db, &query).await?);
+    }
+    Ok(found)
+}
+
 fn note_statement() {
     #[cfg(test)]
     {
@@ -620,7 +712,9 @@ mod tests {
     use ferrioxid_core::{
         ColumnKind, ColumnSpec, DatabaseKind, ModelDescriptor, QueryScope, ScopeValue,
     };
-    use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
+    use sea_orm::{
+        ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait,
+    };
     use serde::Deserialize;
 
     use crate::connect;
@@ -758,7 +852,7 @@ mod tests {
         serde_json::from_value::<Item>(json).unwrap();
     }
 
-    async fn fixture(db: &DatabaseConnection) {
+    async fn fixture(db: &impl ConnectionTrait) {
         insert(
             db,
             NewItem {
@@ -1142,6 +1236,314 @@ mod tests {
         assert_eq!(page.total, 2);
         assert_eq!(page.data.len(), 1);
         assert!(!page.has_more);
+        db.execute(Statement::from_string(
+            DatabaseBackend::Postgres,
+            "DROP TABLE IF EXISTS ferrioxid_query_items".to_owned(),
+        ))
+        .await
+        .unwrap();
+    }
+
+    struct Counting {
+        inner: DatabaseConnection,
+        queries: std::sync::atomic::AtomicUsize,
+        sql: std::sync::Mutex<Vec<String>>,
+    }
+
+    impl Counting {
+        fn new(inner: DatabaseConnection) -> Self {
+            Self {
+                inner,
+                queries: std::sync::atomic::AtomicUsize::new(0),
+                sql: std::sync::Mutex::new(Vec::new()),
+            }
+        }
+
+        fn record(&self, statement: &Statement) {
+            self.queries
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.sql
+                .lock()
+                .expect("query log")
+                .push(statement.sql.clone());
+        }
+    }
+
+    #[async_trait::async_trait]
+    impl ConnectionTrait for Counting {
+        fn get_database_backend(&self) -> DatabaseBackend {
+            self.inner.get_database_backend()
+        }
+
+        async fn execute(
+            &self,
+            statement: Statement,
+        ) -> Result<sea_orm::ExecResult, sea_orm::DbErr> {
+            self.record(&statement);
+            self.inner.execute(statement).await
+        }
+
+        async fn execute_unprepared(
+            &self,
+            sql: &str,
+        ) -> Result<sea_orm::ExecResult, sea_orm::DbErr> {
+            self.queries
+                .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+            self.inner.execute_unprepared(sql).await
+        }
+
+        async fn query_one(
+            &self,
+            statement: Statement,
+        ) -> Result<Option<sea_orm::QueryResult>, sea_orm::DbErr> {
+            self.record(&statement);
+            self.inner.query_one(statement).await
+        }
+
+        async fn query_all(
+            &self,
+            statement: Statement,
+        ) -> Result<Vec<sea_orm::QueryResult>, sea_orm::DbErr> {
+            self.record(&statement);
+            self.inner.query_all(statement).await
+        }
+    }
+
+    #[tokio::test]
+    async fn batch_load_respects_scope_and_does_not_query_per_row() {
+        let db = Counting::new(memory().await);
+        fixture(&db).await;
+        db.queries.store(0, std::sync::atomic::Ordering::Relaxed);
+        db.sql.lock().expect("query log").clear();
+
+        let ids = [
+            Uuid::from_u128(1),
+            Uuid::from_u128(2),
+            Uuid::from_u128(3),
+            Uuid::from_u128(4),
+            Uuid::from_u128(5),
+            Uuid::from_u128(99),
+        ];
+        let visible = load_by_ids::<Item>(&db, &ids, &QueryScope::All)
+            .await
+            .unwrap();
+        assert_eq!(visible.len(), 5);
+        assert_eq!(db.queries.load(std::sync::atomic::Ordering::Relaxed), 1);
+        let sql = db.sql.lock().expect("query log").join("\n");
+        assert!(sql.contains("IN"));
+        assert!(sql.contains('?'));
+        assert!(!sql.contains("DROP"));
+        assert!(!sql.contains(PAYLOAD));
+
+        db.queries.store(0, std::sync::atomic::Ordering::Relaxed);
+        let owned = load_by_ids::<Item>(
+            &db,
+            &ids,
+            &QueryScope::Equals {
+                column: "owner_id",
+                value: ScopeValue::Uuid(Uuid::from_u128(7)),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(names(&owned), vec!["alpha", "beta", PAYLOAD]);
+        assert_eq!(db.queries.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(
+            read_model::<Item>(&db, Uuid::from_u128(5), &QueryScope::None)
+                .await
+                .unwrap()
+                .is_none()
+        );
+
+        db.queries.store(0, std::sync::atomic::Ordering::Relaxed);
+        let denied = load_by_ids::<Item>(&db, &ids, &QueryScope::None)
+            .await
+            .unwrap();
+        assert!(denied.is_empty());
+        assert_eq!(db.queries.load(std::sync::atomic::Ordering::Relaxed), 0);
+
+        let mut many = Vec::new();
+        for number in 1_u128..=101 {
+            many.push(Uuid::from_u128(number));
+        }
+        db.queries.store(0, std::sync::atomic::Ordering::Relaxed);
+        let _ = load_by_ids::<Item>(&db, &many, &QueryScope::All)
+            .await
+            .unwrap();
+        assert_eq!(db.queries.load(std::sync::atomic::Ordering::Relaxed), 2);
+
+        db.queries.store(0, std::sync::atomic::Ordering::Relaxed);
+        let children =
+            load_children::<Item>(&db, "owner_id", &[Uuid::from_u128(8)], &QueryScope::All)
+                .await
+                .unwrap();
+        assert_eq!(names(&children), vec!["gamma", "hidden"]);
+        assert_eq!(db.queries.load(std::sync::atomic::Ordering::Relaxed), 1);
+        assert!(
+            load_children::<Item>(&db, "name", &[Uuid::from_u128(8)], &QueryScope::All)
+                .await
+                .is_err()
+        );
+        assert!(
+            load_children::<Item>(&db, "missing", &[Uuid::from_u128(8)], &QueryScope::All)
+                .await
+                .is_err()
+        );
+
+        let mut cart_lines = Vec::new();
+        for number in 10_u128..30 {
+            let name = format!("line-{number}");
+            insert(
+                &db,
+                NewItem {
+                    id: number,
+                    name: &name,
+                    stock: 1,
+                    active: true,
+                    price: 10,
+                    category: Some(50),
+                    owner: 7,
+                },
+            )
+            .await;
+            cart_lines.push(Uuid::from_u128(number));
+        }
+        db.queries.store(0, std::sync::atomic::Ordering::Relaxed);
+        let products = load_by_ids::<Item>(&db, &cart_lines, &QueryScope::All)
+            .await
+            .unwrap();
+        assert_eq!(products.len(), 20);
+        assert_eq!(db.queries.load(std::sync::atomic::Ordering::Relaxed), 1);
+    }
+
+    #[tokio::test]
+    async fn sqlite_transaction_reads_writes_and_rolls_back_on_one_connection() {
+        let db = memory().await;
+        fixture(&db).await;
+        let finished = tokio::time::timeout(std::time::Duration::from_secs(5), async {
+            let tx = db.begin().await.unwrap();
+            let found = Item::query()
+                .filter(col("active").eq(true))
+                .filter(col("stock").gt(0_i64))
+                .all(&tx)
+                .await
+                .unwrap();
+            assert_eq!(found.len(), 3);
+            let children = crate::find_by_column::<Item>(
+                &tx,
+                "owner_id",
+                Value::Uuid(Some(Box::new(Uuid::from_u128(7)))),
+            )
+            .await
+            .unwrap();
+            assert_eq!(children.len(), 3);
+            insert(
+                &tx,
+                NewItem {
+                    id: 6,
+                    name: "order-line",
+                    stock: 1,
+                    active: true,
+                    price: 12,
+                    category: Some(50),
+                    owner: 7,
+                },
+            )
+            .await;
+            let updated = crate::sql::update_record(
+                &tx,
+                Item::descriptor().table,
+                Item::columns(),
+                Uuid::from_u128(2),
+                vec![("stock", Value::BigInt(Some(9)))],
+                &QueryScope::All,
+            )
+            .await
+            .unwrap();
+            let stock = updated.get("stock").and_then(|value| value.as_i64());
+            assert_eq!(stock, Some(9));
+            let during = Item::query()
+                .filter(col("name").eq("order-line"))
+                .exists(&tx)
+                .await
+                .unwrap();
+            assert!(during);
+            tx.rollback().await.unwrap();
+        })
+        .await;
+        finished.expect("sqlite transaction waited for a second pool connection");
+        assert!(Item::query()
+            .filter(col("name").eq("order-line"))
+            .all(&db)
+            .await
+            .unwrap()
+            .is_empty());
+        let beta = read_model::<Item>(&db, Uuid::from_u128(2), &QueryScope::All)
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(beta.stock, 4);
+
+        let tx = db.begin().await.unwrap();
+        insert(
+            &tx,
+            NewItem {
+                id: 6,
+                name: "kept",
+                stock: 1,
+                active: true,
+                price: 12,
+                category: Some(50),
+                owner: 7,
+            },
+        )
+        .await;
+        tx.commit().await.unwrap();
+        assert_eq!(
+            Item::query()
+                .filter(col("name").eq("kept"))
+                .count(&db)
+                .await
+                .unwrap(),
+            1
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
+    async fn postgres_transaction_query_and_rollback_runtime() {
+        let url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set to run the ignored PostgreSQL transaction test");
+        let db = connect(&url).await.expect("postgres connection");
+        let _ = db
+            .execute(Statement::from_string(
+                DatabaseBackend::Postgres,
+                "DROP TABLE IF EXISTS ferrioxid_query_items".to_owned(),
+            ))
+            .await;
+        db.execute(Statement::from_string(
+            DatabaseBackend::Postgres,
+            Item::schema_sql(DatabaseKind::Postgres),
+        ))
+        .await
+        .expect("create query table");
+        let tx = db.begin().await.unwrap();
+        insert(
+            &tx,
+            NewItem {
+                id: 1,
+                name: "alpha",
+                stock: 2,
+                active: true,
+                price: 10,
+                category: Some(50),
+                owner: 7,
+            },
+        )
+        .await;
+        assert!(Item::query().exists(&tx).await.unwrap());
+        tx.rollback().await.unwrap();
+        assert_eq!(Item::query().count(&db).await.unwrap(), 0);
         db.execute(Statement::from_string(
             DatabaseBackend::Postgres,
             "DROP TABLE IF EXISTS ferrioxid_query_items".to_owned(),
