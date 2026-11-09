@@ -59,6 +59,7 @@
 <button class="js-save" type="submit" name="save" value="new">{{ i18n.save_add }}</button>
 <a class="button ghost" href="{{ cancel }}">{{ i18n.cancel }}</a>
 {% if history_href %}<a class="button ghost" href="{{ history_href }}">{{ i18n.history }}</a>{% endif %}
+{% if delete_href %}<a class="button danger" href="{{ delete_href }}">{{ i18n.delete }}</a>{% endif %}
 </div>
 </form>
 {% endblock %}
