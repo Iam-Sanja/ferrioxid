@@ -8,6 +8,10 @@ Ferrioxid is an experimental Rust framework with a model-first data layer, versi
 
 The main flow is: Rust model → `FerrioxidModel` metadata and repository methods → explicit registration → HTTP routes. Schema changes use the migration engine. `myshop --bootstrap` is a legacy compatibility option and does not create a schema.
 
+## Django capability comparison
+
+The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferrioxid's documented behavior with Django's major developer benefits, tracks missing/partial capabilities and their issues, and defines the **documentation-and-test gate** required before a feature can be called complete. Broad topic labels in the table below indicate existing implementation, **not** full Django parity; consult the matrix for the sub-capability status.
+
 ## Documentation by topic
 
 | Topic | Status | Pages | Responsibility |
