@@ -19,7 +19,7 @@ There are no fallback aliases or precedence rules for the historical names. `DAT
 
 ## Fresh projects and secrets
 
-Run `ferrioxid new` outside the framework workspace as shown in the [README](../README.md). Both API and fullstack templates create `ferrioxid.toml` and `.ferrioxid/project.json`. The configuration discovery code searches for the current TOML filename in the working directory and its ancestors.
+Run `ferrioxid new project` outside the framework workspace as shown in the [README](../README.md). Both API and fullstack templates create `ferrioxid.toml` and `.ferrioxid/project.json`. The configuration discovery code searches for the current TOML filename in the working directory and its ancestors.
 
 Generation creates no CSRF key. Authentication creates or reads `.ferrioxid/csrf.key` only when runtime configuration needs a persistent key and `FERRIOXID_CSRF_SECRET` is not supplied. The generated `.gitignore` excludes this key, `.env` and `.env.*` while allowing `.env.example` and the non-secret project manifest. The model generator continues to use the markers from PR #24.
 

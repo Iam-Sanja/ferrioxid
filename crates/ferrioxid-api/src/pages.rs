@@ -57,10 +57,12 @@ impl Site {
         routes: &crate::urls::RouteMap,
     ) -> Result<Self, PageError> {
         let mut tera = Tera::default();
-        for (name, body) in files {
-            tera.add_raw_template(name, body)
-                .map_err(|error| PageError(format!("Vorlage `{name}` ist ungültig: {error}")))?;
-        }
+        tera.add_raw_templates(
+            files
+                .iter()
+                .map(|(name, body)| (name.as_str(), body.as_str())),
+        )
+        .map_err(|error| PageError(format!("Invalid template catalog: {error}")))?;
         let mut site = Self { tera };
         site.set_routes(routes.clone());
         Ok(site)

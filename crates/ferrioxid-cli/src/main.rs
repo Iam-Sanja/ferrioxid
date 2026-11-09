@@ -27,15 +27,10 @@ struct Cli {
 
 #[derive(Subcommand)]
 enum Command {
-    /// Creates a standalone Ferrioxid project.
+    /// Creates a project or an app inside an existing project.
     New {
-        name: String,
-        /// `api` or `fullstack`. Defaults to `fullstack`.
-        #[arg(long, default_value = "fullstack")]
-        template: String,
-        /// Path to the Ferrioxid repository until the crate is published.
-        #[arg(long)]
-        ferrioxid_path: Option<PathBuf>,
+        #[command(subcommand)]
+        action: NewCommand,
     },
     /// Checks tools, configuration, and project files.
     Doctor,
@@ -98,6 +93,30 @@ enum Command {
 }
 
 #[derive(Subcommand)]
+enum NewCommand {
+    /// Creates an empty standalone project, without business models.
+    Project {
+        name: String,
+        #[arg(long, default_value = "fullstack", value_parser = ["api", "fullstack"])]
+        template: String,
+        /// App modules live in apps/<name> or directly in the project root.
+        #[arg(long, default_value = "apps", value_parser = ["apps", "."])]
+        apps_dir: String,
+        #[arg(long)]
+        ferrioxid_path: Option<PathBuf>,
+    },
+    /// Creates and registers an empty app in a layout-2 project.
+    App {
+        name: String,
+        /// Place the initial HTML template inside the app or in templates/<name>.
+        #[arg(long, default_value = "local", value_parser = ["local", "shared"])]
+        templates: String,
+    },
+    #[command(external_subcommand)]
+    Legacy(Vec<String>),
+}
+
+#[derive(Subcommand)]
 enum JobsCommand {
     /// Lists jobs without modifying them.
     List {
@@ -136,11 +155,14 @@ enum GenerateCommand {
     /// Creates a model and registers it.
     Model {
         name: String,
+        /// Required for models in layout-2 projects.
+        #[arg(long)]
+        app: Option<String>,
         /// Adds managed created_at and updated_at fields.
         #[arg(long)]
         timestamps: bool,
     },
-    /// Creates a Ferrioxid app without overwriting files.
+    /// Removed command: use `ferrioxid new app <name>`.
     App { name: String },
     /// Writes `src/bin/worker.rs` without overwriting existing files.
     Worker,
@@ -219,6 +241,9 @@ enum MigrateCommand {
     Make {
         /// Short name, for example add_note.
         name: Option<String>,
+        /// Use the declared app's schema and migration directory.
+        #[arg(long, conflicts_with_all = ["schema_file", "migrations_dir"])]
+        app: Option<String>,
         /// Schema snapshot JSON instead of schema_command.
         #[arg(long)]
         schema_file: Option<PathBuf>,
@@ -294,20 +319,26 @@ enum MigrateCommand {
 
 fn main() -> ExitCode {
     match Cli::parse().command {
-        Command::New {
-            name,
-            template,
-            ferrioxid_path,
-        } => match scaffold::new_project(&name, &template, ferrioxid_path.as_deref()) {
-            Ok(path) => {
-                println!("{} {}", text::line("project_created"), path.display());
-                ExitCode::SUCCESS
+        Command::New { action } => {
+            let (result, label) = match action {
+                NewCommand::Project { name, template, apps_dir, ferrioxid_path } => (
+                    scaffold::new_project(&name, &template, &apps_dir, ferrioxid_path.as_deref()),
+                    text::line("project_created"),
+                ),
+                NewCommand::App { name, templates } => (apps::generate_app(&name, &templates), "Created app:"),
+                NewCommand::Legacy(arguments) => (Err(format!("The implicit new command ({} arguments) was removed. Use ferrioxid new project <name> or ferrioxid new app <name>. Existing projects are not changed.", arguments.len())), ""),
+            };
+            match result {
+                Ok(path) => {
+                    println!("{label} {}", path.display());
+                    ExitCode::SUCCESS
+                }
+                Err(error) => {
+                    eprintln!("{error}");
+                    ExitCode::from(2)
+                }
             }
-            Err(error) => {
-                eprintln!("{error}");
-                ExitCode::from(1)
-            }
-        },
+        }
         Command::Doctor => diagnose::doctor(),
         Command::Check { strict } => diagnose::check(strict),
         Command::Upgrade {
@@ -328,9 +359,17 @@ fn main() -> ExitCode {
                     ExitCode::from(1)
                 }
             },
-            GenerateCommand::App { name } => match apps::generate_app(&name) {
+            GenerateCommand::App { name: _ } => {
+                eprintln!("Use `ferrioxid new app <name>`. `generate app` no longer writes files. See docs/project-generator.md for existing projects.");
+                ExitCode::from(2)
+            }
+            GenerateCommand::Model {
+                name,
+                app,
+                timestamps,
+            } => match models::generate_model(&name, app.as_deref(), timestamps) {
                 Ok(path) => {
-                    println!("App created: {}", path.display());
+                    println!("{} {}", text::line("model_created"), path.display());
                     ExitCode::SUCCESS
                 }
                 Err(error) => {
@@ -338,18 +377,6 @@ fn main() -> ExitCode {
                     ExitCode::from(1)
                 }
             },
-            GenerateCommand::Model { name, timestamps } => {
-                match models::generate_model(&name, timestamps) {
-                    Ok(path) => {
-                        println!("{} {}", text::line("model_created"), path.display());
-                        ExitCode::SUCCESS
-                    }
-                    Err(error) => {
-                        eprintln!("{error}");
-                        ExitCode::from(1)
-                    }
-                }
-            }
         },
         Command::Migrate { action } => match run_migrate(action) {
             Ok(()) => ExitCode::SUCCESS,
@@ -442,10 +469,14 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
     match action {
         MigrateCommand::Make {
             name,
+            app,
             schema_file,
             migrations_dir,
         } => {
-            let (directory, schema) = resolve_schema(schema_file, migrations_dir)?;
+            let (directory, schema) = match app {
+                Some(name) => resolve_app_schema(&name)?,
+                None => resolve_schema(schema_file, migrations_dir)?,
+            };
             match make_migration(&directory, name.as_deref().unwrap_or("change"), &schema)
                 .map_err(|error| error.0)?
             {
@@ -708,6 +739,27 @@ fn resolve_directory(override_dir: Option<PathBuf>) -> Result<PathBuf, String> {
     let project = discover_project(&std::env::current_dir().map_err(|error| error.to_string())?)
         .map_err(|error| error.0)?;
     Ok(project.migrations_dir)
+}
+
+fn resolve_app_schema(name: &str) -> Result<(PathBuf, SchemaSnapshot), String> {
+    apps::validate_app_name(name)?;
+    let project = discover_project(&std::env::current_dir().map_err(|error| error.to_string())?)
+        .map_err(|error| error.0)?;
+    if project.layout_version != 2 {
+        return Err("--app schema selection requires a layout-2 project. Existing projects can use --schema-file and --migrations-dir explicitly.".to_owned());
+    }
+    let app = project
+        .apps
+        .iter()
+        .find(|app| app.name == name)
+        .ok_or_else(|| format!("App `{name}` is not declared in ferrioxid.toml."))?;
+    let command = project
+        .schema_command
+        .as_ref()
+        .ok_or("schema_command is missing")?;
+    let schema = load_schema_from_command(&project.root, &format!("{command} --app {name}"))
+        .map_err(|error| error.0)?;
+    Ok((app.migrations.clone(), schema))
 }
 
 fn resolve_schema(
