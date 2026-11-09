@@ -358,6 +358,9 @@ fieldset.field legend { font-size: var(--label); font-weight: 650; }
 .menu summary::-webkit-details-marker { display: none; }
 .menu summary:focus-visible { outline: 3px solid var(--focus); outline-offset: 2px; }
 .menu-panel { display: grid; gap: var(--space-1); margin-top: var(--space-2); min-width: 9rem; }
+/* Row clicks complement, rather than replace, keyboard-accessible cell links. */
+tr[data-record-href] { cursor: pointer; }
+tr[data-record-href]:focus-within { outline: 2px solid var(--focus); outline-offset: -2px; }
 .menu-panel a, .menu-panel button { justify-content: flex-start; width: 100%; }
 .menu-panel form { display: grid; gap: var(--space-2); margin: 0; }
 .danger-link { color: var(--danger); }
