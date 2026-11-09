@@ -19,7 +19,7 @@ pub use sql::{
     query_admin_page, query_labels, render_add_column, render_add_column_referencing,
     render_create_index, render_create_table, render_drop_column, render_drop_index,
     render_drop_table, render_rename_column, render_rename_table, render_schema,
-    render_table_bundle, update_record, AdminPage, AdminPageRequest, ForeignKeyClause,
+    render_table_bundle, update_record, with_checks, AdminPage, AdminPageRequest, ForeignKeyClause,
     PhysicalColumn, ValuePage,
 };
 

@@ -77,6 +77,8 @@ async fn category_and_product_relations_are_typed() {
         ProductCreate {
             name: "Laptop".to_owned(),
             price_cents: 1000,
+            price: ferrioxid::core::parse_decimal("10.00", 12, 2).unwrap(),
+            status: myshop::models::product::ProductStatus::Active,
             active: None,
             category_id: Some(books.id),
         },
@@ -88,6 +90,8 @@ async fn category_and_product_relations_are_typed() {
         ProductCreate {
             name: "Orphan".to_owned(),
             price_cents: 1,
+            price: ferrioxid::core::parse_decimal("0.01", 12, 2).unwrap(),
+            status: myshop::models::product::ProductStatus::Draft,
             active: None,
             category_id: None,
         },
@@ -99,6 +103,8 @@ async fn category_and_product_relations_are_typed() {
         ProductCreate {
             name: "Ghost".to_owned(),
             price_cents: 1,
+            price: ferrioxid::core::parse_decimal("0.01", 12, 2).unwrap(),
+            status: myshop::models::product::ProductStatus::Draft,
             active: None,
             category_id: Some(ferrioxid::uuid::Uuid::nil()),
         },
@@ -154,7 +160,8 @@ async fn checked_in_migrations_add_the_category_foreign_key() {
             "0002_categories_and_product_relations".to_owned(),
             "0003_internal_notes".to_owned(),
             "0004_events".to_owned(),
-            "0005_orders".to_owned()
+            "0005_orders".to_owned(),
+            "0006_prices_and_status".to_owned()
         ]
     );
     let category = Category::create(
@@ -170,6 +177,8 @@ async fn checked_in_migrations_add_the_category_foreign_key() {
         ProductCreate {
             name: "Hammer".to_owned(),
             price_cents: 2500,
+            price: ferrioxid::core::parse_decimal("25.00", 12, 2).unwrap(),
+            status: myshop::models::product::ProductStatus::Active,
             active: Some(true),
             category_id: Some(category.id),
         },

@@ -37,7 +37,7 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
             .unwrap()
             .applied
             .len(),
-        5
+        6
     );
     let names = tables(db).await;
     for name in [

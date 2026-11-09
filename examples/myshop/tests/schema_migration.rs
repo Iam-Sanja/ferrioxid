@@ -3,7 +3,9 @@
 
 use ferrioxid::core::FerrioxidModel;
 use ferrioxid::migrations::{
-    load_migration, make_migration, plan_change, seal, RegisteredModel, SchemaSnapshot,
+    load_migration, make_migration, make_migration_with_backfills, plan_change,
+    plan_change_with_backfills, seal, BackfillLiteral, ColumnBackfill, RegisteredModel,
+    SchemaSnapshot,
 };
 use myshop::models::category::Category;
 use myshop::models::event::Event;
@@ -174,5 +176,113 @@ fn orders_migration_appends_parent_and_child_tables() {
             .unwrap()
             .refusal
             .is_none()
+    );
+}
+
+#[test]
+fn prices_and_status_are_added_without_rewriting_applied_history() {
+    let directory = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
+    let current = SchemaSnapshot::from_registered(&[
+        RegisteredModel {
+            table: Category::descriptor().table,
+            columns: Category::columns(),
+            constraints: Category::constraints(),
+        },
+        RegisteredModel {
+            table: LiveProduct::descriptor().table,
+            columns: LiveProduct::columns(),
+            constraints: LiveProduct::constraints(),
+        },
+        RegisteredModel {
+            table: InternalNote::descriptor().table,
+            columns: InternalNote::columns(),
+            constraints: InternalNote::constraints(),
+        },
+        RegisteredModel {
+            table: Event::descriptor().table,
+            columns: Event::columns(),
+            constraints: Event::constraints(),
+        },
+        RegisteredModel {
+            table: Order::descriptor().table,
+            columns: Order::columns(),
+            constraints: Order::constraints(),
+        },
+        RegisteredModel {
+            table: OrderLine::descriptor().table,
+            columns: OrderLine::columns(),
+            constraints: OrderLine::constraints(),
+        },
+    ])
+    .unwrap();
+    let path = directory.join("0006_prices_and_status.json");
+    if !path.exists() {
+        make_migration_with_backfills(
+            &directory,
+            "prices_and_status",
+            &current,
+            &[
+                ColumnBackfill {
+                    table: "products".to_owned(),
+                    column: "price".to_owned(),
+                    value: BackfillLiteral::Text("0.00".to_owned()),
+                },
+                ColumnBackfill {
+                    table: "products".to_owned(),
+                    column: "status".to_owned(),
+                    value: BackfillLiteral::Text("draft".to_owned()),
+                },
+            ],
+        )
+        .unwrap();
+    }
+    let migration = load_migration(&path).unwrap();
+    assert_eq!(migration.id, "0006_prices_and_status");
+    let plan = plan_change_with_backfills(
+        &migration.from_snapshot,
+        &migration.to_snapshot,
+        &[
+            ColumnBackfill {
+                table: "products".to_owned(),
+                column: "price".to_owned(),
+                value: BackfillLiteral::Text("0.00".to_owned()),
+            },
+            ColumnBackfill {
+                table: "products".to_owned(),
+                column: "status".to_owned(),
+                value: BackfillLiteral::Text("draft".to_owned()),
+            },
+        ],
+    )
+    .unwrap();
+    assert!(plan.refusal.is_none(), "{:?}", plan.refusal);
+    let products = migration
+        .to_snapshot
+        .tables
+        .iter()
+        .find(|table| table.name == "products")
+        .unwrap();
+    let price = products
+        .columns
+        .iter()
+        .find(|column| column.name == "price")
+        .unwrap();
+    use ferrioxid::migrations::LogicalType;
+    assert_eq!(price.logical_type, LogicalType::Decimal);
+    assert_eq!(price.precision, Some(12));
+    assert_eq!(price.scale, Some(2));
+    let status = products
+        .columns
+        .iter()
+        .find(|column| column.name == "status")
+        .unwrap();
+    assert_eq!(status.logical_type, LogicalType::Choice);
+    assert_eq!(
+        status
+            .choices
+            .iter()
+            .map(|choice| choice.value.as_str())
+            .collect::<Vec<_>>(),
+        vec!["draft", "active", "archived"]
     );
 }

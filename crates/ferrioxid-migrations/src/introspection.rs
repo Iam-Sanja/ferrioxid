@@ -373,6 +373,10 @@ fn type_compatible(logical: LogicalType, sql_type: &str) -> bool {
         LogicalType::DateTime => {
             text || normalized.contains("timestamp") || normalized == "datetime"
         }
+        LogicalType::Decimal => {
+            matches!(normalized.as_str(), "blob" | "bytea") || normalized.contains("blob")
+        }
+        LogicalType::Choice => text,
     }
 }
 

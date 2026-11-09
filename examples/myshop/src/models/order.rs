@@ -1,4 +1,17 @@
 use ferrioxid::prelude::*;
+use ferrioxid::FerrioxidChoice;
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FerrioxidChoice)]
+pub enum OrderStatus {
+    #[choice(value = "pending", de = "Offen", en = "Pending")]
+    Pending,
+    #[choice(value = "paid", de = "Bezahlt", en = "Paid")]
+    Paid,
+    #[choice(value = "shipped", de = "Versendet", en = "Shipped")]
+    Shipped,
+    #[choice(value = "cancelled", de = "Storniert", en = "Cancelled")]
+    Cancelled,
+}
 
 #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
 #[ferrioxid(
@@ -27,4 +40,8 @@ pub struct Order {
     #[field(required, min_length = 1, max_length = 40)]
     #[admin(list_display, label = "Status")]
     pub status: String,
+
+    #[field(choice)]
+    #[admin(list_display, filterable, sortable, label = "Auftragsstatus")]
+    pub state: Option<OrderStatus>,
 }

@@ -988,6 +988,19 @@ fn filter_value(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
         ColumnKind::DateTime => ferrioxid_core::parse_datetime_utc(value)
             .map(DbValue::from)
             .map_err(|_| format!("filter {} must be a utc datetime", column.name)),
+        ColumnKind::Decimal => {
+            let parsed = ferrioxid_core::parse_decimal(value, column.precision, column.scale)
+                .map_err(|_| format!("filter {} must be a decimal", column.name))?;
+            let bytes = ferrioxid_core::encode_decimal(parsed, column.precision, column.scale)
+                .map_err(|_| format!("filter {} must be a decimal", column.name))?;
+            Ok(DbValue::Bytes(Some(Box::new(bytes.to_vec()))))
+        }
+        ColumnKind::Choice => {
+            if !ferrioxid_core::choice_is_known(column.choices, value) {
+                return Err(format!("filter {} is not a known choice", column.name));
+            }
+            Ok(DbValue::from(value.to_owned()))
+        }
     }
 }
 
@@ -1058,6 +1071,8 @@ fn column_type(column: &ColumnSpec) -> &'static str {
         ColumnKind::Date => "date",
         ColumnKind::Time => "time",
         ColumnKind::DateTime => "datetime",
+        ColumnKind::Decimal => "decimal",
+        ColumnKind::Choice => "choice",
     }
 }
 
