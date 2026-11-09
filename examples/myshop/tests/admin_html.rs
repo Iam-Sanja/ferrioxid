@@ -1274,9 +1274,11 @@ async fn html_admin_works_without_javascript() {
     assert!(users.body.contains("Kein Staff"));
     assert!(users.body.contains("Kein Superuser"));
     assert!(users.body.contains(">Superuser<") || users.body.contains("Superuser</span>"));
-    assert!(users.body.contains("<select"));
-    assert!(users.body.contains("name=\"role\""));
-    assert!(!users.body.contains("<input name=\"role\""));
+    // Role assignments are managed on the user edit page, not the users list.
+    assert!(!users.body.contains("name=\"role\""));
+    assert!(!users.body.contains("id=\"assign-role\""));
+    assert!(!users.body.contains("id=\"assign-email\""));
+    assert!(users.body.contains("/edit#roles"));
     assert!(!users.body.contains("Nein · Superuser"));
     assert!(!users.body.contains("Rolle anlegen"));
     assert!(users.body.contains("Benutzer und Zugang"));
