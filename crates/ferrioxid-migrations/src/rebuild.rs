@@ -1,13 +1,21 @@
 //! Controlled rebuild. SQLite copies rows with `INSERT INTO ... SELECT`; PostgreSQL alters columns directly.
 //!
-//! `PRAGMA foreign_keys` is unchanged. Rebuilds involving foreign keys are rejected.
+//! SQLite cannot add a foreign key with `ALTER TABLE`. The runner therefore turns
+//! `PRAGMA foreign_keys` off on one physical connection, runs this rebuild in that
+//! connection's transaction, and turns enforcement back on before the connection
+//! returns to the pool. A failed restore closes the connection instead of returning
+//! it with enforcement disabled. Inside the transaction, `PRAGMA defer_foreign_keys = ON`
+//! and `PRAGMA foreign_key_check` still run. This module does not change `PRAGMA foreign_keys`.
 //! CREATE, INSERT, DROP, and RENAME run in the migration transaction and are rolled back on errors.
 
-use crate::diff::{alter_is_supported, MigrationOperation};
+use crate::diff::{alter_is_supported, backfill_literal, BackfillLiteral, MigrationOperation};
 use crate::error::MigrationError;
-use crate::snapshot::{is_identifier, ColumnSnapshot, LogicalType, SchemaSnapshot, TableSnapshot};
-use ferrioxid_core::DatabaseKind;
-use ferrioxid_db::{render_create_table, PhysicalColumn};
+use crate::snapshot::{
+    is_identifier, ColumnSnapshot, ForeignKeySnapshot, LogicalType, OnDelete, SchemaSnapshot,
+    TableSnapshot,
+};
+use ferrioxid_core::{DatabaseKind, ReferentialAction};
+use ferrioxid_db::{render_create_index, render_table_bundle, ForeignKeyClause, PhysicalColumn};
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -85,59 +93,244 @@ async fn rebuild_sqlite(
             }
         })
         .collect::<Vec<_>>();
-    let temporary = format!("ferrioxid_rebuild_{}", source.name);
+    let mut target = source.clone();
+    target.columns.clone_from(&target_columns);
+    let selection = source
+        .columns
+        .iter()
+        .map(|column| copy_expression(column, from, to))
+        .collect::<Result<Vec<_>, _>>()?;
+    reconstruct_sqlite(db, &target, &selection).await
+}
+
+pub fn backfill_parts(
+    operation: &MigrationOperation,
+) -> Option<(
+    &str,
+    &ColumnSnapshot,
+    &BackfillLiteral,
+    Option<&ForeignKeySnapshot>,
+)> {
+    match operation {
+        MigrationOperation::AddColumn {
+            table,
+            column,
+            foreign_key,
+            backfill: Some(backfill),
+        } => Some((table.as_str(), column, backfill, foreign_key.as_ref())),
+        _ => None,
+    }
+}
+
+pub fn added_foreign_key(operation: &MigrationOperation) -> Option<(&str, &ForeignKeySnapshot)> {
+    match operation {
+        MigrationOperation::AddForeignKey { table, foreign_key } => {
+            Some((table.as_str(), foreign_key))
+        }
+        _ => None,
+    }
+}
+
+pub async fn apply_backfill_column(
+    db: &impl ConnectionTrait,
+    kind: DatabaseKind,
+    before: &SchemaSnapshot,
+    table: &str,
+    column: &ColumnSnapshot,
+    backfill: &BackfillLiteral,
+    foreign_key: Option<&ForeignKeySnapshot>,
+) -> Result<(), MigrationError> {
+    if column.nullable || column.default.is_some() || column.primary_key {
+        return Err(MigrationError::new(format!(
+            "Column `{table}.{}` does not accept an explicit backfill.",
+            column.name
+        )));
+    }
+    let source = required_table(before, table)?;
+    if source
+        .columns
+        .iter()
+        .any(|candidate| candidate.name == column.name)
+    {
+        return Err(MigrationError::new(format!(
+            "Column `{table}.{}` already exists.",
+            column.name
+        )));
+    }
+    match kind {
+        DatabaseKind::Sqlite => {
+            let mut target = source.clone();
+            target.columns.push(column.clone());
+            if let Some(foreign_key) = foreign_key {
+                target.foreign_keys.push(foreign_key.clone());
+            }
+            let mut selection = source
+                .columns
+                .iter()
+                .map(|candidate| format!("\"{}\"", candidate.name))
+                .collect::<Vec<_>>();
+            selection.push(backfill_literal(DatabaseKind::Sqlite, backfill)?);
+            reconstruct_sqlite(db, &target, &selection).await
+        }
+        DatabaseKind::Postgres => {
+            add_backfill_postgres(db, table, column, backfill).await?;
+            if let Some(foreign_key) = foreign_key {
+                add_foreign_key_postgres(db, table, foreign_key).await?;
+            }
+            Ok(())
+        }
+    }
+}
+
+pub async fn apply_add_foreign_key(
+    db: &impl ConnectionTrait,
+    kind: DatabaseKind,
+    before: &SchemaSnapshot,
+    table: &str,
+    foreign_key: &ForeignKeySnapshot,
+) -> Result<(), MigrationError> {
+    let source = required_table(before, table)?;
+    if source
+        .foreign_keys
+        .iter()
+        .any(|candidate| candidate.name == foreign_key.name)
+    {
+        return Err(MigrationError::new(format!(
+            "Foreign key `{}` already exists on `{table}`.",
+            foreign_key.name
+        )));
+    }
+    reject_orphan_references(db, table, foreign_key).await?;
+    match kind {
+        DatabaseKind::Sqlite => {
+            let mut target = source.clone();
+            target.foreign_keys.push(foreign_key.clone());
+            let selection = target
+                .columns
+                .iter()
+                .map(|column| format!("\"{}\"", column.name))
+                .collect::<Vec<_>>();
+            reconstruct_sqlite(db, &target, &selection).await
+        }
+        DatabaseKind::Postgres => add_foreign_key_postgres(db, table, foreign_key).await,
+    }
+}
+
+async fn reconstruct_sqlite(
+    db: &impl ConnectionTrait,
+    target: &TableSnapshot,
+    selection: &[String],
+) -> Result<(), MigrationError> {
+    if !is_identifier(&target.name) {
+        return Err(MigrationError::new(format!(
+            "Invalid table name `{}`.",
+            target.name
+        )));
+    }
+    if selection.len() != target.columns.len() {
+        return Err(MigrationError::new(format!(
+            "Rebuild of `{}` copied {} values for {} columns.",
+            target.name,
+            selection.len(),
+            target.columns.len()
+        )));
+    }
+    assert_no_views(db, &target.name).await?;
+    let temporary = format!("ferrioxid_rebuild_{}", target.name);
     if !is_identifier(&temporary) {
         return Err(MigrationError::new(format!(
             "Temporary table name `{temporary}` is invalid."
         )));
     }
-    let before = count_where(db, &source.name, "1 = 1").await?;
-    let physical = physical_columns(&target_columns);
+    let triggers = trigger_sql(db, &target.name).await?;
+    let before = count_where(db, &target.name, "1 = 1").await?;
     execute(
         db,
         DatabaseBackend::Sqlite,
-        &render_create_table(DatabaseKind::Sqlite, &temporary, &physical, false),
+        "PRAGMA defer_foreign_keys = ON",
     )
     .await?;
-    let selection = source
-        .columns
-        .iter()
-        .map(|column| copy_expression(column, from, to))
-        .collect::<Result<Vec<_>, _>>()?
-        .join(", ");
+    let foreign_keys = foreign_key_clauses(target)?;
+    let create = render_table_bundle(
+        DatabaseKind::Sqlite,
+        &temporary,
+        &physical_columns(&target.columns),
+        &[],
+        &foreign_keys,
+        &[],
+    );
+    execute(db, DatabaseBackend::Sqlite, &create[0]).await?;
     execute(
         db,
         DatabaseBackend::Sqlite,
         &format!(
-            "INSERT INTO \"{temporary}\" ({}) SELECT {selection} FROM \"{}\"",
-            quote_columns(&target_columns),
-            source.name
+            "INSERT INTO \"{temporary}\" ({}) SELECT {} FROM \"{}\"",
+            quote_columns(&target.columns),
+            selection.join(", "),
+            target.name
         ),
     )
     .await?;
-    let after = count_where(db, &temporary, "1 = 1").await?;
-    if after != before {
+    let copied = count_where(db, &temporary, "1 = 1").await?;
+    if copied != before {
         return Err(MigrationError::new(format!(
-            "Nach dem Kopieren hat `{temporary}` {after} Zeilen, die Quelle hatte {before}."
+            "Nach dem Kopieren hat `{temporary}` {copied} Zeilen, die Quelle hatte {before}."
         )));
     }
     execute(
         db,
         DatabaseBackend::Sqlite,
-        &format!("DROP TABLE \"{}\"", source.name),
+        &format!("DROP TABLE \"{}\"", target.name),
     )
     .await?;
     execute(
         db,
         DatabaseBackend::Sqlite,
-        &format!("ALTER TABLE \"{temporary}\" RENAME TO \"{}\"", source.name),
+        &format!("ALTER TABLE \"{temporary}\" RENAME TO \"{}\"", target.name),
     )
     .await?;
-    let after_rename = count_where(db, &source.name, "1 = 1").await?;
-    if after_rename != before {
+    let restored = count_where(db, &target.name, "1 = 1").await?;
+    if restored != before {
         return Err(MigrationError::new(
-            "Row count does not match after replacing the table.",
+            "Row count does not match after replacing the table.".to_owned(),
         ));
+    }
+    for unique in &target.unique_constraints {
+        let columns = unique
+            .columns
+            .iter()
+            .map(String::as_str)
+            .collect::<Vec<_>>();
+        execute(
+            db,
+            DatabaseBackend::Sqlite,
+            &render_create_index(
+                DatabaseKind::Sqlite,
+                &unique.name,
+                &target.name,
+                &columns,
+                true,
+            ),
+        )
+        .await?;
+    }
+    for index in &target.indexes {
+        let columns = index.columns.iter().map(String::as_str).collect::<Vec<_>>();
+        execute(
+            db,
+            DatabaseBackend::Sqlite,
+            &render_create_index(
+                DatabaseKind::Sqlite,
+                &index.name,
+                &target.name,
+                &columns,
+                false,
+            ),
+        )
+        .await?;
+    }
+    for trigger in &triggers {
+        execute(db, DatabaseBackend::Sqlite, trigger).await?;
     }
     let integrity = db
         .query_one(Statement::from_string(
@@ -155,7 +348,7 @@ async fn rebuild_sqlite(
             "integrity_check returned `{status}`. The transaction is rolled back."
         )));
     }
-    let foreign_keys = db
+    let violations = db
         .query_all(Statement::from_string(
             DatabaseBackend::Sqlite,
             "PRAGMA foreign_key_check",
@@ -164,10 +357,245 @@ async fn rebuild_sqlite(
         .map_err(|error| {
             MigrationError::new(format!("foreign_key_check fehlgeschlagen: {error}"))
         })?;
-    if !foreign_keys.is_empty() {
+    if !violations.is_empty() {
         return Err(MigrationError::new(
-            "foreign_key_check reported violations. The transaction is rolled back.",
+            "foreign_key_check reported violations. The transaction is rolled back and no rows were changed."
+                .to_owned(),
         ));
+    }
+    Ok(())
+}
+
+async fn add_backfill_postgres(
+    db: &impl ConnectionTrait,
+    table: &str,
+    column: &ColumnSnapshot,
+    backfill: &BackfillLiteral,
+) -> Result<(), MigrationError> {
+    let mut nullable = column.clone();
+    nullable.nullable = true;
+    nullable.default = None;
+    execute(
+        db,
+        DatabaseBackend::Postgres,
+        &ferrioxid_db::render_add_column(
+            DatabaseKind::Postgres,
+            table,
+            &PhysicalColumn {
+                name: nullable.name.as_str(),
+                kind: nullable.logical_type.into(),
+                nullable: true,
+                primary_key: false,
+                default_bool: None,
+            },
+        ),
+    )
+    .await?;
+    let literal = backfill_literal(DatabaseKind::Postgres, backfill)?;
+    execute(
+        db,
+        DatabaseBackend::Postgres,
+        &format!(
+            "UPDATE \"{table}\" SET \"{}\" = {literal} WHERE \"{}\" IS NULL",
+            column.name, column.name
+        ),
+    )
+    .await?;
+    let missing = count_where(db, table, &format!("\"{}\" IS NULL", column.name)).await?;
+    if missing > 0 {
+        return Err(MigrationError::new(format!(
+            "Backfill for `{table}.{}` left {missing} NULL values. No replacement was invented.",
+            column.name
+        )));
+    }
+    execute(
+        db,
+        DatabaseBackend::Postgres,
+        &format!(
+            "ALTER TABLE \"{table}\" ALTER COLUMN \"{}\" SET NOT NULL",
+            column.name
+        ),
+    )
+    .await
+}
+
+async fn add_foreign_key_postgres(
+    db: &impl ConnectionTrait,
+    table: &str,
+    foreign_key: &ForeignKeySnapshot,
+) -> Result<(), MigrationError> {
+    let column = foreign_key.columns.first().ok_or_else(|| {
+        MigrationError::new(format!(
+            "Foreign key `{}` must reference exactly one column.",
+            foreign_key.name
+        ))
+    })?;
+    let referenced = foreign_key.referenced_columns.first().ok_or_else(|| {
+        MigrationError::new(format!(
+            "Foreign key `{}` must reference exactly one column.",
+            foreign_key.name
+        ))
+    })?;
+    execute(
+        db,
+        DatabaseBackend::Postgres,
+        &format!(
+            "ALTER TABLE \"{table}\" ADD CONSTRAINT \"{}\" FOREIGN KEY (\"{column}\") REFERENCES \"{}\" (\"{referenced}\") ON DELETE {} ON UPDATE NO ACTION",
+            foreign_key.name,
+            foreign_key.referenced_table,
+            on_delete_sql(foreign_key.on_delete)
+        ),
+    )
+    .await
+}
+
+fn on_delete_sql(action: OnDelete) -> &'static str {
+    match action {
+        OnDelete::Restrict => "RESTRICT",
+        OnDelete::Cascade => "CASCADE",
+        OnDelete::SetNull => "SET NULL",
+    }
+}
+
+fn foreign_key_clauses(table: &TableSnapshot) -> Result<Vec<ForeignKeyClause<'_>>, MigrationError> {
+    let mut clauses = Vec::new();
+    for foreign_key in &table.foreign_keys {
+        let (Some(column), Some(referenced)) = (
+            foreign_key.columns.first(),
+            foreign_key.referenced_columns.first(),
+        ) else {
+            return Err(MigrationError::new(format!(
+                "Foreign key `{}` must reference exactly one column.",
+                foreign_key.name
+            )));
+        };
+        clauses.push(ForeignKeyClause {
+            name: foreign_key.name.as_str(),
+            column: column.as_str(),
+            referenced_table: foreign_key.referenced_table.as_str(),
+            referenced_column: referenced.as_str(),
+            on_delete: match foreign_key.on_delete {
+                OnDelete::Restrict => ReferentialAction::Restrict,
+                OnDelete::Cascade => ReferentialAction::Cascade,
+                OnDelete::SetNull => ReferentialAction::SetNull,
+            },
+        });
+    }
+    Ok(clauses)
+}
+
+fn required_table<'a>(
+    schema: &'a SchemaSnapshot,
+    table: &str,
+) -> Result<&'a TableSnapshot, MigrationError> {
+    schema
+        .tables
+        .iter()
+        .find(|candidate| candidate.name == table)
+        .ok_or_else(|| MigrationError::new(format!("Table `{table}` is missing before rebuild.")))
+}
+
+async fn reject_orphan_references(
+    db: &impl ConnectionTrait,
+    table: &str,
+    foreign_key: &ForeignKeySnapshot,
+) -> Result<(), MigrationError> {
+    let column = foreign_key.columns.first().ok_or_else(|| {
+        MigrationError::new(format!(
+            "Foreign key `{}` must reference exactly one column.",
+            foreign_key.name
+        ))
+    })?;
+    let referenced = foreign_key.referenced_columns.first().ok_or_else(|| {
+        MigrationError::new(format!(
+            "Foreign key `{}` must reference exactly one column.",
+            foreign_key.name
+        ))
+    })?;
+    if !is_identifier(table)
+        || !is_identifier(column)
+        || !is_identifier(&foreign_key.referenced_table)
+        || !is_identifier(referenced)
+    {
+        return Err(MigrationError::new(
+            "Foreign-key validation received an invalid identifier.".to_owned(),
+        ));
+    }
+    let sql = format!(
+        "SELECT COUNT(*) AS total FROM \"{table}\" WHERE \"{column}\" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM \"{}\" AS referenced WHERE referenced.\"{referenced}\" = \"{table}\".\"{column}\")",
+        foreign_key.referenced_table
+    );
+    let row = db
+        .query_one(Statement::from_string(db.get_database_backend(), sql))
+        .await
+        .map_err(|error| {
+            MigrationError::new(format!(
+                "Could not validate `{}.{}` against `{}.{}`: {error}. The foreign key was not added.",
+                table, column, foreign_key.referenced_table, referenced
+            ))
+        })?
+        .ok_or_else(|| MigrationError::new("Foreign-key validation returned no row.".to_owned()))?;
+    let orphans = row
+        .try_get::<i64>("", "total")
+        .or_else(|_| row.try_get::<i32>("", "total").map(i64::from))
+        .map_err(|error| MigrationError::new(format!("Could not read orphan count: {error}")))?;
+    if orphans > 0 {
+        return Err(MigrationError::new(format!(
+            "{orphans} existing values in `{table}.{column}` do not match `{}.{}`. The foreign key was not added and no rows were changed.",
+            foreign_key.referenced_table, referenced
+        )));
+    }
+    Ok(())
+}
+
+async fn trigger_sql(
+    db: &impl ConnectionTrait,
+    table: &str,
+) -> Result<Vec<String>, MigrationError> {
+    let rows = db
+        .query_all(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "SELECT sql FROM sqlite_master WHERE type = 'trigger' AND tbl_name = ? AND sql IS NOT NULL",
+            [Value::from(table)],
+        ))
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not read triggers: {error}")))?;
+    let mut statements = Vec::new();
+    for row in rows {
+        let sql: String = row
+            .try_get("", "sql")
+            .map_err(|error| MigrationError::new(format!("Could not read trigger SQL: {error}")))?;
+        if sql.trim().is_empty() {
+            return Err(MigrationError::new(format!(
+                "Table `{table}` has a trigger without SQL. The rebuild was not applied."
+            )));
+        }
+        statements.push(sql);
+    }
+    Ok(statements)
+}
+
+async fn assert_no_views(db: &impl ConnectionTrait, table: &str) -> Result<(), MigrationError> {
+    let rows = db
+        .query_all(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "SELECT name, sql FROM sqlite_master WHERE type = 'view' AND sql IS NOT NULL",
+        ))
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not read views: {error}")))?;
+    for row in rows {
+        let name: String = row
+            .try_get("", "name")
+            .unwrap_or_else(|_| "unknown".to_owned());
+        let sql: String = row.try_get("", "sql").unwrap_or_default();
+        let mentions = sql
+            .split(|character: char| !character.is_ascii_alphanumeric() && character != '_')
+            .any(|token| token == table);
+        if mentions {
+            return Err(MigrationError::new(format!(
+                "Table `{table}` has view `{name}`. Rebuilding it would drop that view, so the migration was not applied."
+            )));
+        }
     }
     Ok(())
 }
@@ -242,64 +670,7 @@ async fn assert_sqlite_rebuild_safe(
             "Invalid table name `{table}`."
         )));
     }
-    let attached = db
-        .query_all(Statement::from_sql_and_values(
-            DatabaseBackend::Sqlite,
-            "SELECT type, name FROM sqlite_master WHERE tbl_name = ? AND sql IS NOT NULL AND type IN ('index', 'trigger', 'view')",
-            [Value::from(table)],
-        ))
-        .await
-        .map_err(|error| MigrationError::new(format!("Object verification failed: {error}")))?;
-    if !attached.is_empty() {
-        return Err(MigrationError::new(format!(
-            "Table `{table}` has an index, trigger, or view. The rebuild would discard it and is blocked."
-        )));
-    }
-    assert_no_foreign_keys(db, table).await
-}
-
-async fn assert_no_foreign_keys(
-    db: &impl ConnectionTrait,
-    table: &str,
-) -> Result<(), MigrationError> {
-    let tables = db
-        .query_all(Statement::from_string(
-            DatabaseBackend::Sqlite,
-            "SELECT name FROM sqlite_master WHERE type = 'table' AND name NOT LIKE 'sqlite_%'",
-        ))
-        .await
-        .map_err(|error| MigrationError::new(format!("Foreign-key check failed: {error}")))?;
-    for row in tables {
-        let name: String = row
-            .try_get("", "name")
-            .map_err(|error| MigrationError::new(format!("Could not read table name: {error}")))?;
-        if !is_identifier(&name) {
-            continue;
-        }
-        let keys = db
-            .query_all(Statement::from_string(
-                DatabaseBackend::Sqlite,
-                format!("PRAGMA foreign_key_list(\"{name}\")"),
-            ))
-            .await
-            .map_err(|error| {
-                MigrationError::new(format!("foreign_key_list fehlgeschlagen: {error}"))
-            })?;
-        if name == table && !keys.is_empty() {
-            return Err(MigrationError::new(format!(
-                "Table `{table}` has foreign keys, so rebuilding it is blocked."
-            )));
-        }
-        for key in keys {
-            let referenced: String = key.try_get("", "table").unwrap_or_default();
-            if referenced == table {
-                return Err(MigrationError::new(format!(
-                    "Table `{name}` references `{table}`, so rebuilding it is blocked."
-                )));
-            }
-        }
-    }
-    Ok(())
+    assert_no_views(db, table).await
 }
 
 async fn validate_changed_column(

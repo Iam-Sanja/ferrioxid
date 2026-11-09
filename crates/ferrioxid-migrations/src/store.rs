@@ -1,6 +1,8 @@
 //! Migration files, checksums, and directory validation.
 
-use crate::diff::{plan_change, MigrationOperation, MigrationPlan, MigrationRisk};
+use crate::diff::{
+    plan_change_with_backfills, ColumnBackfill, MigrationOperation, MigrationPlan, MigrationRisk,
+};
 use crate::error::MigrationError;
 use crate::snapshot::{is_identifier, SchemaSnapshot};
 use serde::{Deserialize, Serialize};
@@ -230,6 +232,15 @@ pub fn make_migration(
     name: &str,
     current: &SchemaSnapshot,
 ) -> Result<MakeOutcome, MigrationError> {
+    make_migration_with_backfills(directory, name, current, &[])
+}
+
+pub fn make_migration_with_backfills(
+    directory: &Path,
+    name: &str,
+    current: &SchemaSnapshot,
+    backfills: &[ColumnBackfill],
+) -> Result<MakeOutcome, MigrationError> {
     current.validate()?;
     if !is_migration_slug(name) {
         return Err(MigrationError::new(
@@ -245,7 +256,7 @@ pub fn make_migration(
         .last()
         .map(|file| file.to_snapshot.clone())
         .unwrap_or_else(SchemaSnapshot::empty);
-    let plan = plan_change(&from, current)?;
+    let plan = plan_change_with_backfills(&from, current, backfills)?;
     if plan.operations.is_empty() {
         return Ok(MakeOutcome::Unchanged);
     }

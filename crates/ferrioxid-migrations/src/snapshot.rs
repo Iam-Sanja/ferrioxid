@@ -113,10 +113,23 @@ pub struct TableSnapshot {
     pub foreign_keys: Vec<ForeignKeySnapshot>,
 }
 
+/// Tabelle einer anderen installierten App. Diese App erzeugt sie nicht.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ExternalTableSnapshot {
+    pub app: String,
+    pub table: TableSnapshot,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct SchemaSnapshot {
     pub format_version: u32,
     pub tables: Vec<TableSnapshot>,
+    /// Direkte App-Abhängigkeiten. Leer bei bestehenden Dateien und dann nicht serialisiert.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub depends_on: Vec<String>,
+    /// Zieltabellen aus `depends_on`. Sie gehören nicht zu den Operationen dieser App.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub external_tables: Vec<ExternalTableSnapshot>,
 }
 
 /// Ein von der Anwendung explizit registriertes Modell.
@@ -128,9 +141,15 @@ pub struct RegisteredModel {
 
 impl SchemaSnapshot {
     pub fn empty() -> Self {
+        Self::from_tables(Vec::new())
+    }
+
+    pub fn from_tables(tables: Vec<TableSnapshot>) -> Self {
         Self {
             format_version: FORMAT_VERSION,
-            tables: Vec::new(),
+            tables,
+            depends_on: Vec::new(),
+            external_tables: Vec::new(),
         }
     }
 
@@ -140,19 +159,27 @@ impl SchemaSnapshot {
             tables.push(table_from_registered(model)?);
         }
         tables.sort_by(|left, right| left.name.cmp(&right.name));
-        let snapshot = Self {
-            format_version: FORMAT_VERSION,
-            tables,
-        };
-        snapshot.validate()?;
+        let snapshot = Self::from_tables(tables);
+        snapshot.validate_owned()?;
         Ok(snapshot)
     }
 
     pub fn from_json(text: &str) -> Result<Self, MigrationError> {
-        let snapshot: Self = serde_json::from_str(text)
-            .map_err(|error| MigrationError::new(format!("Snapshot is not valid JSON: {error}")))?;
+        let snapshot = Self::parse_json(text)?;
         snapshot.validate()?;
         Ok(snapshot)
+    }
+
+    /// Modellausgabe einer einzelnen App. Ziele aus anderen Apps prüft erst die App-Auflösung.
+    pub fn from_model_json(text: &str) -> Result<Self, MigrationError> {
+        let snapshot = Self::parse_json(text)?;
+        snapshot.validate_owned()?;
+        Ok(snapshot)
+    }
+
+    fn parse_json(text: &str) -> Result<Self, MigrationError> {
+        serde_json::from_str(text)
+            .map_err(|error| MigrationError::new(format!("Snapshot is not valid JSON: {error}")))
     }
 
     pub fn to_canonical_json(&self) -> Result<String, MigrationError> {
@@ -161,78 +188,74 @@ impl SchemaSnapshot {
     }
 
     pub fn validate(&self) -> Result<(), MigrationError> {
+        self.validate_inner(true)
+    }
+
+    /// Prüft die eigenen Tabellen. Ein Ziel aus einer anderen App darf hier noch offen sein.
+    pub fn validate_owned(&self) -> Result<(), MigrationError> {
+        self.validate_inner(false)
+    }
+
+    fn validate_inner(&self, require_targets: bool) -> Result<(), MigrationError> {
         if self.format_version != FORMAT_VERSION {
             return Err(MigrationError::new(format!(
                 "Unknown snapshot version {}. Only {FORMAT_VERSION} is supported.",
                 self.format_version
             )));
         }
+        let mut seen_dependencies = Vec::new();
+        for dependency in &self.depends_on {
+            if !is_identifier(dependency) {
+                return Err(MigrationError::new(format!(
+                    "Invalid app dependency `{dependency}`."
+                )));
+            }
+            if seen_dependencies.contains(&dependency.as_str()) {
+                return Err(MigrationError::new(format!(
+                    "App dependency `{dependency}` is declared twice."
+                )));
+            }
+            seen_dependencies.push(dependency.as_str());
+        }
         let mut table_names = Vec::new();
         for table in &self.tables {
-            if !is_identifier(&table.name) {
-                return Err(MigrationError::new(format!(
-                    "Invalid table name `{}`. Only letters, digits, and underscores are allowed.",
-                    table.name
-                )));
-            }
-            if table_names.contains(&table.name.as_str()) {
-                return Err(MigrationError::new(format!(
-                    "Duplicate table name `{}`.",
-                    table.name
-                )));
-            }
-            table_names.push(table.name.as_str());
-            if table.columns.is_empty() {
-                return Err(MigrationError::new(format!(
-                    "Tabelle `{}` hat keine Spalten.",
-                    table.name
-                )));
-            }
-            let mut column_names = Vec::new();
-            let mut primary_keys = 0;
-            for column in &table.columns {
-                if !is_identifier(&column.name) {
-                    return Err(MigrationError::new(format!(
-                        "Invalid column name `{}.{}`.",
-                        table.name, column.name
-                    )));
-                }
-                if column_names.contains(&column.name.as_str()) {
-                    return Err(MigrationError::new(format!(
-                        "Duplicate column name `{}.{}`.",
-                        table.name, column.name
-                    )));
-                }
-                column_names.push(column.name.as_str());
-                if column.primary_key {
-                    primary_keys += 1;
-                    if column.nullable {
-                        return Err(MigrationError::new(format!(
-                            "Primary key `{}.{}` cannot be nullable.",
-                            table.name, column.name
-                        )));
-                    }
-                }
-                if column.default.is_some() && column.logical_type != LogicalType::Bool {
-                    return Err(MigrationError::new(format!(
-                        "Defaults are supported only for boolean columns (`{}.{}`).",
-                        table.name, column.name
-                    )));
-                }
-            }
-            if primary_keys != 1 {
-                return Err(MigrationError::new(format!(
-                    "Table `{}` requires exactly one primary key; found {primary_keys}.",
-                    table.name
-                )));
-            }
-            validate_table_objects(table, &column_names)?;
+            validate_table_shape(table, &mut table_names)?;
         }
-        validate_foreign_keys(self)?;
+        let mut external_names = Vec::new();
+        for external in &self.external_tables {
+            if !is_identifier(&external.app) {
+                return Err(MigrationError::new(format!(
+                    "Invalid owning app `{}` for external table `{}`.",
+                    external.app, external.table.name
+                )));
+            }
+            if !self
+                .depends_on
+                .iter()
+                .any(|dependency| dependency == &external.app)
+            {
+                return Err(MigrationError::new(format!(
+                    "External table `{}.{}` belongs to app `{}`, which is not listed in depends_on. Existing migration files were not changed.",
+                    external.app, external.table.name, external.app
+                )));
+            }
+            if external_names.contains(&external.table.name.as_str())
+                || table_names.contains(&external.table.name.as_str())
+            {
+                return Err(MigrationError::new(format!(
+                    "Table `{}` is ambiguous: it is declared both locally and by app `{}`.",
+                    external.table.name, external.app
+                )));
+            }
+            external_names.push(external.table.name.as_str());
+            let mut ignored = Vec::new();
+            validate_table_shape(&external.table, &mut ignored)?;
+        }
+        validate_foreign_keys(self, require_targets)?;
         Ok(())
     }
 
-    /// Same logical content. Table and column ordering is not significant.
+    /// Gleicher Tabelleninhalt. `depends_on` und externe Tabellen sind Katalogdaten und erzeugen keine Operation.
     pub fn semantically_eq(&self, other: &Self) -> bool {
         if self.format_version != other.format_version || self.tables.len() != other.tables.len() {
             return false;
@@ -348,6 +371,70 @@ fn index_snapshot(table: &str, columns: &[&str]) -> IndexSnapshot {
     }
 }
 
+fn validate_table_shape<'a>(
+    table: &'a TableSnapshot,
+    table_names: &mut Vec<&'a str>,
+) -> Result<(), MigrationError> {
+    if !is_identifier(&table.name) {
+        return Err(MigrationError::new(format!(
+            "Invalid table name `{}`. Only letters, digits, and underscores are allowed.",
+            table.name
+        )));
+    }
+    if table_names.contains(&table.name.as_str()) {
+        return Err(MigrationError::new(format!(
+            "Duplicate table name `{}`.",
+            table.name
+        )));
+    }
+    table_names.push(table.name.as_str());
+    if table.columns.is_empty() {
+        return Err(MigrationError::new(format!(
+            "Tabelle `{}` hat keine Spalten.",
+            table.name
+        )));
+    }
+    let mut column_names = Vec::new();
+    let mut primary_keys = 0;
+    for column in &table.columns {
+        if !is_identifier(&column.name) {
+            return Err(MigrationError::new(format!(
+                "Invalid column name `{}.{}`.",
+                table.name, column.name
+            )));
+        }
+        if column_names.contains(&column.name.as_str()) {
+            return Err(MigrationError::new(format!(
+                "Duplicate column name `{}.{}`.",
+                table.name, column.name
+            )));
+        }
+        column_names.push(column.name.as_str());
+        if column.primary_key {
+            primary_keys += 1;
+            if column.nullable {
+                return Err(MigrationError::new(format!(
+                    "Primary key `{}.{}` cannot be nullable.",
+                    table.name, column.name
+                )));
+            }
+        }
+        if column.default.is_some() && column.logical_type != LogicalType::Bool {
+            return Err(MigrationError::new(format!(
+                "Defaults are supported only for boolean columns (`{}.{}`).",
+                table.name, column.name
+            )));
+        }
+    }
+    if primary_keys != 1 {
+        return Err(MigrationError::new(format!(
+            "Table `{}` requires exactly one primary key; found {primary_keys}.",
+            table.name
+        )));
+    }
+    validate_table_objects(table, &column_names)
+}
+
 fn validate_table_objects(table: &TableSnapshot, columns: &[&str]) -> Result<(), MigrationError> {
     let mut names = Vec::new();
     for unique in &table.unique_constraints {
@@ -407,19 +494,51 @@ fn validate_table_objects(table: &TableSnapshot, columns: &[&str]) -> Result<(),
     Ok(())
 }
 
-fn validate_foreign_keys(schema: &SchemaSnapshot) -> Result<(), MigrationError> {
+fn referenced_table<'a>(schema: &'a SchemaSnapshot, name: &str) -> Option<&'a TableSnapshot> {
+    schema
+        .tables
+        .iter()
+        .find(|candidate| candidate.name == name)
+        .or_else(|| {
+            schema
+                .external_tables
+                .iter()
+                .find(|candidate| candidate.table.name == name)
+                .map(|candidate| &candidate.table)
+        })
+}
+
+fn validate_foreign_keys(
+    schema: &SchemaSnapshot,
+    require_targets: bool,
+) -> Result<(), MigrationError> {
     for table in &schema.tables {
         for foreign_key in &table.foreign_keys {
-            let referenced = schema
-                .tables
-                .iter()
-                .find(|candidate| candidate.name == foreign_key.referenced_table)
-                .ok_or_else(|| {
-                    MigrationError::new(format!(
-                        "Foreign key `{}` references unknown table `{}`.",
+            let Some(referenced) = referenced_table(schema, &foreign_key.referenced_table) else {
+                if require_targets {
+                    return Err(MigrationError::new(format!(
+                        "Foreign key `{}` references unknown table `{}`. Register that table in this app, or declare depends_on for the installed app that owns it. Existing migration files were not changed.",
                         foreign_key.name, foreign_key.referenced_table
-                    ))
-                })?;
+                    )));
+                }
+                continue;
+            };
+            if let Some(external) = schema
+                .external_tables
+                .iter()
+                .find(|candidate| candidate.table.name == foreign_key.referenced_table)
+            {
+                if !schema
+                    .depends_on
+                    .iter()
+                    .any(|dependency| dependency == &external.app)
+                {
+                    return Err(MigrationError::new(format!(
+                        "Foreign key `{}` references `{}` in app `{}`, but that app is not declared in depends_on.",
+                        foreign_key.name, foreign_key.referenced_table, external.app
+                    )));
+                }
+            }
             if foreign_key.columns.len() != foreign_key.referenced_columns.len()
                 || foreign_key.columns.len() != 1
             {
@@ -549,26 +668,23 @@ mod tests {
     }
 
     fn sample() -> SchemaSnapshot {
-        SchemaSnapshot {
-            format_version: FORMAT_VERSION,
-            tables: vec![TableSnapshot {
-                name: "products".to_owned(),
-                columns: vec![
-                    column("id", LogicalType::Uuid, true, false),
-                    column("name", LogicalType::String, false, false),
-                    ColumnSnapshot {
-                        name: "active".to_owned(),
-                        logical_type: LogicalType::Bool,
-                        primary_key: false,
-                        nullable: false,
-                        default: Some(true),
-                    },
-                ],
-                unique_constraints: Vec::new(),
-                indexes: Vec::new(),
-                foreign_keys: Vec::new(),
-            }],
-        }
+        SchemaSnapshot::from_tables(vec![TableSnapshot {
+            name: "products".to_owned(),
+            columns: vec![
+                column("id", LogicalType::Uuid, true, false),
+                column("name", LogicalType::String, false, false),
+                ColumnSnapshot {
+                    name: "active".to_owned(),
+                    logical_type: LogicalType::Bool,
+                    primary_key: false,
+                    nullable: false,
+                    default: Some(true),
+                },
+            ],
+            unique_constraints: Vec::new(),
+            indexes: Vec::new(),
+            foreign_keys: Vec::new(),
+        }])
     }
 
     #[test]
@@ -583,11 +699,15 @@ mod tests {
         assert!(id < name && name < active);
         assert!(!first.contains("unique_constraints"));
         assert!(!first.contains("foreign_keys"));
+        assert!(!first.contains("depends_on"));
+        assert!(!first.contains("external_tables"));
         let legacy = r#"{"format_version":1,"tables":[{"name":"products","columns":[{"name":"id","type":"uuid","primary_key":true,"nullable":false},{"name":"name","type":"string","primary_key":false,"nullable":false}]}]}"#;
         let parsed = SchemaSnapshot::from_json(legacy).unwrap();
         assert!(parsed.tables[0].unique_constraints.is_empty());
         assert!(parsed.tables[0].indexes.is_empty());
         assert!(parsed.tables[0].foreign_keys.is_empty());
+        assert!(parsed.depends_on.is_empty());
+        assert_eq!(parsed.to_canonical_json().unwrap(), legacy);
     }
 
     #[test]
@@ -685,5 +805,42 @@ mod tests {
             .unwrap_err()
             .0
             .contains("Invalid table name"));
+    }
+
+    #[test]
+    fn registered_cross_app_target_stays_unresolved_until_dependencies_are_bound() {
+        const ID: ColumnSpec = ColumnSpec {
+            name: "id",
+            kind: ColumnKind::Uuid,
+            nullable: false,
+            primary_key: true,
+            default_bool: None,
+            unique: false,
+            indexed: false,
+            foreign_table: None,
+            foreign_column: None,
+            on_delete: None,
+        };
+        const PRODUCT: ColumnSpec = ColumnSpec {
+            name: "product_id",
+            kind: ColumnKind::Uuid,
+            nullable: false,
+            primary_key: false,
+            default_bool: None,
+            unique: false,
+            indexed: false,
+            foreign_table: Some("products"),
+            foreign_column: Some("id"),
+            on_delete: Some(ferrioxid_core::ReferentialAction::Restrict),
+        };
+        let owned = SchemaSnapshot::from_registered(&[RegisteredModel {
+            table: "cart_items",
+            columns: &[ID, PRODUCT],
+            constraints: &ferrioxid_core::TableConstraints::EMPTY,
+        }])
+        .unwrap();
+        let error = owned.validate().unwrap_err().0;
+        assert!(error.contains("depends_on"), "{error}");
+        assert!(error.contains("products"), "{error}");
     }
 }

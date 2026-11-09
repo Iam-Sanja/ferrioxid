@@ -458,28 +458,25 @@ fn phrase(locale: &str, de: &str, en: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::snapshot::{ColumnSnapshot, LogicalType, TableSnapshot, FORMAT_VERSION};
+    use crate::snapshot::{ColumnSnapshot, LogicalType, TableSnapshot};
     use crate::store::make_migration;
     use sea_orm::ConnectionTrait;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn products() -> SchemaSnapshot {
-        SchemaSnapshot {
-            format_version: FORMAT_VERSION,
-            tables: vec![TableSnapshot {
-                name: "products".to_owned(),
-                columns: vec![ColumnSnapshot {
-                    name: "id".to_owned(),
-                    logical_type: LogicalType::I64,
-                    primary_key: true,
-                    nullable: false,
-                    default: None,
-                }],
-                unique_constraints: Vec::new(),
-                indexes: Vec::new(),
-                foreign_keys: Vec::new(),
+        SchemaSnapshot::from_tables(vec![TableSnapshot {
+            name: "products".to_owned(),
+            columns: vec![ColumnSnapshot {
+                name: "id".to_owned(),
+                logical_type: LogicalType::I64,
+                primary_key: true,
+                nullable: false,
+                default: None,
             }],
-        }
+            unique_constraints: Vec::new(),
+            indexes: Vec::new(),
+            foreign_keys: Vec::new(),
+        }])
     }
 
     fn scratch(label: &str) -> std::path::PathBuf {

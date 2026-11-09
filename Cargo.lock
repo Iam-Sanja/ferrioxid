@@ -862,9 +862,11 @@ dependencies = [
 name = "ferrioxid-migrations"
 version = "0.1.0"
 dependencies = [
+ "async-trait",
  "ferrioxid-core",
  "ferrioxid-db",
  "sea-orm",
+ "sea-query-binder",
  "serde",
  "serde_json",
  "sha2",

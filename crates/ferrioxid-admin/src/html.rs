@@ -964,7 +964,7 @@ async fn model_detail(
             "fields": fields,
             "can_update": false,
             "can_delete": can_delete,
-            "inlines": inline_sections(&state, &registry, &user, model.as_ref(), id, &query, false).await
+            "inlines": inline_sections(&state, &registry, &user, model.as_ref(), id, &query, false, &locale).await
         }),
     )
     .await
@@ -1910,10 +1910,9 @@ async fn pick_page(
         )
         .await;
     }
-    let Some(target) = registry
-        .models()
-        .iter()
-        .find(|candidate| candidate.descriptor().table == column.foreign_table.unwrap_or(""))
+    let Some(target) = column
+        .foreign_table
+        .and_then(|table| registry.model_for_table(table))
     else {
         return error_page(
             state,
@@ -2208,7 +2207,7 @@ async fn form_page(
             "existing": id.is_some(),
             "can_create": gate(state, &user, model.as_ref(), "create").await.is_ok(),
             "inlines": if let Some(record_id) = id {
-                inline_sections(state, registry, &user, model.as_ref(), record_id, &inline_query, true).await
+                inline_sections(state, registry, &user, model.as_ref(), record_id, &inline_query, true, &locale).await
             } else { Vec::new() },
             "delete_href": if let Some(record_id) = id {
                 (gate(state, &user, model.as_ref(), "delete").await.is_ok()
@@ -2795,11 +2794,7 @@ async fn relation_options(
     let Some(table) = column.foreign_table else {
         return json!([]);
     };
-    let Some(target) = registry
-        .models()
-        .iter()
-        .find(|candidate| candidate.descriptor().table == table)
-    else {
+    let Some(target) = registry.model_for_table(table) else {
         return json!([]);
     };
     if list_blocked(target.as_ref())
@@ -2921,9 +2916,9 @@ async fn ensure_relations(
     object: &Map<String, Value>,
 ) -> Result<(), String> {
     for column in columns {
-        if column.foreign_table.is_none() {
+        let Some(table) = column.foreign_table else {
             continue;
-        }
+        };
         let Some(value) = object.get(column.name) else {
             continue;
         };
@@ -2939,11 +2934,16 @@ async fn ensure_relations(
         let Ok(id) = Uuid::parse_str(text) else {
             return Err(column.name.to_owned());
         };
-        let Some(target) = registry
-            .models()
-            .iter()
-            .find(|candidate| candidate.descriptor().table == column.foreign_table.unwrap_or(""))
-        else {
+        let Some(target) = registry.model_for_table(table) else {
+            if registry
+                .models()
+                .iter()
+                .filter(|candidate| candidate.descriptor().table == table)
+                .count()
+                > 1
+            {
+                return Err(column.name.to_owned());
+            }
             continue;
         };
         if read_visible(state, user, target.as_ref(), id, "read")
@@ -3016,7 +3016,7 @@ fn visible_fields(
     meta: &ferrioxid_core::AdminModelMeta,
     columns: &[ColumnSpec],
     record: &Value,
-    relations: &HashMap<String, HashMap<String, String>>,
+    relations: &HashMap<String, RelationLabels>,
     superuser: bool,
 ) -> Vec<Value> {
     meta.fields
@@ -3039,6 +3039,7 @@ fn visible_fields(
             "readonly": field.readonly || field.name == "id",
                     "value": cell["text"].as_str().unwrap_or(""),
                     "relation": cell["relation"].as_bool().unwrap_or(false),
+                    "href": cell["href"].as_str().unwrap_or(""),
                     "ref": cell["ref"].as_str().unwrap_or(""),
                     "short": cell["short"].as_str().unwrap_or("")
                 })
@@ -3274,7 +3275,7 @@ fn present_cell(
     columns: &[ColumnSpec],
     name: &str,
     value: &Value,
-    relations: &HashMap<String, HashMap<String, String>>,
+    relations: &HashMap<String, RelationLabels>,
     superuser: bool,
     lead_taken: &mut bool,
 ) -> Value {
@@ -3285,9 +3286,10 @@ fn present_cell(
         .and_then(|column| column.foreign_table);
     if let Some(table) = foreign {
         if text.is_empty() || text == "—" {
-            return json!({ "text": "—", "short": "", "uuid": false, "lead": false, "relation": false, "ref": "" });
+            return json!({ "text": "—", "short": "", "uuid": false, "lead": false, "relation": false, "ref": "", "href": "" });
         }
-        let resolved = relations.get(table).and_then(|labels| labels.get(&text));
+        let entry = relations.get(table);
+        let resolved = entry.and_then(|entry| entry.labels.get(&text));
         let shown = if let Some(label) = resolved {
             label.clone()
         } else if superuser {
@@ -3301,6 +3303,12 @@ fn present_cell(
                 .unwrap_or("Not visible")
                 .to_owned()
         };
+        let href = match (entry, resolved) {
+            (Some(entry), Some(_)) if !entry.model_key.is_empty() => {
+                format!("/admin/models/{}/{text}", entry.model_key)
+            }
+            _ => String::new(),
+        };
         let lead = !*lead_taken;
         *lead_taken = true;
         return json!({
@@ -3309,7 +3317,8 @@ fn present_cell(
             "uuid": false,
             "lead": lead,
             "relation": true,
-            "ref": text
+            "ref": text,
+            "href": href
         });
     }
     let uuid = is_uuid(&text);
@@ -3323,8 +3332,14 @@ fn present_cell(
         "uuid": uuid,
         "lead": lead,
         "relation": false,
-        "ref": ""
+        "ref": "",
+        "href": ""
     })
+}
+
+struct RelationLabels {
+    model_key: &'static str,
+    labels: HashMap<String, String>,
 }
 
 async fn relation_names(
@@ -3333,7 +3348,7 @@ async fn relation_names(
     user: &AuthUser,
     columns: &[ColumnSpec],
     rows: &[Value],
-) -> Result<HashMap<String, HashMap<String, String>>, FerrioxidError> {
+) -> Result<HashMap<String, RelationLabels>, FerrioxidError> {
     let mut grouped: HashMap<&str, Vec<Uuid>> = HashMap::new();
     for column in columns
         .iter()
@@ -3353,11 +3368,14 @@ async fn relation_names(
     }
     let mut resolved = HashMap::new();
     for (table, ids) in grouped {
-        let Some(target) = registry
-            .models()
-            .iter()
-            .find(|candidate| candidate.descriptor().table == table)
-        else {
+        let Some(target) = registry.model_for_table(table) else {
+            resolved.insert(
+                table.to_owned(),
+                RelationLabels {
+                    model_key: "",
+                    labels: HashMap::new(),
+                },
+            );
             continue;
         };
         if list_blocked(target.as_ref())
@@ -3365,10 +3383,23 @@ async fn relation_names(
                 .await
                 .is_err()
         {
-            resolved.insert(table.to_owned(), HashMap::new());
+            resolved.insert(
+                table.to_owned(),
+                RelationLabels {
+                    model_key: "",
+                    labels: HashMap::new(),
+                },
+            );
             continue;
         }
         let Some(label) = display_column(target.meta(), target.columns()) else {
+            resolved.insert(
+                table.to_owned(),
+                RelationLabels {
+                    model_key: "",
+                    labels: HashMap::new(),
+                },
+            );
             continue;
         };
         let scope = access_scope(target.as_ref(), user, false);
@@ -3381,7 +3412,13 @@ async fn relation_names(
             &scope,
         )
         .await?;
-        resolved.insert(table.to_owned(), pairs.into_iter().collect());
+        resolved.insert(
+            table.to_owned(),
+            RelationLabels {
+                model_key: target.meta().key,
+                labels: pairs.into_iter().collect(),
+            },
+        );
     }
     Ok(resolved)
 }
@@ -5164,7 +5201,7 @@ fn child_inline<'a>(
         .find(|item| item.name == name)?;
     let child = registry.find(spec.child_table)?;
     child.columns().iter().find(|column| {
-        column.name == spec.column && column.foreign_table == Some(parent.meta().key)
+        column.name == spec.column && crate::registry::references_parent(column, parent)
     })?;
     Some(child)
 }
@@ -5271,6 +5308,7 @@ fn choice_href(back: &str, field: &str, id: &str, draft: Option<&str>) -> String
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn inline_sections(
     state: &AppState,
     registry: &AdminRegistry,
@@ -5279,6 +5317,7 @@ async fn inline_sections(
     parent_id: Uuid,
     query: &HashMap<String, String>,
     editing: bool,
+    locale: &str,
 ) -> Vec<Value> {
     let mut sections = Vec::new();
     for spec in parent.meta().inlines {
@@ -5333,22 +5372,60 @@ async fn inline_sections(
             })
             .map(|field| field.name)
             .unwrap_or("id");
+        let foreign_label = child
+            .columns()
+            .iter()
+            .any(|column| column.name == label_field && column.foreign_table.is_some());
+        let relations = if foreign_label {
+            let label_columns: Vec<ColumnSpec> = child
+                .columns()
+                .iter()
+                .copied()
+                .filter(|column| column.name == label_field)
+                .collect();
+            match relation_names(registry, state, user, &label_columns, &rows).await {
+                Ok(relations) => relations,
+                Err(_) => continue,
+            }
+        } else {
+            HashMap::new()
+        };
         let rendered = rows
             .iter()
             .filter_map(|row| {
                 let id = row.get("id")?.as_str()?;
-                let text = row
-                    .get(label_field)
-                    .map(|value| match value {
-                        Value::String(text) => text.clone(),
-                        Value::Number(number) => number.to_string(),
-                        Value::Bool(flag) => flag.to_string(),
-                        _ => id.to_owned(),
-                    })
-                    .unwrap_or_else(|| id.to_owned());
+                let (text, relation_href) = if foreign_label {
+                    let mut lead = false;
+                    let cell = present_cell(
+                        locale,
+                        registry.branding().currency.as_str(),
+                        child.columns(),
+                        label_field,
+                        row.get(label_field).unwrap_or(&Value::Null),
+                        &relations,
+                        user.is_superuser,
+                        &mut lead,
+                    );
+                    (
+                        cell["text"].as_str().unwrap_or(id).to_owned(),
+                        cell["href"].as_str().unwrap_or("").to_owned(),
+                    )
+                } else {
+                    let text = row
+                        .get(label_field)
+                        .map(|value| match value {
+                            Value::String(text) => text.clone(),
+                            Value::Number(number) => number.to_string(),
+                            Value::Bool(flag) => flag.to_string(),
+                            _ => id.to_owned(),
+                        })
+                        .unwrap_or_else(|| id.to_owned());
+                    (text, String::new())
+                };
                 Some(json!({
                     "text": text,
-                    "href": format!("/admin/models/{}/{}", child.meta().key, id)
+                    "href": format!("/admin/models/{}/{}", child.meta().key, id),
+                    "relation_href": relation_href
                 }))
             })
             .collect::<Vec<_>>();
@@ -7016,5 +7093,100 @@ mod contrast_tests {
     fn uuids_are_not_ordinary_labels() {
         assert!(is_uuid("11111111-1111-1111-1111-111111111111"));
         assert!(!is_uuid("Apfel"));
+    }
+}
+
+#[cfg(test)]
+mod relation_label_tests {
+    use super::{present_cell, RelationLabels};
+    use ferrioxid_core::{ColumnKind, ColumnSpec, ReferentialAction};
+    use serde_json::json;
+    use std::collections::HashMap;
+
+    fn product_column() -> ColumnSpec {
+        ColumnSpec {
+            name: "product_id",
+            kind: ColumnKind::Uuid,
+            nullable: false,
+            primary_key: false,
+            default_bool: None,
+            unique: false,
+            indexed: true,
+            foreign_table: Some("products"),
+            foreign_column: Some("id"),
+            on_delete: Some(ReferentialAction::Restrict),
+        }
+    }
+
+    fn relations(label: Option<&str>) -> HashMap<String, RelationLabels> {
+        let id = "11111111-1111-1111-1111-111111111111";
+        let mut labels = HashMap::new();
+        if let Some(label) = label {
+            labels.insert(id.to_owned(), label.to_owned());
+        }
+        let mut relations = HashMap::new();
+        relations.insert(
+            "products".to_owned(),
+            RelationLabels {
+                model_key: if label.is_some() { "products" } else { "" },
+                labels,
+            },
+        );
+        relations
+    }
+
+    #[test]
+    fn visible_target_uses_the_name_and_admin_link() {
+        let id = "11111111-1111-1111-1111-111111111111";
+        let mut lead = false;
+        let cell = present_cell(
+            "de",
+            "EUR",
+            &[product_column()],
+            "product_id",
+            &json!(id),
+            &relations(Some("Apfel")),
+            false,
+            &mut lead,
+        );
+        assert_eq!(cell["text"], "Apfel");
+        assert_eq!(cell["href"], format!("/admin/models/products/{id}"));
+        assert_ne!(cell["text"].as_str(), Some(id));
+    }
+
+    #[test]
+    fn missing_and_hidden_targets_share_one_label_without_a_link() {
+        let id = "11111111-1111-1111-1111-111111111111";
+        let columns = [product_column()];
+        let hidden = relations(None);
+        let mut readable = relations(Some("Apfel"));
+        readable.get_mut("products").unwrap().labels.remove(id);
+        let mut lead = false;
+        let hidden_cell = present_cell(
+            "de",
+            "EUR",
+            &columns,
+            "product_id",
+            &json!(id),
+            &hidden,
+            false,
+            &mut lead,
+        );
+        lead = false;
+        let missing_cell = present_cell(
+            "de",
+            "EUR",
+            &columns,
+            "product_id",
+            &json!(id),
+            &readable,
+            false,
+            &mut lead,
+        );
+        assert_eq!(hidden_cell["text"], "Nicht sichtbar");
+        assert_eq!(missing_cell["text"], hidden_cell["text"]);
+        assert_eq!(hidden_cell["href"], "");
+        assert_eq!(missing_cell["href"], "");
+        assert_ne!(hidden_cell["text"].as_str(), Some(id));
     }
 }

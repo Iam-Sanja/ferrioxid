@@ -11,8 +11,13 @@ use ferrioxid_db::{
     render_drop_index, render_drop_table, render_rename_column, render_rename_table,
     render_table_bundle, ForeignKeyClause, PhysicalColumn,
 };
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, TransactionTrait};
+use sea_orm::{
+    ConnectionTrait, DatabaseBackend, DatabaseConnection, DbErr, ExecResult, QueryResult,
+    RuntimeErr, Statement, TransactionTrait,
+};
+use sea_query_binder::SqlxValues;
 use std::path::Path;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
@@ -427,14 +432,193 @@ async fn apply_one(
 ) -> Result<(), MigrationError> {
     let backend = db.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
+    let suspend_foreign_keys = matches!(kind, DatabaseKind::Sqlite)
+        && file.operations.iter().any(|operation| {
+            crate::rebuild::backfill_parts(operation).is_some()
+                || crate::rebuild::added_foreign_key(operation).is_some()
+                || crate::rebuild::alter_parts(operation).is_some()
+        });
+    if suspend_foreign_keys {
+        return apply_sqlite_on_one_connection(db, file, history_table, history_id).await;
+    }
+    apply_one_in_transaction(db, file, history_table, history_id).await
+}
+
+async fn apply_sqlite_on_one_connection(
+    db: &DatabaseConnection,
+    file: &MigrationFile,
+    history_table: &str,
+    history_id: &str,
+) -> Result<(), MigrationError> {
+    let connection = db
+        .get_sqlite_connection_pool()
+        .acquire()
+        .await
+        .map_err(|error| {
+            MigrationError::new(format!(
+                "Could not acquire a SQLite connection for the rebuild: {error}"
+            ))
+        })?;
+    let pinned = PinnedSqlite::new(connection);
+    pinned
+        .execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "PRAGMA foreign_keys = OFF",
+        ))
+        .await
+        .map_err(|error| {
+            MigrationError::new(format!(
+                "Could not suspend foreign keys before rebuilding: {error}"
+            ))
+        })?;
+    pinned.enforcement_suspended();
+    let outcome = async {
+        pinned
+            .execute(Statement::from_string(DatabaseBackend::Sqlite, "BEGIN"))
+            .await
+            .map_err(|error| {
+                MigrationError::new(format!("Could not start transaction: {error}"))
+            })?;
+        let work = apply_open(&pinned, file, history_table, history_id).await;
+        match work {
+            Ok(()) => match pinned
+                .execute(Statement::from_string(DatabaseBackend::Sqlite, "COMMIT"))
+                .await
+            {
+                Ok(_) => Ok(()),
+                Err(error) => {
+                    let _ = pinned
+                        .execute(Statement::from_string(DatabaseBackend::Sqlite, "ROLLBACK"))
+                        .await;
+                    Err(MigrationError::new(format!(
+                        "Could not commit migration {}: {error}",
+                        file.id
+                    )))
+                }
+            },
+            Err(error) => {
+                let _ = pinned
+                    .execute(Statement::from_string(DatabaseBackend::Sqlite, "ROLLBACK"))
+                    .await;
+                Err(error)
+            }
+        }
+    }
+    .await;
+    let restored = restore_sqlite_enforcement(&pinned).await;
+    match (outcome, restored) {
+        (Err(migration), _) => Err(migration),
+        (Ok(()), Err(restore)) => Err(restore),
+        (Ok(()), Ok(())) => Ok(()),
+    }
+}
+
+async fn restore_sqlite_enforcement(connection: &PinnedSqlite) -> Result<(), MigrationError> {
+    connection
+        .execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "PRAGMA foreign_keys = ON",
+        ))
+        .await
+        .map_err(|error| {
+            MigrationError::new(format!(
+                "Could not restore foreign key enforcement after rebuilding: {error}"
+            ))
+        })?;
+    let row = connection
+        .query_one(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "PRAGMA foreign_keys",
+        ))
+        .await
+        .map_err(|error| {
+            MigrationError::new(format!(
+                "Could not read foreign key enforcement after rebuilding: {error}"
+            ))
+        })?
+        .ok_or_else(|| {
+            MigrationError::new(
+                "Could not read foreign key enforcement after rebuilding.".to_owned(),
+            )
+        })?;
+    let enabled = row
+        .try_get::<i64>("", "foreign_keys")
+        .or_else(|_| row.try_get::<i32>("", "foreign_keys").map(i64::from))
+        .map_err(|error| {
+            MigrationError::new(format!(
+                "Could not read foreign key enforcement after rebuilding: {error}"
+            ))
+        })?;
+    if enabled != 1 {
+        return Err(MigrationError::new(
+            "Could not restore foreign key enforcement after rebuilding.".to_owned(),
+        ));
+    }
+    connection.enforcement_restored();
+    Ok(())
+}
+
+async fn apply_one_in_transaction(
+    db: &DatabaseConnection,
+    file: &MigrationFile,
+    history_table: &str,
+    history_id: &str,
+) -> Result<(), MigrationError> {
     let transaction = db
         .begin()
         .await
         .map_err(|error| MigrationError::new(format!("Could not start transaction: {error}")))?;
+    apply_open(&transaction, file, history_table, history_id).await?;
+    transaction.commit().await.map_err(|error| {
+        MigrationError::new(format!("Could not commit migration {}: {error}", file.id))
+    })?;
+    Ok(())
+}
+
+async fn apply_open(
+    transaction: &impl ConnectionTrait,
+    file: &MigrationFile,
+    history_table: &str,
+    history_id: &str,
+) -> Result<(), MigrationError> {
+    let backend = transaction.get_database_backend();
+    let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
     let mut schema = file.from_snapshot.clone();
     for operation in &file.operations {
-        if let Some((table, from, to)) = crate::rebuild::alter_parts(operation) {
-            crate::rebuild::apply_alter(&transaction, kind, &schema, table, from, to)
+        if let Some((table, column, backfill, foreign_key)) =
+            crate::rebuild::backfill_parts(operation)
+        {
+            crate::rebuild::apply_backfill_column(
+                transaction,
+                kind,
+                &schema,
+                table,
+                column,
+                backfill,
+                foreign_key,
+            )
+            .await
+            .map_err(|error| {
+                MigrationError::new(format!(
+                    "Migration {} was rolled back at `{}`: {}",
+                    file.id,
+                    operation.summary(),
+                    error.0
+                ))
+            })?;
+        } else if let Some((table, foreign_key)) = crate::rebuild::added_foreign_key(operation) {
+            crate::rebuild::apply_add_foreign_key(transaction, kind, &schema, table, foreign_key)
+                .await
+                .map_err(|error| {
+                    MigrationError::new(format!(
+                        "Migration {} was rolled back at `{}`: {}",
+                        file.id,
+                        operation.summary(),
+                        error.0
+                    ))
+                })?;
+        } else if let Some((table, from, to)) = crate::rebuild::alter_parts(operation) {
+            crate::rebuild::apply_alter(transaction, kind, &schema, table, from, to)
                 .await
                 .map_err(|error| {
                     MigrationError::new(format!(
@@ -465,7 +649,7 @@ async fn apply_one(
         .map_err(|error| MigrationError::new(format!("Invalid system time: {error}")))?
         .as_secs() as i64;
     history::insert_history_in(
-        &transaction,
+        transaction,
         history_table,
         history_id,
         &file.name,
@@ -473,9 +657,6 @@ async fn apply_one(
         applied_at_unix,
     )
     .await?;
-    transaction.commit().await.map_err(|error| {
-        MigrationError::new(format!("Could not commit migration {}: {error}", file.id))
-    })?;
     Ok(())
 }
 
@@ -543,6 +724,7 @@ fn render_operation(
             table,
             column,
             foreign_key,
+            backfill: _,
         } => {
             let physical = physical_column(column)?;
             let clause = foreign_key.as_ref().map(|foreign_key| ForeignKeyClause {
@@ -592,9 +774,15 @@ fn render_operation(
                 false,
             )]
         }
-        MigrationOperation::AddForeignKey { .. } | MigrationOperation::DropForeignKey { .. } => {
+        MigrationOperation::AddForeignKey { .. } => {
             return Err(MigrationError::new(
-                "Adding foreign keys to existing columns is not supported.".to_owned(),
+                "Adding a foreign key is handled by the verified table rebuild, not as standalone DDL."
+                    .to_owned(),
+            ));
+        }
+        MigrationOperation::DropForeignKey { .. } => {
+            return Err(MigrationError::new(
+                "Dropping a foreign key or changing its delete rule is not supported.".to_owned(),
             ));
         }
         MigrationOperation::AlterColumn { .. } => {
@@ -731,6 +919,129 @@ fn physical_column(column: &ColumnSnapshot) -> Result<PhysicalColumn<'_>, Migrat
         primary_key: column.primary_key,
         default_bool: column.default,
     })
+}
+
+struct PinnedSqlite {
+    connection:
+        tokio::sync::Mutex<Option<sea_orm::sqlx::pool::PoolConnection<sea_orm::sqlx::Sqlite>>>,
+    enforcement_intact: AtomicBool,
+}
+
+impl PinnedSqlite {
+    fn new(connection: sea_orm::sqlx::pool::PoolConnection<sea_orm::sqlx::Sqlite>) -> Self {
+        Self {
+            connection: tokio::sync::Mutex::new(Some(connection)),
+            enforcement_intact: AtomicBool::new(true),
+        }
+    }
+
+    fn enforcement_suspended(&self) {
+        self.enforcement_intact.store(false, Ordering::SeqCst);
+    }
+
+    fn enforcement_restored(&self) {
+        self.enforcement_intact.store(true, Ordering::SeqCst);
+    }
+
+    async fn live(
+        &self,
+    ) -> Result<
+        tokio::sync::MutexGuard<
+            '_,
+            Option<sea_orm::sqlx::pool::PoolConnection<sea_orm::sqlx::Sqlite>>,
+        >,
+        DbErr,
+    > {
+        Ok(self.connection.lock().await)
+    }
+}
+
+impl Drop for PinnedSqlite {
+    fn drop(&mut self) {
+        let connection = self.connection.get_mut().take();
+        if let Some(connection) = connection {
+            if self.enforcement_intact.load(Ordering::SeqCst) {
+                drop(connection);
+            } else {
+                drop(connection.detach());
+            }
+        }
+    }
+}
+
+fn statement_query(
+    statement: &Statement,
+) -> sea_orm::sqlx::query::Query<'_, sea_orm::sqlx::Sqlite, SqlxValues> {
+    let values = statement
+        .values
+        .clone()
+        .unwrap_or_else(|| sea_orm::sea_query::Values(Vec::new()));
+    sea_orm::sqlx::query_with(&statement.sql, SqlxValues(values))
+}
+
+#[async_trait::async_trait]
+impl ConnectionTrait for PinnedSqlite {
+    fn get_database_backend(&self) -> DatabaseBackend {
+        DatabaseBackend::Sqlite
+    }
+
+    async fn execute(&self, statement: Statement) -> Result<ExecResult, DbErr> {
+        let mut guard = self.live().await?;
+        let Some(connection) = guard.as_mut() else {
+            return Err(DbErr::Conn(RuntimeErr::Internal(
+                "SQLite connection is closed".to_owned(),
+            )));
+        };
+        statement_query(&statement)
+            .execute(&mut **connection)
+            .await
+            .map(ExecResult::from)
+            .map_err(|error| DbErr::Exec(RuntimeErr::SqlxError(error)))
+    }
+
+    async fn execute_unprepared(&self, sql: &str) -> Result<ExecResult, DbErr> {
+        let mut guard = self.live().await?;
+        let Some(connection) = guard.as_mut() else {
+            return Err(DbErr::Conn(RuntimeErr::Internal(
+                "SQLite connection is closed".to_owned(),
+            )));
+        };
+        sea_orm::sqlx::Executor::execute(&mut **connection, sql)
+            .await
+            .map(ExecResult::from)
+            .map_err(|error| DbErr::Exec(RuntimeErr::SqlxError(error)))
+    }
+
+    async fn query_one(&self, statement: Statement) -> Result<Option<QueryResult>, DbErr> {
+        let mut guard = self.live().await?;
+        let Some(connection) = guard.as_mut() else {
+            return Err(DbErr::Conn(RuntimeErr::Internal(
+                "SQLite connection is closed".to_owned(),
+            )));
+        };
+        match statement_query(&statement)
+            .fetch_optional(&mut **connection)
+            .await
+        {
+            Ok(Some(row)) => Ok(Some(QueryResult::from(row))),
+            Ok(None) => Ok(None),
+            Err(error) => Err(DbErr::Query(RuntimeErr::SqlxError(error))),
+        }
+    }
+
+    async fn query_all(&self, statement: Statement) -> Result<Vec<QueryResult>, DbErr> {
+        let mut guard = self.live().await?;
+        let Some(connection) = guard.as_mut() else {
+            return Err(DbErr::Conn(RuntimeErr::Internal(
+                "SQLite connection is closed".to_owned(),
+            )));
+        };
+        statement_query(&statement)
+            .fetch_all(&mut **connection)
+            .await
+            .map(|rows| rows.into_iter().map(QueryResult::from).collect())
+            .map_err(|error| DbErr::Query(RuntimeErr::SqlxError(error)))
+    }
 }
 
 fn map_execute_error(id: &str, operation: &MigrationOperation, detail: &str) -> MigrationError {

@@ -401,11 +401,19 @@ async fn relation_options(
     let Some(target_table) = column.foreign_table else {
         return failure(StatusCode::UNPROCESSABLE_ENTITY, "field is not a relation");
     };
-    let Some(target) = registry
+    if registry
         .models()
         .iter()
-        .find(|candidate| candidate.descriptor().table == target_table)
-    else {
+        .filter(|candidate| candidate.descriptor().table == target_table)
+        .count()
+        > 1
+    {
+        return failure(
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "relation target is ambiguous",
+        );
+    }
+    let Some(target) = registry.model_for_table(target_table) else {
         return failure(
             StatusCode::FORBIDDEN,
             "relation options require a registered admin model without an object policy",

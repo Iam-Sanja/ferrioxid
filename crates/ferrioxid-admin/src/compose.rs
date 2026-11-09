@@ -857,8 +857,7 @@ fn label(spec: &AdminInline, fallback: &str) -> String {
 }
 
 fn linked(parent: &dyn ManagedModel, spec: &AdminInline, child: &dyn ManagedModel) -> bool {
-    child
-        .columns()
-        .iter()
-        .any(|column| column.name == spec.column && column.foreign_table == Some(parent.meta().key))
+    child.columns().iter().any(|column| {
+        column.name == spec.column && crate::registry::references_parent(column, parent)
+    })
 }

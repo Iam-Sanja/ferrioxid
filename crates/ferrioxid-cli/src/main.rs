@@ -11,9 +11,10 @@ mod text;
 use clap::{Parser, Subcommand};
 use ferrioxid_migrations::{
     apply_directory, apply_packages, baseline_database, discover_project,
-    inspect_migrations_with_packages, load_schema_from_command, make_migration,
-    readonly_database_url, render_diagnosis, reseal_unapplied, runtime_contract_note,
-    write_explicit_migration, MakeOutcome, MigrationOperation, PackageMigration, SchemaSnapshot,
+    inspect_migrations_with_packages, load_schema_from_command, make_migration_with_backfills,
+    readonly_database_url, render_diagnosis, reseal_unapplied, resolve_installed_schemas,
+    runtime_contract_note, write_explicit_migration, BackfillLiteral, ColumnBackfill, InstalledApp,
+    MakeOutcome, MigrationOperation, PackageMigration, SchemaSnapshot,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -247,6 +248,9 @@ enum MigrateCommand {
         /// Schema snapshot JSON instead of schema_command.
         #[arg(long)]
         schema_file: Option<PathBuf>,
+        /// Explicit value for a new NOT NULL column, for example products.stock:i64=0.
+        #[arg(long = "backfill")]
+        backfill: Vec<String>,
         /// Overrides migrations_dir from ferrioxid.toml.
         #[arg(long)]
         migrations_dir: Option<PathBuf>,
@@ -472,13 +476,23 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
             app,
             schema_file,
             migrations_dir,
+            backfill,
         } => {
             let (directory, schema) = match app {
                 Some(name) => resolve_app_schema(&name)?,
                 None => resolve_schema(schema_file, migrations_dir)?,
             };
-            match make_migration(&directory, name.as_deref().unwrap_or("change"), &schema)
-                .map_err(|error| error.0)?
+            let backfills = backfill
+                .iter()
+                .map(|value| parse_backfill(value))
+                .collect::<Result<Vec<_>, _>>()?;
+            match make_migration_with_backfills(
+                &directory,
+                name.as_deref().unwrap_or("change"),
+                &schema,
+                &backfills,
+            )
+            .map_err(|error| error.0)?
             {
                 MakeOutcome::Unchanged => {
                     println!("No schema changes. No migration was written.");
@@ -686,6 +700,44 @@ fn jobs_database_url(
     }
 }
 
+fn parse_backfill(text: &str) -> Result<ColumnBackfill, String> {
+    let (path, value) = text.split_once('=').ok_or(
+        "A backfill must look like table.column:i64=0, table.column:text=value, or table.column:bool=true.",
+    )?;
+    let (path, kind) = path.rsplit_once(':').ok_or(
+        "A backfill must name the type: table.column:i64=0, table.column:text=value, or table.column:bool=true.",
+    )?;
+    let (table, column) = path
+        .split_once('.')
+        .ok_or("A backfill must name table.column before the type.")?;
+    if table.is_empty() || column.is_empty() {
+        return Err("A backfill needs both a table and a column.".to_owned());
+    }
+    let parsed = match kind {
+        "bool" => BackfillLiteral::Bool(
+            value
+                .parse::<bool>()
+                .map_err(|_| format!("Backfill `{text}` needs a bool value of true or false."))?,
+        ),
+        "i64" => BackfillLiteral::I64(
+            value
+                .parse::<i64>()
+                .map_err(|_| format!("Backfill `{text}` needs a base-10 integer."))?,
+        ),
+        "text" => BackfillLiteral::Text(value.to_owned()),
+        _ => {
+            return Err(format!(
+                "Backfill `{text}` must use bool, i64, or text. No value was invented."
+            ))
+        }
+    };
+    Ok(ColumnBackfill {
+        table: table.to_owned(),
+        column: column.to_owned(),
+        value: parsed,
+    })
+}
+
 fn print_written(outcome: MakeOutcome) {
     match outcome {
         MakeOutcome::Unchanged => {
@@ -748,18 +800,37 @@ fn resolve_app_schema(name: &str) -> Result<(PathBuf, SchemaSnapshot), String> {
     if project.layout_version != 2 {
         return Err("--app schema selection requires a layout-2 project. Existing projects can use --schema-file and --migrations-dir explicitly.".to_owned());
     }
-    let app = project
-        .apps
-        .iter()
-        .find(|app| app.name == name)
-        .ok_or_else(|| format!("App `{name}` is not declared in ferrioxid.toml."))?;
+    if !project.apps.iter().any(|app| app.name == name) {
+        return Err(format!("App `{name}` is not declared in ferrioxid.toml."));
+    }
     let command = project
         .schema_command
         .as_ref()
         .ok_or("schema_command is missing")?;
-    let schema = load_schema_from_command(&project.root, &format!("{command} --app {name}"))
-        .map_err(|error| error.0)?;
-    Ok((app.migrations.clone(), schema))
+    let mut installed = Vec::with_capacity(project.apps.len());
+    for app in &project.apps {
+        let schema =
+            load_schema_from_command(&project.root, &format!("{command} --app {}", app.name))
+                .map_err(|error| error.0)?;
+        installed.push(InstalledApp {
+            name: app.name.clone(),
+            depends_on: app.depends_on.clone(),
+            schema,
+        });
+    }
+    let resolved = resolve_installed_schemas(&installed).map_err(|error| error.0)?;
+    let app = resolved
+        .into_iter()
+        .find(|app| app.name == name)
+        .expect("declared app is present after resolution");
+    let directory = project
+        .apps
+        .iter()
+        .find(|candidate| candidate.name == name)
+        .expect("app was declared")
+        .migrations
+        .clone();
+    Ok((directory, app.schema))
 }
 
 fn resolve_schema(
