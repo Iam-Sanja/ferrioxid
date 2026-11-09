@@ -6,9 +6,11 @@
 mod baseline;
 mod diff;
 mod error;
+mod fixtures;
 mod history;
 mod inspect;
 mod introspection;
+mod management;
 mod manifest;
 mod packages;
 mod project;
@@ -25,10 +27,17 @@ pub use diff::{
     MigrationOperation, MigrationPlan, MigrationRisk,
 };
 pub use error::MigrationError;
+pub use fixtures::{
+    dump_fixture, fixture_to_json, load_fixture, parse_fixture, prepare_records, FixtureFile,
+    FixtureRecord, LoadReport, LoadRequest, FIXTURE_VERSION,
+};
 pub use history::{history_exists, table_exists, AUTH_HISTORY_TABLE};
 pub use inspect::{
     dev_notice, inspect_migrations, inspect_migrations_with_packages, readonly_database_url,
     render_diagnosis, Diagnostic, DualReport, Level, MigrationScope, PackageStatus,
+};
+pub use management::{
+    is_command_name, ArgSpec, CommandError, CommandSpec, Invocation, ManagementCommand, Registry,
 };
 pub use manifest::{
     load_manifest, manifest_json, ProjectManifest, TrackedFile, MANIFEST_RELATIVE, TEMPLATE_VERSION,
@@ -47,9 +56,9 @@ pub use runner::{
     migration_status_in, namespaced_status, reseal_unapplied, ApplyReport, StatusReport,
 };
 pub use snapshot::{
-    ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType,
-    OnDelete, RegisteredModel, SchemaSnapshot, TableSnapshot, UniqueConstraintSnapshot,
-    FORMAT_VERSION,
+    is_identifier, ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, IndexSnapshot,
+    LogicalType, OnDelete, RegisteredModel, SchemaSnapshot, TableSnapshot,
+    UniqueConstraintSnapshot, FORMAT_VERSION,
 };
 pub use store::sha256_hex;
 pub use store::{

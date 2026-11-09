@@ -90,3 +90,5 @@ jobs:
           cargo test -p myshop --test postgres_api -- --ignored postgres_http_roundtrip
           cargo test -p ferrioxid-migrations --test engine -- --ignored postgres_migration_roundtrip
           cargo test -p ferrioxid-auth --lib -- --ignored postgres_anonymous_session_roundtrip
+          cargo test -p ferrioxid --test money -- --ignored postgres_decimal_and_choice_roundtrip
+          cargo test -p ferrioxid-migrations --lib fixtures::tests::postgres_fixture_roundtrip -- --ignored

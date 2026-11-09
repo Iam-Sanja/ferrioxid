@@ -2763,6 +2763,18 @@ async fn input_fields(
                 }
             }
             input["input"] = json!("text");
+        } else if column.kind == ColumnKind::Choice {
+            input["kind"] = json!("select");
+            input["options"] = json!(column
+                .choices
+                .iter()
+                .map(|choice| json!({
+                    "id": choice.value,
+                    "label": if locale == "de" { choice.label_de } else { choice.label_en },
+                    "selected": current.as_str() == Some(choice.value),
+                }))
+                .collect::<Vec<_>>());
+            input["input"] = json!("text");
         } else if column.kind == ColumnKind::Boolean {
             input["kind"] = json!("boolean");
         } else {
@@ -2772,7 +2784,10 @@ async fn input_fields(
                 ColumnKind::Date => "date",
                 ColumnKind::Time => "time",
                 ColumnKind::DateTime => "datetime-local",
-                ColumnKind::Uuid | ColumnKind::Text | ColumnKind::Boolean => "text",
+                ColumnKind::Uuid | ColumnKind::Text | ColumnKind::Boolean | ColumnKind::Choice => {
+                    "text"
+                }
+                ColumnKind::Decimal => "text",
             });
             if column.kind == ColumnKind::DateTime {
                 if let Some(text) = input["value"].as_str() {
@@ -3284,7 +3299,15 @@ fn present_cell(
     superuser: bool,
     lead_taken: &mut bool,
 ) -> Value {
-    let text = display_cell(locale, currency, name, value);
+    let mut text = display_cell(locale, currency, name, value);
+    if let Some(column) = columns
+        .iter()
+        .find(|column| column.name == name && column.kind == ColumnKind::Choice)
+    {
+        if !text.is_empty() && text != "—" {
+            text = ferrioxid_core::choice_label(column.choices, locale, &text);
+        }
+    }
     let foreign = columns
         .iter()
         .find(|column| column.name == name)
@@ -7120,6 +7143,9 @@ mod relation_label_tests {
             foreign_table: Some("products"),
             foreign_column: Some("id"),
             on_delete: Some(ReferentialAction::Restrict),
+            precision: 0,
+            scale: 0,
+            choices: &[],
         }
     }
 

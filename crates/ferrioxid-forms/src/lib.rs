@@ -4,8 +4,9 @@
 
 use chrono::{DateTime, NaiveDate, NaiveTime, Utc};
 use ferrioxid_core::{
-    parse_bool, parse_date, parse_datetime_local, parse_datetime_utc, parse_i64, parse_time,
-    parse_uuid, text_code, AdminFieldMeta, ColumnKind, ColumnSpec,
+    format_decimal, parse_bool, parse_date, parse_datetime_local, parse_datetime_utc,
+    parse_decimal, parse_i64, parse_time, parse_uuid, text_code, AdminFieldMeta, ColumnKind,
+    ColumnSpec,
 };
 use std::collections::BTreeMap;
 
@@ -239,6 +240,77 @@ pub fn optional_i64(
         return Ok(None);
     }
     required_i64(values, name, min, max).map(Some)
+}
+
+pub fn required_column_choice<'a>(
+    values: &FormValues,
+    column: &'a ferrioxid_core::ColumnSpec,
+) -> Result<&'a str, FieldFailure> {
+    let text = values.get(column.name).unwrap_or("").trim();
+    if let Some(choice) = column.choices.iter().find(|choice| choice.value == text) {
+        Ok(choice.value)
+    } else {
+        Err(FieldFailure {
+            field: column.name.to_owned(),
+            code: "validation.choice",
+        })
+    }
+}
+
+pub fn choice_options(
+    column: &ferrioxid_core::ColumnSpec,
+    locale: &str,
+) -> Vec<(&'static str, &'static str)> {
+    column
+        .choices
+        .iter()
+        .map(|choice| {
+            (
+                choice.value,
+                if locale == "de" {
+                    choice.label_de
+                } else {
+                    choice.label_en
+                },
+            )
+        })
+        .collect()
+}
+
+pub fn render_choice_select(
+    column: &ferrioxid_core::ColumnSpec,
+    locale: &str,
+    selected: &str,
+    required: bool,
+) -> String {
+    let mut html = format!(
+        "<select id=\"{name}\" name=\"{name}\"{required}>",
+        name = escape(column.name),
+        required = if required { " required" } else { "" }
+    );
+    for (value, label) in choice_options(column, locale) {
+        let mark = if value == selected { " selected" } else { "" };
+        html.push_str(&format!(
+            "<option value=\"{value}\"{mark}>{label}</option>",
+            value = escape(value),
+            label = escape(label),
+        ));
+    }
+    html.push_str("</select>");
+    html
+}
+
+pub fn required_decimal(
+    values: &FormValues,
+    name: &'static str,
+    precision: u8,
+    scale: u8,
+) -> Result<ferrioxid_core::Decimal, FieldFailure> {
+    let text = values.get(name).unwrap_or("").trim();
+    ferrioxid_core::parse_decimal(text, precision, scale).map_err(|_| FieldFailure {
+        field: name.to_owned(),
+        code: "validation.decimal",
+    })
 }
 
 pub fn required_bool(values: &FormValues, name: &'static str) -> Result<bool, FieldFailure> {
@@ -824,6 +896,9 @@ pub struct ModelField {
     pub name: &'static str,
     pub kind: ColumnKind,
     pub required: bool,
+    pub precision: u8,
+    pub scale: u8,
+    pub choices: &'static [ferrioxid_core::ChoiceValue],
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -881,6 +956,9 @@ pub fn model_fields(
             name: column.name,
             kind: column.kind,
             required: !column.nullable && column.default_bool.is_none(),
+            precision: column.precision,
+            scale: column.scale,
+            choices: column.choices,
         });
     }
     Ok(fields)
@@ -962,6 +1040,20 @@ fn bind_one(
         ColumnKind::Time => parse_time(raw).map(|_| BoundValue::Text(raw.to_owned())),
         ColumnKind::DateTime => parse_datetime_utc(raw).map(|_| BoundValue::Text(raw.to_owned())),
         ColumnKind::Text => Ok(BoundValue::Text(raw.to_owned())),
+        ColumnKind::Decimal => {
+            let value = parse_decimal(raw, field.precision, field.scale)
+                .map_err(|_| "validation.decimal")?;
+            format_decimal(value, field.scale)
+                .map(BoundValue::Text)
+                .map_err(|_| "validation.decimal")
+        }
+        ColumnKind::Choice => {
+            if field.choices.iter().any(|choice| choice.value == raw) {
+                Ok(BoundValue::Text(raw.to_owned()))
+            } else {
+                Err("validation.choice")
+            }
+        }
     }
 }
 
@@ -1218,6 +1310,31 @@ mod tests {
     }
 
     #[test]
+    fn model_binding_checks_decimal_scale_and_choice_tokens() {
+        let mut price = column("price", ColumnKind::Decimal, false, false);
+        price.precision = 12;
+        price.scale = 2;
+        let mut status = column("status", ColumnKind::Choice, false, false);
+        status.choices = &[ferrioxid_core::ChoiceValue {
+            value: "active",
+            label_de: "Aktiv",
+            label_en: "Active",
+        }];
+        let fields = model_fields(&[price, status], &[], &["price", "status"]).unwrap();
+        let mut values = FormValues::default();
+        values.insert("price", "0.10");
+        values.insert("status", "active");
+        let bound = bind_model(SubmitMode::Create, &fields, &values, &[]).unwrap();
+        assert_eq!(bound[0].value, BoundValue::Text("0.10".to_owned()));
+        assert_eq!(bound[1].value, BoundValue::Text("active".to_owned()));
+        values.insert("price", "0.001");
+        values.insert("status", "nope");
+        let errors = bind_model(SubmitMode::Create, &fields, &values, &[]).unwrap_err();
+        assert_eq!(errors.for_field("price"), Some("validation.decimal"));
+        assert_eq!(errors.for_field("status"), Some("validation.choice"));
+    }
+
+    #[test]
     fn postal_code_uses_its_own_code() {
         let mut values = FormValues::default();
         values.insert("postal_code", "ABCDE");
@@ -1246,6 +1363,9 @@ mod tests {
             foreign_table: None,
             foreign_column: None,
             on_delete: None,
+            precision: 0,
+            scale: 0,
+            choices: &[],
         }
     }
 

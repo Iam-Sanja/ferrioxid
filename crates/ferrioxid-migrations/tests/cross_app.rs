@@ -31,6 +31,9 @@ fn column(name: &str, primary_key: bool) -> ColumnSnapshot {
         primary_key,
         nullable: false,
         default: None,
+        precision: None,
+        scale: None,
+        choices: Vec::new(),
     }
 }
 

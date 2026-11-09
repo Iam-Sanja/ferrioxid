@@ -32,7 +32,7 @@ pub trait ModelRepository: FerrioxidModel + Serialize + DeserializeOwned {
 
 ## Dialect and Types (Implemented)
 
-`DatabaseKind` is `Sqlite` or `Postgres`. `ColumnSpec` describes the name, `ColumnKind`, nullability, primary-key status and optional Boolean default. `ColumnKind` includes `Uuid`, `Text`, `BigInt`, `Boolean`, `Date`, `Time` and `DateTime`. SQLite stores all three temporal types as text; PostgreSQL uses `DATE`, `TIME` and `TIMESTAMPTZ`. The macro supplies this metadata, and `render_schema` uses it to build `CREATE TABLE IF NOT EXISTS`. See [date-time-types.md](date-time-types.md).
+`DatabaseKind` is `Sqlite` or `Postgres`. `ColumnSpec` describes the name, `ColumnKind`, nullability, primary-key status, optional Boolean default, decimal precision/scale and choice values. `ColumnKind` includes `Uuid`, `Text`, `BigInt`, `Boolean`, `Date`, `Time`, `DateTime`, `Decimal` and `Choice`. SQLite stores all three temporal types as text; PostgreSQL uses `DATE`, `TIME` and `TIMESTAMPTZ`. Decimal values are 16-byte order-preserving coefficients (`BLOB` / `BYTEA`), not `REAL` and not lexicographic text. Choice values are text plus a `CHECK` constraint. The macro supplies this metadata, and `render_schema` uses it to build `CREATE TABLE IF NOT EXISTS`. See [date-time-types.md](date-time-types.md) and [models.md](models.md).
 
 | Model type | PostgreSQL | SQLite | JSON-API |
 |---|---|---|---|
@@ -40,9 +40,11 @@ pub trait ModelRepository: FerrioxidModel + Serialize + DeserializeOwned {
 | `String` | `text` | `text` | String |
 | `i64` | `bigint` | `bigint` | Number |
 | `bool` | `bool`, Default `TRUE`/`FALSE` | `integer`, Default `1`/`0` | `true`/`false` |
+| `Decimal` | `bytea` coefficient | `blob` coefficient | Decimal string |
+| Choice enum | `text` and `CHECK` | `text` and `CHECK` | Stored value string |
 | `Option<T>` |Column without `NOT NULL`|Column without `NOT NULL`|Value or `null`|
 
-`Decimal` and JSON model columns are not supported. Date/time types and single-column foreign keys are supported as described above and in [relations.md](relations.md). SeaQuery determines exact SQL keyword spelling; the contract is the type mapping rather than a fixed DDL string.
+`i64` remains the minor-unit integer. Decimal filters and `ORDER BY` use the coefficient bytes, so `10` sorts after `9`. A JSON number is accepted only when `rust_decimal` can read its lexical token as an exact decimal. Details and the no-rounding rule are in [models.md](models.md).
 
 SeaQuery binds values using PostgreSQL `$1`, `$2` or SQLite `?` placeholders. Identifiers come only from validated macro attributes and are quoted. Inserts and updates use `RETURNING`, supported by sqlx’s bundled SQLite library. Rows are read column by column and deserialized into models. An empty PATCH reads the current row without updating it; a non-empty PATCH writes only changed columns.
 
@@ -167,6 +169,10 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 - There is no `SUM`, grouping, annotation or arbitrary SQL expression.
 - MySQL is rejected.
 - SQLite behavior is covered by `cargo test -p ferrioxid-db`. PostgreSQL SQL generation is asserted in the same crate. `postgres_filters_and_pages_runtime` is `#[ignore]` and runs only with `DATABASE_URL` and a disposable PostgreSQL database. A local workspace run does not mark that test as passed.
+
+## Fixtures
+
+`ferrioxid dumpdata` and `ferrioxid loaddata` read and write versioned JSON through the schema snapshot. Decimal values travel as strings and are stored as the same 16-byte coefficient used by model inserts. The default load inserts new primary keys and rolls back the whole file when any row conflicts. Details, the confirmed `--truncate` flag and the cycle limit are in [fixtures.md](fixtures.md).
 
 ## Not implemented (planned)
 

@@ -1,4 +1,6 @@
 //! Derive a typed repository and SQL schema from a Rust struct.
+mod choice;
+
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
 use syn::{
@@ -9,6 +11,14 @@ use syn::{
 #[proc_macro_derive(FerrioxidModel, attributes(ferrioxid, field, admin))]
 pub fn derive_model(input: TokenStream) -> TokenStream {
     match expand(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+#[proc_macro_derive(FerrioxidChoice, attributes(choice))]
+pub fn derive_choice(input: TokenStream) -> TokenStream {
+    match choice::expand(parse_macro_input!(input as DeriveInput)) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }
@@ -286,20 +296,16 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             return Err(syn::Error::new_spanned(ident, "invalid column name"));
         }
         let (type_name, nullable, value_ty) = field_type(&field.ty)?;
-        let column_kind = match type_name.as_str() {
-            "Uuid" => quote! { ::ferrioxid::core::ColumnKind::Uuid },
-            "String" => quote! { ::ferrioxid::core::ColumnKind::Text },
-            "i64" => quote! { ::ferrioxid::core::ColumnKind::BigInt },
-            "bool" => quote! { ::ferrioxid::core::ColumnKind::Boolean },
-            "NaiveDate" => quote! { ::ferrioxid::core::ColumnKind::Date },
-            "NaiveTime" => quote! { ::ferrioxid::core::ColumnKind::Time },
-            "DateTime" => quote! { ::ferrioxid::core::ColumnKind::DateTime },
-            _ => {
-                return Err(syn::Error::new_spanned(
-                    &field.ty,
-                    "supported types are Uuid, String, i64, bool, NaiveDate, NaiveTime, DateTime<Utc> and Option of those except a nullable id",
-                ))
-            }
+        let known_kind = match type_name.as_str() {
+            "Uuid" => Some(quote! { ::ferrioxid::core::ColumnKind::Uuid }),
+            "String" => Some(quote! { ::ferrioxid::core::ColumnKind::Text }),
+            "i64" => Some(quote! { ::ferrioxid::core::ColumnKind::BigInt }),
+            "bool" => Some(quote! { ::ferrioxid::core::ColumnKind::Boolean }),
+            "NaiveDate" => Some(quote! { ::ferrioxid::core::ColumnKind::Date }),
+            "NaiveTime" => Some(quote! { ::ferrioxid::core::ColumnKind::Time }),
+            "DateTime" => Some(quote! { ::ferrioxid::core::ColumnKind::DateTime }),
+            "Decimal" => Some(quote! { ::ferrioxid::core::ColumnKind::Decimal }),
+            _ => None,
         };
         let mut primary = false;
         let mut auto = false;
@@ -316,6 +322,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let mut foreign_key: Option<String> = None;
         let mut on_delete: Option<String> = None;
         let mut belongs_to: Option<String> = None;
+        let mut precision: Option<u8> = None;
+        let mut scale: Option<u8> = None;
+        let mut choice = false;
         for attr in &field.attrs {
             if !attr.path().is_ident("field") {
                 continue;
@@ -351,12 +360,81 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     managed = Some(meta.value()?.parse::<LitStr>()?.value());
                 } else if meta.path.is_ident("format") {
                     format = Some(meta.value()?.parse::<LitStr>()?.value());
+                } else if meta.path.is_ident("precision") {
+                    precision = Some(meta.value()?.parse::<LitInt>()?.base10_parse()?);
+                } else if meta.path.is_ident("scale") {
+                    scale = Some(meta.value()?.parse::<LitInt>()?.base10_parse()?);
+                } else if meta.path.is_ident("choice") {
+                    choice = true;
                 } else {
                     return Err(meta.error("unsupported field attribute"));
                 }
                 Ok(())
             })?;
         }
+        let (column_kind, decimal_precision, decimal_scale, is_choice) = if choice {
+            if known_kind.is_some() {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "choice is for an enum, not a built-in column type",
+                ));
+            }
+            if precision.is_some() || scale.is_some() {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "choice does not use precision or scale",
+                ));
+            }
+            (
+                quote! { ::ferrioxid::core::ColumnKind::Choice },
+                0_u8,
+                0_u8,
+                true,
+            )
+        } else if type_name == "Decimal" {
+            let Some(precision) = precision else {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "decimal fields require precision = 1..=28",
+                ));
+            };
+            let Some(scale) = scale else {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "decimal fields require scale <= precision",
+                ));
+            };
+            if !(1..=28).contains(&precision) || scale > precision {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "decimal precision must be 1..=28 and scale must be <= precision",
+                ));
+            }
+            (
+                quote! { ::ferrioxid::core::ColumnKind::Decimal },
+                precision,
+                scale,
+                false,
+            )
+        } else if let Some(kind) = known_kind {
+            if precision.is_some() || scale.is_some() {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "precision and scale belong on decimal fields",
+                ));
+            }
+            (kind, 0_u8, 0_u8, false)
+        } else {
+            return Err(syn::Error::new_spanned(
+                &field.ty,
+                "supported types are Uuid, String, i64, bool, Decimal, NaiveDate, NaiveTime, DateTime<Utc>, Option of those except a nullable id, or an enum marked #[field(choice)]",
+            ));
+        };
+        let choices_expr = if is_choice {
+            quote! { <#value_ty as ::ferrioxid::core::FerrioxidChoice>::VALUES }
+        } else {
+            quote! { &[] }
+        };
         let mut admin_list = false;
         let mut admin_search = false;
         let mut admin_sort = false;
@@ -722,9 +800,11 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 foreign_table: #foreign_table_token,
                 foreign_column: #foreign_column_token,
                 on_delete: #on_delete_token,
+                precision: #decimal_precision,
+                scale: #decimal_scale,
+                choices: #choices_expr,
             }
         });
-        let null_sql = null_value(&type_name);
         if primary {
             values.push(
                 quote! { ::ferrioxid::sea_orm::Value::from(::ferrioxid::uuid::Uuid::new_v4()) },
@@ -754,9 +834,17 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 #[serde(default)]
                 pub #ident: ::core::option::Option<#value_ty>
             });
+            let some_value = stored_sql(
+                quote!(value),
+                &type_name,
+                is_choice,
+                decimal_precision,
+                decimal_scale,
+            );
+            let null_sql = null_value(&type_name);
             values.push(quote! {
                 match payload.#ident {
-                    ::core::option::Option::Some(value) => ::ferrioxid::sea_orm::Value::from(value),
+                    ::core::option::Option::Some(value) => #some_value,
                     ::core::option::Option::None => #null_sql,
                 }
             });
@@ -765,7 +853,14 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 #de
                 pub #ident: #value_ty
             });
-            values.push(quote! { ::ferrioxid::sea_orm::Value::from(payload.#ident) });
+            let stored = stored_sql(
+                quote!(payload.#ident),
+                &type_name,
+                is_choice,
+                decimal_precision,
+                decimal_scale,
+            );
+            values.push(stored);
         }
         if type_name == "String" {
             push_string_checks(
@@ -812,6 +907,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             max_length,
             min,
             format: format.as_deref(),
+            choice: is_choice,
+            precision: decimal_precision,
+            scale: decimal_scale,
         }));
     }
     validate_groups(&name, &field_names, &unique_groups, "unique_together")?;
@@ -1653,6 +1751,32 @@ fn temporal_patch_attr(type_name: &str) -> proc_macro2::TokenStream {
     quote! { #[serde(deserialize_with = #path)] }
 }
 
+fn stored_sql(
+    expr: proc_macro2::TokenStream,
+    type_name: &str,
+    choice: bool,
+    precision: u8,
+    scale: u8,
+) -> proc_macro2::TokenStream {
+    if type_name == "Decimal" {
+        quote! {
+            ::ferrioxid::sea_orm::Value::Bytes(Some(::std::boxed::Box::new(
+                ::ferrioxid::core::encode_decimal(#expr, #precision, #scale)
+                    .map_err(|error| ::ferrioxid::core::FerrioxidError::Validation(error.message.into()))?
+                    .to_vec()
+            )))
+        }
+    } else if choice {
+        quote! {
+            ::ferrioxid::sea_orm::Value::String(Some(::std::boxed::Box::new(
+                ::ferrioxid::core::FerrioxidChoice::stored(#expr).to_owned()
+            )))
+        }
+    } else {
+        quote! { ::ferrioxid::sea_orm::Value::from(#expr) }
+    }
+}
+
 fn null_value(type_name: &str) -> proc_macro2::TokenStream {
     match type_name {
         "String" => quote! { ::ferrioxid::sea_orm::Value::String(None) },
@@ -1662,6 +1786,7 @@ fn null_value(type_name: &str) -> proc_macro2::TokenStream {
         "NaiveDate" => quote! { ::ferrioxid::sea_orm::Value::ChronoDate(None) },
         "NaiveTime" => quote! { ::ferrioxid::sea_orm::Value::ChronoTime(None) },
         "DateTime" => quote! { ::ferrioxid::sea_orm::Value::ChronoDateTimeUtc(None) },
+        "Decimal" => quote! { ::ferrioxid::sea_orm::Value::Bytes(None) },
         _ => quote! { ::ferrioxid::sea_orm::Value::String(None) },
     }
 }
@@ -1741,6 +1866,9 @@ struct PatchRules<'a> {
     max_length: Option<usize>,
     min: Option<i64>,
     format: Option<&'a str>,
+    choice: bool,
+    precision: u8,
+    scale: u8,
 }
 
 fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
@@ -1754,6 +1882,9 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
         max_length,
         min,
         format,
+        choice,
+        precision,
+        scale,
     } = rules;
     let mut value_checks = Vec::new();
     if type_name == "String" {
@@ -1795,13 +1926,14 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
             }
         }
     };
+    let stored = stored_sql(quote!(value), type_name, choice, precision, scale);
     quote! {
         match payload.#ident {
             ::ferrioxid::db::PatchField::Missing => {}
             #null_arm
             ::ferrioxid::db::PatchField::Value(value) => {
                 #(#value_checks)*
-                changes.push((#field_name, ::ferrioxid::sea_orm::Value::from(value)));
+                changes.push((#field_name, #stored));
             }
         };
     }

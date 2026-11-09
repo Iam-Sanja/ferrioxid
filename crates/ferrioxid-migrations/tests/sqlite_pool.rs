@@ -33,6 +33,9 @@ fn column(name: &str, logical_type: LogicalType, nullable: bool) -> ColumnSnapsh
         primary_key: false,
         nullable,
         default: None,
+        precision: None,
+        scale: None,
+        choices: Vec::new(),
     }
 }
 
@@ -47,6 +50,9 @@ fn schema() -> SchemaSnapshot {
                     primary_key: true,
                     nullable: false,
                     default: None,
+                    precision: None,
+                    scale: None,
+                    choices: Vec::new(),
                 },
                 column("name", LogicalType::String, false),
             ],
@@ -63,6 +69,9 @@ fn schema() -> SchemaSnapshot {
                     primary_key: true,
                     nullable: false,
                     default: None,
+                    precision: None,
+                    scale: None,
+                    choices: Vec::new(),
                 },
                 column("product_id", LogicalType::Uuid, false),
             ],

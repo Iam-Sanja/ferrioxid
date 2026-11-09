@@ -107,6 +107,9 @@ pub fn operation_migration_file() -> Result<MigrationFile, AuthError> {
         primary_key: false,
         nullable: true,
         default: None,
+        precision: None,
+        scale: None,
+        choices: Vec::new(),
     });
     to.validate()
         .map_err(|error| AuthError::Validation(error.to_string()))?;
@@ -460,6 +463,9 @@ fn column(
         primary_key,
         nullable,
         default,
+        precision: None,
+        scale: None,
+        choices: Vec::new(),
     }
 }
 

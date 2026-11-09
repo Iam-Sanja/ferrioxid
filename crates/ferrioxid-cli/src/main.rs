@@ -1,9 +1,11 @@
 //! Ferrioxid CLI. Migrations obtain the model registry through ferrioxid.toml.
 
 mod apps;
+mod data;
 mod develop;
 mod diagnose;
 mod jobs;
+mod manage;
 mod models;
 mod scaffold;
 mod text;
@@ -90,6 +92,51 @@ enum Command {
     Jobs {
         #[command(subcommand)]
         action: JobsCommand,
+    },
+    /// Writes selected database rows as a versioned JSON fixture.
+    Dumpdata {
+        /// Writes this table only. Dependencies are not added automatically.
+        #[arg(long)]
+        model: Option<String>,
+        /// Uses the schema of one declared layout-2 app.
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        schema_file: Option<PathBuf>,
+        #[arg(long)]
+        database_url: Option<String>,
+        /// Replaces this file. Standard output is used when the flag is absent.
+        #[arg(long)]
+        output: Option<PathBuf>,
+    },
+    /// Inserts a versioned JSON fixture. Existing rows are left unchanged.
+    Loaddata {
+        file: PathBuf,
+        /// Checks the file and references without writing.
+        #[arg(long)]
+        dry_run: bool,
+        /// Updates rows whose primary key already exists.
+        #[arg(long)]
+        upsert: bool,
+        /// Deletes the selected tables before inserting. Requires --yes.
+        #[arg(long)]
+        truncate: bool,
+        /// Confirms --truncate. Without it, truncate does not open a write.
+        #[arg(long)]
+        yes: bool,
+        #[arg(long)]
+        model: Option<String>,
+        #[arg(long)]
+        app: Option<String>,
+        #[arg(long)]
+        schema_file: Option<PathBuf>,
+        #[arg(long)]
+        database_url: Option<String>,
+    },
+    /// Runs a command compiled into this project's ferrioxid-manage binary.
+    Manage {
+        #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
+        args: Vec<String>,
     },
 }
 
@@ -465,6 +512,50 @@ fn main() -> ExitCode {
                 JobsCommand::Cancel { id, yes, .. } => jobs::cancel(url, id, yes),
             }
         }
+        Command::Dumpdata {
+            model,
+            app,
+            schema_file,
+            database_url,
+            output,
+        } => match data::dumpdata(model, app, schema_file, database_url, output) {
+            Ok(()) => ExitCode::SUCCESS,
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(error.code())
+            }
+        },
+        Command::Loaddata {
+            file,
+            dry_run,
+            upsert,
+            truncate,
+            yes,
+            model,
+            app,
+            schema_file,
+            database_url,
+        } => match data::loaddata(data::LoadOptions {
+            file,
+            dry_run,
+            upsert,
+            truncate,
+            yes,
+            model,
+            app,
+            schema_file,
+            database_url,
+        }) {
+            Ok(message) => {
+                println!("{message}");
+                ExitCode::SUCCESS
+            }
+            Err(error) => {
+                eprintln!("{error}");
+                ExitCode::from(error.code())
+            }
+        },
+        Command::Manage { args } => manage::manage(args),
     }
 }
 
@@ -672,7 +763,7 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
     Ok(())
 }
 
-fn optional_project() -> Result<Option<ferrioxid_migrations::ProjectConfig>, String> {
+pub(crate) fn optional_project() -> Result<Option<ferrioxid_migrations::ProjectConfig>, String> {
     let directory = std::env::current_dir().map_err(|error| error.to_string())?;
     match ferrioxid_migrations::discover_project(&directory) {
         Ok(project) => Ok(Some(project)),
@@ -681,7 +772,7 @@ fn optional_project() -> Result<Option<ferrioxid_migrations::ProjectConfig>, Str
     }
 }
 
-fn jobs_database_url(
+pub(crate) fn jobs_database_url(
     override_url: Option<String>,
     project: Option<&ferrioxid_migrations::ProjectConfig>,
 ) -> Result<String, String> {
@@ -793,7 +884,7 @@ fn resolve_directory(override_dir: Option<PathBuf>) -> Result<PathBuf, String> {
     Ok(project.migrations_dir)
 }
 
-fn resolve_app_schema(name: &str) -> Result<(PathBuf, SchemaSnapshot), String> {
+pub(crate) fn resolve_app_schema(name: &str) -> Result<(PathBuf, SchemaSnapshot), String> {
     apps::validate_app_name(name)?;
     let project = discover_project(&std::env::current_dir().map_err(|error| error.to_string())?)
         .map_err(|error| error.0)?;
@@ -833,7 +924,7 @@ fn resolve_app_schema(name: &str) -> Result<(PathBuf, SchemaSnapshot), String> {
     Ok((directory, app.schema))
 }
 
-fn resolve_schema(
+pub(crate) fn resolve_schema(
     schema_file: Option<PathBuf>,
     migrations_dir: Option<PathBuf>,
 ) -> Result<(PathBuf, SchemaSnapshot), String> {

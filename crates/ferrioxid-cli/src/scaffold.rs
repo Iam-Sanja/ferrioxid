@@ -34,6 +34,7 @@ pub fn new_project(
     })?;
     for directory in [
         "src/project",
+        "src/bin",
         "migrations",
         "tests",
         "templates/errors",
@@ -67,6 +68,14 @@ pub fn new_project(
         "pub mod apps;\npub mod project;\n",
     )?;
     write(&destination.join("src/main.rs"), &format!("#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {{\n    {package}::project::run().await\n}}\n"))?;
+    write(
+        &destination.join("src/bin/ferrioxid-manage.rs"),
+        &format!("#[tokio::main]\nasync fn main() {{\n    let code = {package}::project::management::execute().await;\n    std::process::exit(i32::from(code));\n}}\n"),
+    )?;
+    write(
+        &destination.join("src/project/management.rs"),
+        MANAGEMENT_SOURCE,
+    )?;
     write(&destination.join("src/apps.rs"), APPS_REGISTRY)?;
     write(
         &destination.join("src/project/mod.rs"),
@@ -460,6 +469,68 @@ async fn ping() -> axum::response::Response {
 }
 "#;
 
+const MANAGEMENT_SOURCE: &str = r#"use ferrioxid::async_trait::async_trait;
+use ferrioxid::management::{ArgSpec, CommandError, CommandSpec, Invocation, ManagementCommand, Registry};
+use ferrioxid::migrations::{discover_project, ProjectConfig};
+
+struct About;
+
+#[async_trait]
+impl ManagementCommand for About {
+    fn spec(&self) -> CommandSpec {
+        CommandSpec {
+            name: "about",
+            about: "Prints the project name. This command does not open the database.",
+            args: &[ArgSpec {
+                name: "name",
+                help: "Text to print instead of the project name.",
+                value: true,
+                required: false,
+            }],
+        }
+    }
+
+    async fn run(&self, invocation: &Invocation<'_>) -> Result<(), CommandError> {
+        let name = invocation
+            .options
+            .get("name")
+            .cloned()
+            .or_else(|| invocation.project.name.clone())
+            .unwrap_or_else(|| "ferrioxid".to_owned());
+        println!("{name}");
+        Ok(())
+    }
+}
+
+pub async fn execute_with(project: &ProjectConfig, args: &[String]) -> u8 {
+    let mut registry = Registry::new();
+    if let Err(error) = registry.register(About) {
+        eprintln!("{error}");
+        return 1;
+    }
+    registry.execute(project, args).await
+}
+
+pub async fn execute() -> u8 {
+    let directory = match std::env::current_dir() {
+        Ok(directory) => directory,
+        Err(error) => {
+            eprintln!("{error}");
+            return 1;
+        }
+    };
+    let project = match discover_project(&directory) {
+        Ok(project) => project,
+        Err(error) => {
+            eprintln!("{}", error.0);
+            return 2;
+        }
+    };
+    let args = std::env::args().skip(1).collect::<Vec<_>>();
+    execute_with(&project, &args).await
+}
+"#;
+
 fn project_source(template: Template) -> String {
     let admin = if matches!(template, Template::Fullstack) {
         r#"let admin = ferrioxid::admin::AdminRegistry::new().with_branding(ferrioxid::admin::AdminBranding {
@@ -472,7 +543,8 @@ fn project_source(template: Template) -> String {
         ""
     };
     format!(
-        r#"pub mod settings;
+        r#"pub mod management;
+pub mod settings;
 pub mod urls;
 
 pub async fn run() -> Result<(), Box<dyn std::error::Error>> {{
