@@ -2078,6 +2078,14 @@ async fn form_page(
         json!({
             "model_key": model_key,
             "existing": id.is_some(),
+            "delete_href": if let Some(record_id) = id {
+                permit(state.auth.as_ref().unwrap(), &user, model.meta(), "delete")
+                    .await
+                    .is_ok()
+                    .then(|| format!("/admin/models/{model_key}/{record_id}/delete"))
+            } else {
+                None
+            },
             "history_href": id.map(|value| history_href(model_key, &value.to_string())).unwrap_or_default(),
             "model_label": model.meta().label,
             "list_path": list_path,
