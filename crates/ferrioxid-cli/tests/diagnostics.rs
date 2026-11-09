@@ -75,8 +75,16 @@ fn cli_help_is_english_without_a_locale_override() {
         .expect("CLI help");
     assert!(result.status.success());
     let help = String::from_utf8_lossy(&result.stdout);
+    assert!(help.contains("Creates a project or an app"), "{help}");
+    assert!(help.contains("project") && help.contains("app"), "{help}");
+    let result = ferrioxid(&directory)
+        .args(["new", "project", "--help"])
+        .output()
+        .unwrap();
+    assert!(result.status.success());
+    let help = String::from_utf8_lossy(&result.stdout);
     assert!(
-        help.contains("Creates a standalone Ferrioxid project"),
+        help.contains("--apps-dir") && help.contains("--template"),
         "{help}"
     );
     assert!(!help.contains("Erzeugt"), "{help}");

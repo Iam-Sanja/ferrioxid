@@ -25,12 +25,14 @@ Create a standalone project outside the framework workspace. Start in the Ferrio
 cargo install --path crates/ferrioxid-cli
 $ferrioxidRepo = (Get-Location).Path
 Set-Location ..
-ferrioxid new demo --template fullstack --ferrioxid-path $ferrioxidRepo
+ferrioxid new project demo --template fullstack --ferrioxid-path $ferrioxidRepo
 Set-Location demo
 ferrioxid migrate up
 ferrioxid admin create-user --email admin@example.com --staff --superuser
 ferrioxid dev
 ```
+
+The generated project has no business models or product tables. Add an app with `ferrioxid new app produkte`. See the [project/app guide](docs/project-generator.md).
 
 The generated project is a sibling of the framework repository, so Cargo does not treat it as an unlisted workspace member. The CLI prompts for a password. `FERRIOXID_PASSWORD` is an optional automation input with no default value.
 
