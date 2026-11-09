@@ -253,7 +253,7 @@ pub fn load_schema_from_command(
     let stdout = String::from_utf8(output.stdout).map_err(|_| {
         MigrationError::new("The model registry did not produce a UTF-8 schema.".to_owned())
     })?;
-    SchemaSnapshot::from_json(stdout.trim())
+    SchemaSnapshot::from_model_json(stdout.trim())
 }
 
 fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {

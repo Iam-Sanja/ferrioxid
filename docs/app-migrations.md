@@ -14,7 +14,7 @@ Two apps can both have a file `0001_initial.json`. The history IDs `shop:0001_in
 
 ## Order
 
-`depends_on` lists other app names. `package_order` sorts apps topologically, ordering ready apps by name. Cycles, missing dependencies, self-references and duplicate names fail before any migration is applied.
+`depends_on` lists other app names. `package_order` sorts apps topologically, ordering ready apps by name. Cycles, missing dependencies, self-references and duplicate names fail before any migration is applied. The same order is used when `migrate make --app` loads every installed app schema and resolves foreign keys. A foreign key may target a table owned by an app named in the child's direct `depends_on`. The generated snapshot records that dependency and the referenced tables as external catalog data; those tables are not created again by the child migration. SQLite and PostgreSQL still receive a real `REFERENCES` constraint and the model's `ON DELETE` action. Removing a required dependency, naming an unknown target, or declaring the same table in two apps produces an error and does not rewrite an applied file. A dependency change without a table change does not by itself write a new migration. The next real migration stores the current catalog, while `migrate up` rechecks the live `depends_on` graph before applying anything.
 
 `ferrioxid migrate up` applies auth migrations first, then job migrations, then the legacy project directory, then packages declared in `[app.<name>]`. Repeating the command does not reapply migrations. A changed checksum is a conflict. At server startup, the registered migration packages must match the declarations; the CLI cannot verify Rust registration without running the application.
 

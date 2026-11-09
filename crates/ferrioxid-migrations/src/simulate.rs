@@ -13,7 +13,7 @@ pub fn apply_operations(
     for operation in operations {
         apply_one(&mut schema, operation)?;
     }
-    schema.validate()?;
+    schema.validate_owned()?;
     Ok(schema)
 }
 
@@ -48,6 +48,7 @@ fn apply_one(
             table,
             column,
             foreign_key,
+            backfill: _,
         } => {
             let target = table_mut(schema, table)?;
             if target

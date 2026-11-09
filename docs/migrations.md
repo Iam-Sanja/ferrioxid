@@ -85,7 +85,7 @@ The same schemas shall be considered as unchanged even if only the column order 
 |---|---|---|
 | New table | `create_table` | Safe |
 |New nullable column or `bool` with default| `add_column` | Safe |
-|New `NOT NULL` column without default| `add_column` | Blocked |
+|New `NOT NULL` column without default| `add_column` | Blocked unless `--backfill table.column:kind=value` supplies an explicit value. Otherwise add the column as nullable, fill the rows, then set `NOT NULL`. No value is invented. |
 |New primary key columns| `add_column` | Blocked |
 |Delete the table| `drop_table` |only with `--allow-destructive`|
 |Delete column, no primary key| `drop_column` |only with `--allow-destructive`|
@@ -100,8 +100,9 @@ The same schemas shall be considered as unchanged even if only the column order 
 | Remove unique index | `drop_unique_constraint` | Existing rows remain; future duplicates become possible. |
 | New index | `add_index` | Safe |
 | Remove index | `drop_index` | Safe |
-| Foreign key on a new column | `add_column` with `foreign_key` | Safe when the column is nullable or has a Boolean default. |
-| Add or remove a foreign key on an existing column, or change its deletion rule | `add_foreign_key`, `drop_foreign_key` | Blocked; no file is written |
+| Foreign key on a new column | `add_column` with `foreign_key` | Safe when the column is nullable, has a Boolean default, or an explicit backfill. |
+| Add a foreign key on an existing column | `add_foreign_key` | Executed after existing values are checked. SQLite rebuilds the table; PostgreSQL uses `ADD CONSTRAINT`. Invalid values roll the migration back. |
+| Remove a foreign key or change its delete rule | `drop_foreign_key` | Blocked; no file is written. |
 
 `migrate make` does not write a file when renaming is suspected. The message contains “not renaming” and refers to `rename-column` or `rename-table`.
 
@@ -189,7 +190,7 @@ Deletion risks (`drop_table`, `drop_column`) indicate `--allow-destructive` to t
 
 ## 8. SQLite
 
-SQLite is the tested backend. `connect` keeps a connection and sets `PRAGMA foreign_keys=ON`. Tests use temporary files. `PRAGMA foreign_keys` is not switched in a transaction. SQLite would ignore this change there.
+SQLite is the tested backend. `connect` keeps a connection and sets `PRAGMA foreign_keys=ON`. Tests use temporary files. `PRAGMA foreign_keys` is not switched inside a transaction, because SQLite would ignore that change. A table rebuild turns enforcement off and back on around its transaction on the same physical connection. That connection is not returned to the pool while enforcement is off; if it cannot be restored, it is closed. `PRAGMA foreign_key_check` must be empty before the history row is committed.
 
 `CREATE TABLE` including Foreign Keys, `CREATE UNIQUE INDEX`, `CREATE INDEX`, secure `ADD COLUMN` optionally with `REFERENCES`, `DROP INDEX`, `RENAME TABLE`, `RENAME COLUMN`, as well as `DROP TABLE` and `DROP COLUMN` only after express approval. Each migration runs in a transaction along with the history entry. A unique index that violates existing lines rolls back this transaction.
 
@@ -198,7 +199,7 @@ SQLite is the tested backend. `connect` keeps a connection and sets `PRAGMA fore
 SQLite implements `string` ↔ `i64` conversions and changes to nullability or Boolean defaults by rebuilding the table, since it cannot generally perform them with `ALTER COLUMN`. The sequence in `rebuild.rs` is:
 
 1. Check initial and target columns. Unsupported pairs, primary key changes and type changes without verified conversion are rejected.
-2. Check foreign keys, explicit indices, triggers and views of the table. If one of these is present, it is aborted before each DDL.
+2. A view that belongs to the table aborts the rebuild before DDL. Indexes and unique constraints are recreated from the target snapshot. Trigger SQL is read from `sqlite_master` and executed again after the rename. The runner suspends foreign-key enforcement on the connection that owns the transaction. `PRAGMA defer_foreign_keys = ON` covers the table swap, and `foreign_key_check` must be empty before commit.
 3. If restricted to `NOT NULL`, count the existing `NULL` values. If the number is greater than 0, it is aborted. No substitute value is used.
 4. Read and validate the affected column in Rust. Preserve `NULL`. Values must match the logical type; Booleans must be `0` or `1`. Converting `i64` to `string` uses decimal notation. Converting `string` to `i64` requires an exact round trip through `i64::to_string`, rejecting `01`, `+1`, `1.0`, `-0` and empty text. A successful SQL `CAST` alone is insufficient.
 5. Create `ferrioxid_rebuild_<tabelle>` with the target schema.
@@ -213,11 +214,11 @@ The remaining columns are not loaded into the process memory. The checked column
 
 ### Rollback
 
-In this transaction, SQLite can be fully rolled back: `CREATE TABLE`, `INSERT`, `DROP TABLE`, `ALTER TABLE ... RENAME` and the history entry. If one step fails, the transaction is rejected. The failed migration is not considered to be applied. `PRAGMA foreign_keys` is not changed. Changes outside this transaction, in particular an already established `ensure_history` in the normal `migrate up`, will remain. The baseline creates the history table only in the confirmation transaction.
+In this transaction, SQLite can be fully rolled back: `CREATE TABLE`, `INSERT`, `DROP TABLE`, `ALTER TABLE ... RENAME` and the history entry. If one step fails, the transaction is rejected. The failed migration is not considered to be applied. Foreign-key enforcement is restored even when the rebuild rolls back. Changes outside this transaction, in particular an already established `ensure_history` in the normal `migrate up`, will remain. The baseline creates the history table only in the confirmation transaction.
 
 ## 9. PostgreSQL
 
-The same list of operations is executed, but not through the SQLite rebuild. `CREATE TABLE`, `CREATE INDEX`, secure `ADD COLUMN`, `RENAME` and released deletions use the PostgreSQL dialect. A violating Unique Index or Foreign Key makes the transaction fail. `add_foreign_key` and `drop_foreign_key` also remain blocked here because the same migration file must be able to run on SQLite. A supported column change also checks the values in Rust and then executes `ALTER COLUMN`: type over `TYPE ... USING`, default over `SET DEFAULT` or `DROP DEFAULT`, nullity over `SET NOT NULL` or `DROP NOT NULL`. Unsupported changes are also rejected here.
+The same list of operations is executed, but not through the SQLite rebuild. `CREATE TABLE`, `CREATE INDEX`, secure `ADD COLUMN`, `RENAME` and released deletions use the PostgreSQL dialect. A violating Unique Index or Foreign Key makes the transaction fail. `add_foreign_key` adds a constraint after the same orphan check used on SQLite. `drop_foreign_key` stays blocked on both dialects. A required column with an explicit backfill is added nullable, updated with that literal, then set `NOT NULL`. A supported column change also checks the values in Rust and then executes `ALTER COLUMN`: type over `TYPE ... USING`, default over `SET DEFAULT` or `DROP DEFAULT`, nullity over `SET NOT NULL` or `DROP NOT NULL`. Unsupported changes are also rejected here.
 
 Baseline on PostgreSQL immediately breaks off and does not write a history. There is no silent partial takeover.
 

@@ -4,7 +4,7 @@ use crate::error::JobError;
 #[cfg(test)]
 use ferrioxid_migrations::{
     plan_change, seal, ColumnSnapshot, IndexSnapshot, LogicalType, MigrationFile, SchemaSnapshot,
-    TableSnapshot, UniqueConstraintSnapshot, FORMAT_VERSION,
+    TableSnapshot, UniqueConstraintSnapshot,
 };
 use sea_orm::DatabaseConnection;
 use std::path::PathBuf;
@@ -66,10 +66,7 @@ pub async fn table_ready(db: &DatabaseConnection) -> Result<bool, JobError> {
 
 #[cfg(test)]
 fn schema() -> Result<SchemaSnapshot, JobError> {
-    let snapshot = SchemaSnapshot {
-        format_version: FORMAT_VERSION,
-        tables: vec![jobs_table()],
-    };
+    let snapshot = SchemaSnapshot::from_tables(vec![jobs_table()]);
     snapshot
         .validate()
         .map_err(|error| JobError::message("job.migration", error.to_string()))?;

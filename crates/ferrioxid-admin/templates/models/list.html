@@ -109,7 +109,7 @@
 <tr data-record-href="{{ list_path }}/{{ row.id }}">
 {% if actions %}<td><label class="check"><input type="checkbox" name="ids" value="{{ row.id }}"><span class="sr-only">{{ i18n.select }}</span></label></td>{% endif %}
 {% for cell in row.cells %}
-<td class="{% if cell.lead %}is-lead{% endif %}{% if cell.uuid %} is-uuid{% endif %}">{% if cell.link %}<a href="{{ list_path }}/{{ row.id }}">{% endif %}{% if cell.relation %}<span>{{ cell.text }}</span> <span class="uuid" title="{{ cell.ref }}">{{ cell.short }}</span>{% elif cell.uuid %}<span class="uuid" title="{{ cell.text }}">{{ cell.short }}</span>{% else %}{{ cell.text }}{% endif %}{% if cell.link %}</a>{% endif %}</td>
+<td class="{% if cell.lead %}is-lead{% endif %}{% if cell.uuid %} is-uuid{% endif %}">{% if cell.relation %}{% if cell.href %}<a href="{{ cell.href }}">{{ cell.text }}</a>{% elif cell.link %}<a href="{{ list_path }}/{{ row.id }}">{{ cell.text }}</a>{% else %}{{ cell.text }}{% endif %} <span class="uuid" title="{{ cell.ref }}">{{ cell.short }}</span>{% elif cell.link %}<a href="{{ list_path }}/{{ row.id }}">{% if cell.uuid %}<span class="uuid" title="{{ cell.text }}">{{ cell.short }}</span>{% else %}{{ cell.text }}{% endif %}</a>{% elif cell.uuid %}<span class="uuid" title="{{ cell.text }}">{{ cell.short }}</span>{% else %}{{ cell.text }}{% endif %}</td>
 {% endfor %}
 <td>
 <details class="menu">

@@ -6,7 +6,7 @@ use ferrioxid_migrations::{
     apply_directory, baseline_database, history_exists, make_migration, migration_status,
     plan_change, reseal_migration, reseal_unapplied, save_migration, seal,
     write_explicit_migration, ColumnSnapshot, LogicalType, MakeOutcome, MigrationOperation,
-    SchemaSnapshot, TableSnapshot, FORMAT_VERSION,
+    SchemaSnapshot, TableSnapshot,
 };
 use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
 use std::path::{Path, PathBuf};
@@ -53,16 +53,13 @@ fn products(extra: Vec<ColumnSnapshot>) -> SchemaSnapshot {
         column("active", LogicalType::Bool, false, false, Some(true)),
     ];
     columns.extend(extra);
-    SchemaSnapshot {
-        format_version: FORMAT_VERSION,
-        tables: vec![TableSnapshot {
-            name: "products".to_owned(),
-            columns,
-            unique_constraints: Vec::new(),
-            indexes: Vec::new(),
-            foreign_keys: Vec::new(),
-        }],
-    }
+    SchemaSnapshot::from_tables(vec![TableSnapshot {
+        name: "products".to_owned(),
+        columns,
+        unique_constraints: Vec::new(),
+        indexes: Vec::new(),
+        foreign_keys: Vec::new(),
+    }])
 }
 
 async fn open_db(path: &Path) -> DatabaseConnection {

@@ -4,7 +4,7 @@
 <dl class="card">
 {% for field in fields %}
 <dt>{{ field.label }}{% if field.readonly %} <span class="hint">{{ i18n.readonly }}</span>{% endif %}</dt>
-<dd>{% if field.relation %}{{ field.value }} <span class="uuid" title="{{ field.ref }}">{{ field.short }}</span>{% else %}{{ field.value }}{% endif %}</dd>
+<dd>{% if field.relation %}{% if field.href %}<a href="{{ field.href }}">{{ field.value }}</a>{% else %}{{ field.value }}{% endif %} <span class="uuid" title="{{ field.ref }}">{{ field.short }}</span>{% else %}{{ field.value }}{% endif %}</dd>
 {% endfor %}
 </dl>
 <div class="actions section">
