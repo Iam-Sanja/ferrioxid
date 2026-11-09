@@ -269,19 +269,19 @@ fn attach_backfills(
 }
 
 pub fn backfill_matches(logical_type: LogicalType, value: &BackfillLiteral) -> bool {
-    match (logical_type, value) {
-        (LogicalType::Bool, BackfillLiteral::Bool(_)) => true,
-        (LogicalType::I64, BackfillLiteral::I64(_)) => true,
-        (
-            LogicalType::String
-            | LogicalType::Uuid
-            | LogicalType::Date
-            | LogicalType::Time
-            | LogicalType::DateTime,
-            BackfillLiteral::Text(_),
-        ) => true,
-        _ => false,
-    }
+    matches!(
+        (logical_type, value),
+        (LogicalType::Bool, BackfillLiteral::Bool(_))
+            | (LogicalType::I64, BackfillLiteral::I64(_))
+            | (
+                LogicalType::String
+                    | LogicalType::Uuid
+                    | LogicalType::Date
+                    | LogicalType::Time
+                    | LogicalType::DateTime,
+                BackfillLiteral::Text(_),
+            )
+    )
 }
 
 pub fn backfill_literal(

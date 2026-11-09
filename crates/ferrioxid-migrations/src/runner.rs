@@ -452,10 +452,11 @@ async fn apply_one(
                     "Could not restore foreign key enforcement after rebuilding: {error}"
                 ))
             });
-        if outcome.is_err() {
-            return outcome;
-        }
-        restored?;
+        return match (outcome, restored) {
+            (Err(migration), _) => Err(migration),
+            (Ok(_), Err(restore)) => Err(restore),
+            (Ok(()), Ok(_)) => Ok(()),
+        };
     }
     outcome
 }

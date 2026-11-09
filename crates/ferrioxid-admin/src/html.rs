@@ -5308,6 +5308,7 @@ fn choice_href(back: &str, field: &str, id: &str, draft: Option<&str>) -> String
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 async fn inline_sections(
     state: &AppState,
     registry: &AdminRegistry,
