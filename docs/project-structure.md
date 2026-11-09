@@ -1,57 +1,32 @@
 # Project structure
 
-[Overview](index.md) · Templates: [project-templates.md](project-templates.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · **Implemented file:** `crates/ferrioxid-cli/src/scaffold.rs`.
+[Overview](index.md) · [Generator](project-generator.md) · [Templates](project-templates.md)
 
-## Purpose
-
-`ferrioxid new` creates a project outside the Ferrioxid repository. The Cargo version of dependency remains that of the workspace. The template version in the manifest is `0.24`. `ferrioxid generate app` then supplements `src/apps/<name>/`, described in [create-app.md](create-app.md). The generator of new projects does not write this directory.
-
-## Fullstack
+New layout-2 projects separate global configuration from business apps:
 
 ```text
-meinprojekt/
-├── Cargo.toml
-├── ferrioxid.toml
-├── .gitignore
-├── .env.example
-├── README.md
-├── .ferrioxid/project.json
-├── src/main.rs
-├── src/lib.rs
-├── src/settings.rs
-├── src/urls.rs
-├── src/views/mod.rs
-├── src/views/home.rs
-├── src/models/mod.rs
-├── src/models/product.rs
-├── templates/base.html
-├── templates/index.html
-├── templates/home.html
-├── templates/errors/404.html
-├── templates/errors/500.html
-├── static/css/app.css
-├── static/js/app.js
-├── media/.gitkeep
-├── migrations/0001_initial.json
-└── tests/api.rs
+Shop/
+  Cargo.toml                     # Rust package shop; directory/display name Shop
+  ferrioxid.toml                 # global configuration and app declarations
+  .ferrioxid/project.json        # generation manifest, no secrets
+  .env.example
+  src/main.rs                    # thin entry point
+  src/lib.rs
+  src/apps.rs                    # explicit modules, installation and schema selection
+  src/project/mod.rs             # startup
+  src/project/settings.rs
+  src/project/urls.rs             # global named routes
+  migrations/.gitkeep            # no business migration
+  templates/base.html
+  templates/index.html
+  templates/errors/{404,500}.html
+  static/{css,js}/
+  media/.gitkeep
+  tests/project.rs
 ```
 
-`main.rs` calls `settings::load`, obtains `bind_address`, and adds `.with_settings` and `.urls(urls::routes()?)?` to the existing admin, auth and contact setup. `/` remains the built-in homepage. The named route `site.home` uses `/home` and renders `templates/home.html`.
+`ferrioxid new app produkte` adds `apps/produkte/` by default or `produkte/` with `project.apps_dir = "."`. Each is a module in the same Cargo package, connected by `#[path = "../apps/produkte/mod.rs"]` or `#[path = "../produkte/mod.rs"]` in `src/apps.rs`. Cargo does not discover arbitrary directories. The generator inserts registration lines only at designated markers and appends the matching TOML app declaration.
 
-## API
+Apps contain `mod.rs`, `models/mod.rs`, `urls.rs`, `views.rs`, `admin.rs`, `migrations/.gitkeep`, `templates/produkte/index.html` and `static/produkte/produkte.css`. With `--templates shared` the initial HTML instead lives in project `templates/produkte/`. No app model or migration is created until requested.
 
-The API template includes models, migrations, static files and homepage templates. It does not register admin or authentication routes and has no `src/views/`. `src/urls.rs` registers `api.ping` at `/api/v1/ping`, returning JSON `{"ok": true}`.
-
-The HTML files remain because `templates.enabled` is true in both templates and the existing homepage expects them. An API template without any HTML file is not the generated state.
-
-## Explicit exclusions
-
-There is no second settings module besides `settings.rs`. This module only calls `Settings::discover`. There is no additional example table besides `products`. Contact remains a function in `main.rs`, not its own view file.
-
-## Legacy
-
-A project whose `main.rs` uses `discover_project`, `App::new`, `register` and `merge` does not need to rewrite this file. `ferrioxid.toml` without `[custom]` remains valid. Existing migrations are not changed. `admin-ui` remains an accepted feature.
-
-`ferrioxid upgrade` does not replace a custom file. If the template version is not on `0.24`, the plan reports `project.template.outdated` and leaves the files. A modified file kept in the manifest remains `project.file.modified`. The adjustment to `src/settings.rs` and `src/urls.rs` is manual if an old project wants to adopt it.
-
-The `D:\04_Projekte_Arbeit\Projekte\testprojekt` directory is not newly created and not changed by this template. Tests create their own temporary copies.
+`Cargo.lock` appears on the first Cargo build. Existing layout-1 projects retain their files and root-model generation. See [manual migration](project-generator.md#migration-from-old-clilayouts).

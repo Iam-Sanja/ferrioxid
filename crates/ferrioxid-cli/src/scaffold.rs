@@ -1,87 +1,173 @@
-//! Generates a standalone Ferrioxid project outside the framework workspace.
+//! Generates empty standalone projects. Business models belong to explicitly created apps.
 
-use ferrioxid_migrations::{
-    manifest_json, plan_change, save_migration, seal, sha256_hex, ColumnSnapshot, LogicalType,
-    ProjectManifest, SchemaSnapshot, TableSnapshot, TrackedFile,
-};
+use ferrioxid_migrations::{manifest_json, sha256_hex, ProjectManifest, TrackedFile};
+use std::io::Write;
 use std::path::{Path, PathBuf};
 
 pub fn new_project(
     name: &str,
     template: &str,
+    apps_dir: &str,
     ferrioxid_path: Option<&Path>,
 ) -> Result<PathBuf, String> {
     validate_project_name(name)?;
+    if !matches!(apps_dir, "." | "apps") {
+        return Err("App placement must be . or apps.".to_owned());
+    }
     let template = parse_template(template)?;
     let ferrioxid = resolve_ferrioxid_path(ferrioxid_path)?;
     let destination = std::env::current_dir()
         .map_err(|error| error.to_string())?
         .join(name);
-    if destination.exists() {
-        return Err(format!(
-            "{} already exists. Ferrioxid does not overwrite existing directories.",
+    std::fs::create_dir(&destination).map_err(|error| {
+        format!(
+            "{} cannot be created: {error}. Existing directories are never overwritten.",
             destination.display()
-        ));
+        )
+    })?;
+    for directory in [
+        "src/project",
+        "migrations",
+        "tests",
+        "templates/errors",
+        "static/css",
+        "static/js",
+        "media",
+    ] {
+        std::fs::create_dir_all(destination.join(directory)).map_err(|error| error.to_string())?;
     }
-    std::fs::create_dir_all(destination.join("src/models")).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(destination.join("migrations")).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(destination.join("tests")).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(destination.join("templates/errors"))
-        .map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(destination.join("static/css")).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(destination.join("static/js")).map_err(|error| error.to_string())?;
-    std::fs::create_dir_all(destination.join("media")).map_err(|error| error.to_string())?;
-    let ferrioxid_display = cargo_path(&ferrioxid);
-    let features = match template {
-        Template::Api => "",
-        Template::Fullstack => ", features = [\"admin-ui\"]",
+    let package = crate_name(name);
+    let dependency =
+        serde_json::to_string(&cargo_path(&ferrioxid)).map_err(|error| error.to_string())?;
+    let features = if matches!(template, Template::Fullstack) {
+        ", features = [\"admin-ui\"]"
+    } else {
+        ""
     };
     write(
         &destination.join("Cargo.toml"),
-        &cargo_toml(name, &ferrioxid_display, features),
+        &cargo_toml(&package, &dependency, features),
     )?;
     write(
         &destination.join("ferrioxid.toml"),
-        &manifest(name, template),
+        &manifest(name, template, apps_dir),
     )?;
+    write(&destination.join(".gitignore"), "target/\n.env\n.env.*\n!.env.example\n.ferrioxid/csrf.key\n*.sqlite3\n*.sqlite3-*\nmedia/*\n!media/.gitkeep\n")?;
+    write(&destination.join(".env.example"), env_example())?;
+    write(&destination.join("README.md"), &readme(name))?;
     write(
-        &destination.join(".gitignore"),
-        "target/\n.env\n.env.*\n!.env.example\n.ferrioxid/csrf.key\n*.sqlite3\n*.sqlite3-journal\nmedia/*\n!media/.gitkeep\n",
+        &destination.join("src/lib.rs"),
+        "pub mod apps;\npub mod project;\n",
     )?;
+    write(&destination.join("src/main.rs"), &format!("#[tokio::main]\nasync fn main() -> Result<(), Box<dyn std::error::Error>> {{\n    {package}::project::run().await\n}}\n"))?;
+    write(&destination.join("src/apps.rs"), APPS_REGISTRY)?;
+    write(
+        &destination.join("src/project/mod.rs"),
+        &project_source(template),
+    )?;
+    write(&destination.join("src/project/settings.rs"), settings_rs())?;
+    write(&destination.join("src/project/urls.rs"), URLS_SOURCE)?;
+    write(&destination.join("migrations/.gitkeep"), "")?;
     write(
         &destination.join("static/css/app.css"),
-        "body { font-family: sans-serif; }\n",
+        "body { font-family: sans-serif; max-width: 60rem; margin: 2rem auto; padding: 1rem; }\n",
     )?;
     write(
         &destination.join("static/js/app.js"),
         "document.documentElement.dataset.ferrioxidStatic = \"ready\";\n",
     )?;
     write(&destination.join("media/.gitkeep"), "")?;
-    write(&destination.join(".env.example"), env_example())?;
-    write(&destination.join("README.md"), &readme(name, template))?;
-    write(&destination.join("src/lib.rs"), "pub mod models;\n")?;
-    write(
-        &destination.join("src/models/mod.rs"),
-        "pub mod product;\n// ferrioxid:models\n// ferrioxid:models:end\n",
-    )?;
-    write(
-        &destination.join("src/models/product.rs"),
-        &product_model(template),
-    )?;
-    write(&destination.join("src/main.rs"), &main_rs(name, template))?;
-    write(&destination.join("src/settings.rs"), settings_rs())?;
-    write(&destination.join("src/urls.rs"), &urls_rs(template))?;
-    if matches!(template, Template::Fullstack) {
-        std::fs::create_dir_all(destination.join("src/views"))
-            .map_err(|error| error.to_string())?;
-        write(&destination.join("src/views/mod.rs"), "pub mod home;\n")?;
-        write(&destination.join("src/views/home.rs"), home_view())?;
+    write(&destination.join("templates/base.html"), "<!doctype html>\n<html lang=\"{{ locale }}\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width, initial-scale=1\"><title>{{ app_name }}</title><link rel=\"stylesheet\" href=\"/static/css/app.css\"></head><body><header>{{ app_name }}</header><main>{% block content %}{% endblock %}</main></body></html>\n")?;
+    write(&destination.join("templates/index.html"), "{% extends \"base.html\" %}{% block content %}<h1>{{ project_name }}</h1><p>Your Ferrioxid project is running. Business apps are added explicitly.</p><p>Create an app with <code>ferrioxid new app &lt;name&gt;</code>.</p>{% if admin %}<p><a href=\"/admin\">Admin</a></p>{% endif %}{% endblock %}\n")?;
+    for status in [404, 500] {
+        write(&destination.join(format!("templates/errors/{status}.html")), &format!("{{% extends \"base.html\" %}}{{% block content %}}<h1>{status}</h1>{{% endblock %}}\n"))?;
     }
-    write(&destination.join("tests/api.rs"), &api_test(name))?;
-    write_templates(&destination, name, template)?;
-    write_initial_migration(&destination.join("migrations"))?;
+    write(&destination.join("tests/project.rs"), &format!("#[test]\nfn no_business_models_are_installed() {{\n    assert!({package}::apps::schema(None).unwrap().tables.is_empty());\n}}\n"))?;
     write_upgrade_manifest(&destination, template)?;
     Ok(destination)
+}
+
+pub(crate) fn crate_name(name: &str) -> String {
+    let characters: Vec<char> = name.chars().collect();
+    let mut output = String::new();
+    for (index, &character) in characters.iter().enumerate() {
+        if character.is_ascii_uppercase()
+            && index > 0
+            && (characters[index - 1].is_ascii_lowercase()
+                || characters[index - 1].is_ascii_digit()
+                || characters
+                    .get(index + 1)
+                    .is_some_and(char::is_ascii_lowercase)
+                    && characters[index - 1].is_ascii_uppercase())
+        {
+            output.push('_');
+        }
+        output.push(character.to_ascii_lowercase());
+    }
+    output
+}
+
+pub(crate) fn reserved_identifier(name: &str) -> bool {
+    matches!(
+        name,
+        "as" | "async"
+            | "await"
+            | "break"
+            | "const"
+            | "continue"
+            | "crate"
+            | "dyn"
+            | "else"
+            | "enum"
+            | "extern"
+            | "false"
+            | "fn"
+            | "for"
+            | "gen"
+            | "if"
+            | "impl"
+            | "in"
+            | "let"
+            | "loop"
+            | "match"
+            | "mod"
+            | "move"
+            | "mut"
+            | "pub"
+            | "ref"
+            | "return"
+            | "self"
+            | "static"
+            | "struct"
+            | "super"
+            | "trait"
+            | "true"
+            | "type"
+            | "unsafe"
+            | "use"
+            | "where"
+            | "while"
+            | "abstract"
+            | "become"
+            | "box"
+            | "do"
+            | "final"
+            | "macro"
+            | "override"
+            | "priv"
+            | "typeof"
+            | "unsized"
+            | "virtual"
+            | "yield"
+            | "try"
+            | "con"
+            | "prn"
+            | "aux"
+            | "nul"
+    ) || name
+        .strip_prefix("com")
+        .or_else(|| name.strip_prefix("lpt"))
+        .is_some_and(|suffix| matches!(suffix, "1" | "2" | "3" | "4" | "5" | "6" | "7" | "8" | "9"))
 }
 
 #[derive(Clone, Copy)]
@@ -112,21 +198,23 @@ pub fn validate_project_name(name: &str) -> Result<(), String> {
                 .to_owned(),
         );
     }
-    let reserved = matches!(
-        name.to_ascii_lowercase().as_str(),
-        "ferrioxid"
-            | "test"
-            | "main"
-            | "src"
-            | "migrations"
-            | "cargo"
-            | "con"
-            | "prn"
-            | "aux"
-            | "nul"
-            | "com1"
-            | "lpt1"
-    );
+    let reserved = reserved_identifier(&crate_name(name))
+        || matches!(
+            name.to_ascii_lowercase().as_str(),
+            "ferrioxid"
+                | "test"
+                | "main"
+                | "src"
+                | "project"
+                | "apps"
+                | "templates"
+                | "static"
+                | "media"
+                | "migrations"
+                | "cargo"
+                | "target"
+                | "tests"
+        );
     if reserved {
         return Err(format!("`{name}` is a reserved project name."));
     }
@@ -160,74 +248,61 @@ fn cargo_path(path: &Path) -> String {
 }
 
 fn write_upgrade_manifest(destination: &Path, template: Template) -> Result<(), String> {
-    let template_name = match template {
-        Template::Api => "api",
-        Template::Fullstack => "fullstack",
-    };
-    let mut relative = vec![
-        "Cargo.toml",
-        "ferrioxid.toml",
-        ".gitignore",
-        ".env.example",
-        "README.md",
-        "src/lib.rs",
-        "src/main.rs",
-        "src/settings.rs",
-        "src/urls.rs",
-        "src/models/mod.rs",
-        "src/models/product.rs",
-        "tests/api.rs",
-        "templates/base.html",
-        "templates/index.html",
-        "templates/errors/404.html",
-        "templates/errors/500.html",
-        "static/css/app.css",
-        "static/js/app.js",
-        "media/.gitkeep",
-        "migrations/0001_initial.json",
-    ];
-    if matches!(template, Template::Fullstack) {
-        relative.extend([
-            "src/views/mod.rs",
-            "src/views/home.rs",
-            "templates/home.html",
-        ]);
-    }
+    let mut pending = vec![destination.to_path_buf()];
     let mut files = Vec::new();
-    for path in relative {
-        let bytes = std::fs::read(destination.join(path))
-            .map_err(|error| format!("{path} is missing from the new project: {error}"))?;
-        files.push(TrackedFile {
-            path: path.to_owned(),
-            sha256: sha256_hex(&bytes),
-        });
+    while let Some(directory) = pending.pop() {
+        for entry in std::fs::read_dir(directory).map_err(|error| error.to_string())? {
+            let path = entry.map_err(|error| error.to_string())?.path();
+            if path.is_dir() {
+                pending.push(path);
+            } else {
+                let relative = path
+                    .strip_prefix(destination)
+                    .map_err(|error| error.to_string())?
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                let bytes = std::fs::read(&path).map_err(|error| error.to_string())?;
+                files.push(TrackedFile {
+                    path: relative,
+                    sha256: sha256_hex(&bytes),
+                });
+            }
+        }
     }
-    let json = manifest_json(&ProjectManifest::generated(template_name, files))
-        .map_err(|error| error.0)?;
-    std::fs::create_dir_all(destination.join(".ferrioxid")).map_err(|error| error.to_string())?;
-    std::fs::write(destination.join(".ferrioxid/project.json"), json)
-        .map_err(|error| error.to_string())
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    let json = manifest_json(&ProjectManifest::generated(
+        if matches!(template, Template::Api) {
+            "api"
+        } else {
+            "fullstack"
+        },
+        files,
+    ))
+    .map_err(|error| error.0)?;
+    std::fs::create_dir(destination.join(".ferrioxid")).map_err(|error| error.to_string())?;
+    write(&destination.join(".ferrioxid/project.json"), &json)
 }
 
-fn write(path: &Path, contents: &str) -> Result<(), String> {
-    if path.exists() {
-        return Err(format!(
-            "{} already exists and will not be overwritten.",
-            path.display()
-        ));
-    }
-    std::fs::write(path, contents).map_err(|error| error.to_string())
+pub(crate) fn write(path: &Path, contents: &str) -> Result<(), String> {
+    let mut file = std::fs::OpenOptions::new()
+        .write(true)
+        .create_new(true)
+        .open(path)
+        .map_err(|error| format!("{} will not be overwritten: {error}", path.display()))?;
+    file.write_all(contents.as_bytes())
+        .map_err(|error| error.to_string())
 }
 
 fn cargo_toml(name: &str, ferrioxid: &str, features: &str) -> String {
     format!(
         r#"[package]
 name = "{name}"
+default-run = "{name}"
 version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-ferrioxid = {{ path = "{ferrioxid}"{features} }}
+ferrioxid = {{ path = {ferrioxid}{features} }}
 axum = "0.8"
 serde = {{ version = "1", features = ["derive"] }}
 tokio = {{ version = "1", features = ["macros", "rt-multi-thread"] }}
@@ -237,9 +312,9 @@ tracing-subscriber = {{ version = "0.3", features = ["env-filter"] }}
     )
 }
 
-fn manifest(name: &str, template: Template) -> String {
+fn manifest(name: &str, template: Template, apps_dir: &str) -> String {
     let (template_name, admin, embedded, auth) = match template {
-        Template::Api => ("api", "false", "false", "false"),
+        Template::Api => ("api", "false", "false", "true"),
         Template::Fullstack => ("fullstack", "true", "true", "true"),
     };
     format!(
@@ -250,6 +325,8 @@ schema_command = "cargo run --quiet -- --print-schema"
 [project]
 name = "{name}"
 template = "{template_name}"
+layout_version = 2
+apps_dir = "{apps_dir}"
 default_locale = "de"
 fallback_locale = "en"
 
@@ -293,6 +370,9 @@ backend = "local"
 directory = "media"
 max_upload_size_mb = 10
 
+[jobs]
+enabled = true
+
 [mail]
 backend = "disabled"
 public_origin = "http://127.0.0.1:3000"
@@ -305,241 +385,6 @@ fn env_example() -> &'static str {
     "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRIOXID_CSRF_SECRET must contain 64 hexadecimal characters in production.\n# FERRIOXID_PASSWORD is read only when creating users non-interactively.\n# FERRIOXID_SMTP_PASSWORD must not be stored in ferrioxid.toml.\n# FERRIOXID_PUBLIC_ORIGIN sets the password reset URL, for example https://example.com.\n"
 }
 
-fn readme(name: &str, template: Template) -> String {
-    let frontend = match template {
-        Template::Api => "This API project does not require Node.js.\n",
-        Template::Fullstack => {
-            "The admin is embedded in the Rust binary. Node.js is not required.\n"
-        }
-    };
-    format!(
-        r#"# {name}
-
-SQLite is the local database. Docker and PostgreSQL are not required.
-
-```powershell
-ferrioxid migrate up
-ferrioxid doctor
-ferrioxid dev
-```
-
-{frontend}
-The server binds to `127.0.0.1` by default. The home page is available at `/`. Static files are stored in `static/` and served at `/static/`. `media/` is used for uploads and is not version-controlled. Create a user with `ferrioxid admin create-user --email name@example.com --staff --superuser`. The command prompts for a password. Templates are stored in `templates/` and use Tera. The contact form of a fullstack project is available at `/contact` and does not send email. `[mail] backend = "disabled"` also prevents email from being sent. Password reset is available at `/auth/password-reset` once a mail backend is enabled.
-"#
-    )
-}
-
-fn product_model(template: Template) -> String {
-    let attributes = match template {
-        Template::Api => "    table = \"products\",\n    api = \"/api/v1/products\",\n    allow_anonymous = true",
-        Template::Fullstack => {
-            "    table = \"products\",\n    api = \"/api/v1/products\",\n    allow_anonymous = true,\n    admin = true,\n    admin_label = \"Produkte\",\n    admin_permission = \"products\""
-        }
-    };
-    let name_admin = match template {
-        Template::Api => "",
-        Template::Fullstack => {
-            "#[admin(list_display, searchable, sortable, label = \"Name\")]\n    "
-        }
-    };
-    format!(
-        r#"use ferrioxid::prelude::*;
-use serde::{{Deserialize, Serialize}};
-
-#[derive(FerrioxidModel, Serialize, Deserialize)]
-#[ferrioxid(
-{attributes}
-)]
-pub struct Product {{
-    #[field(primary_key, auto)]
-    pub id: Uuid,
-
-    #[field(required, min_length = 1, max_length = 150)]
-    {name_admin}pub name: String,
-}}
-"#
-    )
-}
-
-fn main_rs(name: &str, template: Template) -> String {
-    let auth = match template {
-        Template::Api => String::new(),
-        Template::Fullstack => r#"
-    let mut auth_config = ferrioxid::auth::AuthConfig::from_env();
-    auth_config.apply_project_session(settings.session_hours, settings.idle_minutes);
-    auth_config.apply_bound_address(&address);
-    let auth = ferrioxid::auth::AuthService::new(db.clone(), auth_config);
-    let admin = ferrioxid::admin::AdminRegistry::new()
-        .with_branding(ferrioxid::admin::AdminBranding {
-            site_title: settings.site_title.clone(),
-            site_header: settings.site_header.clone(),
-            app_name: settings.app_name.clone(),
-            primary_color: settings.primary_color.clone(),
-            default_locale: settings.default_locale.clone(),
-            fallback_locale: settings.fallback_locale.clone(),
-            currency: settings.currency.clone(),
-        })
-        .add::<Product>()
-        // ferrioxid:admin
-        // ferrioxid:admin:end
-        ;
-"#
-        .to_owned(),
-    };
-    let modules = match template {
-        Template::Api => "mod settings;\nmod urls;\n",
-        Template::Fullstack => "mod settings;\nmod urls;\nmod views;\n",
-    };
-    let chain = match template {
-        Template::Api => ".with_settings(settings.clone())\n        .with_mail(ferrioxid::mail_for(&settings))\n        .urls(urls::routes()?)?\n        .register::<Product>()\n        // ferrioxid:registry\n        // ferrioxid:registry:end\n",
-        Template::Fullstack => ".with_settings(settings.clone())\n        .with_mail(ferrioxid::mail_for(&settings))\n        .with_auth(auth)\n        .with_admin(admin)\n        .urls(urls::routes()?)?\n        .merge(axum::Router::new().route(\"/contact\", axum::routing::get(show_contact).post(submit_contact)))\n        .register::<Product>()\n        // ferrioxid:registry\n        // ferrioxid:registry:end\n",
-    };
-    format!(
-        r#"{modules}use {name}::models::product::Product;
-use ferrioxid::core::FerrioxidModel;
-use ferrioxid::migrations::{{RegisteredModel, SchemaSnapshot}};
-// ferrioxid:uses
-// ferrioxid:uses:end
-
-fn registered_schema() -> Result<SchemaSnapshot, Box<dyn std::error::Error>> {{
-    Ok(SchemaSnapshot::from_registered(&[
-        RegisteredModel {{
-            table: Product::descriptor().table,
-            columns: Product::columns(),
-            constraints: Product::constraints(),
-        }},
-        // ferrioxid:schema
-        // ferrioxid:schema:end
-    ])?)
-}}
-
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {{
-    if std::env::args().any(|argument| argument == "--print-schema") {{
-        println!("{{}}", registered_schema()?.to_canonical_json()?);
-        return Ok(());
-    }}
-    let settings = settings::load()?;
-    tracing_subscriber::fmt().with_env_filter("info").init();
-    let url = settings.resolved_database_url();
-    let db = ferrioxid::db::connect(&url).await?;
-    let address = settings.bind_address()?;
-    if address.starts_with("0.0.0.0") {{
-        return Err("Ferrioxid does not bind new projects to 0.0.0.0.".into());
-    }}
-    {auth}
-    let app = ferrioxid::App::new(db)
-        {chain};
-    let listener = tokio::net::TcpListener::bind(&address).await?;
-    println!("Ferrioxid lauscht auf http://{{address}}");
-    let router = ferrioxid::pages::mount_pages(app.into_router(), &settings)?;
-    let router = ferrioxid::web::prepare(router, &settings);
-    axum::serve(
-        listener,
-        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
-    )
-    .await?;
-    Ok(())
-}}
-"#
-    ) + &match template {
-        Template::Api => String::new(),
-        Template::Fullstack => contact_handlers(),
-    }
-}
-
-fn contact_handlers() -> String {
-    r#"
-use ferrioxid::forms::FerrioxidForm;
-
-async fn show_contact(
-    axum::extract::State(state): axum::extract::State<ferrioxid::auth::AppState>,
-    headers: axum::http::HeaderMap,
-) -> axum::response::Html<String> {
-    let csrf = csrf_for(&state, &headers).await;
-    let form = ferrioxid::forms::render_form(
-        "/contact",
-        csrf.as_deref(),
-        &ferrioxid::forms::FormValues::default(),
-        &ferrioxid::forms::FormErrors::default(),
-        &ferrioxid::forms::contact_fields("de"),
-        "de",
-    );
-    axum::response::Html(ferrioxid::forms::render_page("Kontakt", &form))
-}
-
-async fn submit_contact(
-    axum::extract::State(state): axum::extract::State<ferrioxid::auth::AppState>,
-    headers: axum::http::HeaderMap,
-    body: axum::body::Bytes,
-) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    let values = match ferrioxid::forms::FormValues::parse_urlencoded(&String::from_utf8_lossy(&body)) {
-        Ok(values) => values,
-        Err(errors) => return axum::response::Html(contact_html(&state, &headers, &ferrioxid::forms::FormValues::default(), &errors).await).into_response(),
-    };
-    if let Some(auth) = state.auth.as_ref() {
-        if auth.csrf_from_request(&headers).await.is_ok()
-            && auth.authenticate_csrf(&headers, &axum::http::Method::POST, values.get("csrf_token").unwrap_or("")).await.is_err()
-        {
-            let mut errors = ferrioxid::forms::FormErrors::default();
-            errors.push("", "form.csrf");
-            return (axum::http::StatusCode::FORBIDDEN, axum::response::Html(contact_html(&state, &headers, &values, &errors).await)).into_response();
-        }
-    }
-    match ferrioxid::forms::ContactForm::from_form(&values) {
-        Ok(_form) => axum::response::Html(ferrioxid::forms::render_page("Kontakt", &format!("<p role=\"status\">{}</p>", ferrioxid::forms::message("de", "form.thanks")))).into_response(),
-        Err(errors) => (axum::http::StatusCode::UNPROCESSABLE_ENTITY, axum::response::Html(contact_html(&state, &headers, &values, &errors).await)).into_response(),
-    }
-}
-
-async fn csrf_for(state: &ferrioxid::auth::AppState, headers: &axum::http::HeaderMap) -> Option<String> {
-    match state.auth.as_ref() {
-        Some(auth) => auth.csrf_from_request(headers).await.ok(),
-        None => None,
-    }
-}
-
-async fn contact_html(state: &ferrioxid::auth::AppState, headers: &axum::http::HeaderMap, values: &ferrioxid::forms::FormValues, errors: &ferrioxid::forms::FormErrors) -> String {
-    let csrf = csrf_for(state, headers).await;
-    let form = ferrioxid::forms::render_form("/contact", csrf.as_deref(), values, errors, &ferrioxid::forms::contact_fields("de"), "de");
-    ferrioxid::forms::render_page("Kontakt", &form)
-}
-"#.to_owned()
-}
-
-fn write_templates(destination: &Path, name: &str, template: Template) -> Result<(), String> {
-    let admin_block = match template {
-        Template::Api => "",
-        Template::Fullstack => "{% if admin %}<p><a href=\"/admin\">{{ admin_link }}</a></p><p>{{ auth_hint }}</p>{% endif %}\n<p><a href=\"/?lang=de\">Deutsch</a> · <a href=\"/?lang=en\">English</a></p>\n",
-    };
-    write(
-        &destination.join("templates/base.html"),
-        "<!DOCTYPE html>\n<html lang=\"{{ locale }}\">\n<head>\n<meta charset=\"utf-8\">\n<meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">\n<title>{{ app_name }}</title>\n<link rel=\"stylesheet\" href=\"/static/css/app.css\">\n<style>\n:root { --ink: {{ primary_color }}; }\nbody { margin: 0; font-family: \"Segoe UI\", sans-serif; background: #f8fafc; color: #0f172a; }\nheader { background: var(--ink); color: white; padding: 1.25rem 1.5rem; }\nmain { max-width: 46rem; margin: 0 auto; padding: 1.5rem; }\n.panel { background: white; border-radius: 1rem; padding: 1.25rem; box-shadow: 0 1px 2px rgba(15,23,42,.08); }\na { color: #0f766e; }\n</style>\n</head>\n<body>\n<header><strong>{{ app_name }}</strong></header>\n<main>{% block content %}{% endblock %}</main>\n</body>\n</html>\n",
-    )?;
-    write(
-        &destination.join("templates/index.html"),
-        &format!(
-            "{{% extends \"base.html\" %}}{{% block content %}}\n<h1>{name}</h1>\n<p>{{{{ running }}}}</p>\n<section class=\"panel\">\n<p>{{{{ api_hint }}}}</p>\n{admin_block}<p>{{{{ setup_hint }}}}</p>\n<p>{{{{ status_label }}}}: SQLite</p>\n</section>\n{{% endblock %}}\n"
-        ),
-    )?;
-    write(
-        &destination.join("templates/errors/404.html"),
-        "{% extends \"base.html\" %}{% block content %}<h1>404</h1><p>{{ not_found }}</p>{% endblock %}\n",
-    )?;
-    write(
-        &destination.join("templates/errors/500.html"),
-        "{% extends \"base.html\" %}{% block content %}<h1>500</h1><p>{{ server_error }}</p>{% endblock %}\n",
-    )?;
-    if matches!(template, Template::Fullstack) {
-        write(
-            &destination.join("templates/home.html"),
-            "{% extends \"base.html\" %}{% block content %}<h1>{{ welcome }}</h1><p>{{ running }}</p>{% endblock %}\n",
-        )?;
-    }
-    Ok(())
-}
-
 fn settings_rs() -> &'static str {
     r#"pub fn load() -> Result<ferrioxid::migrations::ProjectConfig, Box<dyn std::error::Error>> {
     let settings = ferrioxid::migrations::Settings::discover(std::path::Path::new("."))?;
@@ -548,126 +393,125 @@ fn settings_rs() -> &'static str {
 "#
 }
 
-fn urls_rs(template: Template) -> String {
-    match template {
-        Template::Api => r#"use axum::routing::get;
+fn readme(name: &str) -> String {
+    format!(
+        r#"# {name}
+
+This is an empty project, not a business app. No domain models or app migrations are generated.
+
+```sh
+ferrioxid migrate up
+ferrioxid new app produkte
+ferrioxid generate model Item --app produkte
+ferrioxid migrate make initial --app produkte
+ferrioxid migrate up
+ferrioxid doctor
+ferrioxid dev
+```
+
+The Rust package name is normalized; the project directory/display name is preserved. Project startup, configuration and root URLs live in `src/project/`. `src/apps.rs` explicitly registers app modules, runtime apps and app schemas. `project.apps_dir` selects `apps` (default) or `.` for new apps. Each app remains a Rust module in this Cargo package, not a separate crate. Do not move an existing app by only changing this setting.
+
+App templates are loaded from `<app>/templates/<appname>/`. Files in project `templates/<appname>/` explicitly override matching local names and may also exist without a local counterpart. Use `new app <name> --templates shared` to create the initial shared template. App migrations are declared in `[app.<name>]` and registered in Rust; mismatches fail startup. Removing an app requires removing both declarations; it never deletes existing tables or data.
+
+Run `migrate up` before starting the server. It applies framework auth/job migrations and only your explicit app migrations. The default bind is loopback; no user or password is preconfigured. Create an administrator explicitly with `ferrioxid admin create-user --email name@example.com --staff --superuser`. Mail is disabled by default. `.env` and `.ferrioxid/csrf.key` stay outside Git.
+"#
+    )
+}
+
+pub(crate) const APPS_REGISTRY: &str = r#"// App files are explicit Rust modules, even when they live outside src/.
+// ferrioxid:app-modules:end
+
+pub fn install(app: ferrioxid::App) -> Result<ferrioxid::App, ferrioxid::apps::AppError> {
+    let app = app
+        // ferrioxid:apps:end
+        ;
+    app.seal()
+}
+
+pub fn schema(app: Option<&str>) -> Result<ferrioxid::migrations::SchemaSnapshot, Box<dyn std::error::Error>> {
+    match app {
+        None => Ok(ferrioxid::migrations::SchemaSnapshot::empty()),
+        // ferrioxid:app-schema:end
+        Some(name) => Err(format!("App `{name}` is not registered in src/apps.rs.").into()),
+    }
+}
+"#;
+
+const URLS_SOURCE: &str = r#"use axum::routing::get;
 use ferrioxid::urls::{UrlError, UrlSet};
 
 pub fn routes() -> Result<UrlSet, UrlError> {
-    UrlSet::new().route("api.ping", "/api/v1/ping", get(ping))
+    UrlSet::new().route("project.ping", "/api/v1/ping", get(ping))
 }
 
 async fn ping() -> axum::response::Response {
     ferrioxid::views::json(&ferrioxid::serde_json::json!({"ok": true}))
 }
-"#
-        .to_owned(),
-        Template::Fullstack => r#"use axum::routing::get;
-use ferrioxid::urls::{UrlError, UrlSet};
+"#;
 
-pub fn routes() -> Result<UrlSet, UrlError> {
-    UrlSet::new().route("site.home", "/home", get(crate::views::home::home))
-}
-"#
-        .to_owned(),
-    }
-}
-
-fn home_view() -> &'static str {
-    r#"use std::sync::Arc;
-
-use axum::extract::Extension;
-use ferrioxid::migrations::ProjectConfig;
-
-pub async fn home(
-    Extension(settings): Extension<Arc<ProjectConfig>>,
-) -> axum::response::Response {
-    let site = match ferrioxid::pages::Site::open(&settings.templates_directory()) {
-        Ok(site) => site,
-        Err(_) => {
-            return ferrioxid::views::fail(
-                &axum::http::HeaderMap::new(),
-                None,
-                axum::http::StatusCode::INTERNAL_SERVER_ERROR,
-                "view.template",
-                "Internal server error",
-                settings.debug,
-            )
-        }
+fn project_source(template: Template) -> String {
+    let admin = if matches!(template, Template::Fullstack) {
+        r#"let admin = ferrioxid::admin::AdminRegistry::new().with_branding(ferrioxid::admin::AdminBranding {
+        site_title: settings.site_title.clone(), site_header: settings.site_header.clone(),
+        app_name: settings.app_name.clone(), primary_color: settings.primary_color.clone(),
+        default_locale: settings.default_locale.clone(), fallback_locale: settings.fallback_locale.clone(), currency: settings.currency.clone(),
+    });
+    let app = app.with_admin(admin);"#
+    } else {
+        ""
     };
-    let context = ferrioxid::pages::home_context(&settings);
-    ferrioxid::views::render(&site, "home.html", &context, settings.debug)
-}
-"#
-}
-
-fn api_test(name: &str) -> String {
     format!(
-        r#"use {name}::models::product::Product;
-use ferrioxid::core::FerrioxidModel;
+        r#"pub mod settings;
+pub mod urls;
 
-#[test]
-fn product_table_is_explicit() {{
-    assert_eq!(Product::descriptor().table, "products");
-    assert_eq!(Product::descriptor().api_path, "/api/v1/products");
+pub async fn run() -> Result<(), Box<dyn std::error::Error>> {{
+    let arguments: Vec<String> = std::env::args().skip(1).collect();
+    match arguments.as_slice() {{
+        [flag] if flag == "--print-schema" => {{
+            println!("{{}}", crate::apps::schema(None)?.to_canonical_json()?);
+            return Ok(());
+        }},
+        [flag, selector, name] if flag == "--print-schema" && selector == "--app" => {{
+            println!("{{}}", crate::apps::schema(Some(name))?.to_canonical_json()?);
+            return Ok(());
+        }},
+        [] => {{}},
+        _ => return Err("Use --print-schema [--app <name>] or run without arguments to serve.".into()),
+    }}
+    let settings = settings::load()?;
+    tracing_subscriber::fmt().with_env_filter("info").init();
+    let db = ferrioxid::db::connect(&settings.resolved_database_url()).await?;
+    let address = settings.bind_address()?;
+    let mut auth_config = ferrioxid::auth::AuthConfig::from_env();
+    auth_config.apply_project_session(settings.session_hours, settings.idle_minutes);
+    auth_config.apply_bound_address(&address);
+    let auth = ferrioxid::auth::AuthService::new(db.clone(), auth_config);
+    let app = ferrioxid::App::new(db).with_settings(settings.clone()).with_auth(auth).with_mail(ferrioxid::mail_for(&settings)).urls(urls::routes()?)?;
+    {admin}
+    let app = crate::apps::install(app)?;
+    let router = ferrioxid::pages::mount_pages(app.try_into_router()?, &settings)?;
+    let router = ferrioxid::web::prepare(router, &settings);
+    let listener = tokio::net::TcpListener::bind(&address).await?;
+    println!("Ferrioxid lauscht auf http://{{address}}");
+    axum::serve(listener, router.into_make_service_with_connect_info::<std::net::SocketAddr>()).await?;
+    Ok(())
 }}
 "#
     )
 }
 
-fn write_initial_migration(directory: &Path) -> Result<(), String> {
-    let from = SchemaSnapshot {
-        format_version: 1,
-        tables: Vec::new(),
-    };
-    let to = SchemaSnapshot {
-        format_version: 1,
-        tables: vec![TableSnapshot {
-            name: "products".to_owned(),
-            columns: vec![
-                ColumnSnapshot {
-                    name: "id".to_owned(),
-                    logical_type: LogicalType::Uuid,
-                    primary_key: true,
-                    nullable: false,
-                    default: None,
-                },
-                ColumnSnapshot {
-                    name: "name".to_owned(),
-                    logical_type: LogicalType::String,
-                    primary_key: false,
-                    nullable: false,
-                    default: None,
-                },
-            ],
-            unique_constraints: Vec::new(),
-            indexes: Vec::new(),
-            foreign_keys: Vec::new(),
-        }],
-    };
-    let plan = plan_change(&from, &to).map_err(|error| error.to_string())?;
-    let file = seal(
-        "0001_initial".to_owned(),
-        "initial".to_owned(),
-        from,
-        to,
-        &plan,
-    )
-    .map_err(|error| error.to_string())?;
-    save_migration(directory, &file).map_err(|error| error.to_string())?;
-    Ok(())
-}
-
 #[cfg(test)]
 mod tests {
-    use super::validate_project_name;
+    use super::{crate_name, validate_project_name};
 
     #[test]
     fn rejects_unsafe_project_names() {
-        assert!(validate_project_name("").is_err());
-        assert!(validate_project_name("../secret").is_err());
-        assert!(validate_project_name("shop;rm").is_err());
-        assert!(validate_project_name("con").is_err());
-        assert!(validate_project_name("shop").is_ok());
+        for name in ["", "../secret", "shop;rm", "con", "com9", "type", "Self"] {
+            assert!(validate_project_name(name).is_err(), "{name}");
+        }
+        assert!(validate_project_name("Shop").is_ok());
+        assert_eq!(crate_name("Shop"), "shop");
+        assert_eq!(crate_name("MyShop"), "my_shop");
+        assert_eq!(crate_name("HTTPServer"), "http_server");
     }
 }

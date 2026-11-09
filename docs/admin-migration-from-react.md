@@ -28,7 +28,7 @@ The HTML login cannot send a session CSRF token before a session exists, so it u
 A fullstack project only needs Cargo:
 
 ```powershell
-ferrioxid new myproject --template fullstack --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
+ferrioxid new project myproject --template fullstack --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
 cd myproject
 ferrioxid migrate up
 ferrioxid admin create-user --staff --superuser

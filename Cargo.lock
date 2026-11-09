@@ -768,6 +768,7 @@ dependencies = [
  "notify",
  "rpassword",
  "sea-orm",
+ "serde_json",
  "tokio",
  "uuid",
 ]

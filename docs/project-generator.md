@@ -1,68 +1,58 @@
 # Project generator
 
-[Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/scaffold.rs`.
+[Overview](index.md) · [App generator](create-app.md) · [Structure](project-structure.md)
 
-## Purpose
-
-`ferrioxid new` creates an independent Ferrioxid project. It compiles outside the Ferrioxid workspace, uses SQLite and registers an example model. Fullstack projects transfer branding and currency to `AdminRegistry::with_branding` and do not need Node.js for the admin. The homepage contains fixed language links and a localized 500 text. Already created projects do not automatically take over. Since v0.12, the generator is `static/css/app.css`, `static/js/app.js` and `media/.gitkeep`. `media/*` is ignored. `ferrioxid.toml` contains `[static]` and `[storage]`. Fullstack projects have `/contact`. The API template does not mount the form.
-
-## Responsible files
-
-- `crates/ferrioxid-cli/src/scaffold.rs`
-- `crates/ferrioxid-cli/src/main.rs`
-- `crates/ferrioxid-cli/tests/generator.rs`
-
-## Public interface
+## Create an empty project
 
 ```powershell
-ferrioxid new myproject
-ferrioxid new myapi --template api
-ferrioxid new myshop --template fullstack --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
+ferrioxid new project Shop --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
+cd Shop
+ferrioxid migrate up
+ferrioxid dev
 ```
 
-The default template is `fullstack`. Until the crates are published, `--ferrioxid-path` points to the local Ferrioxid repository. Without that argument, the CLI uses the repository path recorded when `ferrioxid-cli` was compiled.
+The default is `--template fullstack`; `--template api` omits admin registration. Both create a runnable homepage, a named `project.ping` route at `/api/v1/ping`, authentication, static files and an empty media directory. Neither creates a business app, a `Product` model, business tables, seed data or an initial domain migration. `migrate up` applies the framework authentication and jobs migrations, then explicitly declared project/app migrations. It never resets a database. No user or default password is created.
 
-## Configuration
+The directory/display name remains `Shop`. Its Rust package/import name is `shop`; `MyShop` becomes `my_shop` and `HTTPServer` becomes `http_server`. Names must start with an ASCII letter, contain only ASCII letters, digits or underscores, and fit within 48 characters. Rust keywords, Windows device names and reserved project directories are rejected.
 
-Generated `ferrioxid.toml` files configure project, database, server, admin, auth, templates and branding. Templates include `base.html`, `index.html` and `errors/`. The database defaults to `sqlite://db.sqlite3?mode=rwc` and the server to `127.0.0.1:3000`. Secrets are not stored in this file. `.env.example` lists `DATABASE_URL`, `BIND_ADDRESS`, and commented guidance for `FERRIOXID_CSRF_SECRET` and `FERRIOXID_PASSWORD`.
+Crates are not published yet. `--ferrioxid-path` points to the framework checkout; without it the generator uses its build-time checkout. Create projects outside the framework workspace. Existing target directories are refused; newly generated files use exclusive creation.
 
-## Data flow
+## Project and app are different
 
-1. The project name is checked.
-2. The target directory must not already exist.
-3. Canonicalize the Ferrioxid path and require `crates/ferrioxid/Cargo.toml`.
-4. On Windows, the CLI removes the prefix `\\?\` in order for Cargo to accept the path as a dependency.
-5. Write the generated files without replacing existing files.
-6. Create `0001_initial.json` using the same sealing procedure as other migrations.
-
-## Error cases
-
-| Case | Behavior |
-|---|---|
-| Invalid or reserved project name, including path or shell characters | Reject without creating a project |
-| Target directory already exists | Reject; existing contents remain unchanged |
-| `--ferrioxid-path` does not contain the Ferrioxid crate | Abort generation |
-
-## Security rules
-
-No shell interpolation of the name. No `0.0.0.0`. No built-in password. No overwriting. The dependency path points to `crates/ferrioxid`, not individual internal files.
-
-## Example
+Global configuration lives in `ferrioxid.toml`, global startup/settings/URLs in `src/project/`, and explicit Rust app registration in `src/apps.rs`. Apps own models, routes, views, admin extensions, migrations, templates and static files. See [project-structure.md](project-structure.md).
 
 ```powershell
-ferrioxid new demo --template fullstack --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
-cd demo
+ferrioxid new app produkte
+ferrioxid generate model Customer --app produkte --timestamps
+ferrioxid migrate make initial --app produkte
 ferrioxid migrate up
 ferrioxid admin create-user --email admin@example.com --staff --superuser
 ferrioxid dev
 ```
 
-`create-user` prompts for a password without echoing it. For automation, set `FERRIOXID_PASSWORD` to a password of at least 12 characters. There is no default password.
+Model generation creates only the model requested by the developer. New models require authentication and their model permissions, including API-template models. Table/API names are explicit model attributes and are not automatically prefixed by app names. Choose distinct names across apps.
 
-## Tests
+## Placement and templates
 
-`crates/ferrioxid-cli/tests/generator.rs` generates API and fullstack projects in a temporary directory, rejects `../escape` and an existing target, and verifies `cargo check`.
+`--apps-dir apps` (default) creates `apps/<name>/`; `--apps-dir .` creates `<name>/` directly in the project root. The choice is stored as `project.apps_dir` and affects only subsequently generated apps. Each is a module in the same Cargo package, connected with an explicit `#[path]` declaration in `src/apps.rs`. Cargo does not discover arbitrary directories. Moving an app requires updating its Rust module path and its runtime/TOML migration and asset paths together.
 
-## Limitations
+`new app <name> --templates local` creates an app-local template; `--templates shared` creates `templates/<name>/index.html`. Shared templates override matching app-local names and may exist without a local counterpart. The namespace and reserved-name checks remain enforced. See [create-app.md](create-app.md).
 
-Versioned crates.io dependencies are planned; generated projects currently use a local path dependency. Cargo writes `Cargo.lock` during the first build, not during generation. After `ferrioxid generate model`, create the model's migration with `ferrioxid migrate make`.
+## Migration from old CLI/layouts
+
+| Old call | New call |
+|---|---|
+| `ferrioxid new Shop` | `ferrioxid new project Shop` |
+| `ferrioxid generate app produkte` | `ferrioxid new app produkte` |
+| `ferrioxid generate model Customer` in a new project | `ferrioxid generate model Customer --app produkte` |
+| `ferrioxid migrate make initial` for an app | `ferrioxid migrate make initial --app produkte` |
+
+The first two old calls fail with actionable guidance and do not create files. Existing manifests without `project.layout_version` remain layout 1. Their startup, model generation and migration IDs keep working. `new app` refuses layout 1 rather than silently relocating code.
+
+For an existing project, first commit/back up code and back up its database. Generate a layout-2 reference project in a separate, unused directory. Port startup, settings and root URLs manually; add `src/apps.rs` and explicitly install each migrated app. Set `project.layout_version = 2` only after adapting the source and declarations. Preserve existing model table names, API paths, project migration files, checksums and history IDs. Applied unqualified migrations stay in the project history; do not copy them into an app package or baseline/reset the database. Use `migrate status` and `check` before applying any new, reviewed migration. Compare behavior against the old project before deployment.
+
+The internal template version is `0.25`; the Cargo version remains `0.1.0`. `upgrade` does not convert layouts or replace project files. App/model generation intentionally changes registration files, so later manifest diagnostics can report their original hashes as modified; those warnings do not authorize replacement.
+
+## Validation
+
+`crates/ferrioxid-cli/tests/generator.rs` exercises both templates outside the workspace, Rust package normalization, both app placements, local/shared templates, names and duplicates, legacy-command rejection, SQLite system-only initialization, app migrations, protected model APIs, HTTP startup, development startup and release builds. Existing projects and databases are never automatically restructured.
