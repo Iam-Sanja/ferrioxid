@@ -1,0 +1,17 @@
+{% extends "base.html" %}
+{% block content %}
+<nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="/admin/directory/roles">{{ i18n.roles }}</a> / <span>{{ i18n.new_record }}</span></nav>
+<form class="card" method="post" action="/admin/directory/roles/new">
+<input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+<div class="field">
+<label for="role-name">{{ i18n.role }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
+<p class="hint" id="role-name-hint">{{ i18n.hint_role_name }}</p>
+<input id="role-name" name="name" required aria-describedby="role-name-hint" pattern="[A-Za-z0-9_.]+" autofocus>
+</div>
+<label class="check"><input type="checkbox" name="confirm" value="1" required> <span>{{ i18n.confirm_check }}</span></label>
+<div class="actions">
+<button type="submit">{{ i18n.save }}</button>
+<a class="button ghost" href="/admin/directory/roles">{{ i18n.cancel }}</a>
+</div>
+</form>
+{% endblock %}
