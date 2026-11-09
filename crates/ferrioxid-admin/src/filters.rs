@@ -216,5 +216,22 @@ fn typed(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
         ColumnKind::DateTime => ferrioxid_core::parse_datetime_utc(value)
             .map(DbValue::from)
             .map_err(|_| format!("filter {} must be a utc datetime", column.name)),
+        ColumnKind::Decimal => decimal_filter(column, value),
+        ColumnKind::Choice => choice_filter(column, value),
     }
+}
+
+fn decimal_filter(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
+    let parsed = ferrioxid_core::parse_decimal(value, column.precision, column.scale)
+        .map_err(|_| format!("filter {} must be a decimal", column.name))?;
+    let bytes = ferrioxid_core::encode_decimal(parsed, column.precision, column.scale)
+        .map_err(|_| format!("filter {} must be a decimal", column.name))?;
+    Ok(DbValue::Bytes(Some(Box::new(bytes.to_vec()))))
+}
+
+fn choice_filter(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
+    if !ferrioxid_core::choice_is_known(column.choices, value) {
+        return Err(format!("filter {} is not a known choice", column.name));
+    }
+    Ok(DbValue::from(value.to_owned()))
 }

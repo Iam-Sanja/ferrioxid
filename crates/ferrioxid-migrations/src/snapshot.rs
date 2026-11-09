@@ -19,6 +19,8 @@ pub enum LogicalType {
     Date,
     Time,
     DateTime,
+    Decimal,
+    Choice,
 }
 
 impl From<ColumnKind> for LogicalType {
@@ -31,6 +33,8 @@ impl From<ColumnKind> for LogicalType {
             ColumnKind::Date => Self::Date,
             ColumnKind::Time => Self::Time,
             ColumnKind::DateTime => Self::DateTime,
+            ColumnKind::Decimal => Self::Decimal,
+            ColumnKind::Choice => Self::Choice,
         }
     }
 }
@@ -45,6 +49,8 @@ impl From<LogicalType> for ColumnKind {
             LogicalType::Date => Self::Date,
             LogicalType::Time => Self::Time,
             LogicalType::DateTime => Self::DateTime,
+            LogicalType::Decimal => Self::Decimal,
+            LogicalType::Choice => Self::Choice,
         }
     }
 }
@@ -58,6 +64,23 @@ pub struct ColumnSnapshot {
     pub nullable: bool,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub default: Option<bool>,
+    /// Nur bei `decimal`. Fehlt in älteren Snapshots.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub precision: Option<u8>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub scale: Option<u8>,
+    /// Speicherwerte einer Choice-Spalte. Labels sind Anzeigetext und kein Schemaunterschied.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub choices: Vec<StoredChoice>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct StoredChoice {
+    pub value: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label_de: String,
+    #[serde(default, skip_serializing_if = "String::is_empty")]
+    pub label_en: String,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
@@ -288,6 +311,13 @@ fn columns_equivalent(left: &[ColumnSnapshot], right: &[ColumnSnapshot]) -> bool
                     && candidate.primary_key == column.primary_key
                     && candidate.nullable == column.nullable
                     && candidate.default == column.default
+                    && candidate.precision == column.precision
+                    && candidate.scale == column.scale
+                    && candidate
+                        .choices
+                        .iter()
+                        .map(|choice| choice.value.as_str())
+                        .eq(column.choices.iter().map(|choice| choice.value.as_str()))
             })
     })
 }
@@ -302,6 +332,17 @@ fn table_from_registered(model: &RegisteredModel) -> Result<TableSnapshot, Migra
             primary_key: column.primary_key,
             nullable: column.nullable,
             default: column.default_bool,
+            precision: (column.kind == ColumnKind::Decimal).then_some(column.precision),
+            scale: (column.kind == ColumnKind::Decimal).then_some(column.scale),
+            choices: column
+                .choices
+                .iter()
+                .map(|choice| StoredChoice {
+                    value: choice.value.to_owned(),
+                    label_de: choice.label_de.to_owned(),
+                    label_en: choice.label_en.to_owned(),
+                })
+                .collect(),
         })
         .collect::<Vec<_>>();
     let mut unique_constraints = Vec::new();
@@ -422,6 +463,44 @@ fn validate_table_shape<'a>(
         if column.default.is_some() && column.logical_type != LogicalType::Bool {
             return Err(MigrationError::new(format!(
                 "Defaults are supported only for boolean columns (`{}.{}`).",
+                table.name, column.name
+            )));
+        }
+        if column.logical_type == LogicalType::Decimal {
+            let precision = column.precision.unwrap_or(0);
+            let scale = column.scale.unwrap_or(0);
+            if ferrioxid_core::validate_decimal_meta(precision, scale).is_err() {
+                return Err(MigrationError::new(format!(
+                    "Decimal column `{}.{}` needs precision 1..=28 and scale <= precision.",
+                    table.name, column.name
+                )));
+            }
+        } else if column.precision.is_some() || column.scale.is_some() {
+            return Err(MigrationError::new(format!(
+                "Only decimal columns carry precision and scale (`{}.{}`).",
+                table.name, column.name
+            )));
+        }
+        if column.logical_type == LogicalType::Choice {
+            if column.choices.is_empty() {
+                return Err(MigrationError::new(format!(
+                    "Choice column `{}.{}` needs at least one stored value.",
+                    table.name, column.name
+                )));
+            }
+            let mut seen = Vec::new();
+            for choice in &column.choices {
+                if !is_choice_token(&choice.value) || seen.contains(&choice.value.as_str()) {
+                    return Err(MigrationError::new(format!(
+                        "Choice value `{}` on `{}.{}` must be a unique lowercase identifier.",
+                        choice.value, table.name, column.name
+                    )));
+                }
+                seen.push(choice.value.as_str());
+            }
+        } else if !column.choices.is_empty() {
+            return Err(MigrationError::new(format!(
+                "Only choice columns carry stored values (`{}.{}`).",
                 table.name, column.name
             )));
         }
@@ -648,6 +727,15 @@ pub fn is_identifier(value: &str) -> bool {
         && chars.all(|character| character.is_ascii_alphanumeric() || character == '_')
 }
 
+fn is_choice_token(value: &str) -> bool {
+    let mut chars = value.chars();
+    matches!(chars.next(), Some(character) if character.is_ascii_lowercase())
+        && chars.all(|character| {
+            character.is_ascii_lowercase() || character.is_ascii_digit() || character == '_'
+        })
+        && value.len() <= 64
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -664,6 +752,9 @@ mod tests {
             primary_key,
             nullable,
             default: None,
+            precision: None,
+            scale: None,
+            choices: Vec::new(),
         }
     }
 
@@ -679,6 +770,9 @@ mod tests {
                     primary_key: false,
                     nullable: false,
                     default: Some(true),
+                    precision: None,
+                    scale: None,
+                    choices: Vec::new(),
                 },
             ],
             unique_constraints: Vec::new(),
@@ -723,6 +817,9 @@ mod tests {
             foreign_table: None,
             foreign_column: None,
             on_delete: None,
+            precision: 0,
+            scale: 0,
+            choices: &[],
         };
         const LABEL: ColumnSpec = ColumnSpec {
             name: "label",
@@ -735,6 +832,9 @@ mod tests {
             foreign_table: None,
             foreign_column: None,
             on_delete: None,
+            precision: 0,
+            scale: 0,
+            choices: &[],
         };
         let left = SchemaSnapshot::from_registered(&[
             RegisteredModel {
@@ -820,6 +920,9 @@ mod tests {
             foreign_table: None,
             foreign_column: None,
             on_delete: None,
+            precision: 0,
+            scale: 0,
+            choices: &[],
         };
         const PRODUCT: ColumnSpec = ColumnSpec {
             name: "product_id",
@@ -832,6 +935,9 @@ mod tests {
             foreign_table: Some("products"),
             foreign_column: Some("id"),
             on_delete: Some(ferrioxid_core::ReferentialAction::Restrict),
+            precision: 0,
+            scale: 0,
+            choices: &[],
         };
         let owned = SchemaSnapshot::from_registered(&[RegisteredModel {
             table: "cart_items",

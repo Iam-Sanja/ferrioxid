@@ -29,6 +29,9 @@ fn column(name: &str, logical_type: LogicalType, nullable: bool) -> ColumnSnapsh
         primary_key: false,
         nullable,
         default: None,
+        precision: None,
+        scale: None,
+        choices: Vec::new(),
     }
 }
 
@@ -40,6 +43,9 @@ fn products(extra: Vec<ColumnSnapshot>, indexes: Vec<IndexSnapshot>) -> SchemaSn
             primary_key: true,
             nullable: false,
             default: None,
+            precision: None,
+            scale: None,
+            choices: Vec::new(),
         },
         column("name", LogicalType::String, false),
     ];
@@ -236,6 +242,9 @@ async fn invalid_foreign_key_rolls_back_and_a_valid_one_is_enforced() {
                 primary_key: true,
                 nullable: false,
                 default: None,
+                precision: None,
+                scale: None,
+                choices: Vec::new(),
             },
             column("product_id", LogicalType::Uuid, false),
         ],
@@ -324,6 +333,9 @@ async fn rebuild_preserves_indexes_triggers_and_incoming_keys_but_blocks_views()
                 primary_key: true,
                 nullable: false,
                 default: None,
+                precision: None,
+                scale: None,
+                choices: Vec::new(),
             },
             column("product_id", LogicalType::Uuid, false),
         ],

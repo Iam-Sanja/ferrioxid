@@ -20,7 +20,7 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | Public facade | Implemented | [facade.md](facade.md) | Re-exports, prelude and stability limits |
 | Core | Implemented and planned | [core.md](core.md) | Traits, metadata and shared errors |
 | Macros | Implemented and planned | [macros.md](macros.md) | Parsing, validation and code generation |
-| Database | Implemented and planned | [database.md](database.md) | Typed repositories, connections, composable queries and SQL |
+| Database | Implemented and planned | [database.md](database.md) | Typed repositories, decimal and choice columns, composable queries and SQL |
 | Django capability matrix | Inventory, not a completion claim | [django-capability-matrix.md](django-capability-matrix.md) | Evidence status for Django-shaped capabilities |
 | CLI | Implemented | [cli.md](cli.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generation, diagnostics, upgrades, builds and development server |
 | Example | Implemented | [example-myshop.md](example-myshop.md) | The myshop integration example |

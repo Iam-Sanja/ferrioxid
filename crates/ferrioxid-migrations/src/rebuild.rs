@@ -8,7 +8,7 @@
 //! and `PRAGMA foreign_key_check` still run. This module does not change `PRAGMA foreign_keys`.
 //! CREATE, INSERT, DROP, and RENAME run in the migration transaction and are rolled back on errors.
 
-use crate::diff::{alter_is_supported, backfill_literal, BackfillLiteral, MigrationOperation};
+use crate::diff::{alter_is_supported, backfill_literal_for, BackfillLiteral, MigrationOperation};
 use crate::error::MigrationError;
 use crate::snapshot::{
     is_identifier, ColumnSnapshot, ForeignKeySnapshot, LogicalType, OnDelete, SchemaSnapshot,
@@ -169,7 +169,11 @@ pub async fn apply_backfill_column(
                 .iter()
                 .map(|candidate| format!("\"{}\"", candidate.name))
                 .collect::<Vec<_>>();
-            selection.push(backfill_literal(DatabaseKind::Sqlite, backfill)?);
+            selection.push(backfill_literal_for(
+                DatabaseKind::Sqlite,
+                column,
+                backfill,
+            )?);
             reconstruct_sqlite(db, &target, &selection).await
         }
         DatabaseKind::Postgres => {
@@ -251,13 +255,17 @@ async fn reconstruct_sqlite(
     )
     .await?;
     let foreign_keys = foreign_key_clauses(target)?;
-    let create = render_table_bundle(
+    let mut create = render_table_bundle(
         DatabaseKind::Sqlite,
         &temporary,
         &physical_columns(&target.columns),
         &[],
         &foreign_keys,
         &[],
+    );
+    create[0] = ferrioxid_db::with_checks(
+        std::mem::take(&mut create[0]),
+        &choice_checks(&target.columns),
     );
     execute(db, DatabaseBackend::Sqlite, &create[0]).await?;
     execute(
@@ -391,7 +399,7 @@ async fn add_backfill_postgres(
         ),
     )
     .await?;
-    let literal = backfill_literal(DatabaseKind::Postgres, backfill)?;
+    let literal = backfill_literal_for(DatabaseKind::Postgres, column, backfill)?;
     execute(
         db,
         DatabaseBackend::Postgres,
@@ -607,15 +615,38 @@ async fn alter_postgres(
     to: &ColumnSnapshot,
 ) -> Result<(), MigrationError> {
     if from.logical_type != to.logical_type {
-        let sql_type = match to.logical_type {
+        if from.logical_type == LogicalType::String && to.logical_type == LogicalType::Choice {
+            let list = to
+                .choices
+                .iter()
+                .map(|choice| format!("'{}'", choice.value))
+                .collect::<Vec<_>>()
+                .join(", ");
+            execute(
+                db,
+                DatabaseBackend::Postgres,
+                &format!(
+                    "ALTER TABLE \"{table}\" ADD CONSTRAINT \"ck_{table}_{}\" CHECK (\"{}\" IN ({list}))",
+                    to.name, to.name
+                ),
+            )
+            .await?;
+        } else {
+            let sql_type = match to.logical_type {
             LogicalType::String | LogicalType::Uuid => "text",
             LogicalType::I64 => "bigint",
             LogicalType::Bool => "boolean",
             LogicalType::Date => "date",
             LogicalType::Time => "time",
             LogicalType::DateTime => "timestamptz",
+            LogicalType::Decimal | LogicalType::Choice => {
+                return Err(MigrationError::new(format!(
+                    "Changing `{}` to {:?} is not an automatic column rewrite. Add a new column and backfill it explicitly.",
+                    to.name, to.logical_type
+                )))
+            }
         };
-        execute(
+            execute(
             db,
             DatabaseBackend::Postgres,
             &format!(
@@ -624,6 +655,7 @@ async fn alter_postgres(
             ),
         )
         .await?;
+        }
     }
     if from.default != to.default {
         let statement = match to.default {
@@ -702,6 +734,16 @@ async fn validate_changed_column(
     }
     for (index, row) in rows.iter().enumerate() {
         let cell = read_cell(row, "value", from.logical_type)?;
+        if to.logical_type == LogicalType::Choice {
+            if let Cell::Text(text) = &cell {
+                if !to.choices.iter().any(|choice| choice.value == *text) {
+                    return Err(MigrationError::new(format!(
+                        "Row {index} in `{table}.{}` has `{text}`, which is not a stored choice. No rows were rewritten.",
+                        from.name
+                    )));
+                }
+            }
+        }
         let converted =
             convert_cell(cell, from.logical_type, to.logical_type).map_err(|error| {
                 MigrationError::new(format!(
@@ -719,6 +761,22 @@ async fn validate_changed_column(
     Ok(())
 }
 
+fn choice_checks(columns: &[crate::snapshot::ColumnSnapshot]) -> Vec<String> {
+    columns
+        .iter()
+        .filter(|column| column.logical_type == crate::snapshot::LogicalType::Choice)
+        .map(|column| {
+            let list = column
+                .choices
+                .iter()
+                .map(|choice| format!("'{}'", choice.value))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("CHECK (\"{}\" IN ({list}))", column.name)
+        })
+        .collect()
+}
+
 fn copy_expression(
     column: &ColumnSnapshot,
     from: &ColumnSnapshot,
@@ -727,12 +785,15 @@ fn copy_expression(
     if column.name != from.name || from.logical_type == to.logical_type {
         return Ok(format!("\"{}\"", column.name));
     }
+    if from.logical_type == LogicalType::String && to.logical_type == LogicalType::Choice {
+        return Ok(format!("\"{}\"", column.name));
+    }
     let sql_type = match to.logical_type {
         LogicalType::String | LogicalType::Date | LogicalType::Time | LogicalType::DateTime => {
             "TEXT"
         }
         LogicalType::I64 => "INTEGER",
-        LogicalType::Uuid | LogicalType::Bool => {
+        LogicalType::Uuid | LogicalType::Bool | LogicalType::Decimal | LogicalType::Choice => {
             return Err(MigrationError::new(format!(
                 "Changing `{}` from {:?} to {:?} is not supported.",
                 column.name, from.logical_type, to.logical_type
@@ -752,7 +813,8 @@ fn read_cell(
         | LogicalType::Uuid
         | LogicalType::Date
         | LogicalType::Time
-        | LogicalType::DateTime => match row.try_get::<Option<String>>("", name) {
+        | LogicalType::DateTime
+        | LogicalType::Choice => match row.try_get::<Option<String>>("", name) {
             Ok(Some(text)) => Ok(Cell::Text(text)),
             Ok(None) => Ok(Cell::Null),
             Err(error) => Err(MigrationError::new(format!(
@@ -773,6 +835,15 @@ fn read_cell(
                 "Could not read numeric value in `{name}`."
             )))
         }
+        LogicalType::Decimal => match row.try_get::<Option<Vec<u8>>>("", name) {
+            Ok(Some(bytes)) => Ok(Cell::Text(
+                bytes.iter().map(|byte| format!("{byte:02x}")).collect(),
+            )),
+            Ok(None) => Ok(Cell::Null),
+            Err(error) => Err(MigrationError::new(format!(
+                "Could not read decimal value in `{name}`: {error}"
+            ))),
+        },
     }
 }
 
@@ -792,7 +863,9 @@ fn convert_cell(value: Cell, from: LogicalType, to: LogicalType) -> Result<Cell,
                 | LogicalType::Uuid
                 | LogicalType::Date
                 | LogicalType::Time
-                | LogicalType::DateTime,
+                | LogicalType::DateTime
+                | LogicalType::Choice
+                | LogicalType::Decimal,
                 Cell::Text(text),
             ) => Ok(Cell::Text(text)),
             _ => Err("stored value does not match the source type".to_owned()),
@@ -805,6 +878,7 @@ fn convert_cell(value: Cell, from: LogicalType, to: LogicalType) -> Result<Cell,
         (LogicalType::String, LogicalType::I64, Cell::Text(text)) => {
             parse_canonical_i64(&text).map(Cell::Integer)
         }
+        (LogicalType::String, LogicalType::Choice, Cell::Text(text)) => Ok(Cell::Text(text)),
         _ => Err(format!(
             "keine verlustfreie Konvertierung von {from:?} nach {to:?}"
         )),

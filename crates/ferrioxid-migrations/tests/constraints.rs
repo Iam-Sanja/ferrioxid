@@ -42,6 +42,9 @@ fn column(
         primary_key,
         nullable,
         default: None,
+        precision: None,
+        scale: None,
+        choices: Vec::new(),
     }
 }
 

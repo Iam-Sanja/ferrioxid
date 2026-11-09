@@ -9,7 +9,7 @@ pub use ferrioxid_auth as auth;
 pub use ferrioxid_core as core;
 pub use ferrioxid_db as db;
 pub use ferrioxid_forms as forms;
-pub use ferrioxid_macros::{model_fields, FerrioxidModel};
+pub use ferrioxid_macros::{model_fields, FerrioxidChoice, FerrioxidModel};
 
 #[macro_export]
 macro_rules! with_timestamps {
@@ -57,6 +57,7 @@ pub fn mail_for(project: &ferrioxid_migrations::ProjectConfig) -> ferrioxid_mail
 
 pub mod prelude {
     pub use crate::chrono::{DateTime, NaiveDate, NaiveTime, Utc};
+    pub use crate::core::Decimal;
     pub use crate::uuid::Uuid;
     pub use crate::{App, FerrioxidModel};
 }

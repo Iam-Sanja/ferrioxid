@@ -241,6 +241,77 @@ pub fn optional_i64(
     required_i64(values, name, min, max).map(Some)
 }
 
+pub fn required_choice<'a>(
+    values: &FormValues,
+    column: &'a ferrioxid_core::ColumnSpec,
+) -> Result<&'a str, FieldFailure> {
+    let text = values.get(column.name).unwrap_or("").trim();
+    if let Some(choice) = column.choices.iter().find(|choice| choice.value == text) {
+        Ok(choice.value)
+    } else {
+        Err(FieldFailure {
+            field: column.name.to_owned(),
+            code: "validation.choice",
+        })
+    }
+}
+
+pub fn choice_options(
+    column: &ferrioxid_core::ColumnSpec,
+    locale: &str,
+) -> Vec<(&'static str, &'static str)> {
+    column
+        .choices
+        .iter()
+        .map(|choice| {
+            (
+                choice.value,
+                if locale == "de" {
+                    choice.label_de
+                } else {
+                    choice.label_en
+                },
+            )
+        })
+        .collect()
+}
+
+pub fn render_choice_select(
+    column: &ferrioxid_core::ColumnSpec,
+    locale: &str,
+    selected: &str,
+    required: bool,
+) -> String {
+    let mut html = format!(
+        "<select id=\"{name}\" name=\"{name}\"{required}>",
+        name = escape(column.name),
+        required = if required { " required" } else { "" }
+    );
+    for (value, label) in choice_options(column, locale) {
+        let mark = if value == selected { " selected" } else { "" };
+        html.push_str(&format!(
+            "<option value=\"{value}\"{mark}>{label}</option>",
+            value = escape(value),
+            label = escape(label),
+        ));
+    }
+    html.push_str("</select>");
+    html
+}
+
+pub fn required_decimal(
+    values: &FormValues,
+    name: &'static str,
+    precision: u8,
+    scale: u8,
+) -> Result<ferrioxid_core::Decimal, FieldFailure> {
+    let text = values.get(name).unwrap_or("").trim();
+    ferrioxid_core::parse_decimal(text, precision, scale).map_err(|_| FieldFailure {
+        field: name.to_owned(),
+        code: "validation.decimal",
+    })
+}
+
 pub fn required_bool(values: &FormValues, name: &'static str) -> Result<bool, FieldFailure> {
     match parse_bool(values.get(name).unwrap_or("").trim()) {
         Ok(value) => Ok(value),

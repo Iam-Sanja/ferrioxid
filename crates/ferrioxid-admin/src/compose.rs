@@ -540,6 +540,18 @@ fn typed(column: &ColumnSpec, text: &str) -> Result<Value, &'static str> {
             .or_else(|_| temporal::parse_datetime_utc(text))
             .map(|value| Value::String(temporal::format_datetime(value))),
         ColumnKind::Uuid | ColumnKind::Text => Ok(Value::String(text.to_owned())),
+        ColumnKind::Decimal => {
+            ferrioxid_core::format_decimal_text(text, column.precision, column.scale)
+                .map(Value::String)
+                .map_err(|_| "validation.inline_field")
+        }
+        ColumnKind::Choice => {
+            if ferrioxid_core::choice_is_known(column.choices, text) {
+                Ok(Value::String(text.to_owned()))
+            } else {
+                Err("validation.inline_field")
+            }
+        }
     }
 }
 

@@ -165,13 +165,13 @@ impl<'a> ActionContext<'a> {
                 "column is not declared",
             ));
         }
-        let allowed = self
-            .specs
-            .iter()
-            .any(|spec| spec.name == column && spec.kind == kind)
-            && self.meta.fields.iter().any(|field| {
-                field.name == column && !field.hidden && !field.sensitive && !field.readonly
-            });
+        let allowed = self.specs.iter().any(|spec| {
+            spec.name == column
+                && (spec.kind == kind
+                    || (kind == ColumnKind::Text && spec.kind == ColumnKind::Choice))
+        }) && self.meta.fields.iter().any(|field| {
+            field.name == column && !field.hidden && !field.sensitive && !field.readonly
+        });
         if !allowed {
             return Err(ActionError::new(
                 "extension.action",
@@ -461,6 +461,9 @@ mod tests {
             foreign_table: None,
             foreign_column: None,
             on_delete: None,
+            precision: 0,
+            scale: 0,
+            choices: &[],
         }];
         let fields: &'static [AdminFieldMeta] = Box::leak(Box::new([AdminFieldMeta {
             name: "status",

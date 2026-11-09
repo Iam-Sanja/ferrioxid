@@ -139,12 +139,27 @@ pub fn alter_is_supported(from: &ColumnSnapshot, to: &ColumnSnapshot) -> bool {
         return false;
     }
     if from.logical_type == to.logical_type {
+        if from.precision != to.precision
+            || from.scale != to.scale
+            || choice_values_changed(from, to)
+        {
+            return false;
+        }
         return from.nullable != to.nullable || from.default != to.default;
     }
     matches!(
         (from.logical_type, to.logical_type),
-        (LogicalType::String, LogicalType::I64) | (LogicalType::I64, LogicalType::String)
+        (LogicalType::String, LogicalType::I64)
+            | (LogicalType::I64, LogicalType::String)
+            | (LogicalType::String, LogicalType::Choice)
     )
+}
+
+fn choice_values_changed(from: &ColumnSnapshot, to: &ColumnSnapshot) -> bool {
+    from.choices
+        .iter()
+        .map(|choice| choice.value.as_str())
+        .ne(to.choices.iter().map(|choice| choice.value.as_str()))
 }
 
 pub fn plan_change(
@@ -278,7 +293,9 @@ pub fn backfill_matches(logical_type: LogicalType, value: &BackfillLiteral) -> b
                     | LogicalType::Uuid
                     | LogicalType::Date
                     | LogicalType::Time
-                    | LogicalType::DateTime,
+                    | LogicalType::DateTime
+                    | LogicalType::Decimal
+                    | LogicalType::Choice,
                 BackfillLiteral::Text(_),
             )
     )
@@ -304,6 +321,40 @@ pub fn backfill_literal(
             }
             Ok(format!("'{}'", text.replace('\'', "''")))
         }
+    }
+}
+
+pub fn backfill_literal_for(
+    kind: ferrioxid_core::DatabaseKind,
+    column: &crate::snapshot::ColumnSnapshot,
+    value: &BackfillLiteral,
+) -> Result<String, MigrationError> {
+    match (column.logical_type, value) {
+        (LogicalType::Decimal, BackfillLiteral::Text(text)) => {
+            let precision = column.precision.unwrap_or(0);
+            let scale = column.scale.unwrap_or(0);
+            ferrioxid_core::decimal_sql_literal(
+                matches!(kind, ferrioxid_core::DatabaseKind::Postgres),
+                text,
+                precision,
+                scale,
+            )
+            .map_err(|error| MigrationError::new(error.message.to_owned()))
+        }
+        (LogicalType::Choice, BackfillLiteral::Text(text)) => {
+            if !column
+                .choices
+                .iter()
+                .any(|choice| choice.value == text.as_str())
+            {
+                return Err(MigrationError::new(format!(
+                    "Backfill `{text}` is not a stored value of choice column `{}`.",
+                    column.name
+                )));
+            }
+            backfill_literal(kind, value)
+        }
+        _ => backfill_literal(kind, value),
     }
 }
 
@@ -559,6 +610,13 @@ fn same_column(left: &ColumnSnapshot, right: &ColumnSnapshot) -> bool {
         && left.primary_key == right.primary_key
         && left.nullable == right.nullable
         && left.default == right.default
+        && left.precision == right.precision
+        && left.scale == right.scale
+        && left
+            .choices
+            .iter()
+            .map(|choice| choice.value.as_str())
+            .eq(right.choices.iter().map(|choice| choice.value.as_str()))
 }
 
 fn risks_for(operations: &[MigrationOperation]) -> Vec<MigrationRisk> {
@@ -641,8 +699,17 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
     for operation in operations {
         match operation {
             MigrationOperation::AlterColumn { table, from, to } if !alter_is_supported(from, to) => {
+                let detail = if from.logical_type == to.logical_type
+                    && (from.precision != to.precision
+                        || from.scale != to.scale
+                        || choice_values_changed(from, to))
+                {
+                    "precision, scale, or stored choice values are not rewritten automatically. Add a new column and backfill it."
+                } else {
+                    "no verified lossless conversion exists."
+                };
                 reasons.push(format!(
-                    "Change to `{table}.{}` ({:?} -> {:?}, nullable {} -> {}, default {:?} -> {:?}) is blocked: no verified lossless conversion exists.",
+                    "Change to `{table}.{}` ({:?} -> {:?}, nullable {} -> {}, default {:?} -> {:?}) is blocked: {detail}",
                     from.name, from.logical_type, to.logical_type, from.nullable, to.nullable, from.default, to.default
                 ))
             }
@@ -836,6 +903,9 @@ mod tests {
             primary_key: false,
             nullable,
             default,
+            precision: None,
+            scale: None,
+            choices: Vec::new(),
         }
     }
 
@@ -846,6 +916,9 @@ mod tests {
             primary_key: true,
             nullable: false,
             default: None,
+            precision: None,
+            scale: None,
+            choices: Vec::new(),
         }
     }
 

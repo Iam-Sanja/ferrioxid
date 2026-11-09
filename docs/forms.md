@@ -37,6 +37,8 @@ HTML output is escaped. Unknown fields return `validation.unknown_field` instead
 
 Codes include `validation.required`, `validation.min_length`, `validation.max_length`, `validation.min_value`, `validation.max_value`, `validation.email`, `validation.url`, `validation.invalid_type`, `validation.uuid`, `validation.unknown_field`, `validation.mismatch` and `form.csrf`. `ContactForm` returns `validation.mismatch` when the name equals the local part of the email address. For unknown codes, `message` returns `missing message`.
 
+`required_choice`, `choice_options` and `render_choice_select` build a select from `ColumnSpec::choices`. `required_decimal` rejects values that do not fit the declared precision and scale. Labels follow `de` or any other locale as English. Unknown choices use `validation.choice` and bad decimals use `validation.decimal`. See [models.md](models.md).
+
 ## Example
 
 ```rust

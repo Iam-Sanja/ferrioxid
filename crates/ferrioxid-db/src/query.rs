@@ -503,15 +503,18 @@ fn compare_expr(column: &ColumnSpec, compare: &Compare) -> Result<SimpleExpr, Fe
         )));
     }
     let expr = Expr::col(Alias::new(column.name));
+    let bound = |value: &Bound| -> Result<Value, FerrioxidError> { bind_for_column(column, value) };
     Ok(match compare {
-        Compare::Eq(value) => expr.eq(bound_value(value)),
-        Compare::Ne(value) => expr.ne(bound_value(value)),
-        Compare::Gt(value) => expr.gt(bound_value(value)),
-        Compare::Gte(value) => expr.gte(bound_value(value)),
-        Compare::Lt(value) => expr.lt(bound_value(value)),
-        Compare::Lte(value) => expr.lte(bound_value(value)),
-        Compare::In(values) => expr.is_in(values.iter().map(bound_value)),
-        Compare::NotIn(values) => expr.is_not_in(values.iter().map(bound_value)),
+        Compare::Eq(value) => expr.eq(bound(value)?),
+        Compare::Ne(value) => expr.ne(bound(value)?),
+        Compare::Gt(value) => expr.gt(bound(value)?),
+        Compare::Gte(value) => expr.gte(bound(value)?),
+        Compare::Lt(value) => expr.lt(bound(value)?),
+        Compare::Lte(value) => expr.lte(bound(value)?),
+        Compare::In(values) => expr.is_in(values.iter().map(bound).collect::<Result<Vec<_>, _>>()?),
+        Compare::NotIn(values) => {
+            expr.is_not_in(values.iter().map(bound).collect::<Result<Vec<_>, _>>()?)
+        }
         Compare::IsNull => expr.is_null(),
         Compare::IsNotNull => expr.is_not_null(),
     })
@@ -523,11 +526,53 @@ fn value_matches(kind: ColumnKind, value: &Bound, inequality: bool) -> bool {
         (ColumnKind::Uuid, Bound::Uuid(_)) => !inequality,
         (ColumnKind::BigInt, Bound::I64(_)) => true,
         (
-            ColumnKind::Text | ColumnKind::Date | ColumnKind::Time | ColumnKind::DateTime,
+            ColumnKind::Text
+            | ColumnKind::Date
+            | ColumnKind::Time
+            | ColumnKind::DateTime
+            | ColumnKind::Choice,
             Bound::Text(_),
         ) => true,
+        (ColumnKind::Decimal, Bound::Text(_)) => true,
         _ => false,
     }
+}
+
+fn bind_for_column(column: &ColumnSpec, value: &Bound) -> Result<Value, FerrioxidError> {
+    if column.kind == ColumnKind::Decimal {
+        let Bound::Text(text) = value else {
+            return Err(FerrioxidError::Validation(format!(
+                "column {} does not accept this comparison",
+                column.name
+            )));
+        };
+        let bytes = ferrioxid_core::encode_decimal(
+            ferrioxid_core::parse_decimal(text, column.precision, column.scale).map_err(
+                |error| FerrioxidError::Validation(format!("{} {}", column.name, error.message)),
+            )?,
+            column.precision,
+            column.scale,
+        )
+        .map_err(|error| {
+            FerrioxidError::Validation(format!("{} {}", column.name, error.message))
+        })?;
+        return Ok(Value::Bytes(Some(Box::new(bytes.to_vec()))));
+    }
+    if column.kind == ColumnKind::Choice {
+        let Bound::Text(text) = value else {
+            return Err(FerrioxidError::Validation(format!(
+                "column {} does not accept this comparison",
+                column.name
+            )));
+        };
+        if !column.choices.is_empty() && !ferrioxid_core::choice_is_known(column.choices, text) {
+            return Err(FerrioxidError::Validation(format!(
+                "column {} does not accept {text}",
+                column.name
+            )));
+        }
+    }
+    Ok(bound_value(value))
 }
 
 fn bound_value(value: &Bound) -> Value {
@@ -799,6 +844,9 @@ mod tests {
             foreign_table: None,
             foreign_column: None,
             on_delete: None,
+            precision: 0,
+            scale: 0,
+            choices: &[],
         }
     }
 

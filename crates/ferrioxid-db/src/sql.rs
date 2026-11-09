@@ -48,7 +48,7 @@ impl<'a> From<&'a ColumnSpec> for PhysicalColumn<'a> {
 
 pub fn render_schema(kind: DatabaseKind, table: &str, columns: &[ColumnSpec]) -> String {
     let physical: Vec<PhysicalColumn<'_>> = columns.iter().map(PhysicalColumn::from).collect();
-    render_create_table(kind, table, &physical, true)
+    inject_choice_checks(render_create_table(kind, table, &physical, true), columns)
 }
 
 pub fn render_create_table(
@@ -242,6 +242,12 @@ fn column_definition(kind: DatabaseKind, column: &PhysicalColumn<'_>) -> ColumnD
             definition.timestamp_with_time_zone();
         }
         (DatabaseKind::Sqlite, ColumnKind::DateTime) => {
+            definition.text();
+        }
+        (_, ColumnKind::Decimal) => {
+            definition.blob();
+        }
+        (_, ColumnKind::Choice) => {
             definition.text();
         }
     }
@@ -442,10 +448,9 @@ pub async fn query_labels(
     }
     ensure_column(columns, "id")?;
     ensure_column(columns, label)?;
-    if columns
-        .iter()
-        .any(|column| column.name == label && column.kind != ColumnKind::Text)
-    {
+    if columns.iter().any(|column| {
+        column.name == label && !matches!(column.kind, ColumnKind::Text | ColumnKind::Choice)
+    }) {
         return Err(FerrioxidError::Validation(format!(
             "column {label} is not text"
         )));
@@ -862,10 +867,58 @@ pub(crate) fn row_to_json(
             ColumnKind::Date | ColumnKind::Time | ColumnKind::DateTime => {
                 json_temporal(row, column)?
             }
+            ColumnKind::Choice => json_text(row, column)?,
+            ColumnKind::Decimal => json_decimal(row, column)?,
         };
         object.insert(column.name.to_owned(), value);
     }
     Ok(Json::Object(object))
+}
+
+fn inject_choice_checks(sql: String, columns: &[ColumnSpec]) -> String {
+    let checks: Vec<String> = columns
+        .iter()
+        .filter(|column| column.kind == ColumnKind::Choice && !column.choices.is_empty())
+        .map(|column| {
+            let list = column
+                .choices
+                .iter()
+                .map(|choice| format!("'{}'", choice.value))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("CHECK (\"{}\" IN ({list}))", column.name)
+        })
+        .collect();
+    with_checks(sql, &checks)
+}
+
+pub fn with_checks(sql: String, checks: &[String]) -> String {
+    if checks.is_empty() {
+        return sql;
+    }
+    let Some((body, tail)) = sql.rsplit_once(')') else {
+        return sql;
+    };
+    format!("{body}, {}){tail}", checks.join(", "))
+}
+
+fn json_decimal(row: &QueryResult, column: &ColumnSpec) -> Result<Json, FerrioxidError> {
+    let value = row
+        .try_get::<Option<Vec<u8>>>("", column.name)
+        .map_err(FerrioxidError::database)?;
+    Ok(match value {
+        Some(bytes) => {
+            let decimal =
+                ferrioxid_core::decode_decimal(&bytes, column.scale).map_err(|error| {
+                    FerrioxidError::Validation(format!("{} {}", column.name, error.message))
+                })?;
+            let text = ferrioxid_core::format_decimal(decimal, column.scale).map_err(|error| {
+                FerrioxidError::Validation(format!("{} {}", column.name, error.message))
+            })?;
+            Json::String(text)
+        }
+        None => Json::Null,
+    })
 }
 
 fn json_text(row: &QueryResult, column: &ColumnSpec) -> Result<Json, FerrioxidError> {

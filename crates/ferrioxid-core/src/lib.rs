@@ -1,10 +1,18 @@
 //! Shared contracts, independent of HTTP and database implementations.
 
+pub mod choice;
+pub mod decimal;
 mod problem;
 pub mod temporal;
 mod validation;
 
+pub use choice::{choice_is_known, choice_label, ChoiceValue, FerrioxidChoice};
+pub use decimal::{
+    decimal_sql_literal, decode_decimal, encode_decimal, format_decimal, format_decimal_text,
+    parse_decimal, prepare_decimal, validate_decimal_meta, DecimalError,
+};
 pub use problem::problem_json;
+pub use rust_decimal::Decimal;
 pub use temporal::{
     hierarchy_bound, parse_date, parse_datetime_local, parse_datetime_utc, parse_time, DateBound,
 };
@@ -131,6 +139,10 @@ pub enum ColumnKind {
     Time,
     /// Absoluter Zeitpunkt in UTC. Kanonisch RFC 3339 mit `Z`.
     DateTime,
+    /// Exakter Dezimalwert. Speicherformat: 16-Byte-Koeffizient, siehe `decimal`.
+    Decimal,
+    /// Enum-Wert mit festem Speichertext. Zulässige Werte stehen in `ColumnSpec::choices`.
+    Choice,
 }
 
 /// Aktion für `ON DELETE`. `ON UPDATE` bleibt `NO ACTION`.
@@ -154,6 +166,12 @@ pub struct ColumnSpec {
     pub foreign_table: Option<&'static str>,
     pub foreign_column: Option<&'static str>,
     pub on_delete: Option<ReferentialAction>,
+    /// `0`, wenn die Spalte kein `Decimal` ist. Sonst `1..=28`.
+    pub precision: u8,
+    /// Nachkommastellen. Nur für `Decimal` gesetzt und immer `<= precision`.
+    pub scale: u8,
+    /// Leer, außer bei `Choice`.
+    pub choices: &'static [ChoiceValue],
 }
 
 /// Zusammengesetzte Unique-Constraints und Indizes. Leere Listen sind der Normalfall.

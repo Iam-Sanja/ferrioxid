@@ -9,7 +9,7 @@ use ferrioxid_core::{secondary_index_name, unique_index_name, DatabaseKind, Refe
 use ferrioxid_db::{
     kind_of, render_add_column_referencing, render_create_index, render_drop_column,
     render_drop_index, render_drop_table, render_rename_column, render_rename_table,
-    render_table_bundle, ForeignKeyClause, PhysicalColumn,
+    render_table_bundle, with_checks, ForeignKeyClause, PhysicalColumn,
 };
 use sea_orm::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, DbErr, ExecResult, QueryResult,
@@ -710,14 +710,19 @@ fn render_operation(
                 .iter()
                 .map(|(name, columns)| (*name, columns.as_slice()))
                 .collect::<Vec<_>>();
-            render_table_bundle(
+            let mut statements = render_table_bundle(
                 kind,
                 &table.name,
                 &columns,
                 &unique_refs,
                 &foreign_keys,
                 &index_refs,
-            )
+            );
+            if let Some(create) = statements.first_mut() {
+                let checks = choice_check_clauses(&table.columns);
+                *create = with_checks(std::mem::take(create), &checks);
+            }
+            statements
         }
         MigrationOperation::DropTable { name } => vec![render_drop_table(kind, name)],
         MigrationOperation::AddColumn {
@@ -899,6 +904,22 @@ pub async fn reseal_unapplied(
         )));
     }
     crate::store::reseal_migration(path)
+}
+
+fn choice_check_clauses(columns: &[ColumnSnapshot]) -> Vec<String> {
+    columns
+        .iter()
+        .filter(|column| column.logical_type == crate::snapshot::LogicalType::Choice)
+        .map(|column| {
+            let list = column
+                .choices
+                .iter()
+                .map(|choice| format!("'{}'", choice.value))
+                .collect::<Vec<_>>()
+                .join(", ");
+            format!("CHECK (\"{}\" IN ({list}))", column.name)
+        })
+        .collect()
 }
 
 fn physical_columns(columns: &[ColumnSnapshot]) -> Result<Vec<PhysicalColumn<'_>>, MigrationError> {

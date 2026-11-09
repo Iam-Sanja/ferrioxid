@@ -53,7 +53,9 @@ schema_command = "cargo run -p myshop --quiet -- --print-schema"
 
 ## 3. Snapshot
 
-Format version `1`. Tables are sorted by name. Columns keep the order of the model. The same input generates the same compact JSON.
+Format version `1`. New optional column fields `precision`, `scale` and `choices` are omitted when empty, so older snapshots keep the same canonical JSON and the same checksum. Tables are sorted by name. Columns keep the order of the model. The same input generates the same compact JSON.
+
+Decimal columns record `precision` and `scale`. Choice columns record `choices` with `value`, `label_de` and `label_en`. Label text is not a schema change. Changing precision, scale, or stored choice values is blocked. A `String` column can become a choice only when every stored row already uses one of the new values. A `NOT NULL` decimal backfill is a decimal string such as `0.00`; the runner writes the order-preserving 16-byte coefficient. See [models.md](models.md).
 
 ```json
 {
