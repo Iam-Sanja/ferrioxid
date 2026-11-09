@@ -417,21 +417,11 @@ async fn canonical_editors_preserve_permissions_readonly_fields_roles_and_naviga
     // Create a unique test credential instead of hard-coding a password.
     let password = format!("test-{}", ferrioxid::uuid::Uuid::new_v4());
     let root = auth
-        .create_user(
-            "editor-root@example.com",
-            &password,
-            true,
-            true,
-        )
+        .create_user("editor-root@example.com", &password, true, true)
         .await
         .unwrap();
     let target = auth
-        .create_user(
-            "editor-target@example.com",
-            &password,
-            false,
-            false,
-        )
+        .create_user("editor-target@example.com", &password, false, false)
         .await
         .unwrap();
     for (role, actions) in [
@@ -440,14 +430,9 @@ async fn canonical_editors_preserve_permissions_readonly_fields_roles_and_naviga
         ("eraser", vec!["read", "delete"]),
         ("write_only", vec!["update"]),
     ] {
-        auth.create_user(
-            &format!("{role}@example.com"),
-            &password,
-            true,
-            false,
-        )
-        .await
-        .unwrap();
+        auth.create_user(&format!("{role}@example.com"), &password, true, false)
+            .await
+            .unwrap();
         auth.ensure_role(role).await.unwrap();
         for action in actions {
             auth.grant_permission(role, &format!("records.{action}"))
