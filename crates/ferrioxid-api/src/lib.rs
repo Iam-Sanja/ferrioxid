@@ -80,6 +80,10 @@ impl App {
         self
     }
 
+    pub fn route_names(&self) -> &urls::RouteMap {
+        &self.names
+    }
+
     /// Hängt benannte Anwendungsrouten an. Reservierte Framework-Pfade werden abgelehnt.
     pub fn urls(mut self, set: urls::UrlSet) -> Result<Self, urls::UrlError> {
         self.accept_urls(set)?;

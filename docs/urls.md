@@ -96,4 +96,4 @@ A second name or path in the same `UrlSet` or when merging into `App::urls` is `
 
 ## Limitations
 
-Templates can call `url(name=...)` once the route map is supplied to `Site::set_routes`; handlers can also resolve paths and add them to the context. `require_user` checks a GET session without CSRF. State-changing views must call `AuthService::authenticate_csrf`.
+Templates can call `url(name=...)` once the route map is supplied to `Site::set_routes`. `mount_pages_with` does that for the project homepage and error pages, including routes nested under an app prefix. `mount_pages` still works and passes an empty map. Dynamic segments are percent-encoded. `/`, `\`, `?`, `#`, controls and `..` are rejected so a parameter cannot change the path structure. A duplicate name or path is `url.duplicate`, including when a nested set reuses a name. Handlers can also resolve paths with `RouteMap::path` and add them to the context. `require_user` checks a GET session without CSRF. State-changing views must call `AuthService::authenticate_csrf`.

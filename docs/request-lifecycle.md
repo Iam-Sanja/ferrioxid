@@ -51,7 +51,7 @@ First the size is limited, then a separate request ID is generated. Logs see the
 
 ## Example
 
-A fullstack project from `ferrioxid new` calls `mount_pages` and then `ferrioxid::web::prepare`. `/contact` is merged before `into_router`.
+A fullstack project from `ferrioxid new` calls `mount_pages_with` and then `ferrioxid::web::prepare`. `/contact` is merged before `into_router`. The cloned route map gives the project templates `url()`.
 
 ## Tests
 

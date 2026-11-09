@@ -29,6 +29,7 @@ impl ViewError {
 impl IntoResponse for ViewError {
     fn into_response(self) -> Response {
         respond(
+            None,
             &HeaderMap::new(),
             None,
             self.status,
@@ -42,20 +43,21 @@ impl IntoResponse for ViewError {
 pub fn render(site: &Site, name: &str, context: &Context, debug: bool) -> Response {
     match site.render(name, context) {
         Ok(body) => Html(body).into_response(),
-        Err(error) => {
-            tracing::warn!(code = "view.template", "template rendering failed");
-            let detail = if debug {
-                error.to_string()
-            } else {
-                "Internal server error".to_owned()
-            };
+        Err(_error) => {
+            let show_details = debug;
+            tracing::warn!(
+                show_details,
+                code = "view.template",
+                "template rendering failed"
+            );
             respond(
+                Some(site),
                 &HeaderMap::new(),
                 None,
                 StatusCode::INTERNAL_SERVER_ERROR,
                 "view.template",
-                &detail,
-                debug,
+                "Internal server error",
+                false,
             )
         }
     }
@@ -84,7 +86,19 @@ pub fn fail(
     detail: &str,
     debug: bool,
 ) -> Response {
-    respond(headers, request_id, status, code, detail, debug)
+    fail_in(None, headers, request_id, status, code, detail, debug)
+}
+
+pub fn fail_in(
+    site: Option<&Site>,
+    headers: &HeaderMap,
+    request_id: Option<&RequestId>,
+    status: StatusCode,
+    code: &'static str,
+    detail: &str,
+    debug: bool,
+) -> Response {
+    respond(site, headers, request_id, status, code, detail, debug)
 }
 
 pub async fn require_mutation(
@@ -207,6 +221,7 @@ pub fn form_fields(body: &str) -> Result<Vec<(String, String)>, ViewError> {
 pub fn validation(headers: &HeaderMap, field: &str, detail: &str) -> Response {
     let body = format!("field:{field}: {detail}");
     respond(
+        None,
         headers,
         None,
         StatusCode::UNPROCESSABLE_ENTITY,
@@ -217,6 +232,7 @@ pub fn validation(headers: &HeaderMap, field: &str, detail: &str) -> Response {
 }
 
 fn respond(
+    site: Option<&Site>,
     headers: &HeaderMap,
     request_id: Option<&RequestId>,
     status: StatusCode,
@@ -235,12 +251,26 @@ fn respond(
     if wants_html(headers) {
         let locale = locale_from(headers);
         let title = message(locale, status_key(status));
-        let body = format!(
-            "<!DOCTYPE html><html lang=\"{locale}\"><head><meta charset=\"utf-8\"><title>{}</title></head><body><h1>{}</h1><p>{}</p></body></html>",
-            escape(title),
-            escape(title),
-            escape(&localize_detail(locale, &public_detail))
-        );
+        let shown = localize_detail(locale, &public_detail);
+        let body = site
+            .and_then(|site| {
+                crate::pages::render_status_template(
+                    site,
+                    template_name(status),
+                    locale,
+                    title,
+                    &shown,
+                    status.as_u16(),
+                )
+            })
+            .unwrap_or_else(|| {
+                format!(
+                    "<!DOCTYPE html><html lang=\"{locale}\"><head><meta charset=\"utf-8\"><title>{}</title></head><body><h1>{}</h1><p>{}</p></body></html>",
+                    escape(title),
+                    escape(title),
+                    escape(&shown)
+                )
+            });
         (status, Html(body)).into_response()
     } else {
         (
@@ -286,12 +316,26 @@ fn locale_from(headers: &HeaderMap) -> &'static str {
         .unwrap_or("de")
 }
 
+fn template_name(status: StatusCode) -> &'static str {
+    match status.as_u16() {
+        400 => "errors/400.html",
+        401 => "errors/401.html",
+        403 => "errors/403.html",
+        404 => "errors/404.html",
+        405 => "errors/405.html",
+        409 => "errors/409.html",
+        422 => "errors/422.html",
+        _ => "errors/500.html",
+    }
+}
+
 fn status_key(status: StatusCode) -> &'static str {
     match status.as_u16() {
         400 => "bad_request",
         401 => "unauthorized",
         403 => "forbidden",
         404 => "not_found",
+        405 => "method_not_allowed",
         409 => "conflict",
         422 => "validation",
         _ => "server_error",
@@ -304,6 +348,7 @@ fn status_title(status: StatusCode) -> &'static str {
         401 => "Unauthorized",
         403 => "Forbidden",
         404 => "Not found",
+        405 => "Method not allowed",
         409 => "Conflict",
         422 => "Validation failed",
         _ => "Internal server error",
@@ -385,7 +430,9 @@ fn escape(value: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use super::{fail, form_fields, redirect_to, require_mutation, require_staff, validation};
+    use super::{
+        fail, fail_in, form_fields, redirect_to, require_mutation, require_staff, validation,
+    };
     use axum::body::Body;
     use axum::http::{Request, StatusCode};
     use ferrioxid_middleware::{apply, Standard};
@@ -464,5 +511,91 @@ mod tests {
             .unwrap()
             .iter()
             .any(|field| field.0 == "name"));
+    }
+
+    #[tokio::test]
+    async fn custom_error_templates_hide_internal_details() {
+        use axum::http::header::CONTENT_TYPE;
+        let site = crate::pages::Site::from_named(
+            &[
+                (
+                    "errors/422.html".to_owned(),
+                    "<p>{{ status }} {{ detail }}</p>".to_owned(),
+                ),
+                (
+                    "errors/500.html".to_owned(),
+                    "<p>custom-down {{ detail }}</p>".to_owned(),
+                ),
+            ],
+            &crate::urls::RouteMap::default(),
+        )
+        .unwrap();
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("accept", "text/html".parse().unwrap());
+        let page = fail_in(
+            Some(&site),
+            &headers,
+            None,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "validation.field",
+            "field:title: validation.required",
+            false,
+        );
+        assert_eq!(page.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        let body = String::from_utf8(
+            page.into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(body.contains("422"), "{body}");
+        assert!(
+            body.contains("required") || body.contains("erforderlich"),
+            "{body}"
+        );
+        assert!(!body.contains("SELECT"), "{body}");
+        let hidden = fail_in(
+            Some(&site),
+            &headers,
+            None,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "server.error",
+            "SELECT id FROM notes; stack backtrace",
+            false,
+        );
+        assert_eq!(hidden.status(), StatusCode::INTERNAL_SERVER_ERROR);
+        let hidden_body = String::from_utf8(
+            hidden
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(hidden_body.contains("custom-down"), "{hidden_body}");
+        assert!(!hidden_body.contains("SELECT"), "{hidden_body}");
+        assert!(!hidden_body.to_ascii_lowercase().contains("stack backtrace"));
+        let json_headers = axum::http::HeaderMap::new();
+        let api = fail_in(
+            Some(&site),
+            &json_headers,
+            None,
+            StatusCode::UNPROCESSABLE_ENTITY,
+            "validation.field",
+            "field:title: validation.required",
+            false,
+        );
+        assert_eq!(api.status(), StatusCode::UNPROCESSABLE_ENTITY);
+        assert!(api
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .contains("application/json"));
     }
 }

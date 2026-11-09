@@ -79,6 +79,7 @@ fn answers() -> Result<axum::response::Response, ferrioxid::views::ViewError> {
 | 403 | `forbidden` |
 | 404 | `not_found` |
 | 409 | `conflict` |
+| 405 | `method_not_allowed` |
 | 422 | `validation` |
 | 500 | `server_error` |
 
@@ -86,7 +87,7 @@ If `Accept` contains `text/html` and not `application/json`, the response is HTM
 
 An `Accept-Language` value beginning with `en` selects the English heading; otherwise the heading is German. Without debug mode, a 500 response hides internal details. Details containing `password`, `secret`, `token` or `stack backtrace` become `Request rejected`. Logs include the request ID, code and status, not the detail.
 
-Custom pages can access `fail` with their own `code`. The project templates `templates/errors/404.html` and `500.html` remain the answers of `mount_pages`, not `fail`.
+`fail` builds the safe HTML or JSON answer. `fail_in` uses the same answer and, for HTML, first tries `templates/errors/{status}.html` for 400, 401, 403, 404, 405, 409, 422 and 500. A missing template stays on the original status and uses the built-in page. The built-in page and the template context contain the localized title and detail, not a stack trace, SQL text or the template error chain. `mount_pages` uses the same 404 and 405 pages. JSON requests keep `problem_json`, the status and `application/json`.
 
 ## Access
 

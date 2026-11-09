@@ -42,6 +42,7 @@ In the long term, the admin should cover the relevant functions of the Django ad
 
 - Forms ([#47](https://github.com/Iam-Sanja/ferrioxid/issues/47)): text, number, email, password, checkbox, select and textarea widgets, escaped labels and values, and model binding through an explicit column allow-list. Create and replace require every required field. Patch leaves missing keys unchanged. Formsets are still absent. Status in the capability matrix: **In PR**.
 - Validation display ([#48](https://github.com/Iam-Sanja/ferrioxid/issues/48)): one German/English catalog, field overrides, and model errors stored as stable codes. Unknown locales use English. SQL and stack traces are not shown. Status: **In PR**.
+- Error pages and named routes ([#50](https://github.com/Iam-Sanja/ferrioxid/issues/50)): status templates with a safe fallback, project `url()` across prefixes, and percent-encoded path parameters. Status: **In PR**.
 
 ## Open after v0.27.1
 
@@ -58,14 +59,12 @@ In the long term, the admin should cover the relevant functions of the Django ad
 
 ## Open after v0.25
 
-- `views::fail` uses its own HTML page and not `templates/errors/`.
 - `require_user` continues to authenticate with GET. Mutations use `require_mutation`.
 - Since v0.26, the process start compares both lists. The CLI remains with `ferrioxid.toml`.
 - `ferrioxid new` does not yet generate `src/apps/`.
 
 ## Open after v0.24
 
-- `views::fail` uses its own HTML page and not `templates/errors/`.
 - `require_user` authenticates with GET and does not check CSRF.
 - The API template continues to write `templates/index.html` because the start page remains active.
 
