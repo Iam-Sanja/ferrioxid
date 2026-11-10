@@ -305,20 +305,13 @@ mod tests {
             .unwrap();
         let parent_id = uuid::Uuid::from_u128(7);
         let child_id = uuid::Uuid::from_u128(8);
-        insert_id(
-            &db,
-            backend,
-            "ferrioxid_down_parent",
-            &["id"],
-            &[parent_id.to_string()],
-        )
-        .await;
+        insert_id(&db, backend, "ferrioxid_down_parent", &["id"], &[parent_id]).await;
         insert_id(
             &db,
             backend,
             "ferrioxid_down_child",
             &["id", "product_id"],
-            &[child_id.to_string(), parent_id.to_string()],
+            &[child_id, parent_id],
         )
         .await;
         std::fs::rename(
@@ -373,7 +366,7 @@ mod tests {
         backend: DatabaseBackend,
         table: &str,
         columns: &[&str],
-        values: &[String],
+        values: &[uuid::Uuid],
     ) {
         let names = columns
             .iter()
@@ -389,8 +382,7 @@ mod tests {
         };
         let bound = values
             .iter()
-            .cloned()
-            .map(sea_orm::Value::from)
+            .map(|value| sea_orm::Value::Uuid(Some(Box::new(*value))))
             .collect::<Vec<_>>();
         db.execute(Statement::from_sql_and_values(
             backend,
@@ -465,7 +457,7 @@ mod tests {
             DatabaseBackend::Sqlite,
             "ferrioxid_down_parent",
             &["id"],
-            &[uuid::Uuid::from_u128(11).to_string()],
+            &[uuid::Uuid::from_u128(11)],
         )
         .await;
         let refused = crate::revert_namespaced(&db, &directory, "catalog", false, false).await;
