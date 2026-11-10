@@ -249,6 +249,87 @@ impl<'a> Registration<'a> {
         Ok(())
     }
 
+    /// Publishes this app's templates for apps that declare `depends_on` and call
+    /// [`Registration::import_templates`]. Names stay under `{app}/`.
+    pub fn export_templates(&mut self, directory: impl AsRef<Path>) -> Result<(), AppError> {
+        let files = collect_templates(self.name, directory.as_ref(), TemplateMode::Isolated, None)?;
+        if files.is_empty() {
+            return Err(AppError::new(
+                "app.template.export",
+                format!("`{}` has no templates to export.", self.name),
+            ));
+        }
+        if self
+            .app
+            .catalog
+            .exported
+            .insert(self.name.to_owned(), files)
+            .is_some()
+        {
+            return Err(AppError::new(
+                "app.template.export",
+                format!("`{}` already exported templates.", self.name),
+            ));
+        }
+        Ok(())
+    }
+
+    /// Copies an exported catalog into this app. Call it before [`Registration::templates`].
+    ///
+    /// The source must be named in `depends_on` and must already have called
+    /// [`Registration::export_templates`]. Admin, base and login templates cannot be imported.
+    pub fn import_templates(&mut self, source: &str) -> Result<(), AppError> {
+        if !self.depends_on.contains(&source) {
+            return Err(AppError::new(
+                "app.template.import",
+                format!("`{}` does not depend on `{source}`.", self.name),
+            ));
+        }
+        if self.app.catalog.sites.contains_key(self.name) {
+            return Err(AppError::new(
+                "app.template.import",
+                format!(
+                    "Import `{source}` before `templates()` on `{}`. Existing templates were not changed.",
+                    self.name
+                ),
+            ));
+        }
+        let Some(files) = self.app.catalog.exported.get(source).cloned() else {
+            return Err(AppError::new(
+                "app.template.import",
+                format!("`{source}` has not exported templates. Missing import `{source}`."),
+            ));
+        };
+        let slot = self
+            .app
+            .catalog
+            .imported
+            .entry(self.name.to_owned())
+            .or_default();
+        for (name, body) in files {
+            if !name.starts_with(&format!("{source}/"))
+                || name
+                    .split('/')
+                    .any(|part| part.is_empty() || part == ".." || part == "admin")
+                || name == "base.html"
+                || name == "login.html"
+            {
+                return Err(AppError::new(
+                    "app.template.import",
+                    format!("`{name}` is outside the exported `{source}` namespace."),
+                ));
+            }
+            if slot.iter().any(|(existing, _)| existing == &name) {
+                return Err(AppError::new(
+                    "app.template.import",
+                    format!("`{name}` is already imported into `{}`.", self.name),
+                ));
+            }
+            slot.push((name, body));
+        }
+        Ok(())
+    }
+
     pub fn templates(
         &mut self,
         directory: impl AsRef<Path>,
@@ -388,6 +469,15 @@ impl App {
 
     pub fn installed_apps(&self) -> &[String] {
         &self.installed
+    }
+
+    /// Renders one registered template. The name is an app namespace, not a filesystem path.
+    pub fn render_template(
+        &self,
+        name: &str,
+        context: &tera::Context,
+    ) -> Result<String, crate::pages::PageError> {
+        self.catalog.render(name, context)
     }
 }
 
@@ -600,6 +690,7 @@ mod tests {
     use crate::App;
     use axum::routing::get;
     use ferrioxid_db::connect;
+    use sea_orm::ConnectionTrait;
     use tower::ServiceExt;
 
     struct Shop;
@@ -953,5 +1044,196 @@ mod tests {
             .try_into_router();
         assert!(matches!(mismatch, Err(error) if error.code == "app.migration.mismatch"));
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    struct SharedApp {
+        name: &'static str,
+        directory: std::path::PathBuf,
+        export: Option<std::path::PathBuf>,
+        depends_on: &'static [&'static str],
+        import: Option<&'static str>,
+    }
+
+    impl FerrioxidApplication for SharedApp {
+        fn config(&self) -> AppConfig {
+            AppConfig::new(self.name).depends_on(self.depends_on)
+        }
+
+        fn contribute(&self, registry: &mut Registration<'_>) -> Result<(), super::AppError> {
+            if let Some(export) = &self.export {
+                registry.export_templates(export)?;
+            }
+            if let Some(source) = self.import {
+                registry.import_templates(source)?;
+            }
+            registry.templates(&self.directory, TemplateMode::Isolated)
+        }
+    }
+
+    #[tokio::test]
+    async fn exported_macros_cross_app_boundaries_explicitly() {
+        let root = std::env::temp_dir().join(format!(
+            "ferrioxid-templates-{}",
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let cards = root.join("cards");
+        let cards_public = root.join("cards-public");
+        let shop = root.join("shop");
+        let other = root.join("other");
+        std::fs::create_dir_all(cards.join("cards")).unwrap();
+        std::fs::create_dir_all(cards_public.join("cards")).unwrap();
+        std::fs::create_dir_all(shop.join("shop")).unwrap();
+        std::fs::create_dir_all(other.join("other")).unwrap();
+        std::fs::write(
+            cards.join("cards/secret.html"),
+            "{% macro secret() %}hidden{% endmacro %}",
+        )
+        .unwrap();
+        std::fs::write(
+            cards_public.join("cards/card.html"),
+            "{% macro label() %}shared{% endmacro %}",
+        )
+        .unwrap();
+        std::fs::write(cards.join("cards/page.html"), "<p>cards {{ name }}</p>").unwrap();
+        std::fs::write(
+            shop.join("shop/page.html"),
+            "{% import \"cards/card.html\" as card %}{{ card::label() }}",
+        )
+        .unwrap();
+        std::fs::write(other.join("other/page.html"), "<p>other {{ name }}</p>").unwrap();
+        let db = connect("sqlite::memory:").await.unwrap();
+        let app = App::new(db)
+            .install(SharedApp {
+                name: "cards",
+                directory: cards.clone(),
+                export: Some(cards_public),
+                depends_on: &[],
+                import: None,
+            })
+            .unwrap()
+            .install(SharedApp {
+                name: "shop",
+                directory: shop,
+                export: None,
+                depends_on: &["cards"],
+                import: Some("cards"),
+            })
+            .unwrap()
+            .install(SharedApp {
+                name: "other",
+                directory: other,
+                export: None,
+                depends_on: &[],
+                import: None,
+            })
+            .unwrap();
+        let mut context = tera::Context::new();
+        context.insert("name", "Ada");
+        assert_eq!(
+            app.render_template("shop/page.html", &context).unwrap(),
+            "shared"
+        );
+        assert!(app
+            .render_template("cards/page.html", &context)
+            .unwrap()
+            .contains("cards Ada"));
+        assert!(app
+            .render_template("other/page.html", &context)
+            .unwrap()
+            .contains("other Ada"));
+        let broken = root.join("broken");
+        std::fs::create_dir_all(broken.join("shop")).unwrap();
+        std::fs::write(
+            broken.join("shop/page.html"),
+            "{% import \"cards/secret.html\" as secret %}{{ secret::secret() }}",
+        )
+        .unwrap();
+        let missing = App::new(connect("sqlite::memory:").await.unwrap())
+            .install(SharedApp {
+                name: "cards",
+                directory: cards.clone(),
+                export: Some(root.join("cards-public")),
+                depends_on: &[],
+                import: None,
+            })
+            .unwrap()
+            .install(SharedApp {
+                name: "shop",
+                directory: broken,
+                export: None,
+                depends_on: &["cards"],
+                import: Some("cards"),
+            });
+        let Err(missing) = missing else {
+            panic!("an import of an unexported template was accepted");
+        };
+        assert!(
+            missing.detail.contains("secret") || missing.detail.contains("isn't present"),
+            "{}",
+            missing.detail
+        );
+        let refused = App::new(connect("sqlite::memory:").await.unwrap()).install(SharedApp {
+            name: "lone",
+            directory: cards,
+            export: None,
+            depends_on: &[],
+            import: Some("cards"),
+        });
+        assert!(matches!(refused, Err(error) if error.code == "app.template.import"));
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn strict_startup_reads_migration_status_without_writing() {
+        let fresh = connect("sqlite::memory:").await.unwrap();
+        let pending = App::new(fresh.clone())
+            .strict_migrations()
+            .try_into_router_strict()
+            .await;
+        let Err(pending) = pending else {
+            panic!("pending auth migrations were accepted");
+        };
+        assert_eq!(pending.code, "migration.strict");
+        assert!(pending.detail.contains("pending"), "{}", pending.detail);
+        let tables = fresh
+            .query_one(sea_orm::Statement::from_string(
+                fresh.get_database_backend(),
+                "SELECT count(*) AS n FROM sqlite_master".to_owned(),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        assert_eq!(tables.try_get_by_index::<i64>(0).unwrap(), 0);
+
+        let ready = connect("sqlite::memory:").await.unwrap();
+        ferrioxid_auth::apply_migrations(&ready).await.unwrap();
+        let before = ready
+            .query_one(sea_orm::Statement::from_string(
+                ready.get_database_backend(),
+                "SELECT count(*) AS n FROM _ferrioxid_auth_migrations".to_owned(),
+            ))
+            .await
+            .unwrap();
+        let _ = App::new(ready.clone())
+            .strict_migrations()
+            .try_into_router_strict()
+            .await
+            .unwrap();
+        let after = ready
+            .query_one(sea_orm::Statement::from_string(
+                ready.get_database_backend(),
+                "SELECT count(*) AS n FROM _ferrioxid_auth_migrations".to_owned(),
+            ))
+            .await
+            .unwrap();
+        assert_eq!(
+            before.unwrap().try_get_by_index::<i64>(0).unwrap(),
+            after.unwrap().try_get_by_index::<i64>(0).unwrap()
+        );
+        let blocked = App::new(ready).strict_migrations().try_into_router();
+        assert!(matches!(blocked, Err(error) if error.code == "migration.strict"));
     }
 }

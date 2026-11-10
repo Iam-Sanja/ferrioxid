@@ -54,6 +54,7 @@ pub struct App {
     openapi: OpenApiOptions,
     openapi_operations: Vec<OpenApiOperation>,
     documented: Vec<openapi::DocumentedModel>,
+    strict_migrations: bool,
 }
 
 impl App {
@@ -78,7 +79,17 @@ impl App {
             openapi: OpenApiOptions::default(),
             openapi_operations: Vec::new(),
             documented: Vec::new(),
+            strict_migrations: false,
         }
+    }
+
+    /// Requires [`App::try_into_router_strict`] before the router is built.
+    ///
+    /// The check only reads migration status. It does not apply or roll back migrations.
+    /// [`App::try_into_router`] keeps the previous behavior unless this flag is set.
+    pub fn strict_migrations(mut self) -> Self {
+        self.strict_migrations = true;
+        self
     }
 
     /// Replaces the OpenAPI JSON path, the optional explorer, or turns both off.
@@ -295,6 +306,23 @@ impl App {
     }
 
     pub fn try_into_router(self) -> Result<Router, crate::apps::AppError> {
+        if self.strict_migrations {
+            return Err(crate::apps::AppError::new(
+                "migration.strict",
+                "strict_migrations() was set. Call try_into_router_strict().await. Nothing was migrated.",
+            ));
+        }
+        self.build_router()
+    }
+
+    /// Reads migration status, then builds the router. A pending, unknown or conflicting
+    /// migration rejects startup before the first request. The database is not changed.
+    pub async fn try_into_router_strict(self) -> Result<Router, crate::apps::AppError> {
+        self.migration_readiness().await?;
+        self.build_router()
+    }
+
+    fn build_router(self) -> Result<Router, crate::apps::AppError> {
         let needs_validation = !self.sealed
             && (!self.installed.is_empty()
                 || self
@@ -314,6 +342,51 @@ impl App {
                 "Ferrioxid-App-Registry ist ungültig ({}). {}",
                 error.code, error.detail
             ),
+        }
+    }
+
+    async fn migration_readiness(&self) -> Result<(), crate::apps::AppError> {
+        let app_dir = self
+            .settings
+            .as_ref()
+            .map(|settings| settings.migrations_dir.clone())
+            .unwrap_or_else(|| std::path::PathBuf::from("ferrioxid-no-app-migrations"));
+        let report = ferrioxid_migrations::inspect_migrations_with_packages(
+            &self.db,
+            &ferrioxid_auth::migrations_dir(),
+            &app_dir,
+            None,
+            &self.migrations,
+        )
+        .await
+        .map_err(|error| crate::apps::AppError::new("migration.strict", error.0))?;
+        let mut problems = Vec::new();
+        collect_migration_problems("auth", &report.auth, &mut problems);
+        collect_migration_problems("app", &report.app, &mut problems);
+        for package in &report.packages {
+            collect_migration_problems(&package.name, &package.status, &mut problems);
+        }
+        for diagnostic in &report.diagnostics {
+            if diagnostic.level == ferrioxid_migrations::Level::Error
+                || diagnostic.description.contains("differs")
+                || diagnostic.description.contains("neither")
+            {
+                problems.push(format!(
+                    "{} {}: {}",
+                    diagnostic.code, diagnostic.migration_id, diagnostic.description
+                ));
+            }
+        }
+        if problems.is_empty() {
+            Ok(())
+        } else {
+            Err(crate::apps::AppError::new(
+                "migration.strict",
+                format!(
+                    "Startup refused because migrations are not ready. Apply the listed migrations manually. This check did not change the database.\n{}",
+                    problems.join("\n")
+                ),
+            ))
         }
     }
 
@@ -366,6 +439,24 @@ impl App {
         } else {
             router
         }
+    }
+}
+
+fn collect_migration_problems(
+    app: &str,
+    status: &ferrioxid_migrations::StatusReport,
+    problems: &mut Vec<String>,
+) {
+    for line in &status.lines {
+        if line.state == "ausstehend" {
+            problems.push(format!("app `{app}` migration `{}` is pending", line.id));
+        }
+    }
+    for conflict in &status.conflicts {
+        problems.push(format!("app `{app}`: {conflict}"));
+    }
+    if status.schema_note.contains("differs") || status.schema_note.contains("neither") {
+        problems.push(format!("app `{app}`: {}", status.schema_note));
     }
 }
 
