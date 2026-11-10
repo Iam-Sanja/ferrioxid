@@ -5,6 +5,7 @@
 
 mod baseline;
 mod diff;
+mod down;
 mod error;
 mod fixtures;
 mod history;
@@ -53,7 +54,8 @@ pub use project::{
 };
 pub use runner::{
     apply_directory, apply_directory_with_history, apply_namespaced_directory, migration_status,
-    migration_status_in, namespaced_status, reseal_unapplied, ApplyReport, StatusReport,
+    migration_status_in, namespaced_status, reseal_unapplied, revert_latest, ApplyReport,
+    RevertPlan, StatusReport,
 };
 pub use snapshot::{
     is_identifier, ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, IndexSnapshot,

@@ -66,6 +66,10 @@ pub enum MigrationOperation {
     DropForeignKey {
         table: String,
         name: String,
+        /// Vorhandener Schlüssel, damit `migrate down` ihn wieder anlegen kann.
+        /// Alte Dateien ohne dieses Feld bleiben lesbar.
+        #[serde(default, skip_serializing_if = "Option::is_none")]
+        previous: Option<ForeignKeySnapshot>,
     },
 }
 
@@ -129,7 +133,7 @@ impl MigrationOperation {
             Self::AddForeignKey { table, foreign_key } => {
                 format!("add_foreign_key {table}.{}", foreign_key.name)
             }
-            Self::DropForeignKey { table, name } => format!("drop_foreign_key {table}.{name}"),
+            Self::DropForeignKey { table, name, .. } => format!("drop_foreign_key {table}.{name}"),
         }
     }
 }
@@ -459,6 +463,7 @@ fn attach_new_foreign_keys(
                 operations.push(MigrationOperation::DropForeignKey {
                     table: previous.name.clone(),
                     name: foreign_key.name.clone(),
+                    previous: Some(existing.clone()),
                 });
                 operations.push(MigrationOperation::AddForeignKey {
                     table: next.name.clone(),
@@ -503,6 +508,7 @@ fn attach_new_foreign_keys(
             operations.push(MigrationOperation::DropForeignKey {
                 table: previous.name.clone(),
                 name: foreign_key.name.clone(),
+                previous: Some(foreign_key.clone()),
             });
         }
     }
@@ -554,13 +560,12 @@ fn operation_rank(operation: &MigrationOperation) -> u8 {
     match operation {
         MigrationOperation::AddColumn { .. } => 1,
         MigrationOperation::AddUniqueConstraint { .. } | MigrationOperation::AddIndex { .. } => 2,
+        MigrationOperation::DropForeignKey { .. } => 2,
         MigrationOperation::AddForeignKey { .. } => 3,
         MigrationOperation::AlterColumn { .. }
         | MigrationOperation::RenameColumn { .. }
         | MigrationOperation::RenameTable { .. } => 4,
-        MigrationOperation::DropForeignKey { .. }
-        | MigrationOperation::DropIndex { .. }
-        | MigrationOperation::DropUniqueConstraint { .. } => 5,
+        MigrationOperation::DropIndex { .. } | MigrationOperation::DropUniqueConstraint { .. } => 5,
         MigrationOperation::DropColumn { .. } => 6,
         MigrationOperation::CreateTable { .. } | MigrationOperation::DropTable { .. } => 0,
     }
@@ -740,9 +745,7 @@ fn refusal_for(operations: &[MigrationOperation]) -> Option<String> {
             | MigrationOperation::AddIndex { .. }
             | MigrationOperation::DropIndex { .. } => {}
             MigrationOperation::AddForeignKey { .. } => {}
-            MigrationOperation::DropForeignKey { table, name } => reasons.push(format!(
-                "Foreign key `{name}` on `{table}` cannot be dropped or have its delete rule changed. Existing rows and migration files stay unchanged."
-            )),
+            MigrationOperation::DropForeignKey { .. } => {}
         }
     }
 
@@ -876,13 +879,7 @@ pub fn classify(
         | MigrationOperation::DropIndex { .. } => (ApplyClass::Safe, None),
         MigrationOperation::DropUniqueConstraint { .. } => (ApplyClass::Safe, None),
         MigrationOperation::AddForeignKey { .. } => (ApplyClass::Safe, None),
-        MigrationOperation::DropForeignKey { .. } => (
-            ApplyClass::Unsupported,
-            Some(
-                "Existing foreign keys cannot be removed or have their delete rule changed."
-                    .to_owned(),
-            ),
-        ),
+        MigrationOperation::DropForeignKey { .. } => (ApplyClass::Safe, None),
     }
 }
 

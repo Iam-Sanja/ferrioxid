@@ -183,7 +183,8 @@ pub async fn apply_backfill_column(
             }
             Ok(())
         }
-    }
+    }?;
+    assert_no_nulls(db, table, &column.name).await
 }
 
 pub async fn apply_add_foreign_key(
@@ -218,6 +219,80 @@ pub async fn apply_add_foreign_key(
         }
         DatabaseKind::Postgres => add_foreign_key_postgres(db, table, foreign_key).await,
     }
+}
+
+pub fn dropped_foreign_key(operation: &MigrationOperation) -> Option<(&str, &str)> {
+    match operation {
+        MigrationOperation::DropForeignKey { table, name, .. } => {
+            Some((table.as_str(), name.as_str()))
+        }
+        _ => None,
+    }
+}
+
+pub async fn apply_drop_foreign_key(
+    db: &impl ConnectionTrait,
+    kind: DatabaseKind,
+    before: &SchemaSnapshot,
+    table: &str,
+    name: &str,
+) -> Result<(), MigrationError> {
+    let source = required_table(before, table)?;
+    if !source
+        .foreign_keys
+        .iter()
+        .any(|candidate| candidate.name == name)
+    {
+        return Err(MigrationError::new(format!(
+            "Foreign key `{name}` is missing on `{table}`."
+        )));
+    }
+    if !is_identifier(table) || !is_identifier(name) {
+        return Err(MigrationError::new(format!(
+            "Foreign key `{name}` on `{table}` is not a valid identifier."
+        )));
+    }
+    match kind {
+        DatabaseKind::Sqlite => {
+            let mut target = source.clone();
+            target
+                .foreign_keys
+                .retain(|candidate| candidate.name != name);
+            let selection = target
+                .columns
+                .iter()
+                .map(|column| format!("\"{}\"", column.name))
+                .collect::<Vec<_>>();
+            reconstruct_sqlite(db, &target, &selection).await
+        }
+        DatabaseKind::Postgres => {
+            execute(
+                db,
+                DatabaseBackend::Postgres,
+                &format!("ALTER TABLE \"{table}\" DROP CONSTRAINT \"{name}\""),
+            )
+            .await
+        }
+    }
+}
+
+async fn assert_no_nulls(
+    db: &impl ConnectionTrait,
+    table: &str,
+    column: &str,
+) -> Result<(), MigrationError> {
+    if !is_identifier(table) || !is_identifier(column) {
+        return Err(MigrationError::new(format!(
+            "Column `{table}.{column}` is not a valid identifier."
+        )));
+    }
+    let remaining = count_where(db, table, &format!("\"{column}\" IS NULL")).await?;
+    if remaining != 0 {
+        return Err(MigrationError::new(format!(
+            "Column `{table}.{column}` still has {remaining} NULL rows. The NOT NULL constraint was not applied and the migration is rolled back."
+        )));
+    }
+    Ok(())
 }
 
 async fn reconstruct_sqlite(
@@ -949,4 +1024,41 @@ async fn execute(
         .await
         .map_err(|error| MigrationError::new(format!("SQL fehlgeschlagen: {error}")))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use sea_orm::DatabaseBackend;
+
+    #[tokio::test]
+    async fn null_rows_block_the_not_null_check() {
+        let db = ferrioxid_db::connect("sqlite::memory:").await.unwrap();
+        execute(
+            &db,
+            DatabaseBackend::Sqlite,
+            "CREATE TABLE ferrioxid_null_gate (id text PRIMARY KEY NOT NULL, stock bigint)",
+        )
+        .await
+        .unwrap();
+        execute(
+            &db,
+            DatabaseBackend::Sqlite,
+            "INSERT INTO ferrioxid_null_gate (id, stock) VALUES ('one', NULL)",
+        )
+        .await
+        .unwrap();
+        let blocked = assert_no_nulls(&db, "ferrioxid_null_gate", "stock").await;
+        assert!(blocked.is_err());
+        execute(
+            &db,
+            DatabaseBackend::Sqlite,
+            "UPDATE ferrioxid_null_gate SET stock = 0 WHERE stock IS NULL",
+        )
+        .await
+        .unwrap();
+        assert_no_nulls(&db, "ferrioxid_null_gate", "stock")
+            .await
+            .unwrap();
+    }
 }

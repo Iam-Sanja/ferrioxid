@@ -26,6 +26,14 @@ pub struct ApplyReport {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
+pub struct RevertPlan {
+    pub id: String,
+    pub steps: Vec<String>,
+    pub destructive: bool,
+    pub executed: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MigrationLine {
     pub id: String,
     pub state: String,
@@ -71,6 +79,95 @@ impl StatusReport {
         text.push_str(&format!("Schema: {}\n", self.schema_note));
         text
     }
+}
+
+/// Reverts the latest applied migration in `directory`.
+///
+/// A later applied migration id, including one from another app, blocks the
+/// revert. Irreversible operations are refused. Dropping a table or column
+/// requires `allow_destructive`. `dry_run` returns the inverse plan and writes
+/// nothing.
+pub async fn revert_latest(
+    db: &DatabaseConnection,
+    directory: &Path,
+    allow_destructive: bool,
+    dry_run: bool,
+) -> Result<RevertPlan, MigrationError> {
+    let state = inspect_directory(directory);
+    if !state.conflicts.is_empty() {
+        return Err(MigrationError::new(state.conflicts.join("\n")));
+    }
+    history::ensure_history_in(db, history::HISTORY_TABLE).await?;
+    let history = history::read_history_in(db, history::HISTORY_TABLE).await?;
+    let applied = scoped_history(&history, None)?;
+    let pending = pending_files(&state.files, &applied)?;
+    let applied_count = state.files.len().saturating_sub(pending.len());
+    if applied_count == 0 {
+        return Err(MigrationError::new(
+            "No applied migration can be reverted.".to_owned(),
+        ));
+    }
+    let target = &state.files[applied_count - 1];
+    for entry in &history {
+        let other = crate::down::file_id(&entry.id);
+        if other > target.id.as_str() {
+            return Err(MigrationError::new(format!(
+                "Cannot revert {} while {} is still applied.",
+                target.id, entry.id
+            )));
+        }
+    }
+    let simulated = crate::down::simulated_target(&target.from_snapshot, &target.operations)?;
+    if simulated != target.to_snapshot {
+        return Err(MigrationError::new(format!(
+            "Migration {} does not match its stored snapshot. Nothing was changed.",
+            target.id
+        )));
+    }
+    let inverse = crate::down::invert_operations(&target.operations)?;
+    let mut schema = target.to_snapshot.clone();
+    let mut destructive = false;
+    let mut steps = Vec::new();
+    for operation in &inverse {
+        let (class, reason) = classify(operation, &schema);
+        steps.push(operation.summary());
+        schema = crate::simulate::apply_operations(&schema, std::slice::from_ref(operation))?;
+        match class {
+            ApplyClass::Safe => {}
+            ApplyClass::Destructive => destructive = true,
+            ApplyClass::Unsupported => {
+                return Err(MigrationError::new(format!(
+                    "Migration {} cannot be reverted: {}",
+                    target.id,
+                    reason.unwrap_or_else(|| "This operation has no safe inverse.".to_owned())
+                )));
+            }
+        }
+    }
+    let plan = RevertPlan {
+        id: target.id.clone(),
+        steps,
+        destructive,
+        executed: false,
+    };
+    if dry_run {
+        return Ok(plan);
+    }
+    if destructive && !allow_destructive {
+        return Err(MigrationError::new(format!(
+            "Reverting {} drops tables or columns and was not executed. Re-run with --allow-destructive only if that data loss is intentional.",
+            target.id
+        )));
+    }
+    let mut reversed = target.clone();
+    reversed.from_snapshot = target.to_snapshot.clone();
+    reversed.operations = inverse;
+    reversed.to_snapshot = schema;
+    apply_one(db, &reversed, history::HISTORY_TABLE, &target.id, false).await?;
+    Ok(RevertPlan {
+        executed: true,
+        ..plan
+    })
 }
 
 pub async fn apply_directory(
@@ -145,7 +242,7 @@ async fn apply_scoped(
     for file in pending {
         reject_blocked(file, allow_destructive)?;
         let history_id = history_key(namespace, &file.id);
-        apply_one(db, file, history_table, &history_id).await?;
+        apply_one(db, file, history_table, &history_id, true).await?;
         done.push(history_id);
     }
     Ok(ApplyReport { applied: done })
@@ -429,6 +526,7 @@ async fn apply_one(
     file: &MigrationFile,
     history_table: &str,
     history_id: &str,
+    record: bool,
 ) -> Result<(), MigrationError> {
     let backend = db.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
@@ -436,12 +534,13 @@ async fn apply_one(
         && file.operations.iter().any(|operation| {
             crate::rebuild::backfill_parts(operation).is_some()
                 || crate::rebuild::added_foreign_key(operation).is_some()
+                || crate::rebuild::dropped_foreign_key(operation).is_some()
                 || crate::rebuild::alter_parts(operation).is_some()
         });
     if suspend_foreign_keys {
-        return apply_sqlite_on_one_connection(db, file, history_table, history_id).await;
+        return apply_sqlite_on_one_connection(db, file, history_table, history_id, record).await;
     }
-    apply_one_in_transaction(db, file, history_table, history_id).await
+    apply_one_in_transaction(db, file, history_table, history_id, record).await
 }
 
 async fn apply_sqlite_on_one_connection(
@@ -449,6 +548,7 @@ async fn apply_sqlite_on_one_connection(
     file: &MigrationFile,
     history_table: &str,
     history_id: &str,
+    record: bool,
 ) -> Result<(), MigrationError> {
     let connection = db
         .get_sqlite_connection_pool()
@@ -479,7 +579,7 @@ async fn apply_sqlite_on_one_connection(
             .map_err(|error| {
                 MigrationError::new(format!("Could not start transaction: {error}"))
             })?;
-        let work = apply_open(&pinned, file, history_table, history_id).await;
+        let work = apply_open(&pinned, file, history_table, history_id, record).await;
         match work {
             Ok(()) => match pinned
                 .execute(Statement::from_string(DatabaseBackend::Sqlite, "COMMIT"))
@@ -563,12 +663,13 @@ async fn apply_one_in_transaction(
     file: &MigrationFile,
     history_table: &str,
     history_id: &str,
+    record: bool,
 ) -> Result<(), MigrationError> {
     let transaction = db
         .begin()
         .await
         .map_err(|error| MigrationError::new(format!("Could not start transaction: {error}")))?;
-    apply_open(&transaction, file, history_table, history_id).await?;
+    apply_open(&transaction, file, history_table, history_id, record).await?;
     transaction.commit().await.map_err(|error| {
         MigrationError::new(format!("Could not commit migration {}: {error}", file.id))
     })?;
@@ -580,6 +681,7 @@ async fn apply_open(
     file: &MigrationFile,
     history_table: &str,
     history_id: &str,
+    record: bool,
 ) -> Result<(), MigrationError> {
     let backend = transaction.get_database_backend();
     let kind = kind_of(backend).map_err(|error| MigrationError::new(error.to_string()))?;
@@ -606,6 +708,17 @@ async fn apply_open(
                     error.0
                 ))
             })?;
+        } else if let Some((table, name)) = crate::rebuild::dropped_foreign_key(operation) {
+            crate::rebuild::apply_drop_foreign_key(transaction, kind, &schema, table, name)
+                .await
+                .map_err(|error| {
+                    MigrationError::new(format!(
+                        "Migration {} was rolled back at `{}`: {}",
+                        file.id,
+                        operation.summary(),
+                        error.0
+                    ))
+                })?;
         } else if let Some((table, foreign_key)) = crate::rebuild::added_foreign_key(operation) {
             crate::rebuild::apply_add_foreign_key(transaction, kind, &schema, table, foreign_key)
                 .await
@@ -644,19 +757,23 @@ async fn apply_open(
         }
         schema = crate::simulate::apply_operations(&schema, std::slice::from_ref(operation))?;
     }
-    let applied_at_unix = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_err(|error| MigrationError::new(format!("Invalid system time: {error}")))?
-        .as_secs() as i64;
-    history::insert_history_in(
-        transaction,
-        history_table,
-        history_id,
-        &file.name,
-        &file.checksum,
-        applied_at_unix,
-    )
-    .await?;
+    if record {
+        let applied_at_unix = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_err(|error| MigrationError::new(format!("Invalid system time: {error}")))?
+            .as_secs() as i64;
+        history::insert_history_in(
+            transaction,
+            history_table,
+            history_id,
+            &file.name,
+            &file.checksum,
+            applied_at_unix,
+        )
+        .await?;
+    } else {
+        history::delete_history_in(transaction, history_table, history_id).await?;
+    }
     Ok(())
 }
 
@@ -787,7 +904,8 @@ fn render_operation(
         }
         MigrationOperation::DropForeignKey { .. } => {
             return Err(MigrationError::new(
-                "Dropping a foreign key or changing its delete rule is not supported.".to_owned(),
+                "Dropping a foreign key is handled by the verified table rebuild, not as standalone DDL."
+                    .to_owned(),
             ));
         }
         MigrationOperation::AlterColumn { .. } => {

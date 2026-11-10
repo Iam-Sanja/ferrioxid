@@ -312,6 +312,19 @@ enum MigrateCommand {
         #[arg(long)]
         allow_destructive: bool,
     },
+    /// Reverts the latest applied app migration.
+    Down {
+        #[arg(long)]
+        database_url: Option<String>,
+        #[arg(long)]
+        migrations_dir: Option<PathBuf>,
+        /// Allows dropping a table or column created by that migration.
+        #[arg(long)]
+        allow_destructive: bool,
+        /// Prints the inverse plan without changing the database.
+        #[arg(long)]
+        dry_run: bool,
+    },
     /// Shows database backend, files, history, conflicts, and schema drift.
     Status {
         #[arg(long)]
@@ -717,6 +730,36 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 for id in package_report {
                     println!("App migration applied: {id}");
                 }
+            }
+        }
+        MigrateCommand::Down {
+            database_url,
+            migrations_dir,
+            allow_destructive,
+            dry_run,
+        } => {
+            let directory = resolve_directory(migrations_dir)?;
+            let url = resolve_database_url(database_url)?;
+            let plan = runtime.block_on(async {
+                let db = ferrioxid_db::connect(&url)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                ferrioxid_migrations::revert_latest(&db, &directory, allow_destructive, dry_run)
+                    .await
+                    .map_err(|error| error.0)
+            })?;
+            if dry_run {
+                println!("Dry run. No tables or rows were changed.");
+            } else if plan.executed {
+                println!("Reverted: {}", plan.id);
+            }
+            for step in plan.steps {
+                println!("Inverse: {step}");
+            }
+            if plan.destructive {
+                println!(
+                    "This revert drops a table or column. Data in those objects is not restored."
+                );
             }
         }
         MigrateCommand::Status {
