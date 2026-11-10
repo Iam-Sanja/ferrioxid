@@ -2,24 +2,31 @@
 //!
 //! Column names come from the model whitelist. Values are bound parameters.
 //! `list` and `list_scoped` stay capped at 100 rows; this module is the
-//! pagination path.
+//! pagination path. `page` keeps that cap and rejects offsets above
+//! [`OFFSET_LIMIT`]. `keyset` is the stable alternative: it walks the same
+//! order, including the `id` tie-break, and does not use `OFFSET`.
+//! Aggregates and many-to-many loads are separate statements, not one query
+//! per parent row.
 
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use ferrioxid_core::{ColumnKind, ColumnSpec, FerrioxidError, FerrioxidModel, QueryScope};
 use sea_orm::sea_query::{
-    Alias, Expr, Order, PostgresQueryBuilder, Query, QueryStatementWriter, SelectStatement,
-    SimpleExpr, SqliteQueryBuilder,
+    Alias, Condition, Expr, Func, JoinType, Order, PostgresQueryBuilder, Query,
+    QueryStatementWriter, SelectStatement, SimpleExpr, SqliteQueryBuilder,
 };
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as Json;
 use uuid::Uuid;
 
 use crate::sql::{is_safe_ident, row_to_json, scope_condition, LIST_LIMIT};
 
 /// Maximum page size. Matches `list` and the admin list.
 pub const PAGE_LIMIT: u64 = LIST_LIMIT as u64;
-/// Maximum `OFFSET`. Larger windows need a keyset that this API does not provide.
+/// Maximum `OFFSET` for [`Select::page`]. Larger windows use [`Select::keyset`].
 pub const OFFSET_LIMIT: u64 = 1_000_000;
 /// Maximum number of bound values in one `IN` or `NOT IN` list.
 pub const IN_LIMIT: usize = 100;
@@ -188,6 +195,76 @@ pub struct QueryPage<T> {
     pub has_more: bool,
 }
 
+/// One keyset page. `next` is `None` when the page is empty.
+/// Pass `next` back to [`Select::keyset`] to read the following page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeysetPage<T> {
+    pub data: Vec<T>,
+    pub limit: u64,
+    pub next: Option<String>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AggregateFn {
+    Count,
+    Sum,
+}
+
+/// A related `COUNT` or `SUM` for [`Select::annotate`].
+pub struct Aggregate<Child> {
+    pub alias: &'static str,
+    pub function: AggregateFn,
+    pub foreign_key: &'static str,
+    pub value_column: Option<&'static str>,
+    pub child_scope: QueryScope,
+    _child: PhantomData<Child>,
+}
+
+impl<Child> Aggregate<Child> {
+    pub fn count(alias: &'static str, foreign_key: &'static str) -> Self {
+        Self {
+            alias,
+            function: AggregateFn::Count,
+            foreign_key,
+            value_column: None,
+            child_scope: QueryScope::All,
+            _child: PhantomData,
+        }
+    }
+
+    pub fn sum(alias: &'static str, foreign_key: &'static str, value_column: &'static str) -> Self {
+        Self {
+            alias,
+            function: AggregateFn::Sum,
+            foreign_key,
+            value_column: Some(value_column),
+            child_scope: QueryScope::All,
+            _child: PhantomData,
+        }
+    }
+
+    pub fn scope(mut self, scope: QueryScope) -> Self {
+        self.child_scope = scope;
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Annotated<M> {
+    pub row: M,
+    pub alias: &'static str,
+    pub value: i64,
+}
+
+/// Join table for [`load_many_to_many`]. Both columns are UUID foreign keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManyToMany {
+    pub join_table: &'static str,
+    pub parent_column: &'static str,
+    pub child_column: &'static str,
+}
+
 /// A bounded `SELECT` for `M`.
 ///
 /// `filter` combines with AND. `any_of` and `not` build OR and NOT.
@@ -339,6 +416,194 @@ impl<M> Select<M> {
             total,
             has_more,
         })
+    }
+
+    /// Returns the next page after `cursor`.
+    ///
+    /// `None` starts at the first row. The cursor is an opaque token for the
+    /// last returned row and the planned order, including the `id` tie-break.
+    /// [`QueryScope`] is applied. Offset is not used; a non-zero offset is
+    /// rejected. Nullable and boolean order columns are rejected because their
+    /// seek comparison is not stable on both backends. The page size stays
+    /// between 1 and [`PAGE_LIMIT`].
+    pub async fn keyset<C>(
+        &self,
+        db: &C,
+        cursor: Option<&str>,
+    ) -> Result<KeysetPage<M>, FerrioxidError>
+    where
+        M: FerrioxidModel + DeserializeOwned,
+        C: ConnectionTrait,
+    {
+        if self.offset != 0 {
+            return Err(FerrioxidError::Validation(
+                "keyset pagination does not use offset".into(),
+            ));
+        }
+        let plan = self.plan()?;
+        reject_keyset_orders(M::columns(), &plan.orders)?;
+        let mut query = select_body::<M>(plan.filter);
+        if let Some(token) = cursor {
+            let values = decode_cursor(token)?;
+            if values.len() != plan.orders.len() {
+                return Err(FerrioxidError::Validation(
+                    "keyset cursor does not match the order".into(),
+                ));
+            }
+            query.and_where(seek_expr(M::columns(), &plan.orders, &values)?);
+        }
+        apply_orders(&mut query, &plan.orders);
+        query.limit(plan.limit.saturating_add(1));
+        let mut pairs = fetch_pairs(db, &query).await?;
+        let has_more = pairs.len() as u64 > plan.limit;
+        if has_more {
+            pairs.pop();
+        }
+        let next = match pairs.last() {
+            Some((json, _)) => Some(encode_cursor(M::columns(), &plan.orders, json)?),
+            None => None,
+        };
+        Ok(KeysetPage {
+            data: pairs.into_iter().map(|(_, row)| row).collect(),
+            limit: plan.limit,
+            next,
+            has_more,
+        })
+    }
+
+    /// Attaches one related `COUNT` or `SUM` with a single grouped join.
+    ///
+    /// The parent filter, scope, order and page window stay in force. The
+    /// child scope is applied inside the aggregate and cannot be skipped.
+    /// Missing children are `0`. `order` sorts by the aggregate before the
+    /// parent order. The returned page still contains at most [`PAGE_LIMIT`]
+    /// parents.
+    pub async fn annotate<Child, C>(
+        &self,
+        db: &C,
+        spec: Aggregate<Child>,
+        order: Option<Direction>,
+    ) -> Result<Vec<Annotated<M>>, FerrioxidError>
+    where
+        M: FerrioxidModel + DeserializeOwned,
+        Child: FerrioxidModel,
+        C: ConnectionTrait,
+    {
+        let plan = self.plan()?;
+        let child_table = Child::descriptor().table;
+        if !is_safe_ident(child_table) || !is_safe_ident(spec.foreign_key) {
+            return Err(FerrioxidError::Validation(
+                "aggregate columns are not available".into(),
+            ));
+        }
+        let child_fk = lookup(Child::columns(), spec.foreign_key)?;
+        if child_fk.kind != ColumnKind::Uuid {
+            return Err(FerrioxidError::Validation(format!(
+                "column {} is not a parent reference",
+                spec.foreign_key
+            )));
+        }
+        let mut sub = Query::select();
+        sub.column(Alias::new(spec.foreign_key))
+            .from(Alias::new(child_table))
+            .group_by_col(Alias::new(spec.foreign_key));
+        match spec.function {
+            AggregateFn::Count => {
+                sub.expr_as(
+                    Expr::col(Alias::new(spec.foreign_key)).count(),
+                    Alias::new("aggregate_value"),
+                );
+            }
+            AggregateFn::Sum => {
+                let Some(value_column) = spec.value_column else {
+                    return Err(FerrioxidError::Validation(
+                        "sum needs a value column".into(),
+                    ));
+                };
+                let column = lookup(Child::columns(), value_column)?;
+                if column.kind != ColumnKind::BigInt {
+                    return Err(FerrioxidError::Validation(format!(
+                        "column {value_column} cannot be summed"
+                    )));
+                }
+                sub.expr_as(
+                    Expr::col(Alias::new(value_column)).sum(),
+                    Alias::new("aggregate_value"),
+                );
+            }
+        }
+        if let Some(scope) = scope_condition(Child::columns(), &spec.child_scope)? {
+            sub.and_where(scope);
+        }
+        let table = M::descriptor().table;
+        let mut query = Query::select();
+        for column in M::columns() {
+            query.expr_as(
+                Expr::col((Alias::new(table), Alias::new(column.name))),
+                Alias::new(column.name),
+            );
+        }
+        let aggregate = Func::coalesce([
+            Expr::col((Alias::new("ferrioxid_agg"), Alias::new("aggregate_value"))).into(),
+            Expr::val(0).into(),
+        ]);
+        let cast = match db.get_database_backend() {
+            DatabaseBackend::Postgres => "bigint",
+            DatabaseBackend::Sqlite => "integer",
+            DatabaseBackend::MySql => {
+                return Err(FerrioxidError::database(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "MySQL is not a Ferrioxid database",
+                )))
+            }
+        };
+        query.expr_as(
+            Func::cast_as(aggregate, Alias::new(cast)),
+            Alias::new("ferrioxid_aggregate"),
+        );
+        query.from(Alias::new(table)).join_subquery(
+            JoinType::LeftJoin,
+            sub,
+            Alias::new("ferrioxid_agg"),
+            Condition::all().add(
+                Expr::col((Alias::new("ferrioxid_agg"), Alias::new(spec.foreign_key)))
+                    .eq(Expr::col((Alias::new(table), Alias::new("id")))),
+            ),
+        );
+        if let Some(filter) = plan.filter {
+            query.and_where(filter);
+        }
+        if let Some(direction) = order {
+            query.order_by(
+                Alias::new("ferrioxid_aggregate"),
+                match direction {
+                    Direction::Asc => Order::Asc,
+                    Direction::Desc => Order::Desc,
+                },
+            );
+        }
+        apply_orders(&mut query, &plan.orders);
+        query.limit(plan.limit).offset(plan.offset);
+        note_statement();
+        let rows = db
+            .query_all(render(db.get_database_backend(), &query)?)
+            .await
+            .map_err(FerrioxidError::database)?;
+        let mut annotated = Vec::with_capacity(rows.len());
+        for row in rows {
+            let value = row
+                .try_get::<i64>("", "ferrioxid_aggregate")
+                .or_else(|_| row.try_get::<i32>("", "ferrioxid_aggregate").map(i64::from))
+                .map_err(FerrioxidError::database)?;
+            let json = row_to_json(&row, M::columns())?;
+            let model = serde_json::from_value(json).map_err(FerrioxidError::database)?;
+            annotated.push(Annotated {
+                row: model,
+                alias: spec.alias,
+                value,
+            });
+        }
+        Ok(annotated)
     }
 
     fn plan(&self) -> Result<Plan, FerrioxidError>
@@ -631,6 +896,211 @@ fn render(
     Ok(Statement::from_sql_and_values(backend, sql, values.0))
 }
 
+fn reject_keyset_orders(
+    columns: &[ColumnSpec],
+    orders: &[(&str, Direction)],
+) -> Result<(), FerrioxidError> {
+    for (name, _) in orders {
+        let column = lookup(columns, name)?;
+        if column.nullable || column.kind == ColumnKind::Boolean {
+            return Err(FerrioxidError::Validation(format!(
+                "keyset cannot order by {name}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn seek_expr(
+    columns: &[ColumnSpec],
+    orders: &[(&str, Direction)],
+    values: &[Bound],
+) -> Result<SimpleExpr, FerrioxidError> {
+    let mut outer: Option<SimpleExpr> = None;
+    for index in 0..orders.len() {
+        let mut inner: Option<SimpleExpr> = None;
+        for earlier in 0..index {
+            let (name, _) = orders[earlier];
+            let column = lookup(columns, name)?;
+            let equal = Expr::col(Alias::new(name)).eq(bind_for_column(column, &values[earlier])?);
+            inner = Some(match inner {
+                Some(current) => current.and(equal),
+                None => equal,
+            });
+        }
+        let (name, direction) = orders[index];
+        let column = lookup(columns, name)?;
+        let value = bind_for_column(column, &values[index])?;
+        let compared = match direction {
+            Direction::Asc => Expr::col(Alias::new(name)).gt(value),
+            Direction::Desc => Expr::col(Alias::new(name)).lt(value),
+        };
+        let branch = match inner {
+            Some(current) => current.and(compared),
+            None => compared,
+        };
+        outer = Some(match outer {
+            Some(current) => current.or(branch),
+            None => branch,
+        });
+    }
+    outer.ok_or_else(|| FerrioxidError::Validation("keyset order is empty".into()))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CursorToken {
+    values: Vec<CursorValue>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum CursorValue {
+    I64(i64),
+    Text(String),
+    Bool(bool),
+    Uuid(Uuid),
+}
+
+fn encode_cursor(
+    columns: &[ColumnSpec],
+    orders: &[(&str, Direction)],
+    row: &Json,
+) -> Result<String, FerrioxidError> {
+    let object = row.as_object().ok_or_else(|| {
+        FerrioxidError::database(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "keyset row is not an object",
+        ))
+    })?;
+    let mut values = Vec::new();
+    for (name, _) in orders {
+        let column = lookup(columns, name)?;
+        let value = object.get(*name).ok_or_else(|| {
+            FerrioxidError::Validation(format!("keyset column {name} is missing"))
+        })?;
+        values.push(cursor_value(column, value)?);
+    }
+    let json = serde_json::to_vec(&CursorToken { values }).map_err(FerrioxidError::database)?;
+    Ok(format!("k1.{}", hex_encode(&json)))
+}
+
+fn cursor_value(column: &ColumnSpec, value: &Json) -> Result<CursorValue, FerrioxidError> {
+    if value.is_null() {
+        return Err(FerrioxidError::Validation(format!(
+            "keyset column {} is null",
+            column.name
+        )));
+    }
+    match column.kind {
+        ColumnKind::BigInt => value
+            .as_i64()
+            .map(CursorValue::I64)
+            .ok_or_else(|| invalid_cursor(column.name)),
+        ColumnKind::Boolean => value
+            .as_bool()
+            .map(CursorValue::Bool)
+            .ok_or_else(|| invalid_cursor(column.name)),
+        ColumnKind::Uuid => {
+            let text = value.as_str().ok_or_else(|| invalid_cursor(column.name))?;
+            Uuid::parse_str(text)
+                .map(CursorValue::Uuid)
+                .map_err(|_| invalid_cursor(column.name))
+        }
+        ColumnKind::Text
+        | ColumnKind::Date
+        | ColumnKind::Time
+        | ColumnKind::DateTime
+        | ColumnKind::Choice
+        | ColumnKind::Decimal => value
+            .as_str()
+            .map(|text| CursorValue::Text(text.to_owned()))
+            .ok_or_else(|| invalid_cursor(column.name)),
+    }
+}
+
+fn invalid_cursor(name: &str) -> FerrioxidError {
+    FerrioxidError::Validation(format!("keyset column {name} cannot be continued"))
+}
+
+fn decode_cursor(token: &str) -> Result<Vec<Bound>, FerrioxidError> {
+    let Some(encoded) = token.strip_prefix("k1.") else {
+        return Err(FerrioxidError::Validation(
+            "keyset cursor is not valid".into(),
+        ));
+    };
+    let bytes = hex_decode(encoded)
+        .map_err(|_| FerrioxidError::Validation("keyset cursor is not valid".into()))?;
+    let token: CursorToken = serde_json::from_slice(&bytes)
+        .map_err(|_| FerrioxidError::Validation("keyset cursor is not valid".into()))?;
+    token
+        .values
+        .into_iter()
+        .map(|value| {
+            Ok(match value {
+                CursorValue::I64(number) => Bound::I64(number),
+                CursorValue::Text(text) => Bound::Text(text),
+                CursorValue::Bool(flag) => Bound::Bool(flag),
+                CursorValue::Uuid(id) => Bound::Uuid(id),
+            })
+        })
+        .collect()
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn hex_decode(text: &str) -> Result<Vec<u8>, ()> {
+    if text.len() % 2 != 0 {
+        return Err(());
+    }
+    let mut out = Vec::with_capacity(text.len() / 2);
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let high = hex_nibble(bytes[index])?;
+        let low = hex_nibble(bytes[index + 1])?;
+        out.push((high << 4) | low);
+        index += 2;
+    }
+    Ok(out)
+}
+
+fn hex_nibble(byte: u8) -> Result<u8, ()> {
+    match byte {
+        b'0'..=b'9' => Ok(byte - b'0'),
+        b'a'..=b'f' => Ok(byte - b'a' + 10),
+        _ => Err(()),
+    }
+}
+
+async fn fetch_pairs<M, C>(
+    db: &C,
+    query: &SelectStatement,
+) -> Result<Vec<(Json, M)>, FerrioxidError>
+where
+    M: FerrioxidModel + DeserializeOwned,
+    C: ConnectionTrait,
+{
+    note_statement();
+    let rows = db
+        .query_all(render(db.get_database_backend(), query)?)
+        .await
+        .map_err(FerrioxidError::database)?;
+    let mut pairs = Vec::with_capacity(rows.len());
+    for row in rows {
+        let json = row_to_json(&row, M::columns())?;
+        let model = serde_json::from_value(json.clone()).map_err(FerrioxidError::database)?;
+        pairs.push((json, model));
+    }
+    Ok(pairs)
+}
+
 /// Loads models by primary key on `db`, which may be an open transaction.
 ///
 /// At most [`IN_LIMIT`] identifiers are sent per statement. Rows hidden by
@@ -670,6 +1140,94 @@ where
         )));
     }
     load_where::<M>(db, column, parent_ids, scope).await
+}
+
+/// Groups child rows by parent without a further query.
+pub fn group_by_parent<T>(rows: Vec<T>, parent_of: impl Fn(&T) -> Uuid) -> BTreeMap<Uuid, Vec<T>> {
+    let mut grouped = BTreeMap::new();
+    for row in rows {
+        grouped
+            .entry(parent_of(&row))
+            .or_insert_with(Vec::new)
+            .push(row);
+    }
+    grouped
+}
+
+/// Loads many-to-many children through `link`.
+///
+/// One statement reads at most [`IN_LIMIT`] parent identifiers from the join
+/// table. Children are then loaded with [`load_by_ids`] under `scope`. A child
+/// hidden by the scope is omitted. The pairs keep join-table order. An empty
+/// parent list or [`QueryScope::None`] performs no query.
+pub async fn load_many_to_many<Child>(
+    db: &impl ConnectionTrait,
+    link: ManyToMany,
+    parent_ids: &[Uuid],
+    scope: &QueryScope,
+) -> Result<Vec<(Uuid, Child)>, FerrioxidError>
+where
+    Child: FerrioxidModel + DeserializeOwned + Serialize + Clone,
+{
+    if !is_safe_ident(link.join_table)
+        || !is_safe_ident(link.parent_column)
+        || !is_safe_ident(link.child_column)
+    {
+        return Err(FerrioxidError::Validation(
+            "many-to-many columns are not available".into(),
+        ));
+    }
+    if parent_ids.is_empty() || matches!(scope, QueryScope::None) {
+        return Ok(Vec::new());
+    }
+    let mut parents = parent_ids.to_vec();
+    parents.sort();
+    parents.dedup();
+    let mut links = Vec::new();
+    for chunk in parents.chunks(IN_LIMIT) {
+        let mut query = Query::select();
+        query
+            .columns([
+                Alias::new(link.parent_column),
+                Alias::new(link.child_column),
+            ])
+            .from(Alias::new(link.join_table))
+            .and_where(Expr::col(Alias::new(link.parent_column)).is_in(chunk.iter().copied()))
+            .order_by(Alias::new(link.parent_column), Order::Asc)
+            .order_by(Alias::new(link.child_column), Order::Asc);
+        note_statement();
+        let rows = db
+            .query_all(render(db.get_database_backend(), &query)?)
+            .await
+            .map_err(FerrioxidError::database)?;
+        for row in rows {
+            let parent = read_uuid(&row, link.parent_column)?;
+            let child = read_uuid(&row, link.child_column)?;
+            links.push((parent, child));
+        }
+    }
+    let child_ids: Vec<Uuid> = links.iter().map(|(_, child)| *child).collect();
+    let children = load_by_ids::<Child>(db, &child_ids, scope).await?;
+    let mut by_id = BTreeMap::new();
+    for child in children {
+        let json = serde_json::to_value(&child).map_err(FerrioxidError::database)?;
+        by_id.insert(json_id(&json)?, child);
+    }
+    let mut pairs = Vec::new();
+    for (parent, child_id) in links {
+        if let Some(child) = by_id.get(&child_id) {
+            pairs.push((parent, child.clone()));
+        }
+    }
+    Ok(pairs)
+}
+
+fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FerrioxidError> {
+    if let Ok(id) = row.try_get::<Uuid>("", column) {
+        return Ok(id);
+    }
+    let text: String = row.try_get("", column).map_err(FerrioxidError::database)?;
+    Uuid::parse_str(&text).map_err(FerrioxidError::database)
 }
 
 /// Reads one model on `db` and applies `scope`. A hidden row is `Ok(None)`.
@@ -801,7 +1359,7 @@ mod tests {
     use sea_orm::{
         ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait,
     };
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
 
     use crate::connect;
 
@@ -1689,5 +2247,287 @@ mod tests {
         ))
         .await
         .unwrap();
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+    struct Tag {
+        id: Uuid,
+        item_id: Uuid,
+        amount: i64,
+        visible: bool,
+    }
+
+    const TAG_DESCRIPTOR: ModelDescriptor = ModelDescriptor {
+        name: "Tag",
+        table: "ferrioxid_query_tags",
+        api_path: "",
+        allow_anonymous: false,
+        permission: None,
+        requires_object_policy: false,
+    };
+
+    impl FerrioxidModel for Tag {
+        fn descriptor() -> &'static ModelDescriptor {
+            &TAG_DESCRIPTOR
+        }
+
+        fn columns() -> &'static [ColumnSpec] {
+            use std::sync::OnceLock;
+            static COLUMNS: OnceLock<Vec<ColumnSpec>> = OnceLock::new();
+            COLUMNS.get_or_init(|| {
+                vec![
+                    column("id", ColumnKind::Uuid, false, true),
+                    column("item_id", ColumnKind::Uuid, false, false),
+                    column("amount", ColumnKind::BigInt, false, false),
+                    column("visible", ColumnKind::Boolean, false, false),
+                ]
+            })
+        }
+
+        fn schema_sql(kind: DatabaseKind) -> String {
+            match kind {
+                DatabaseKind::Sqlite => "CREATE TABLE ferrioxid_query_tags (
+                    id text PRIMARY KEY NOT NULL,
+                    item_id text NOT NULL,
+                    amount bigint NOT NULL,
+                    visible integer NOT NULL
+                )"
+                .to_owned(),
+                DatabaseKind::Postgres => "CREATE TABLE ferrioxid_query_tags (
+                    id uuid PRIMARY KEY NOT NULL,
+                    item_id uuid NOT NULL,
+                    amount bigint NOT NULL,
+                    visible boolean NOT NULL
+                )"
+                .to_owned(),
+            }
+        }
+    }
+
+    fn tag_sql(kind: DatabaseKind) -> String {
+        let id = match kind {
+            DatabaseKind::Sqlite => "text",
+            DatabaseKind::Postgres => "uuid",
+        };
+        format!(
+            "CREATE TABLE ferrioxid_query_membership (
+                item_id {id} NOT NULL,
+                tag_id {id} NOT NULL,
+                PRIMARY KEY (item_id, tag_id)
+            )"
+        )
+    }
+
+    async fn prepare_relations(db: &impl ConnectionTrait, kind: DatabaseKind) {
+        let backend = match kind {
+            DatabaseKind::Sqlite => DatabaseBackend::Sqlite,
+            DatabaseKind::Postgres => DatabaseBackend::Postgres,
+        };
+        db.execute(Statement::from_string(backend, Tag::schema_sql(kind)))
+            .await
+            .unwrap();
+        db.execute(Statement::from_string(backend, tag_sql(kind)))
+            .await
+            .unwrap();
+        for (id, item, amount, visible) in
+            [(10_u128, 1_u128, 4_i64, 1), (11, 1, 6, 1), (12, 2, 3, 0)]
+        {
+            insert_tag(db, kind, id, item, amount, visible).await;
+        }
+        for (item, tag) in [(1_u128, 10_u128), (1, 11), (2, 12)] {
+            link_tag(db, kind, item, tag).await;
+        }
+    }
+
+    async fn insert_tag(
+        db: &impl ConnectionTrait,
+        kind: DatabaseKind,
+        id: u128,
+        item: u128,
+        amount: i64,
+        visible: i64,
+    ) {
+        let _ = kind;
+        let mut query = Query::insert();
+        query
+            .into_table(Alias::new("ferrioxid_query_tags"))
+            .columns([
+                Alias::new("id"),
+                Alias::new("item_id"),
+                Alias::new("amount"),
+                Alias::new("visible"),
+            ])
+            .values_panic([
+                Value::Uuid(Some(Box::new(Uuid::from_u128(id)))).into(),
+                Value::Uuid(Some(Box::new(Uuid::from_u128(item)))).into(),
+                Value::BigInt(Some(amount)).into(),
+                Value::Bool(Some(visible == 1)).into(),
+            ]);
+        db.execute(render(db.get_database_backend(), &query).unwrap())
+            .await
+            .unwrap();
+    }
+
+    async fn link_tag(db: &impl ConnectionTrait, kind: DatabaseKind, item: u128, tag: u128) {
+        let _ = kind;
+        let mut query = Query::insert();
+        query
+            .into_table(Alias::new("ferrioxid_query_membership"))
+            .columns([Alias::new("item_id"), Alias::new("tag_id")])
+            .values_panic([
+                Value::Uuid(Some(Box::new(Uuid::from_u128(item)))).into(),
+                Value::Uuid(Some(Box::new(Uuid::from_u128(tag)))).into(),
+            ]);
+        db.execute(render(db.get_database_backend(), &query).unwrap())
+            .await
+            .unwrap();
+    }
+
+    async fn assert_relations(db: &impl ConnectionTrait) {
+        let page = Item::query()
+            .order_by("price_cents", Direction::Asc)
+            .limit(2)
+            .keyset(db, None)
+            .await
+            .unwrap();
+        assert_eq!(page.data.len(), 2);
+        assert!(page.has_more);
+        let again = Item::query()
+            .order_by("price_cents", Direction::Asc)
+            .limit(2)
+            .keyset(db, page.next.as_deref())
+            .await
+            .unwrap();
+        let mut seen = page.data.iter().map(|row| row.id).collect::<Vec<_>>();
+        seen.extend(again.data.iter().map(|row| row.id));
+        seen.sort();
+        seen.dedup();
+        assert_eq!(seen.len(), page.data.len() + again.data.len());
+        let rejected = Item::query()
+            .order_by("category_id", Direction::Asc)
+            .keyset(db, None)
+            .await;
+        assert!(rejected.is_err());
+
+        let counts = Item::query()
+            .filter(col("id").is_in(vec![
+                Uuid::from_u128(1),
+                Uuid::from_u128(2),
+                Uuid::from_u128(3),
+            ]))
+            .annotate(
+                db,
+                Aggregate::<Tag>::count("tags", "item_id"),
+                Some(Direction::Desc),
+            )
+            .await
+            .unwrap();
+        assert_eq!(counts[0].row.id, Uuid::from_u128(1));
+        assert_eq!(counts[0].value, 2);
+        assert_eq!(counts[2].value, 0);
+        let sums = Item::query()
+            .filter(col("id").eq(Uuid::from_u128(1)))
+            .annotate(
+                db,
+                Aggregate::<Tag>::sum("amount", "item_id", "amount").scope(QueryScope::Equals {
+                    column: "visible",
+                    value: ScopeValue::Bool(true),
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(sums[0].value, 10);
+
+        STATEMENT_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+        let parents = [Uuid::from_u128(1), Uuid::from_u128(2)];
+        let children = load_children::<Tag>(db, "item_id", &parents, &QueryScope::All)
+            .await
+            .unwrap();
+        let grouped = group_by_parent(children, |tag| tag.item_id);
+        assert_eq!(grouped.get(&Uuid::from_u128(1)).unwrap().len(), 2);
+        let pairs = load_many_to_many::<Tag>(
+            db,
+            ManyToMany {
+                join_table: "ferrioxid_query_membership",
+                parent_column: "item_id",
+                child_column: "tag_id",
+            },
+            &parents,
+            &QueryScope::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(pairs.len(), 3);
+        let hidden = load_many_to_many::<Tag>(
+            db,
+            ManyToMany {
+                join_table: "ferrioxid_query_membership",
+                parent_column: "item_id",
+                child_column: "tag_id",
+            },
+            &parents,
+            &QueryScope::Equals {
+                column: "visible",
+                value: ScopeValue::Bool(true),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(hidden.len(), 2);
+        let statements = STATEMENT_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        assert!(
+            statements <= 6,
+            "relation loads issued {statements} statements"
+        );
+    }
+
+    #[tokio::test]
+    async fn sqlite_keyset_annotations_and_many_to_many() {
+        let db = memory().await;
+        fixture(&db).await;
+        prepare_relations(&db, DatabaseKind::Sqlite).await;
+        assert_relations(&db).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
+    async fn postgres_keyset_annotations_and_many_to_many() {
+        let url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set to run the ignored PostgreSQL relation test");
+        let db = connect(&url).await.expect("postgres connection");
+        for sql in [
+            "DROP TABLE IF EXISTS ferrioxid_query_membership",
+            "DROP TABLE IF EXISTS ferrioxid_query_tags",
+            "DROP TABLE IF EXISTS ferrioxid_query_items",
+        ] {
+            db.execute(Statement::from_string(
+                DatabaseBackend::Postgres,
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap();
+        }
+        db.execute(Statement::from_string(
+            DatabaseBackend::Postgres,
+            Item::schema_sql(DatabaseKind::Postgres),
+        ))
+        .await
+        .unwrap();
+        fixture(&db).await;
+        prepare_relations(&db, DatabaseKind::Postgres).await;
+        assert_relations(&db).await;
+        for sql in [
+            "DROP TABLE IF EXISTS ferrioxid_query_membership",
+            "DROP TABLE IF EXISTS ferrioxid_query_tags",
+            "DROP TABLE IF EXISTS ferrioxid_query_items",
+        ] {
+            db.execute(Statement::from_string(
+                DatabaseBackend::Postgres,
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap();
+        }
     }
 }

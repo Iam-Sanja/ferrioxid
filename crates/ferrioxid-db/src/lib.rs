@@ -5,8 +5,9 @@ mod sql;
 mod unit;
 
 pub use query::{
-    all_of, any_of, col, load_by_ids, load_children, not, read_model, Bound, Column, Compare,
-    Direction, ModelQuery, Predicate, QueryPage, Select, IN_LIMIT, OFFSET_LIMIT, PAGE_LIMIT,
+    all_of, any_of, col, group_by_parent, load_by_ids, load_children, load_many_to_many, not,
+    read_model, Aggregate, AggregateFn, Annotated, Bound, Column, Compare, Direction, KeysetPage,
+    ManyToMany, ModelQuery, Predicate, QueryPage, Select, IN_LIMIT, OFFSET_LIMIT, PAGE_LIMIT,
 };
 
 pub use unit::conclude;
