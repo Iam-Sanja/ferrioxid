@@ -13,8 +13,9 @@ use std::marker::PhantomData;
 
 use ferrioxid_core::{ColumnKind, ColumnSpec, FerrioxidError, FerrioxidModel, QueryScope};
 use sea_orm::sea_query::{
-    Alias, Condition, Expr, ExprTrait, Func, JoinType, Order, PostgresQueryBuilder, Query,
-    QueryStatementWriter, SelectStatement, SimpleExpr, SqliteQueryBuilder,
+    extension::sqlite::SqliteExpr, Alias, Condition, Expr, ExprTrait, Func, JoinType, LikeExpr,
+    Order, PostgresQueryBuilder, Query, QueryStatementWriter, SelectStatement, SimpleExpr,
+    SqliteQueryBuilder,
 };
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
 use serde::de::DeserializeOwned;
@@ -1058,47 +1059,40 @@ fn text_match_expr(
             "text search is limited to {TEXT_MATCH_LIMIT} characters"
         )));
     }
-    let quoted = match qualifier {
-        Some(alias) => format!("\"{alias}\".\"{}\"", column.name),
-        None => format!("\"{}\"", column.name),
-    };
-    let (sql, pattern) = if case_insensitive {
+    let column_expr = qualified_col(qualifier, &column.name);
+    if case_insensitive {
         let pattern = match position {
             TextPosition::Contains => format!("%{}%", escape_like(value)),
             TextPosition::StartsWith => format!("{}%", escape_like(value)),
             TextPosition::EndsWith => format!("%{}", escape_like(value)),
         };
-        (
-            format!("LOWER({quoted}) LIKE LOWER(?) ESCAPE '\\'"),
-            pattern,
-        )
-    } else {
-        match backend {
-            DatabaseBackend::Postgres => {
-                let pattern = match position {
-                    TextPosition::Contains => format!("%{}%", escape_like(value)),
-                    TextPosition::StartsWith => format!("{}%", escape_like(value)),
-                    TextPosition::EndsWith => format!("%{}", escape_like(value)),
-                };
-                (format!("{quoted} LIKE ? ESCAPE '\\'"), pattern)
-            }
-            DatabaseBackend::Sqlite => {
-                let pattern = match position {
-                    TextPosition::Contains => format!("*{}*", escape_glob(value)),
-                    TextPosition::StartsWith => format!("{}*", escape_glob(value)),
-                    TextPosition::EndsWith => format!("*{}", escape_glob(value)),
-                };
-                (format!("{quoted} GLOB ?"), pattern)
-            }
-            DatabaseBackend::MySql => {
-                return Err(FerrioxidError::Validation("MySQL is not supported".into()));
-            }
+        return Ok(Some(
+            Expr::expr(Func::cust("LOWER").arg(column_expr))
+                .like(LikeExpr::new(pattern.to_lowercase()).escape('\\')),
+        ));
+    }
+    let expr = match backend {
+        DatabaseBackend::Postgres => {
+            let pattern = match position {
+                TextPosition::Contains => format!("%{}%", escape_like(value)),
+                TextPosition::StartsWith => format!("{}%", escape_like(value)),
+                TextPosition::EndsWith => format!("%{}", escape_like(value)),
+            };
+            column_expr.like(LikeExpr::new(pattern).escape('\\'))
+        }
+        DatabaseBackend::Sqlite => {
+            let pattern = match position {
+                TextPosition::Contains => format!("*{}*", escape_glob(value)),
+                TextPosition::StartsWith => format!("{}*", escape_glob(value)),
+                TextPosition::EndsWith => format!("*{}", escape_glob(value)),
+            };
+            column_expr.glob(pattern)
+        }
+        DatabaseBackend::MySql => {
+            return Err(FerrioxidError::Validation("MySQL is not supported".into()));
         }
     };
-    Ok(Some(Expr::cust_with_values(
-        sql,
-        [Value::String(Some(Box::new(pattern)))],
-    )))
+    Ok(Some(expr))
 }
 
 fn escape_glob(term: &str) -> String {
@@ -3119,6 +3113,8 @@ mod tests {
         let sqlite = select.statement_for(DatabaseBackend::Sqlite).unwrap();
         let postgres = select.statement_for(DatabaseBackend::Postgres).unwrap();
         assert!(sqlite.sql.contains("GLOB"));
+        assert!(!postgres.sql.contains("LIKE ?"));
+        assert!(postgres.sql.contains("$1"));
         assert!(!sqlite.sql.contains("LIKE"));
         assert!(postgres.sql.contains("LIKE"));
         assert!(postgres.sql.contains("ESCAPE"));
@@ -3237,9 +3233,22 @@ mod tests {
             )
             .await;
         }
+        let backend = db.get_database_backend();
+        let (categories_sql, notes_sql, item_categories_sql) = match backend {
+            DatabaseBackend::Postgres => (
+                "INSERT INTO ferrioxid_query_categories (id, name) VALUES ($1, $2), ($3, $4)",
+                "INSERT INTO ferrioxid_query_notes (id, item_id, body) VALUES ($1, $2, $3)",
+                "INSERT INTO ferrioxid_query_item_categories (item_id, category_id) VALUES ($1, $2)",
+            ),
+            _ => (
+                "INSERT INTO ferrioxid_query_categories (id, name) VALUES (?, ?), (?, ?)",
+                "INSERT INTO ferrioxid_query_notes (id, item_id, body) VALUES (?, ?, ?)",
+                "INSERT INTO ferrioxid_query_item_categories (item_id, category_id) VALUES (?, ?)",
+            ),
+        };
         db.execute(Statement::from_sql_and_values(
-            db.get_database_backend(),
-            "INSERT INTO ferrioxid_query_categories (id, name) VALUES (?, ?), (?, ?)",
+            backend,
+            categories_sql,
             [
                 uuid_value(50),
                 text_value("Tools"),
@@ -3250,15 +3259,15 @@ mod tests {
         .await
         .unwrap();
         db.execute(Statement::from_sql_and_values(
-            db.get_database_backend(),
-            "INSERT INTO ferrioxid_query_notes (id, item_id, body) VALUES (?, ?, ?)",
+            backend,
+            notes_sql,
             [uuid_value(90), uuid_value(1), text_value("sharp edge")],
         ))
         .await
         .unwrap();
         db.execute(Statement::from_sql_and_values(
-            db.get_database_backend(),
-            "INSERT INTO ferrioxid_query_item_categories (item_id, category_id) VALUES (?, ?)",
+            backend,
+            item_categories_sql,
             [uuid_value(4), uuid_value(50)],
         ))
         .await
@@ -3281,7 +3290,7 @@ mod tests {
 
         let folded = Item::query()
             .filter(col("name").contains_ignore_case("BETA"))
-            .order_by("name", Direction::Asc)
+            .order_by("id", Direction::Asc)
             .all(db)
             .await
             .unwrap();
