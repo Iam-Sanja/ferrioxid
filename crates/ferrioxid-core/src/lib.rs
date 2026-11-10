@@ -204,6 +204,22 @@ pub struct NumericBound {
     pub max: Option<i64>,
 }
 
+/// Write and validation rules emitted by the model derive.
+///
+/// The same field attributes that build `ColumnSpec` and `NumericBound` fill this
+/// contract. Hand-written models inherit the empty default.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FieldContract {
+    pub column: &'static str,
+    pub in_create: bool,
+    pub in_update: bool,
+    pub create_required: bool,
+    pub min_length: Option<u32>,
+    pub max_length: Option<u32>,
+    /// `"slug"` or `"email"` when the field declares `format`.
+    pub format: Option<&'static str>,
+}
+
 pub trait FerrioxidModel: Send + Sync + 'static {
     fn descriptor() -> &'static ModelDescriptor;
     fn columns() -> &'static [ColumnSpec];
@@ -216,6 +232,11 @@ pub trait FerrioxidModel: Send + Sync + 'static {
     }
     /// Limits from `#[field(min = ..., max = ...)]`. Empty when the model has none.
     fn numeric_bounds() -> &'static [NumericBound] {
+        &[]
+    }
+
+    /// Create, update and text rules from the same derive. Empty for hand-written models.
+    fn field_contracts() -> &'static [FieldContract] {
         &[]
     }
 }

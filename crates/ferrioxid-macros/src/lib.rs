@@ -290,6 +290,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let mut values = Vec::new();
     let mut checks = Vec::new();
     let mut bound_items = Vec::new();
+    let mut contract_items = Vec::new();
     let mut update_fields = Vec::new();
     let mut update_bindings = Vec::new();
     let mut seen_id = false;
@@ -821,6 +822,42 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 choices: #choices_expr,
             }
         });
+        let in_create = !primary && managed_kind.is_none();
+        let in_update = in_create && !readonly;
+        let create_required = in_create && (required || (!nullable && default_bool.is_none()));
+        let min_length_token = match min_length {
+            Some(value) => {
+                let value = u32::try_from(value).map_err(|_| {
+                    syn::Error::new_spanned(&ident, "min_length does not fit into u32")
+                })?;
+                quote! { ::core::option::Option::Some(#value) }
+            }
+            None => quote! { ::core::option::Option::None },
+        };
+        let max_length_token = match max_length {
+            Some(value) => {
+                let value = u32::try_from(value).map_err(|_| {
+                    syn::Error::new_spanned(&ident, "max_length does not fit into u32")
+                })?;
+                quote! { ::core::option::Option::Some(#value) }
+            }
+            None => quote! { ::core::option::Option::None },
+        };
+        let format_token = match format.as_deref() {
+            Some(value) => quote! { ::core::option::Option::Some(#value) },
+            None => quote! { ::core::option::Option::None },
+        };
+        contract_items.push(quote! {
+            ::ferrioxid::core::FieldContract {
+                column: #field_name,
+                in_create: #in_create,
+                in_update: #in_update,
+                create_required: #create_required,
+                min_length: #min_length_token,
+                max_length: #max_length_token,
+                format: #format_token,
+            }
+        });
         if primary {
             values.push(
                 quote! { ::ferrioxid::sea_orm::Value::from(::ferrioxid::uuid::Uuid::new_v4()) },
@@ -1266,6 +1303,10 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             fn numeric_bounds() -> &'static [::ferrioxid::core::NumericBound] {
                 static BOUNDS: &[::ferrioxid::core::NumericBound] = &[#(#bound_items),*];
                 BOUNDS
+            }
+            fn field_contracts() -> &'static [::ferrioxid::core::FieldContract] {
+                static CONTRACTS: &[::ferrioxid::core::FieldContract] = &[#(#contract_items),*];
+                CONTRACTS
             }
             fn constraints() -> &'static ::ferrioxid::core::TableConstraints {
                 static CONSTRAINTS: ::ferrioxid::core::TableConstraints = ::ferrioxid::core::TableConstraints {
