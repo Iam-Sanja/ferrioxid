@@ -272,4 +272,4 @@ After that, `migrate up` will not run the already marked files again.
 
 ## 13. Not implemented
 
-`migrate down`, subsequent foreign key change on existing columns, baseline for PostgreSQL, substitute values for `NULL`, advisory lock, automatic migration at server startup, MySQL, many-to-many and automatic eager loading. Explicit batch reads are described in [relations.md](relations.md). Type changes other than `string` ↔ `i64` and other than nullity or bool default of the same type are rejected.
+PostgreSQL baseline, per-row substitute values for `NULL`, advisory lock, automatic migration at server startup and MySQL. `migrate down` and `migrate down --app` revert one applied file when its snapshot matches. An `ON DELETE` change is a reversible foreign-key replacement. A new required column without a default needs an explicit backfill; remaining NULL rows abort the transaction. Dropping a table or column still needs `--allow-destructive` and does not restore those rows. Many-to-many loads are described in [relations.md](relations.md). Type changes other than `string` ↔ `i64` and other than nullity or bool default of the same type are rejected.

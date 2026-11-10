@@ -62,7 +62,7 @@ If `allow_anonymous = true`, a request without a session cookie can be used with
 4. Cursor-based pagination with stable ordering and enforced limits.
 5. Allowlists for sortable and filterable fields.
 6. Declare versioning explicitly and do not guess from path names.
-7. OpenAPI metadata without duplicate manual schema definitions.
+7. OpenAPI metadata is generated from the model derive. See [openapi.md](openapi.md). The generated list is still the fixed 100-row window.
 8. JSON error contract with structured validation details and RFC-9457 matching.
 
 ## API acceptance tests

@@ -58,11 +58,21 @@ The JSON structure is the same for both backends because the handlers are dialec
 
 `.github/workflows/ci.yml` starts rustfmt, Clippy, `cargo test --workspace` and `cargo build --workspace` on Linux and Windows. The SQLite test is running. A separate job starts PostgreSQL 16 and the two ignored tests. A local workspace run without a server is not a PostgreSQL proof.
 
-The migration tests test the same snapshots, deterministic column order, duplicate names, unknown versions, new table, new column, deleted column, supported type and default change, blocked type change, empty diff, risky change, renaming refusal, explicit column and table renaming, successful and failed SQLite conversion, blocked `NOT NULL`, matching and deviating baseline, destructive chains without baseline, `reseal`, first application, second migration with received rows, repeated `up`, manipulated file and existing tables without history. `tests/constraints.rs` checks Unique including `NULL` and composite key, index attachment, repeated `up`, index removal, valid and invalid foreign keys, `restrict`, `cascade`, `set_null`, rejected `set_null` on `NOT NULL`, baseline with indices, rolled-back Unique migration and blocked erasure rule change. A renaming of an indexed column renames the index to SQLite. The `migrate_make_up_and_status_use_a_temporary_sqlite_database` CLI test uses a temporary SQLite file. `examples/myshop/tests/relations.rs` checks Belongs-To, Has-Many, empty children, optional `None`, duplicate category name, an invalid foreign key and the checked-in chain `0001` plus `0002`.
+The migration tests test the same snapshots, deterministic column order, duplicate names, unknown versions, new table, new column, deleted column, supported type and default change, blocked type change, empty diff, risky change, renaming refusal, explicit column and table renaming, successful and failed SQLite conversion, blocked `NOT NULL`, matching and deviating baseline, destructive chains without baseline, `reseal`, first application, second migration with received rows, repeated `up`, manipulated file and existing tables without history. `tests/constraints.rs` checks Unique including `NULL` and composite key, index attachment, repeated `up`, index removal, valid and invalid foreign keys, `restrict`, `cascade`, `set_null`, rejected `set_null` on `NOT NULL`, baseline with indices, rolled-back Unique migration and a reversible ON DELETE change. A renaming of an indexed column renames the index to SQLite. The `migrate_make_up_and_status_use_a_temporary_sqlite_database` CLI test uses a temporary SQLite file. `examples/myshop/tests/relations.rs` checks Belongs-To, Has-Many, empty children, optional `None`, duplicate category name, an invalid foreign key and the checked-in chain `0001` plus `0002`.
 
 PostgreSQL migration and HTTP tests remain ignored as long as no server is running. An ignored test does not count as passed.
 
 The quality commands for this implementation are contained in the final report of the operation. `postgres_http_roundtrip` and `postgres_migration_roundtrip` remain ignored as long as no PostgreSQL server is running. An ignored test is not a success.
+
+## In-process client (implemented)
+
+`ferrioxid::testing::TestClient` sends `GET`, `POST`, `PUT`, `PATCH` and `DELETE` through the Axum router. It stores `Set-Cookie` values and sends them back. `post_json` and `post_form` set the matching content type. `post_form_with_csrf` copies the `csrf_token` field from HTML. `assert_status` and `assert_json` compare the response.
+
+`TestDatabase::sqlite` creates a temporary directory named `ferrioxid-test-*` and deletes only that directory. `TestDatabase::postgres` accepts a URL only when the database name contains `ferrioxid_test`. `cleanup` drops recorded PostgreSQL tables and never runs `DROP DATABASE`. A name such as `ferrioxid` is refused before a connection is opened.
+
+`ferrioxid::db::QueryCounter::install` counts model statements on the current thread. `assert_query_budget` fails when the count is above the limit. The executable example is `crates/ferrioxid/tests/openapi_client.rs`.
+
+PostgreSQL was not running on this machine while this client was added. The ignored PostgreSQL tests were not executed.
 
 ## Planned extension (planned)
 

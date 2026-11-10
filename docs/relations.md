@@ -1,6 +1,6 @@
 # Typed model relationships
 
-[Overview](index.md) · **Implemented** for Belongs-To, Has-Many and explicit batch loading. Many-to-many and automatic eager loading are not implemented.
+[Overview](index.md) · **Implemented** for Belongs-To, Has-Many, explicit batch loading and `load_many_to_many`. Automatic eager loading is not implemented. Call `Select::annotate` or `load_children` when the handler needs the related rows. Keyset pages use `Select::keyset` and stay within 100 rows.
 
 A relationship does not only exist in Rust. The field carries a foreign key, and the database checks it. The methods load typed models. You do not return a `serde_json::Value`.
 

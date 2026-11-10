@@ -37,6 +37,8 @@ These issues are implemented locally. Their matrix status stays **In PR** until 
 
 `App::require_browser_writes` layers `require_browser` before `with_state`, so an installed project can opt into [#69](https://github.com/Iam-Sanja/ferrioxid/issues/69) without wrapping a finished router.
 
+OpenAPI 3.1 and `ferrioxid::testing::TestClient` are also on this branch. They stay **In PR**. The schema reuses `FieldContract`, numeric bounds and admin field metadata. It does not describe `/admin` or a path that was not registered. The generated list stays a 100-row window and does not accept filter query parameters. `crates/ferrioxid/tests/openapi_client.rs` covers the schema, the explorer, a cookie write without CSRF, the query counter and the PostgreSQL name guard. That guard was not connected to a server. PostgreSQL was not running.
+
 ## TestShop
 
 TestShop depends on this checkout through `ferrioxid = { path = "D:/04_Projekte_Arbeit/Projekte/ferrioxid/crates/ferrioxid" }`. It is not a Git repository. Changed files were copied to `_backup_framework_completion` before editing. Git was not initialized there.
@@ -56,6 +58,8 @@ TestShop depends on this checkout through `ferrioxid = { path = "D:/04_Projekte_
 
 The test hashes `db.sqlite3` before and after. The original file was unchanged. The new migration is not applied to that file. The staff user exists only on the copy.
 
+`tests/api_docs.rs` uses another copy. It checks the OpenAPI document, the explorer, an anonymous cookie, a missing CSRF token, a cart write, admin login, and the query counter. Additive cart, order and product migrations are applied only to that copy. The original file hash stayed the same.
+
 PostgreSQL was not running on this machine. Ignored PostgreSQL tests, including the two new ones, were not executed and are not a pass.
 
 ## Workspace commands
@@ -67,7 +71,7 @@ These commands were run on `feat/framework-completion` after the TestShop integr
 - `cargo test --workspace -- --test-threads=8` passed. Eleven PostgreSQL tests stayed ignored because `DATABASE_URL` was unset and nothing was listening on `127.0.0.1:5432`. They are not a pass: `postgres_decimal_and_choice_roundtrip`, `postgres_anonymous_session_roundtrip`, `postgres_filters_and_pages_runtime`, `postgres_keyset_annotations_and_many_to_many`, `postgres_transaction_query_and_rollback_runtime`, `postgres_reverts_backfill_and_foreign_key`, `postgres_fixture_roundtrip`, `postgres_enforces_cross_app_foreign_keys`, `postgres_migration_roundtrip`, `fresh_postgres_initializes_auth_jobs_and_application`, and `postgres_http_roundtrip`.
 - `cargo build --workspace` passed.
 
-The SQLite constraint test now expects an `ON DELETE` change to be written as a reversible foreign-key replacement. That matches the down-migration behavior. TestShop `cargo test` passed, including `shop_flow`, with the demo seed left ignored.
+The SQLite constraint test now expects an `ON DELETE` change to be written as a reversible foreign-key replacement. That matches the down-migration behavior. TestShop `cargo test --test api_docs` passed against a database copy. `cargo test --workspace` for this OpenAPI and test-client change passed. Eleven PostgreSQL tests stayed ignored because `DATABASE_URL` was unset and nothing was listening on `127.0.0.1:5432`. They are not a pass.
 
 ## Limits that remain on purpose
 

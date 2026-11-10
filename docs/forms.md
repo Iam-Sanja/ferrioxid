@@ -21,7 +21,7 @@ The facade exports the module as `ferrioxid::forms`.
 
 `model_fields` builds fields from `ColumnSpec` and `AdminFieldMeta`, but only for names in the explicit allow-list. A name that is not a column, a duplicate, a primary key, or an admin field marked sensitive, readonly or hidden returns `FormSetupError` and creates no field. `bind_model` distinguishes `SubmitMode::Create`, `Replace` and `Patch`. Create and Replace require every required field and turn a missing optional field into `BoundValue::Null`. Patch keeps a missing key as `BoundValue::Unchanged`. Posted names outside the field list produce `validation.unknown_field`, including when a client adds a column the allow-list omitted. `choices` rejects values that are not in the supplied list with `validation.choice`.
 
-A `#[derive(FerrioxidForm)]` is not implemented. The trait and `model_fields` are the compilable API. The HTML `required` attribute does not replace the server check.
+`#[derive(FerrioxidForm)]` with `#[form(model = Type)]` builds a form from the model allow-list. `bind_formset` accepts at most 100 rows named `{prefix}_{index}_{field}`. `store_upload` rejects `..`, slashes and NUL, then stores the bytes through `LocalStorage`. Numeric `min` and `max` come from the model column metadata. The HTML `required` attribute does not replace the server check.
 
 ## Data flow
 

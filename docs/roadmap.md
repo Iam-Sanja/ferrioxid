@@ -122,7 +122,7 @@ The order is binding for the next work. A later phase does not begin until the p
 | v0.23 | Completed |Email, Password Reset and Typed Notes| [password-reset.md](password-reset.md) |
 | v0.24 | Completed |Settings, named URLs, views and project structure| [settings.md](settings.md) |
 
-Not in these numbered phases: React return, OAuth, MFA, JWT, S3, virus scanning, PostgreSQL baseline, OpenAPI and automatic superuser semantics. Many-to-many loads, `migrate down`, explicit backfills and derived forms are on the local branch `feat/framework-completion`. They are **In PR** and are not a numbered milestone. See [framework-quality-review.md](framework-quality-review.md).
+Not in these numbered phases: React return, OAuth, MFA, JWT, S3, virus scanning, PostgreSQL baseline and automatic superuser semantics. Many-to-many loads, `migrate down`, explicit backfills, derived forms, OpenAPI 3.1 and the in-process test client are on the local branch `feat/framework-completion`. They are **In PR** and are not a numbered milestone. See [framework-quality-review.md](framework-quality-review.md).
 
 ## Boundaries that remain
 
