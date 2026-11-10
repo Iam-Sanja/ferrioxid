@@ -24,7 +24,7 @@ mod upgrade;
 
 pub use baseline::baseline_database;
 pub use diff::{
-    plan_change, plan_change_with_backfills, ApplyClass, BackfillLiteral, ColumnBackfill,
+    classify, plan_change, plan_change_with_backfills, ApplyClass, BackfillLiteral, ColumnBackfill,
     MigrationOperation, MigrationPlan, MigrationRisk,
 };
 pub use error::MigrationError;
