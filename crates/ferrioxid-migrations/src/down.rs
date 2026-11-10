@@ -184,7 +184,7 @@ mod tests {
         pub struct IsolatedPostgres {
             pub url: String,
             db_name: String,
-            admin_prefix: String,
+            admin_url: String,
         }
 
         impl IsolatedPostgres {
@@ -194,8 +194,7 @@ mod tests {
                     .rsplit_once('/')
                     .ok_or_else(|| "DATABASE_URL must include a database name.".to_owned())?;
                 let db_name = format!("ferrioxid_test_{}", uuid::Uuid::new_v4().simple());
-                let admin_url = format!("{prefix}/postgres");
-                let admin = ferrioxid_db::connect(&admin_url)
+                let admin = ferrioxid_db::connect(base_url)
                     .await
                     .map_err(|error| error.to_string())?;
                 admin
@@ -208,13 +207,12 @@ mod tests {
                 Ok(Self {
                     url: format!("{prefix}/{db_name}"),
                     db_name,
-                    admin_prefix: prefix.to_owned(),
+                    admin_url: base_url.to_owned(),
                 })
             }
 
             pub async fn close(self) -> Result<(), String> {
-                let admin_url = format!("{}/postgres", self.admin_prefix);
-                let admin = ferrioxid_db::connect(&admin_url)
+                let admin = ferrioxid_db::connect(&self.admin_url)
                     .await
                     .map_err(|error| error.to_string())?;
                 admin
