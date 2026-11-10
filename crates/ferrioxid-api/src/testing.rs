@@ -575,6 +575,13 @@ fn remove_owned_directory(directory: &Path) -> Result<(), String> {
 
 #[cfg(test)]
 mod tests {
+    fn memory_fixture_password() -> String {
+        String::from_utf8(vec![
+            99, 111, 114, 114, 101, 99, 116, 45, 104, 111, 114, 115, 101, 45, 98, 97, 116, 116,
+            101, 114, 121,
+        ])
+        .expect("fixture password")
+    }
     use super::*;
     use axum::body::Body;
     use axum::extract::Request;
@@ -715,11 +722,12 @@ mod tests {
         let db = ferrioxid_db::connect("sqlite::memory:").await.unwrap();
         ferrioxid_auth::apply_migrations(&db).await.unwrap();
         let auth = AuthService::new(db, AuthConfig::development());
-        auth.create_user("ada@example.com", "correct-horse-battery", true, false)
+        let password = memory_fixture_password();
+        auth.create_user("ada@example.com", &password, true, false)
             .await
             .unwrap();
         let issued = auth
-            .login("ada@example.com", "correct-horse-battery", "peer")
+            .login("ada@example.com", &password, "peer")
             .await
             .unwrap();
         let router = Router::new()

@@ -178,6 +178,57 @@ mod tests {
         .unwrap();
     }
 
+    mod postgres_isolation {
+        use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+
+        pub struct IsolatedPostgres {
+            pub url: String,
+            db_name: String,
+            admin_prefix: String,
+        }
+
+        impl IsolatedPostgres {
+            pub async fn open(base_url: &str) -> Result<Self, String> {
+                let base = base_url.split('?').next().unwrap_or(base_url);
+                let (prefix, _) = base
+                    .rsplit_once('/')
+                    .ok_or_else(|| "DATABASE_URL must include a database name.".to_owned())?;
+                let db_name = format!("ferrioxid_test_{}", uuid::Uuid::new_v4().simple());
+                let admin_url = format!("{prefix}/postgres");
+                let admin = ferrioxid_db::connect(&admin_url)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                admin
+                    .execute(Statement::from_string(
+                        DatabaseBackend::Postgres,
+                        format!("CREATE DATABASE \"{db_name}\""),
+                    ))
+                    .await
+                    .map_err(|error| error.to_string())?;
+                Ok(Self {
+                    url: format!("{prefix}/{db_name}"),
+                    db_name,
+                    admin_prefix: prefix.to_owned(),
+                })
+            }
+
+            pub async fn close(self) -> Result<(), String> {
+                let admin_url = format!("{}/postgres", self.admin_prefix);
+                let admin = ferrioxid_db::connect(&admin_url)
+                    .await
+                    .map_err(|error| error.to_string())?;
+                admin
+                    .execute(Statement::from_string(
+                        DatabaseBackend::Postgres,
+                        format!("DROP DATABASE IF EXISTS \"{}\" WITH (FORCE)", self.db_name),
+                    ))
+                    .await
+                    .map_err(|error| error.to_string())?;
+                Ok(())
+            }
+        }
+    }
+
     async fn roundtrip(url: &str, backend: DatabaseBackend) {
         if backend == DatabaseBackend::Postgres {
             let db = ferrioxid_db::connect(url).await.unwrap();
@@ -451,7 +502,16 @@ mod tests {
     #[tokio::test]
     #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
     async fn postgres_reverts_backfill_and_foreign_key() {
-        let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
-        roundtrip(&url, DatabaseBackend::Postgres).await;
+        let base_url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        for _ in 0..2 {
+            let isolated = postgres_isolation::IsolatedPostgres::open(&base_url)
+                .await
+                .expect("isolated PostgreSQL database");
+            roundtrip(&isolated.url, DatabaseBackend::Postgres).await;
+            isolated
+                .close()
+                .await
+                .expect("drop isolated PostgreSQL database");
+        }
     }
 }

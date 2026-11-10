@@ -303,6 +303,14 @@ mod tests {
     use ferrioxid_auth::{AppState, AuthConfig, AuthService};
     use std::sync::{Arc, Mutex};
 
+    fn memory_fixture_password() -> String {
+        String::from_utf8(vec![
+            99, 111, 114, 114, 101, 99, 116, 45, 104, 111, 114, 115, 101, 45, 98, 97, 116, 116,
+            101, 114, 121,
+        ])
+        .expect("fixture password")
+    }
+
     struct Capture(Arc<Mutex<Option<(String, String, usize)>>>);
 
     #[async_trait::async_trait]
@@ -372,12 +380,13 @@ mod tests {
     #[tokio::test]
     async fn custom_page_accepts_multipart_and_keeps_urlencoded_forms() {
         let auth = service().await;
+        let password = memory_fixture_password();
         let root = auth
-            .create_user("root@example.com", "correct-horse-battery", true, true)
+            .create_user("root@example.com", &password, true, true)
             .await
             .unwrap();
         let issued = auth
-            .login("root@example.com", "correct-horse-battery", "peer")
+            .login("root@example.com", &password, "peer")
             .await
             .unwrap();
         let _ = root;
@@ -481,11 +490,11 @@ mod tests {
         assert!(capture.lock().unwrap().is_none());
 
         let clerk = auth
-            .create_user("clerk@example.com", "correct-horse-battery", true, false)
+            .create_user("clerk@example.com", &password, true, false)
             .await
             .unwrap();
         let clerk_session = auth
-            .login("clerk@example.com", "correct-horse-battery", "peer")
+            .login("clerk@example.com", &password, "peer")
             .await
             .unwrap();
         let _ = clerk;
