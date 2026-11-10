@@ -47,7 +47,15 @@ In the long term, the admin should cover the relevant functions of the Django ad
 
 ## ORM queries
 
-`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. PR #59 is merged. The capability matrix rows are **Partial**: SQLite tests pass and PostgreSQL SQL generation is asserted, while `postgres_filters_and_pages_runtime` and `postgres_transaction_query_and_rollback_runtime` are not in the PostgreSQL CI job. Annotations, keyset pagination, many-to-many and automatic eager loading are not part of this API.
+`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. PR #59 is merged. The capability matrix rows are **Partial**: SQLite tests pass and PostgreSQL SQL generation is asserted, while `postgres_filters_and_pages_runtime` and `postgres_transaction_query_and_rollback_runtime` are not in the PostgreSQL CI job.
+
+On `feat/framework-completion`, and not as a numbered milestone, the same query API adds:
+
+- `Select::keyset` for cursor pages. The order includes an `id` tie-break. Offset, nullable order columns and boolean order columns are rejected. The page size stays between 1 and 100.
+- `annotate` for one `COUNT` or one bigint `SUM`. The child query scope stays inside the grouped subquery. Missing children are 0. The parent page is still capped at 100.
+- `load_many_to_many` for an explicit join table. Hidden children stay hidden. This is not an automatic fetch on every model read.
+
+Those three are **In PR**. SQLite tests passed. `postgres_keyset_annotations_and_many_to_many` was not run locally.
 
 ## Decimal fields and typed choices
 
@@ -114,7 +122,7 @@ The order is binding for the next work. A later phase does not begin until the p
 | v0.23 | Completed |Email, Password Reset and Typed Notes| [password-reset.md](password-reset.md) |
 | v0.24 | Completed |Settings, named URLs, views and project structure| [settings.md](settings.md) |
 
-Not in these phases: React Return, OAuth, MFA, JWT, S3, Virus Scanner, Many-to-Many, `migrate down`, PostgreSQL Baseline, OpenAPI, automatic superuser semantics.
+Not in these numbered phases: React return, OAuth, MFA, JWT, S3, virus scanning, PostgreSQL baseline, OpenAPI and automatic superuser semantics. Many-to-many loads, `migrate down`, explicit backfills and derived forms are on the local branch `feat/framework-completion`. They are **In PR** and are not a numbered milestone. See [framework-quality-review.md](framework-quality-review.md).
 
 ## Boundaries that remain
 
