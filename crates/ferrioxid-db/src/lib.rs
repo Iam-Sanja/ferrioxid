@@ -7,8 +7,8 @@ mod unit;
 pub use query::{
     all_of, any_of, col, group_by_parent, load_by_ids, load_children, load_many_to_many, not,
     read_model, Aggregate, AggregateFn, Annotated, Bound, Column, Compare, Direction, KeysetPage,
-    ManyToMany, ModelQuery, Predicate, QueryCounter, QueryPage, Select, IN_LIMIT, OFFSET_LIMIT,
-    PAGE_LIMIT,
+    ManyToMany, ModelQuery, Predicate, QueryCounter, QueryPage, Related, Select, IN_LIMIT,
+    OFFSET_LIMIT, PAGE_LIMIT, TEXT_MATCH_LIMIT,
 };
 
 pub use unit::conclude;

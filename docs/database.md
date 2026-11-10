@@ -155,7 +155,11 @@ loop {
 
 `count` and `exists` still reject an invalid `limit` or `offset` on that builder.
 
-Supported comparisons are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_in`, `is_not_in`, `is_null` and `is_not_null`. `filter` combines with AND. `all_of`, `any_of` and `not` nest AND, OR and NOT. An empty OR matches nothing. Boolean and UUID columns accept equality, inequality, `IN`, `NOT IN` and null checks. `i64`, text, date, time and datetime also accept ranges. A comparison whose value type does not match the column is `Validation`.
+Supported comparisons are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_in`, `is_not_in`, `is_null` and `is_not_null`. Text and choice columns also accept `contains`, `starts_with` and `ends_with`. Those three are case-sensitive: PostgreSQL uses `LIKE ... ESCAPE '\'`, and SQLite uses `GLOB` because SQLite `LIKE` is case-insensitive for ASCII. `contains_ignore_case`, `starts_with_ignore_case` and `ends_with_ignore_case` use `LOWER(column) LIKE LOWER(?) ESCAPE '\'` on both backends. `%`, `_` and `\` in the term are escaped and the pattern is a bound parameter. A term longer than 200 characters is `Validation`. SQLite `LOWER` folds ASCII only. PostgreSQL `LOWER` follows the database locale. Neither is Unicode casefolding.
+
+`where_related` keeps rows whose foreign-key column points at a related model row. `where_has` keeps rows that a related model references. `where_linked` keeps rows joined through `ManyToMany`. `Related::filter` and `Related::scope` apply inside `EXISTS`, so `count`, `page`, `keyset` and the parent `QueryScope` see the same constraint. `Related::negated` emits `NOT EXISTS`. The foreign-key metadata must name the related table. A many-to-many join table must use UUID primary keys and is not itself a model.
+
+`filter` combines with AND. `all_of`, `any_of` and `not` nest AND, OR and NOT. An empty OR matches nothing. Boolean and UUID columns accept equality, inequality, `IN`, `NOT IN` and null checks. `i64`, text, date, time and datetime also accept ranges. A comparison whose value type does not match the column is `Validation`.
 
 Column names must be columns of that model and must match `[A-Za-z_][A-Za-z0-9_]*`. Unknown or unsafe names are `Validation` and are not sent to the database. Values go through SeaQuery parameters (`?` on SQLite, `$1` on PostgreSQL). `limit` and `offset` are validated integers; SeaQuery may emit them as numeric literals.
 

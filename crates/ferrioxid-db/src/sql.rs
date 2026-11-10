@@ -647,19 +647,35 @@ pub(crate) fn scope_condition(
     columns: &[ColumnSpec],
     scope: &QueryScope,
 ) -> Result<Option<sea_orm::sea_query::SimpleExpr>, FerrioxidError> {
+    scope_condition_in(columns, scope, None)
+}
+
+pub(crate) fn scope_condition_in(
+    columns: &[ColumnSpec],
+    scope: &QueryScope,
+    alias: Option<&str>,
+) -> Result<Option<sea_orm::sea_query::SimpleExpr>, FerrioxidError> {
     match scope {
         QueryScope::All => Ok(None),
         QueryScope::None => Ok(Some(Expr::val(0).eq(1))),
         QueryScope::Equals { column, value } => {
             ensure_column(columns, column)?;
+            let column = qualified_col(alias, column);
             let expression = match value {
-                ScopeValue::Text(text) => Expr::col(Alias::new(*column)).eq(text.clone()),
-                ScopeValue::Uuid(id) => Expr::col(Alias::new(*column)).eq(*id),
-                ScopeValue::BigInt(number) => Expr::col(Alias::new(*column)).eq(*number),
-                ScopeValue::Bool(flag) => Expr::col(Alias::new(*column)).eq(*flag),
+                ScopeValue::Text(text) => column.eq(text.clone()),
+                ScopeValue::Uuid(id) => column.eq(*id),
+                ScopeValue::BigInt(number) => column.eq(*number),
+                ScopeValue::Bool(flag) => column.eq(*flag),
             };
             Ok(Some(expression))
         }
+    }
+}
+
+fn qualified_col(alias: Option<&str>, name: &str) -> sea_orm::sea_query::SimpleExpr {
+    match alias {
+        Some(alias) => sea_orm::sea_query::Expr::col((Alias::new(alias), Alias::new(name))).into(),
+        None => sea_orm::sea_query::Expr::col(Alias::new(name)).into(),
     }
 }
 
@@ -669,7 +685,7 @@ pub(crate) fn is_safe_ident(name: &str) -> bool {
         && chars.all(|char| char.is_ascii_alphanumeric() || char == '_')
 }
 
-fn like_pattern(term: &str) -> String {
+pub(crate) fn escape_like(term: &str) -> String {
     let mut escaped = String::new();
     for char in term.chars() {
         if matches!(char, '\\' | '%' | '_') {
@@ -677,7 +693,11 @@ fn like_pattern(term: &str) -> String {
         }
         escaped.push(char);
     }
-    format!("%{escaped}%")
+    escaped
+}
+
+fn like_pattern(term: &str) -> String {
+    format!("%{}%", escape_like(term))
 }
 
 pub async fn get_record(
