@@ -1059,7 +1059,7 @@ fn text_match_expr(
             "text search is limited to {TEXT_MATCH_LIMIT} characters"
         )));
     }
-    let column_expr = qualified_col(qualifier, &column.name);
+    let column_expr = qualified_col(qualifier, column.name);
     if case_insensitive {
         let pattern = match position {
             TextPosition::Contains => format!("%{}%", escape_like(value)),
