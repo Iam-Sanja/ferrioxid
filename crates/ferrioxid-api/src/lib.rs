@@ -47,6 +47,7 @@ pub struct App {
     migrations: Vec<ferrioxid_migrations::PackageMigration>,
     catalog: apps::TemplateCatalog,
     statics: Vec<apps::StaticMount>,
+    browser_required: bool,
 }
 
 impl App {
@@ -67,7 +68,14 @@ impl App {
             migrations: Vec::new(),
             catalog: apps::TemplateCatalog::default(),
             statics: Vec::new(),
+            browser_required: false,
         }
+    }
+
+    /// POST, PUT, PATCH and DELETE require a browser session cookie and its CSRF proof.
+    pub fn require_browser_writes(mut self) -> Self {
+        self.browser_required = true;
+        self
     }
 
     pub fn with_auth(mut self, auth: AuthService) -> Self {
@@ -280,8 +288,16 @@ impl App {
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             cookie_guard::enforce,
-        ))
-        .with_state(state);
+        ));
+        let router = if self.browser_required {
+            router.layer(axum::middleware::from_fn_with_state(
+                state.clone(),
+                cookie_guard::require_browser,
+            ))
+        } else {
+            router
+        };
+        let router = router.with_state(state);
         let mut router = router;
         for mount in self.statics {
             let mut options = ferrioxid_static::StaticOptions::new(mount.directory);
