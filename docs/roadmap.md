@@ -40,26 +40,26 @@ In the long term, the admin should cover the relevant functions of the Django ad
 
 ## In review
 
-- Forms ([#47](https://github.com/Iam-Sanja/ferrioxid/issues/47)): text, number, email, password, checkbox, select and textarea widgets, escaped labels and values, and model binding through an explicit column allow-list. Create and replace require every required field. Patch leaves missing keys unchanged. Formsets are still absent. Status in the capability matrix: **In PR**.
-- Validation display ([#48](https://github.com/Iam-Sanja/ferrioxid/issues/48)): one German/English catalog, field overrides, and model errors stored as stable codes. Unknown locales use English. SQL and stack traces are not shown. Status: **In PR**.
-- Error pages and named routes ([#50](https://github.com/Iam-Sanja/ferrioxid/issues/50)): status templates with a safe fallback, project `url()` across prefixes, and percent-encoded path parameters. Status: **In PR**.
-- Anonymous sessions and CSRF ([#46](https://github.com/Iam-Sanja/ferrioxid/issues/46)): server-side anonymous sessions, the same HMAC as user sessions, login rotation, and an opted-in myshop contact form. Status in the capability matrix: **In PR**. PostgreSQL runtime for `postgres_anonymous_session_roundtrip` is not a local pass.
+- Forms ([#47](https://github.com/Iam-Sanja/ferrioxid/issues/47)): text, number, email, password, checkbox, select and textarea widgets, escaped labels and values, and model binding through an explicit column allow-list. Create and replace require every required field. Patch leaves missing keys unchanged. Formsets are still absent. Merged in PR #60. Status: **Partial**.
+- Validation display ([#48](https://github.com/Iam-Sanja/ferrioxid/issues/48)): one German/English catalog, field overrides, and model errors stored as stable codes. Unknown locales use English. SQL and stack traces are not shown. Merged in PR #60. Status: **Partial**.
+- Error pages and named routes ([#50](https://github.com/Iam-Sanja/ferrioxid/issues/50)): status templates with a safe fallback, project `url()` across prefixes, and percent-encoded path parameters. Merged in PR #60. Status: **Partial**.
+- Anonymous sessions and CSRF ([#46](https://github.com/Iam-Sanja/ferrioxid/issues/46)): server-side anonymous sessions, the same HMAC as user sessions, login rotation, and an opted-in myshop contact form. Merged in PR #62. Status: **Partial**. `postgres_anonymous_session_roundtrip` passed in the PostgreSQL CI job on `6d79283`.
 
 ## ORM queries
 
-`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. PR #59 is merged; the capability matrix rows for filtering, pagination, relations and transactions stay **In PR** until a later status review, because PostgreSQL runtime tests were not a local pass. Local workspace tests cover SQLite. PostgreSQL SQL generation is asserted. Annotations, keyset pagination, many-to-many and automatic eager loading are not part of this API.
+`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. PR #59 is merged. The capability matrix rows are **Partial**: SQLite tests pass and PostgreSQL SQL generation is asserted, while `postgres_filters_and_pages_runtime` and `postgres_transaction_query_and_rollback_runtime` are not in the PostgreSQL CI job. Annotations, keyset pagination, many-to-many and automatic eager loading are not part of this API.
 
 ## Decimal fields and typed choices
 
-`Decimal` and `FerrioxidChoice` are described in [models.md](models.md). myshop migration `0006_prices_and_status` adds a precise product price, `ProductStatus`, and optional `Order.state`. This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. Local tests cover SQLite. `postgres_decimal_and_choice_roundtrip` stays ignored without a server.
+`Decimal` and `FerrioxidChoice` are described in [models.md](models.md). myshop migration `0006_prices_and_status` adds a precise product price, `ProductStatus`, and optional `Order.state`. This is not a new version milestone. PR #61 is merged. The rows are **Partial**. Local tests cover SQLite. `postgres_decimal_and_choice_roundtrip` passed in the PostgreSQL CI job on `6d79283`.
 
 ## Fixtures
 
-`dumpdata` and `loaddata` are described in [fixtures.md](fixtures.md). myshop `fixtures/catalog.json` loads one category and two priced products. A second plain load does not create duplicates, and a conflicting file rolls back. This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. `postgres_fixture_roundtrip` stays ignored without a server. Natural keys are not implemented.
+`dumpdata` and `loaddata` are described in [fixtures.md](fixtures.md). myshop `fixtures/catalog.json` loads one category and two priced products. A second plain load does not create duplicates, and a conflicting file rolls back. This is not a new version milestone. PR #61 is merged. The row is **Partial**. `postgres_fixture_roundtrip` passed in the PostgreSQL CI job on `6d79283`. Natural keys are not implemented.
 
 ## Management commands
 
-Project commands live in the compiled `ferrioxid-manage` binary. `ferrioxid manage` only checks the command name and starts that binary with separate arguments. The contract is in [management-commands.md](management-commands.md). myshop's `seed-shop` upserts `fixtures/catalog.json` and can be run again without adding rows. This is not a new version milestone. The capability matrix stays **In PR** until the change is merged. The sample command was exercised on SQLite. It was not run against PostgreSQL locally.
+Project commands live in the compiled `ferrioxid-manage` binary. `ferrioxid manage` only checks the command name and starts that binary with separate arguments. The contract is in [management-commands.md](management-commands.md). myshop's `seed-shop` upserts `fixtures/catalog.json` and can be run again without adding rows. This is not a new version milestone. PR #61 is merged. The row is **Partial**. The sample command was exercised on SQLite. It was not run against PostgreSQL locally.
 
 ## Open after v0.27.1
 

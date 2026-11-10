@@ -15,7 +15,7 @@
 
 ## Authentication (actual, v0.7)
 
-Users, Argon2id, server-side sessions, anonymous server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model permissions are implemented. Anonymous sessions and their CSRF checks are **In PR** until this change is merged. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [csrf.md](csrf.md), [permissions.md](permissions.md) and [policies.md](policies.md).
+Users, Argon2id, server-side sessions, anonymous server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model permissions are implemented. Anonymous sessions and their CSRF checks are on `main` after PR #62 and remain Partial: cookie-less `allow_anonymous` writes stay open. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [csrf.md](csrf.md), [permissions.md](permissions.md) and [policies.md](policies.md).
 
 `allow_anonymous = true` remains an explicit public release. Product and category in myshop are such demo endpoints. Protected routes refuse without session and right.
 

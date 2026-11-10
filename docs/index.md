@@ -22,6 +22,7 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | Macros | Implemented and planned | [macros.md](macros.md) | Parsing, validation and code generation |
 | Database | Implemented and planned | [database.md](database.md) | Typed repositories, decimal and choice columns, composable queries and SQL |
 | Django capability matrix | Inventory, not a completion claim | [django-capability-matrix.md](django-capability-matrix.md) | Evidence status for Django-shaped capabilities |
+| Framework quality review | Local development review, not a release | [framework-quality-review.md](framework-quality-review.md) | What the current local branch verified and which gaps remain |
 | CLI | Implemented | [cli.md](cli.md), [fixtures.md](fixtures.md), [management-commands.md](management-commands.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generation, diagnostics, fixtures, project commands, upgrades, builds and development server |
 | Example | Implemented | [example-myshop.md](example-myshop.md) | The myshop integration example |
 | Settings | Implemented, v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrioxid.toml`, environment overrides and custom sections |
