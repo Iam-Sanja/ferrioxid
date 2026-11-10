@@ -35,7 +35,7 @@ Logout, password change and expiration revoke or discard the session. After that
 - `GET /auth/csrf` returns `{ "csrf_token": "..." }`
 - Header `x-csrf-token` for unsafe JSON methods
 - HTML field `csrf_token` with the same HMAC
-- Cookie `ferrioxid_login_csrf` only for `POST /admin/login` before a session exists. It is 64 Hex characters, HttpOnly, `Path=/`, SameSite from the Auth configuration, `Secure` only at `cookie_secure` and `Max-Age=600`. A valid cookie is reused for other tabs.
+- Cookie `ferrioxid_login_csrf` only for `POST /admin/login`. It is 64 Hex characters, HttpOnly, `Path=/`, SameSite from the Auth configuration, `Secure` only at `cookie_secure` and `Max-Age=600`. A valid cookie is reused for other tabs. An existing `ferrioxid_anonymous` or `ferrioxid_session` cookie does not replace this check: the global cookie guard accepts the login double-submit and still rejects a missing or mismatched login token. The anonymous CSRF token is not a login proof. A successful login revokes the anonymous session. `POST /auth/password-reset` and `POST /auth/password-reset/choose` use the same separation for `ferrioxid_reset_csrf`. JSON `POST /auth/login` has no login cookie; with an anonymous cookie it still needs the anonymous CSRF proof, and without a session cookie it stays a stateless credential request.
 
 ## Data flow
 

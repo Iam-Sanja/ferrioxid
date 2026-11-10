@@ -2,10 +2,12 @@
 //!
 //! Ohne `ferrioxid_session` oder `ferrioxid_anonymous` bleibt die Anfrage unberührt.
 //! Das gilt auch für `Authorization: Bearer`: der Header wird hier nicht geprüft.
+//! `POST /admin/login` und die Passwort-Reset-Formulare behalten ihren eigenen
+//! Double-Submit-Nachweis, auch wenn bereits ein anonymes Session-Cookie vorliegt.
 
 use axum::body::Body;
 use axum::extract::{Request, State};
-use axum::http::{header, HeaderMap, HeaderValue, StatusCode};
+use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::Json;
@@ -32,8 +34,10 @@ pub async fn enforce(State(state): State<AppState>, request: Request, next: Next
     let Some(auth) = state.auth.clone() else {
         return reject(AuthError::CsrfRejected, request.headers());
     };
+    let path = request.uri().path().to_owned();
+    let dedicated = dedicated_csrf_cookie(&path);
     let header_token = header_csrf(request.headers());
-    let (request, field) = if header_token.is_empty() {
+    let (request, field) = if header_token.is_empty() || dedicated.is_some() {
         match body_field(request).await {
             Ok(pair) => pair,
             Err(BodyRead::TooLarge) => {
@@ -54,6 +58,19 @@ pub async fn enforce(State(state): State<AppState>, request: Request, next: Next
     } else {
         (request, String::new())
     };
+    if let Some(cookie_name) = dedicated {
+        if dedicated_proof(
+            &auth,
+            request.headers(),
+            request.method(),
+            cookie_name,
+            &header_token,
+            &field,
+        ) {
+            return next.run(request).await;
+        }
+        return reject(AuthError::CsrfRejected, request.headers());
+    }
     match auth
         .guard_cookie_write(request.headers(), request.method(), &field)
         .await
@@ -61,6 +78,60 @@ pub async fn enforce(State(state): State<AppState>, request: Request, next: Next
         Ok(_) => next.run(request).await,
         Err(error) => reject(error, request.headers()),
     }
+}
+
+fn dedicated_csrf_cookie(path: &str) -> Option<&'static str> {
+    match path {
+        "/admin/login" => Some("ferrioxid_login_csrf"),
+        "/auth/password-reset" | "/auth/password-reset/choose" => Some("ferrioxid_reset_csrf"),
+        _ => None,
+    }
+}
+
+fn dedicated_proof(
+    auth: &ferrioxid_auth::AuthService,
+    headers: &HeaderMap,
+    method: &Method,
+    cookie_name: &str,
+    header_token: &str,
+    field: &str,
+) -> bool {
+    if auth.origin_allowed(headers, method).is_err() {
+        return false;
+    }
+    let Some(expected) = cookie_value(headers, cookie_name) else {
+        return false;
+    };
+    if cookie_name == "ferrioxid_login_csrf" && !valid_login_csrf(&expected) {
+        return false;
+    }
+    (!field.is_empty() && constant_eq(field, &expected))
+        || (!header_token.is_empty() && constant_eq(header_token, &expected))
+}
+
+fn valid_login_csrf(value: &str) -> bool {
+    value.len() == 64 && value.chars().all(|char| char.is_ascii_hexdigit())
+}
+
+fn constant_eq(left: &str, right: &str) -> bool {
+    let (left, right) = (left.as_bytes(), right.as_bytes());
+    if left.len() != right.len() {
+        return false;
+    }
+    left.iter()
+        .zip(right)
+        .fold(0_u8, |diff, (left, right)| diff | (left ^ right))
+        == 0
+}
+
+fn cookie_value(headers: &HeaderMap, name: &str) -> Option<String> {
+    headers.get_all(header::COOKIE).iter().find_map(|value| {
+        let raw = value.to_str().ok()?;
+        raw.split(';').find_map(|part| {
+            let (key, token) = part.trim().split_once('=')?;
+            (key.trim() == name).then(|| token.trim().to_owned())
+        })
+    })
 }
 
 fn default_session_cookie(headers: &HeaderMap) -> bool {

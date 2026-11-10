@@ -397,3 +397,249 @@ async fn cookie_writes_require_csrf_before_the_handler() {
     .await;
     assert_eq!(status, StatusCode::OK);
 }
+
+fn shop_routes() -> axum::Router<AppState> {
+    axum::Router::new().route("/shop", axum::routing::get(shop_page))
+}
+
+async fn shop_page(
+    axum::extract::State(state): axum::extract::State<AppState>,
+    headers: axum::http::HeaderMap,
+) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let Some(auth) = state.auth.as_ref() else {
+        return StatusCode::FORBIDDEN.into_response();
+    };
+    let session = auth
+        .ensure_anonymous_session(&headers)
+        .await
+        .expect("anonymous session");
+    let mut response = axum::response::Html("shop").into_response();
+    if let Some(cookie) = session.cookie {
+        response.headers_mut().append(
+            axum::http::header::SET_COOKIE,
+            axum::http::HeaderValue::from_str(&cookie).expect("cookie"),
+        );
+    }
+    response
+}
+
+struct Exchange {
+    status: StatusCode,
+    cookies: Vec<String>,
+    body: String,
+}
+
+async fn exchange(
+    app: &axum::Router,
+    method: &str,
+    path: &str,
+    cookie: Option<&str>,
+    content_type: Option<&str>,
+    body: &str,
+) -> Exchange {
+    let mut builder = Request::builder().method(method).uri(path);
+    if let Some(cookie) = cookie {
+        builder = builder.header("cookie", cookie);
+    }
+    if let Some(content_type) = content_type {
+        builder = builder.header("content-type", content_type);
+    }
+    let response = app
+        .clone()
+        .oneshot(builder.body(Body::from(body.to_owned())).unwrap())
+        .await
+        .unwrap();
+    let status = response.status();
+    let cookies = response
+        .headers()
+        .get_all(axum::http::header::SET_COOKIE)
+        .iter()
+        .filter_map(|value| value.to_str().ok().map(str::to_owned))
+        .collect();
+    let bytes = response.into_body().collect().await.unwrap().to_bytes();
+    Exchange {
+        status,
+        cookies,
+        body: String::from_utf8_lossy(&bytes).into_owned(),
+    }
+}
+
+fn cookie_pair(set_cookie: &str) -> String {
+    set_cookie.split(';').next().unwrap_or("").trim().to_owned()
+}
+
+fn cookie_named<'a>(cookies: &'a [String], name: &str) -> Option<&'a str> {
+    cookies.iter().find_map(|cookie| {
+        let pair = cookie_pair(cookie);
+        let (key, _) = pair.split_once('=')?;
+        (key == name).then_some(cookie.as_str())
+    })
+}
+
+fn form_token(body: &str) -> String {
+    let marker = "name=\"csrf_token\" value=\"";
+    let start = body.find(marker).expect("login csrf field") + marker.len();
+    body[start..].split('"').next().unwrap().to_owned()
+}
+
+fn encode_form(pairs: &[(&str, &str)]) -> String {
+    pairs
+        .iter()
+        .map(|(key, value)| format!("{}={}", encode_component(key), encode_component(value)))
+        .collect::<Vec<_>>()
+        .join("&")
+}
+
+fn encode_component(value: &str) -> String {
+    let mut out = String::new();
+    for byte in value.bytes() {
+        match byte {
+            b'A'..=b'Z' | b'a'..=b'z' | b'0'..=b'9' | b'-' | b'_' | b'.' | b'~' => {
+                out.push(byte as char)
+            }
+            _ => out.push_str(&format!("%{byte:02X}")),
+        }
+    }
+    out
+}
+
+#[tokio::test]
+async fn admin_login_accepts_login_csrf_while_an_anonymous_session_exists() {
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let auth = AuthService::new(db.clone(), AuthConfig::development());
+    let password = memory_fixture_password();
+    auth.create_user("ada@example.com", &password, true, false)
+        .await
+        .unwrap();
+    let app = App::new(db)
+        .with_auth(auth.clone())
+        .with_admin(ferrioxid::admin::AdminRegistry::new())
+        .merge(shop_routes())
+        .into_router();
+
+    let shop = exchange(&app, "GET", "/shop", None, None, "").await;
+    assert_eq!(shop.status, StatusCode::OK);
+    let anonymous = cookie_named(&shop.cookies, "ferrioxid_anonymous").expect("anonymous cookie");
+    let anonymous_pair = cookie_pair(anonymous);
+    let anonymous_token = anonymous_pair.split_once('=').unwrap().1.to_owned();
+
+    let login_page = exchange(&app, "GET", "/admin/login", Some(&anonymous_pair), None, "").await;
+    assert_eq!(login_page.status, StatusCode::OK, "{}", login_page.body);
+    let login_cookie =
+        cookie_named(&login_page.cookies, "ferrioxid_login_csrf").expect("login csrf");
+    let login_pair = cookie_pair(login_cookie);
+    let login_token = form_token(&login_page.body);
+    assert_eq!(login_pair.split_once('=').unwrap().1, login_token);
+
+    let forged = encode_form(&[
+        ("csrf_token", &anonymous_token),
+        ("email", "ada@example.com"),
+        ("password", &password),
+        ("next", "/admin"),
+    ]);
+    let rejected = exchange(
+        &app,
+        "POST",
+        "/admin/login",
+        Some(&format!("{anonymous_pair}; {login_pair}")),
+        Some("application/x-www-form-urlencoded"),
+        &forged,
+    )
+    .await;
+    assert_eq!(rejected.status, StatusCode::FORBIDDEN, "{}", rejected.body);
+    assert!(auth.read_anonymous_state(&anonymous_token).await.is_ok());
+
+    let missing = encode_form(&[
+        ("email", "ada@example.com"),
+        ("password", &password),
+        ("next", "/admin"),
+    ]);
+    let missing = exchange(
+        &app,
+        "POST",
+        "/admin/login",
+        Some(&format!("{anonymous_pair}; {login_pair}")),
+        Some("application/x-www-form-urlencoded"),
+        &missing,
+    )
+    .await;
+    assert_eq!(missing.status, StatusCode::FORBIDDEN, "{}", missing.body);
+
+    let prior = auth
+        .login("ada@example.com", &password, "peer")
+        .await
+        .unwrap();
+    let both = format!(
+        "ferrioxid_session={}; {anonymous_pair}; {login_pair}",
+        prior.token
+    );
+    let body = encode_form(&[
+        ("csrf_token", &login_token),
+        ("email", "ada@example.com"),
+        ("password", &password),
+        ("next", "/admin"),
+    ]);
+    let logged_in = exchange(
+        &app,
+        "POST",
+        "/admin/login",
+        Some(&both),
+        Some("application/x-www-form-urlencoded"),
+        &body,
+    )
+    .await;
+    assert_eq!(
+        logged_in.status,
+        StatusCode::SEE_OTHER,
+        "{}",
+        logged_in.body
+    );
+    let session = cookie_named(&logged_in.cookies, "ferrioxid_session").expect("session");
+    assert!(!cookie_pair(session).ends_with('='));
+    let cleared = cookie_named(&logged_in.cookies, "ferrioxid_anonymous").expect("clear anonymous");
+    assert!(cleared.contains("Max-Age=0"), "{cleared}");
+    assert!(auth.read_anonymous_state(&anonymous_token).await.is_err());
+
+    let session_pair = cookie_pair(session);
+    let csrf = exchange(&app, "GET", "/auth/csrf", Some(&session_pair), None, "").await;
+    assert_eq!(csrf.status, StatusCode::OK, "{}", csrf.body);
+    let csrf_token = csrf
+        .body
+        .split("\"csrf_token\":\"")
+        .nth(1)
+        .unwrap()
+        .split('"')
+        .next()
+        .unwrap()
+        .to_owned();
+    let logged_out = exchange(
+        &app,
+        "POST",
+        "/admin/logout",
+        Some(&session_pair),
+        Some("application/x-www-form-urlencoded"),
+        &encode_form(&[("csrf_token", &csrf_token)]),
+    )
+    .await;
+    assert_eq!(
+        logged_out.status,
+        StatusCode::SEE_OTHER,
+        "{}",
+        logged_out.body
+    );
+    let me = exchange(&app, "GET", "/auth/me", Some(&session_pair), None, "").await;
+    assert_eq!(me.status, StatusCode::UNAUTHORIZED, "{}", me.body);
+
+    let stateless = exchange(
+        &app,
+        "POST",
+        "/auth/login",
+        None,
+        Some("application/json"),
+        &format!("{{\"email\":\"ada@example.com\",\"password\":\"{password}\"}}"),
+    )
+    .await;
+    assert_eq!(stateless.status, StatusCode::OK, "{}", stateless.body);
+}
