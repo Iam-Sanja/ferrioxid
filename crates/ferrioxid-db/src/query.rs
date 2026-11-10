@@ -1056,7 +1056,7 @@ fn hex_encode(bytes: &[u8]) -> String {
 }
 
 fn hex_decode(text: &str) -> Result<Vec<u8>, ()> {
-    if text.len() % 2 != 0 {
+    if !text.len().is_multiple_of(2) {
         return Err(());
     }
     let mut out = Vec::with_capacity(text.len() / 2);
@@ -1324,14 +1324,13 @@ fn json_id(json: &serde_json::Value) -> Result<Uuid, FerrioxidError> {
 
 fn note_statement() {
     #[cfg(test)]
-    {
-        STATEMENT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
-    }
+    STATEMENT_COUNT.with(|count| count.set(count.get() + 1));
 }
 
 #[cfg(test)]
-pub(crate) static STATEMENT_COUNT: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
+thread_local! {
+    static STATEMENT_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+}
 
 #[cfg(test)]
 impl<M> Select<M>
@@ -2439,7 +2438,7 @@ mod tests {
             .unwrap();
         assert_eq!(sums[0].value, 10);
 
-        STATEMENT_COUNT.store(0, std::sync::atomic::Ordering::Relaxed);
+        STATEMENT_COUNT.with(|count| count.set(0));
         let parents = [Uuid::from_u128(1), Uuid::from_u128(2)];
         let children = load_children::<Tag>(db, "item_id", &parents, &QueryScope::All)
             .await
@@ -2475,14 +2474,14 @@ mod tests {
         .await
         .unwrap();
         assert_eq!(hidden.len(), 2);
-        let statements = STATEMENT_COUNT.load(std::sync::atomic::Ordering::Relaxed);
+        let statements = STATEMENT_COUNT.with(|count| count.get());
         assert!(
             statements <= 6,
             "relation loads issued {statements} statements"
         );
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     async fn sqlite_keyset_annotations_and_many_to_many() {
         let db = memory().await;
         fixture(&db).await;
@@ -2490,7 +2489,7 @@ mod tests {
         assert_relations(&db).await;
     }
 
-    #[tokio::test]
+    #[tokio::test(flavor = "current_thread")]
     #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
     async fn postgres_keyset_annotations_and_many_to_many() {
         let url = std::env::var("DATABASE_URL")
