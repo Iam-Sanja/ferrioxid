@@ -187,6 +187,16 @@ mod tests {
             admin_url: String,
         }
 
+        async fn admin_connection(prefix: &str) -> Result<sea_orm::DatabaseConnection, String> {
+            for db in ["template1", "postgres", "ferrioxid"] {
+                let url = format!("{prefix}/{db}");
+                if let Ok(connection) = ferrioxid_db::connect(&url).await {
+                    return Ok(connection);
+                }
+            }
+            Err("could not open a PostgreSQL admin connection".to_owned())
+        }
+
         impl IsolatedPostgres {
             pub async fn open(base_url: &str) -> Result<Self, String> {
                 let base = base_url.split('?').next().unwrap_or(base_url);
@@ -195,9 +205,7 @@ mod tests {
                     .ok_or_else(|| "DATABASE_URL must include a database name.".to_owned())?;
                 let db_name = format!("ferrioxid_test_{}", uuid::Uuid::new_v4().simple());
                 let admin_url = format!("{prefix}/template1");
-                let admin = ferrioxid_db::connect(&admin_url)
-                    .await
-                    .map_err(|error| error.to_string())?;
+                let admin = admin_connection(prefix).await?;
                 admin
                     .execute(Statement::from_string(
                         DatabaseBackend::Postgres,
@@ -205,6 +213,7 @@ mod tests {
                     ))
                     .await
                     .map_err(|error| error.to_string())?;
+                admin.close().await.map_err(|error| error.to_string())?;
                 Ok(Self {
                     url: format!("{prefix}/{db_name}"),
                     db_name,
@@ -213,9 +222,11 @@ mod tests {
             }
 
             pub async fn close(self) -> Result<(), String> {
-                let admin = ferrioxid_db::connect(&self.admin_url)
-                    .await
-                    .map_err(|error| error.to_string())?;
+                let base = self.admin_url.split('?').next().unwrap_or(&self.admin_url);
+                let (prefix, _) = base
+                    .rsplit_once('/')
+                    .ok_or_else(|| "DATABASE_URL must include a database name.".to_owned())?;
+                let admin = admin_connection(prefix).await?;
                 let escaped = self.db_name.replace('\'', "''");
                 let _ = admin
                     .execute(Statement::from_string(
@@ -233,16 +244,17 @@ mod tests {
                     ))
                     .await
                     .map_err(|error| error.to_string())?;
+                admin.close().await.map_err(|error| error.to_string())?;
                 Ok(())
             }
         }
     }
 
     async fn roundtrip(url: &str, backend: DatabaseBackend) {
+        let db = ferrioxid_db::connect(url).await.unwrap();
         if backend == DatabaseBackend::Postgres {
-            let db = ferrioxid_db::connect(url).await.unwrap();
-            execute(&db, "DROP TABLE IF EXISTS ferrioxid_down_child").await;
-            execute(&db, "DROP TABLE IF EXISTS ferrioxid_down_parent").await;
+            execute(&db, "DROP TABLE IF EXISTS ferrioxid_down_child CASCADE").await;
+            execute(&db, "DROP TABLE IF EXISTS ferrioxid_down_parent CASCADE").await;
         }
         let directory =
             std::env::temp_dir().join(format!("ferrioxid-down-{}", uuid::Uuid::new_v4()));
@@ -303,7 +315,6 @@ mod tests {
         )
         .unwrap();
 
-        let db = ferrioxid_db::connect(url).await.unwrap();
         let only_first = directory.join("hold");
         std::fs::create_dir_all(&only_first).unwrap();
         std::fs::rename(
@@ -367,8 +378,9 @@ mod tests {
         assert_eq!(still, 1);
         let _ = std::fs::remove_dir_all(&directory);
         if backend == DatabaseBackend::Postgres {
-            execute(&db, "DROP TABLE IF EXISTS ferrioxid_down_child").await;
-            execute(&db, "DROP TABLE IF EXISTS ferrioxid_down_parent").await;
+            execute(&db, "DROP TABLE IF EXISTS ferrioxid_down_child CASCADE").await;
+            execute(&db, "DROP TABLE IF EXISTS ferrioxid_down_parent CASCADE").await;
+            db.close().await.unwrap();
         }
     }
 
