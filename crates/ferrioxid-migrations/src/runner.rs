@@ -93,13 +93,38 @@ pub async fn revert_latest(
     allow_destructive: bool,
     dry_run: bool,
 ) -> Result<RevertPlan, MigrationError> {
+    revert_scoped(db, directory, None, allow_destructive, dry_run).await
+}
+
+/// Reverts the latest applied migration of one app.
+///
+/// History ids are `app:file`. A later applied file id from any app still blocks
+/// the revert. Dropping a table or column requires `allow_destructive`.
+pub async fn revert_namespaced(
+    db: &DatabaseConnection,
+    directory: &Path,
+    namespace: &str,
+    allow_destructive: bool,
+    dry_run: bool,
+) -> Result<RevertPlan, MigrationError> {
+    validate_namespace(namespace)?;
+    revert_scoped(db, directory, Some(namespace), allow_destructive, dry_run).await
+}
+
+async fn revert_scoped(
+    db: &DatabaseConnection,
+    directory: &Path,
+    namespace: Option<&str>,
+    allow_destructive: bool,
+    dry_run: bool,
+) -> Result<RevertPlan, MigrationError> {
     let state = inspect_directory(directory);
     if !state.conflicts.is_empty() {
         return Err(MigrationError::new(state.conflicts.join("\n")));
     }
     history::ensure_history_in(db, history::HISTORY_TABLE).await?;
     let history = history::read_history_in(db, history::HISTORY_TABLE).await?;
-    let applied = scoped_history(&history, None)?;
+    let applied = scoped_history(&history, namespace)?;
     let pending = pending_files(&state.files, &applied)?;
     let applied_count = state.files.len().saturating_sub(pending.len());
     if applied_count == 0 {
@@ -118,7 +143,7 @@ pub async fn revert_latest(
         }
     }
     let simulated = crate::down::simulated_target(&target.from_snapshot, &target.operations)?;
-    if simulated != target.to_snapshot {
+    if !simulated.semantically_eq(&target.to_snapshot) {
         return Err(MigrationError::new(format!(
             "Migration {} does not match its stored snapshot. Nothing was changed.",
             target.id
@@ -163,7 +188,8 @@ pub async fn revert_latest(
     reversed.from_snapshot = target.to_snapshot.clone();
     reversed.operations = inverse;
     reversed.to_snapshot = schema;
-    apply_one(db, &reversed, history::HISTORY_TABLE, &target.id, false).await?;
+    let history_id = history_key(namespace, &target.id);
+    apply_one(db, &reversed, history::HISTORY_TABLE, &history_id, false).await?;
     Ok(RevertPlan {
         executed: true,
         ..plan

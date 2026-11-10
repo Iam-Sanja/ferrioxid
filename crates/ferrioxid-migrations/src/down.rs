@@ -383,6 +383,72 @@ mod tests {
     }
 
     #[tokio::test]
+    async fn sqlite_reverts_a_namespaced_app_migration() {
+        let directory =
+            std::env::temp_dir().join(format!("ferrioxid-down-app-{}", uuid::Uuid::new_v4()));
+        std::fs::create_dir_all(&directory).unwrap();
+        let path = directory.join("down.sqlite");
+        let url = format!(
+            "sqlite://{}?mode=rwc",
+            path.display().to_string().replace('\\', "/")
+        );
+        let empty = SchemaSnapshot::empty();
+        let created = SchemaSnapshot::from_tables(vec![parent()]);
+        let plan = plan_change(&empty, &created).unwrap();
+        save_migration(
+            &directory,
+            &seal(
+                "0001_parent".to_owned(),
+                "parent".to_owned(),
+                empty,
+                created,
+                &plan,
+            )
+            .unwrap(),
+        )
+        .unwrap();
+        let db = ferrioxid_db::connect(&url).await.unwrap();
+        crate::apply_namespaced_directory(&db, &directory, "catalog", false)
+            .await
+            .unwrap();
+        insert_id(
+            &db,
+            DatabaseBackend::Sqlite,
+            "ferrioxid_down_parent",
+            &["id"],
+            &[uuid::Uuid::from_u128(11).to_string()],
+        )
+        .await;
+        let refused = crate::revert_namespaced(&db, &directory, "catalog", false, false).await;
+        assert!(refused.is_err(), "{refused:?}");
+        assert_eq!(
+            scalar(&db, "SELECT COUNT(*) AS total FROM ferrioxid_down_parent").await,
+            1
+        );
+        let preview = crate::revert_namespaced(&db, &directory, "catalog", false, true)
+            .await
+            .unwrap();
+        assert!(!preview.executed);
+        assert!(preview.destructive);
+        assert_eq!(
+            scalar(&db, "SELECT COUNT(*) AS total FROM ferrioxid_down_parent").await,
+            1
+        );
+        let reverted = crate::revert_namespaced(&db, &directory, "catalog", true, false)
+            .await
+            .unwrap();
+        assert!(reverted.executed);
+        let missing = db
+            .query_one(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                "SELECT COUNT(*) AS total FROM ferrioxid_down_parent".to_owned(),
+            ))
+            .await;
+        assert!(missing.is_err(), "{missing:?}");
+        let _ = std::fs::remove_dir_all(&directory);
+    }
+
+    #[tokio::test]
     #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
     async fn postgres_reverts_backfill_and_foreign_key() {
         let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");

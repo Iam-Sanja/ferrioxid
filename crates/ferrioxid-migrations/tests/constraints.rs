@@ -460,10 +460,25 @@ async fn sqlite_constraints_indexes_and_foreign_keys() {
         .unwrap()
         .foreign_keys[0]
         .on_delete = OnDelete::Cascade;
-    let refused = make_migration(&migrations, "cascade_brand", &changed_rule);
-    assert!(refused.is_err(), "{refused:?}");
+    let written = make_migration(&migrations, "cascade_brand", &changed_rule).unwrap();
+    assert!(
+        matches!(written, MakeOutcome::Written { ref risks, .. } if risks.is_empty()),
+        "{written:?}"
+    );
     let plan = plan_change(&unique_name, &changed_rule).unwrap();
-    assert!(plan.refusal.is_some());
+    assert!(plan.refusal.is_none(), "{:?}", plan.refusal);
+    assert!(plan.operations.iter().any(|operation| matches!(
+        operation,
+        MigrationOperation::DropForeignKey {
+            previous: Some(_),
+            ..
+        }
+    )));
+    assert!(plan.operations.iter().any(|operation| matches!(
+        operation,
+        MigrationOperation::AddForeignKey { foreign_key, .. }
+            if foreign_key.on_delete == OnDelete::Cascade
+    )));
 }
 
 #[tokio::test]
