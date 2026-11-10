@@ -519,6 +519,10 @@ mod tests {
     #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
     async fn postgres_reverts_backfill_and_foreign_key() {
         let base_url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        if let Ok(dedicated) = std::env::var("FERRIOXID_MIGRATIONS_DOWN_DATABASE_URL") {
+            roundtrip(&dedicated, DatabaseBackend::Postgres).await;
+            return;
+        }
         for _ in 0..2 {
             let isolated = postgres_isolation::IsolatedPostgres::open(&base_url)
                 .await

@@ -82,9 +82,20 @@ jobs:
       - name: Cache Cargo
         uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
 
+      - name: Prepare isolated migration down database
+        env:
+          PGPASSWORD: ferrioxid_dev_only
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client > /dev/null
+          psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS ferrioxid_migrations_down_test WITH (FORCE);' \
+            -c 'CREATE DATABASE ferrioxid_migrations_down_test;'
+
       - name: Run the ignored PostgreSQL tests
         env:
           DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid
+          FERRIOXID_MIGRATIONS_DOWN_DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid_migrations_down_test
         run: |
           cargo test -p myshop --test framework_names -- --ignored fresh_postgres_initializes_auth_jobs_and_application
           cargo test -p myshop --test postgres_api -- --ignored postgres_http_roundtrip
