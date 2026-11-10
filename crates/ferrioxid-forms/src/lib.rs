@@ -8,6 +8,7 @@ use ferrioxid_core::{
     parse_decimal, parse_i64, parse_time, parse_uuid, text_code, AdminFieldMeta, ColumnKind,
     ColumnSpec,
 };
+use ferrioxid_storage::Storage;
 use std::collections::BTreeMap;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -899,6 +900,8 @@ pub struct ModelField {
     pub precision: u8,
     pub scale: u8,
     pub choices: &'static [ferrioxid_core::ChoiceValue],
+    pub min: Option<i64>,
+    pub max: Option<i64>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -959,9 +962,21 @@ pub fn model_fields(
             precision: column.precision,
             scale: column.scale,
             choices: column.choices,
+            min: None,
+            max: None,
         });
     }
     Ok(fields)
+}
+
+/// Copies `#[field(min, max)]` onto the allowlisted fields. Browser attributes are not consulted.
+pub fn apply_bounds(fields: &mut [ModelField], bounds: &[ferrioxid_core::NumericBound]) {
+    for field in fields {
+        if let Some(bound) = bounds.iter().find(|bound| bound.column == field.name) {
+            field.min = bound.min;
+            field.max = bound.max;
+        }
+    }
 }
 
 pub fn model_widget(field: &ModelField, label: &'static str) -> Field {
@@ -1033,7 +1048,7 @@ fn bind_one(
         }
     }
     match field.kind {
-        ColumnKind::BigInt => parse_i64(raw, None, None).map(BoundValue::Integer),
+        ColumnKind::BigInt => parse_i64(raw, field.min, field.max).map(BoundValue::Integer),
         ColumnKind::Boolean => parse_bool(raw).map(BoundValue::Boolean),
         ColumnKind::Uuid => parse_uuid(raw).map(|id| BoundValue::Text(id.to_string())),
         ColumnKind::Date => parse_date(raw).map(|_| BoundValue::Text(raw.to_owned())),
@@ -1043,6 +1058,18 @@ fn bind_one(
         ColumnKind::Decimal => {
             let value = parse_decimal(raw, field.precision, field.scale)
                 .map_err(|_| "validation.decimal")?;
+            if field
+                .min
+                .is_some_and(|min| value < ferrioxid_core::Decimal::from(min))
+            {
+                return Err("validation.min_value");
+            }
+            if field
+                .max
+                .is_some_and(|max| value > ferrioxid_core::Decimal::from(max))
+            {
+                return Err("validation.max_value");
+            }
             format_decimal(value, field.scale)
                 .map(BoundValue::Text)
                 .map_err(|_| "validation.decimal")
@@ -1053,6 +1080,136 @@ fn bind_one(
             } else {
                 Err("validation.choice")
             }
+        }
+    }
+}
+
+/// Hard cap for one formset. A larger `max_rows` is rejected.
+pub const FORMSET_MAX_ROWS: usize = 100;
+
+/// Binds `prefix_TOTAL_FORMS` rows. Field names are `prefix_0_name`.
+///
+/// `max_rows` is the application limit and must be between 1 and [`FORMSET_MAX_ROWS`].
+/// Extra indexes and an oversized total are errors. Each row is parsed with `parse`,
+/// and its errors keep the prefixed field name.
+pub fn bind_formset<T>(
+    values: &FormValues,
+    prefix: &str,
+    max_rows: usize,
+    mode: SubmitMode,
+    mut parse: impl FnMut(SubmitMode, &FormValues) -> Result<T, FormErrors>,
+) -> Result<Vec<T>, FormErrors> {
+    let mut errors = FormErrors::default();
+    if !valid_field_name(prefix) || max_rows == 0 || max_rows > FORMSET_MAX_ROWS {
+        errors.push(prefix, "form.formset");
+        return Err(errors);
+    }
+    let total_name = format!("{prefix}_TOTAL_FORMS");
+    let initial_name = format!("{prefix}_INITIAL_FORMS");
+    let total = match values.get(&total_name).map(str::trim) {
+        Some(raw) => match raw.parse::<usize>() {
+            Ok(total) if total <= max_rows => total,
+            Ok(_) => {
+                errors.push(&total_name, "validation.formset_size");
+                return Err(errors);
+            }
+            Err(_) => {
+                errors.push(&total_name, "validation.invalid_type");
+                return Err(errors);
+            }
+        },
+        None => {
+            errors.push(&total_name, "validation.required");
+            return Err(errors);
+        }
+    };
+    if let Some(raw) = values.get(&initial_name).map(str::trim) {
+        match raw.parse::<usize>() {
+            Ok(initial) if initial <= total => {}
+            Ok(_) => errors.push(&initial_name, "validation.formset_size"),
+            Err(_) => errors.push(&initial_name, "validation.invalid_type"),
+        }
+    }
+    let marker = format!("{prefix}_");
+    for name in values.names() {
+        if name == total_name || name == initial_name || !name.starts_with(&marker) {
+            continue;
+        }
+        let rest = &name[marker.len()..];
+        let Some((index, _)) = rest.split_once('_') else {
+            errors.push(name, "validation.unknown_field");
+            continue;
+        };
+        match index.parse::<usize>() {
+            Ok(index) if index < total => {}
+            _ => errors.push(name, "validation.formset_size"),
+        }
+    }
+    let mut rows = Vec::with_capacity(total);
+    for index in 0..total {
+        let row_prefix = format!("{prefix}_{index}_");
+        let mut row = FormValues::default();
+        for name in values.names() {
+            if let Some(field) = name.strip_prefix(&row_prefix) {
+                if let Some(value) = values.get(name) {
+                    row.insert(field, value);
+                }
+            }
+        }
+        match parse(mode, &row) {
+            Ok(item) => rows.push(item),
+            Err(row_errors) => {
+                for failure in row_errors.fields {
+                    let field = if failure.field.is_empty() {
+                        row_prefix.trim_end_matches('_').to_owned()
+                    } else {
+                        format!("{row_prefix}{}", failure.field)
+                    };
+                    errors.push(field, failure.code);
+                }
+            }
+        }
+    }
+    if errors.is_empty() {
+        Ok(rows)
+    } else {
+        Err(errors)
+    }
+}
+
+/// Stores an upload through the storage API.
+///
+/// The client name is never used as a path. Names containing a separator or
+/// `..` are rejected. Size and content type are enforced by the storage root.
+pub async fn store_upload(
+    storage: &ferrioxid_storage::LocalStorage,
+    owner: uuid::Uuid,
+    original_name: &str,
+    bytes: &[u8],
+) -> Result<ferrioxid_storage::StoredFile, FormErrors> {
+    let mut errors = FormErrors::default();
+    if original_name.trim().is_empty()
+        || original_name.contains("..")
+        || original_name.contains('/')
+        || original_name.contains('\\')
+        || original_name.contains('\0')
+    {
+        errors.push("file", "validation.upload_name");
+        return Err(errors);
+    }
+    match storage.save(owner, original_name, bytes).await {
+        Ok(stored) => Ok(stored),
+        Err(ferrioxid_storage::StorageError::TooLarge) => {
+            errors.push("file", "validation.upload_size");
+            Err(errors)
+        }
+        Err(ferrioxid_storage::StorageError::TypeRejected) => {
+            errors.push("file", "validation.upload_type");
+            Err(errors)
+        }
+        Err(_) => {
+            errors.push("file", "validation.upload");
+            Err(errors)
         }
     }
 }
@@ -1112,11 +1269,13 @@ fn decode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        bind_model, escape, model_fields, render_fields, require_confirmation, required_choice,
-        required_i64, required_postal, required_uuid, BoundValue, ContactForm, FerrioxidForm,
-        Field, FormErrors, FormValues, SubmitMode, Widget,
+        apply_bounds, bind_formset, bind_model, escape, model_fields, render_fields,
+        require_confirmation, required_choice, required_i64, required_postal, required_uuid,
+        store_upload, BoundValue, ContactForm, FerrioxidForm, Field, FormErrors, FormValues,
+        SubmitMode, Widget,
     };
-    use ferrioxid_core::{AdminFieldMeta, ColumnKind, ColumnSpec};
+    use ferrioxid_core::{AdminFieldMeta, ColumnKind, ColumnSpec, NumericBound};
+    use ferrioxid_storage::Storage;
 
     #[test]
     fn confirmation_accepts_only_the_checkbox_value() {
@@ -1344,6 +1503,110 @@ mod tests {
         );
         values.insert("postal_code", "10115");
         assert_eq!(required_postal(&values, "postal_code").unwrap(), "10115");
+    }
+
+    #[test]
+    fn numeric_bounds_reject_browser_values_outside_the_model() {
+        let stock = column("stock", ColumnKind::BigInt, false, false);
+        let price = ColumnSpec {
+            precision: 8,
+            scale: 2,
+            ..column("price", ColumnKind::Decimal, false, false)
+        };
+        let mut fields = model_fields(&[stock, price], &[], &["stock", "price"]).unwrap();
+        apply_bounds(
+            &mut fields,
+            &[
+                NumericBound {
+                    column: "stock",
+                    min: Some(0),
+                    max: Some(10),
+                },
+                NumericBound {
+                    column: "price",
+                    min: Some(1),
+                    max: None,
+                },
+            ],
+        );
+        let mut values = FormValues::default();
+        values.insert("stock", "11");
+        values.insert("price", "0.50");
+        let errors = bind_model(SubmitMode::Create, &fields, &values, &[]).unwrap_err();
+        assert_eq!(errors.for_field("stock"), Some("validation.max_value"));
+        assert_eq!(errors.for_field("price"), Some("validation.min_value"));
+        values.insert("stock", "4");
+        values.insert("price", "1.25");
+        let bound = bind_model(SubmitMode::Replace, &fields, &values, &[]).unwrap();
+        assert_eq!(bound[0].value, BoundValue::Integer(4));
+        assert_eq!(bound[1].value, BoundValue::Text("1.25".to_owned()));
+        let patched = bind_model(SubmitMode::Patch, &fields, &FormValues::default(), &[]).unwrap();
+        assert_eq!(patched[0].value, BoundValue::Unchanged);
+    }
+
+    #[test]
+    fn formset_bounds_rows_and_prefixes_errors() {
+        let mut values = FormValues::default();
+        values.insert("lines_TOTAL_FORMS", "2");
+        values.insert("lines_0_name", "one");
+        values.insert("lines_1_name", "");
+        values.insert("lines_2_name", "extra");
+        let errors = bind_formset(&values, "lines", 5, SubmitMode::Create, |_mode, row| {
+            let mut errors = FormErrors::default();
+            match row.get("name").map(str::trim) {
+                Some(name) if !name.is_empty() => Ok(name.to_owned()),
+                _ => {
+                    errors.push("name", "validation.required");
+                    Err(errors)
+                }
+            }
+        })
+        .unwrap_err();
+        assert_eq!(
+            errors.for_field("lines_1_name"),
+            Some("validation.required")
+        );
+        assert_eq!(
+            errors.for_field("lines_2_name"),
+            Some("validation.formset_size")
+        );
+        let mut values = FormValues::default();
+        values.insert("lines_TOTAL_FORMS", "1");
+        values.insert("lines_0_name", "one");
+        let rows = bind_formset(&values, "lines", 5, SubmitMode::Create, |_mode, row| {
+            Ok(row.get("name").unwrap_or("").to_owned())
+        })
+        .unwrap();
+        assert_eq!(rows, vec!["one".to_owned()]);
+        values.insert("lines_TOTAL_FORMS", "9");
+        let oversized = bind_formset(&values, "lines", 2, SubmitMode::Create, |_mode, row| {
+            Ok(row.get("name").unwrap_or("").to_owned())
+        })
+        .unwrap_err();
+        assert_eq!(
+            oversized.for_field("lines_TOTAL_FORMS"),
+            Some("validation.formset_size")
+        );
+    }
+
+    #[tokio::test]
+    async fn upload_rejects_traversal_and_stores_a_png() {
+        let root = std::env::temp_dir().join(format!("ferrioxid-upload-{}", uuid::Uuid::new_v4()));
+        let storage = ferrioxid_storage::LocalStorage::open(&root, 32, &["image/png"]).unwrap();
+        let owner = uuid::Uuid::from_u128(3);
+        let traversed = store_upload(&storage, owner, "../secret.png", b"not-a-png")
+            .await
+            .unwrap_err();
+        assert_eq!(traversed.for_field("file"), Some("validation.upload_name"));
+        let png: &[u8] = b"\x89PNG\r\n\x1a\nsafe";
+        let stored = store_upload(&storage, owner, "photo.png", png)
+            .await
+            .unwrap();
+        assert_eq!(stored.original_name, "photo.png");
+        assert!(!stored.id.to_string().contains(".."));
+        let (_meta, bytes) = storage.read(owner, stored.id).await.unwrap();
+        assert_eq!(bytes, png);
+        let _ = std::fs::remove_dir_all(&root);
     }
 
     fn column(

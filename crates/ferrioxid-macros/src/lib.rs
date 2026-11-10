@@ -1,5 +1,6 @@
 //! Derive a typed repository and SQL schema from a Rust struct.
 mod choice;
+mod form;
 
 use proc_macro::TokenStream;
 use quote::{format_ident, quote};
@@ -19,6 +20,14 @@ pub fn derive_model(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(FerrioxidChoice, attributes(choice))]
 pub fn derive_choice(input: TokenStream) -> TokenStream {
     match choice::expand(parse_macro_input!(input as DeriveInput)) {
+        Ok(tokens) => tokens.into(),
+        Err(error) => error.to_compile_error().into(),
+    }
+}
+
+#[proc_macro_derive(FerrioxidForm, attributes(form))]
+pub fn derive_form(input: TokenStream) -> TokenStream {
+    match form::expand(parse_macro_input!(input as DeriveInput)) {
         Ok(tokens) => tokens.into(),
         Err(error) => error.to_compile_error().into(),
     }
@@ -280,6 +289,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
     let mut dto_fields = Vec::new();
     let mut values = Vec::new();
     let mut checks = Vec::new();
+    let mut bound_items = Vec::new();
     let mut update_fields = Vec::new();
     let mut update_bindings = Vec::new();
     let mut seen_id = false;
@@ -314,6 +324,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let mut min_length: Option<usize> = None;
         let mut max_length: Option<usize> = None;
         let mut min: Option<i64> = None;
+        let mut max: Option<i64> = None;
         let mut default_bool: Option<bool> = None;
         let mut unique = false;
         let mut indexed = false;
@@ -344,6 +355,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     max_length = Some(meta.value()?.parse::<LitInt>()?.base10_parse()?);
                 } else if meta.path.is_ident("min") {
                     min = Some(meta.value()?.parse::<LitInt>()?.base10_parse()?);
+                } else if meta.path.is_ident("max") {
+                    max = Some(meta.value()?.parse::<LitInt>()?.base10_parse()?);
                 } else if meta.path.is_ident("default") {
                     default_bool = Some(meta.value()?.parse::<LitBool>()?.value);
                 } else if meta.path.is_ident("unique") {
@@ -575,8 +588,11 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 "length constraints require String",
             ));
         }
-        if min.is_some() && type_name != "i64" {
-            return Err(syn::Error::new_spanned(&ident, "min requires i64"));
+        if (min.is_some() || max.is_some()) && type_name != "i64" && type_name != "Decimal" {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "min and max apply to i64 or Decimal fields",
+            ));
         }
         if required && nullable {
             return Err(syn::Error::new_spanned(
@@ -876,18 +892,73 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 push_format_check(&mut checks, &ident, &field_name, nullable, kind);
             }
         }
-        if let Some(minimum) = min {
-            if nullable {
-                checks.push(quote! { if let ::core::option::Option::Some(value) = payload.#ident {
-                    if value < #minimum {
-                        return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_value:{}", #field_name, #minimum)));
-                    }
-                } });
-            } else {
-                checks.push(quote! { if payload.#ident < #minimum {
-                    return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_value:{}", #field_name, #minimum)));
-                } });
+        if let (Some(minimum), Some(maximum)) = (min, max) {
+            if minimum > maximum {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "field min is greater than max",
+                ));
             }
+        }
+        if min.is_some() || max.is_some() {
+            if type_name != "i64" && type_name != "Decimal" {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "min and max apply to i64 or Decimal fields",
+                ));
+            }
+            let limit = |number: i64| {
+                if type_name == "Decimal" {
+                    quote! { ::ferrioxid::core::Decimal::from(#number) }
+                } else {
+                    quote! { #number }
+                }
+            };
+            if let Some(minimum) = min {
+                let floor = limit(minimum);
+                if nullable {
+                    checks.push(quote! { if let ::core::option::Option::Some(value) = payload.#ident {
+                        if value < #floor {
+                            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_value:{}", #field_name, #minimum)));
+                        }
+                    } });
+                } else {
+                    checks.push(quote! { if payload.#ident < #floor {
+                        return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_value:{}", #field_name, #minimum)));
+                    } });
+                }
+            }
+            if let Some(maximum) = max {
+                let ceiling = limit(maximum);
+                if nullable {
+                    checks.push(quote! { if let ::core::option::Option::Some(value) = payload.#ident {
+                        if value > #ceiling {
+                            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.max_value:{}", #field_name, #maximum)));
+                        }
+                    } });
+                } else {
+                    checks.push(quote! { if payload.#ident > #ceiling {
+                        return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.max_value:{}", #field_name, #maximum)));
+                    } });
+                }
+            }
+        }
+        if min.is_some() || max.is_some() {
+            let minimum = match min {
+                Some(value) => quote! { ::core::option::Option::Some(#value) },
+                None => quote! { ::core::option::Option::None },
+            };
+            let maximum = match max {
+                Some(value) => quote! { ::core::option::Option::Some(#value) },
+                None => quote! { ::core::option::Option::None },
+            };
+            bound_items.push(quote! {
+                ::ferrioxid::core::NumericBound {
+                    column: #field_name,
+                    min: #minimum,
+                    max: #maximum,
+                }
+            });
         }
         if readonly {
             continue;
@@ -906,6 +977,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             min_length,
             max_length,
             min,
+            max,
             format: format.as_deref(),
             choice: is_choice,
             precision: decimal_precision,
@@ -1191,6 +1263,10 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 &DESCRIPTOR
             }
             fn columns() -> &'static [::ferrioxid::core::ColumnSpec] { #columns_ident }
+            fn numeric_bounds() -> &'static [::ferrioxid::core::NumericBound] {
+                static BOUNDS: &[::ferrioxid::core::NumericBound] = &[#(#bound_items),*];
+                BOUNDS
+            }
             fn constraints() -> &'static ::ferrioxid::core::TableConstraints {
                 static CONSTRAINTS: ::ferrioxid::core::TableConstraints = ::ferrioxid::core::TableConstraints {
                     unique_groups: &[#(#unique_lists),*],
@@ -1865,6 +1941,7 @@ struct PatchRules<'a> {
     min_length: Option<usize>,
     max_length: Option<usize>,
     min: Option<i64>,
+    max: Option<i64>,
     format: Option<&'a str>,
     choice: bool,
     precision: u8,
@@ -1881,6 +1958,7 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
         min_length,
         max_length,
         min,
+        max,
         format,
         choice,
         precision,
@@ -1911,9 +1989,23 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
             value_checks.push(quote! { #checker(#field_name, value.as_str())?; });
         }
     }
+    let limit = |number: i64| {
+        if type_name == "Decimal" {
+            quote! { ::ferrioxid::core::Decimal::from(#number) }
+        } else {
+            quote! { #number }
+        }
+    };
     if let Some(minimum) = min {
-        value_checks.push(quote! { if value < #minimum {
+        let floor = limit(minimum);
+        value_checks.push(quote! { if value < #floor {
             return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.min_value:{}", #field_name, #minimum)));
+        } });
+    }
+    if let Some(maximum) = max {
+        let ceiling = limit(maximum);
+        value_checks.push(quote! { if value > #ceiling {
+            return Err(::ferrioxid::core::FerrioxidError::Validation(format!("field:{}: validation.max_value:{}", #field_name, #maximum)));
         } });
     }
     let null_arm = if nullable {

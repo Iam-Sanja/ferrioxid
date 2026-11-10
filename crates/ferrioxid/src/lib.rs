@@ -9,7 +9,7 @@ pub use ferrioxid_auth as auth;
 pub use ferrioxid_core as core;
 pub use ferrioxid_db as db;
 pub use ferrioxid_forms as forms;
-pub use ferrioxid_macros::{model_fields, FerrioxidChoice, FerrioxidModel};
+pub use ferrioxid_macros::{model_fields, FerrioxidChoice, FerrioxidForm, FerrioxidModel};
 
 #[macro_export]
 macro_rules! with_timestamps {

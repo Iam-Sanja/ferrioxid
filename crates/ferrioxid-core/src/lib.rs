@@ -196,6 +196,14 @@ impl Default for TableConstraints {
     }
 }
 
+/// Server-side numeric limits declared on a model field.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct NumericBound {
+    pub column: &'static str,
+    pub min: Option<i64>,
+    pub max: Option<i64>,
+}
+
 pub trait FerrioxidModel: Send + Sync + 'static {
     fn descriptor() -> &'static ModelDescriptor;
     fn columns() -> &'static [ColumnSpec];
@@ -205,6 +213,10 @@ pub trait FerrioxidModel: Send + Sync + 'static {
     fn schema_sql(kind: DatabaseKind) -> String;
     fn admin_meta() -> Option<&'static AdminModelMeta> {
         None
+    }
+    /// Limits from `#[field(min = ..., max = ...)]`. Empty when the model has none.
+    fn numeric_bounds() -> &'static [NumericBound] {
+        &[]
     }
 }
 
