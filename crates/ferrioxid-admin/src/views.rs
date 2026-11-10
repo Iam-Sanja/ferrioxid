@@ -40,11 +40,29 @@ impl std::fmt::Display for ExtensionError {
 
 impl std::error::Error for ExtensionError {}
 
+/// A file field from a multipart admin form. The bytes are not stored by the framework.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UploadedFile {
+    pub field: String,
+    pub filename: String,
+    /// Browser-supplied Content-Type. Do not use it as proof of the file contents.
+    pub declared_type: Option<String>,
+    pub bytes: Vec<u8>,
+}
+
+impl UploadedFile {
+    pub fn size(&self) -> usize {
+        self.bytes.len()
+    }
+}
+
 pub struct ViewRequest<'a> {
     pub user: &'a AuthUser,
     pub db: &'a DatabaseConnection,
     pub locale: &'a str,
     pub form: &'a HashMap<String, String>,
+    /// Empty for GET and for URL-encoded forms.
+    pub uploads: &'a [UploadedFile],
 }
 
 #[derive(Debug, Clone)]

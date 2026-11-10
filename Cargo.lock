@@ -723,6 +723,7 @@ dependencies = [
  "ferrioxid-core",
  "ferrioxid-db",
  "ferrioxid-forms",
+ "ferrioxid-storage",
  "sea-orm",
  "serde",
  "serde_json",

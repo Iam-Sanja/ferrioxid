@@ -32,3 +32,5 @@ Before calling `handle`, Ferrioxid checks the session, `is_staff` and `AuthServi
 `ViewPage` provides data for the registered template. `notice` and `alert` are shortened and escaped by Tera. The template is chosen by the developer during registration, not the request.
 
 The sidebar includes pages registered with `navigation(true)` only when the current user holds the required permission. This applies to the dashboard, lists, forms and custom pages.
+
+A custom page POST may use `multipart/form-data`. Text parts become `ViewRequest.form`. File parts become `ViewRequest.uploads` (`UploadedFile`: field, filename, declared Content-Type, bytes, `size()`). The declared type is not trusted. Duplicate field names and filenames containing a separator, `:`, `.` or `..` are rejected with 400 after authentication. Bodies larger than `MULTIPART_BODY_LIMIT` (1 MiB) are rejected with 413 before the handler runs. CSRF, staff and the page permission are still required; a rejected request does not call the handler, so the framework does not store the file. URL-encoded forms are unchanged and have an empty `uploads` slice. The handler decides whether to call storage.

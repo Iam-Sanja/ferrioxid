@@ -4474,13 +4474,9 @@ pub(crate) async fn require_post(
     let Some(auth) = state.auth.as_ref() else {
         return Err(());
     };
-    let form = parse_form(body);
+    let token = csrf_token_from(headers, body);
     let user = auth
-        .authenticate_csrf(
-            headers,
-            &Method::POST,
-            form.get("csrf_token").map(String::as_str).unwrap_or(""),
-        )
+        .authenticate_csrf(headers, &Method::POST, &token)
         .await
         .map_err(|_| ())?;
     user.is_staff.then_some(user).ok_or(())
@@ -6642,6 +6638,28 @@ fn append_cookie(response: &mut Response, value: &str) {
             .headers_mut()
             .append(header::SET_COOKIE, header_value);
     }
+}
+
+pub(crate) fn csrf_token_from(headers: &HeaderMap, body: &Bytes) -> String {
+    let content_type = headers
+        .get(header::CONTENT_TYPE)
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+    if content_type
+        .split(';')
+        .next()
+        .unwrap_or("")
+        .trim()
+        .eq_ignore_ascii_case("multipart/form-data")
+    {
+        return ferrioxid_storage::multipart_text_field(content_type, body, "csrf_token")
+            .map(|value| value.trim().to_owned())
+            .unwrap_or_default();
+    }
+    parse_form(body)
+        .get("csrf_token")
+        .cloned()
+        .unwrap_or_default()
 }
 
 pub(crate) fn parse_form(body: &Bytes) -> HashMap<String, String> {
