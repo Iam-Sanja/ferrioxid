@@ -21,6 +21,20 @@ const BODY_CAP: usize = 8 * 1024 * 1024;
 const DEFAULT_SESSION_COOKIES: [&str; 2] = ["ferrioxid_session", "ferrioxid_anonymous"];
 
 pub async fn enforce(State(state): State<AppState>, request: Request, next: Next) -> Response {
+    gate(state, request, next, false).await
+}
+
+/// Schreibzugriff nur mit gültigem Browser-CSRF. Ein fehlendes Session-Cookie und ein ungeprüftes
+/// `Authorization: Bearer` reichen nicht.
+pub async fn require_browser(
+    State(state): State<AppState>,
+    request: Request,
+    next: Next,
+) -> Response {
+    gate(state, request, next, true).await
+}
+
+async fn gate(state: AppState, request: Request, next: Next, browser_required: bool) -> Response {
     if request.method().is_safe() {
         return next.run(request).await;
     }
@@ -29,6 +43,9 @@ pub async fn enforce(State(state): State<AppState>, request: Request, next: Next
         None => default_session_cookie(request.headers()),
     };
     if !protected {
+        if browser_required {
+            return reject(AuthError::CsrfRejected, request.headers());
+        }
         return next.run(request).await;
     }
     let Some(auth) = state.auth.clone() else {

@@ -643,3 +643,99 @@ async fn admin_login_accepts_login_csrf_while_an_anonymous_session_exists() {
     .await;
     assert_eq!(stateless.status, StatusCode::OK, "{}", stateless.body);
 }
+
+#[tokio::test]
+async fn browser_routes_reject_cookieless_and_bearer_writes() {
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let auth = AuthService::new(db.clone(), AuthConfig::development());
+    let anonymous = auth
+        .ensure_anonymous_session(&axum::http::HeaderMap::new())
+        .await
+        .unwrap();
+    let anonymous_cookie = pair(anonymous.cookie.as_deref().unwrap());
+    let state = AppState {
+        db,
+        auth: Some(auth),
+        mail: None,
+    };
+    let app = axum::Router::new()
+        .route(
+            "/cart",
+            axum::routing::get(|| async { "ok" })
+                .post(|| async { "ok" })
+                .put(|| async { "ok" })
+                .patch(|| async { "ok" })
+                .delete(|| async { "ok" }),
+        )
+        .layer(axum::middleware::from_fn_with_state(
+            state.clone(),
+            ferrioxid::require_browser,
+        ))
+        .with_state(state);
+
+    let (status, _) = send(&app, "GET", "/cart", None, None, None, None, "").await;
+    assert_eq!(status, StatusCode::OK);
+    for method in ["POST", "PUT", "PATCH", "DELETE"] {
+        let (status, body) = send(
+            &app,
+            method,
+            "/cart",
+            None,
+            None,
+            None,
+            Some("application/json"),
+            "{}",
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{method} {body}");
+        let (status, body) = send(
+            &app,
+            method,
+            "/cart",
+            None,
+            None,
+            Some("Bearer opaque-client"),
+            Some("application/json"),
+            "{}",
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{method} bearer {body}");
+        let (status, body) = send(
+            &app,
+            method,
+            "/cart",
+            Some(&anonymous_cookie),
+            None,
+            None,
+            Some("application/json"),
+            "{}",
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{method} cookie {body}");
+        let (status, _) = send(
+            &app,
+            method,
+            "/cart",
+            Some(&anonymous_cookie),
+            Some("not-the-token"),
+            None,
+            Some("application/json"),
+            "{}",
+        )
+        .await;
+        assert_eq!(status, StatusCode::FORBIDDEN, "{method} forged");
+        let (status, body) = send(
+            &app,
+            method,
+            "/cart",
+            Some(&anonymous_cookie),
+            Some(&anonymous.csrf_token),
+            None,
+            Some("application/json"),
+            "{}",
+        )
+        .await;
+        assert_eq!(status, StatusCode::OK, "{method} {body}");
+    }
+}

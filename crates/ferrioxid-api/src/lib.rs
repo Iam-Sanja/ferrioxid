@@ -23,6 +23,8 @@ use serde_json::json;
 
 mod cookie_guard;
 
+pub use cookie_guard::require_browser;
+
 pub mod apps;
 pub mod pages;
 pub mod urls;
