@@ -112,6 +112,8 @@ Some important limitations on the current published `main` include: no first-cla
 
 The [Django capability matrix](docs/django-capability-matrix.md) and [roadmap](docs/roadmap.md) give the detail. The experimental framework has **not** been declared production-ready.
 
+The in-review [framework completion pull request](https://github.com/Iam-Sanja/ferrioxid/pull/72) adds OpenAPI 3.1 from model metadata, an HTTP `TestClient`, keyset pagination, many-to-many loading, `migrate down`, derived forms and related fixes. That work is **not on `main` until merge** and must not be read as a production release.
+
 ## Help build Ferrioxid
 
 **You don't need to know the whole framework to contribute.** Useful contributions include reproducible bug reports, smaller documentation fixes, tests, examples and focused feature improvements.
