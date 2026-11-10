@@ -1322,14 +1322,46 @@ fn json_id(json: &serde_json::Value) -> Result<Uuid, FerrioxidError> {
     Uuid::parse_str(text).map_err(FerrioxidError::database)
 }
 
-fn note_statement() {
-    #[cfg(test)]
-    STATEMENT_COUNT.with(|count| count.set(count.get() + 1));
+pub(crate) fn note_statement() {
+    let enabled = cfg!(test) || COUNTING.with(|flag| flag.get());
+    if enabled {
+        STATEMENT_COUNT.with(|count| count.set(count.get().saturating_add(1)));
+    }
 }
 
-#[cfg(test)]
 thread_local! {
     static STATEMENT_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static COUNTING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Counts model statements on this thread while it is alive.
+///
+/// Library unit tests already count. Application tests call [`QueryCounter::install`]
+/// because a dependency is not built with `cfg(test)`.
+pub struct QueryCounter {
+    previous: bool,
+}
+
+impl QueryCounter {
+    pub fn install() -> Self {
+        let previous = COUNTING.with(|flag| flag.replace(true));
+        STATEMENT_COUNT.with(|count| count.set(0));
+        Self { previous }
+    }
+
+    pub fn reset() {
+        STATEMENT_COUNT.with(|count| count.set(0));
+    }
+
+    pub fn get() -> usize {
+        STATEMENT_COUNT.with(|count| count.get())
+    }
+}
+
+impl Drop for QueryCounter {
+    fn drop(&mut self) {
+        COUNTING.with(|flag| flag.set(self.previous));
+    }
 }
 
 #[cfg(test)]

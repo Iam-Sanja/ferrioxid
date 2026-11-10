@@ -302,7 +302,10 @@ pub async fn list_records(
         query.and_where(condition);
     }
     let rows = db
-        .query_all(statement(db, &query)?)
+        .query_all({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     let truncated = rows.len() > LIST_LIMIT;
@@ -376,7 +379,10 @@ pub async fn query_admin_page(
         request.scope,
     )?;
     let count_row = db
-        .query_one(statement(db, &count_query)?)
+        .query_one({
+            crate::query::note_statement();
+            statement(db, &count_query)?
+        })
         .await
         .map_err(FerrioxidError::database)?
         .ok_or_else(|| {
@@ -415,7 +421,10 @@ pub async fn query_admin_page(
     }
     query.limit(request.limit + 1).offset(request.offset);
     let rows = db
-        .query_all(statement(db, &query)?)
+        .query_all({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     let has_more = rows.len() > request.limit as usize;
@@ -473,7 +482,10 @@ pub async fn query_labels(
             query.and_where(condition);
         }
         let rows = db
-            .query_all(statement(db, &query)?)
+            .query_all({
+                crate::query::note_statement();
+                statement(db, &query)?
+            })
             .await
             .map_err(FerrioxidError::database)?;
         for row in rows {
@@ -541,7 +553,10 @@ pub async fn date_buckets(
     query.order_by_expr(Expr::cust("bucket"), Order::Asc);
     query.limit(101);
     let rows = db
-        .query_all(statement(db, &query)?)
+        .query_all({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     let mut buckets = Vec::new();
@@ -681,7 +696,10 @@ pub async fn get_record(
         query.and_where(condition);
     }
     let row = db
-        .query_one(statement(db, &query)?)
+        .query_one({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     row.map(|row| row_to_json(&row, columns)).transpose()
@@ -700,7 +718,10 @@ pub async fn insert_record(
         .values_panic(values.into_iter().map(Into::into))
         .returning_all();
     let row = db
-        .query_one(statement(db, &query)?)
+        .query_one({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(map_write)?
         .ok_or_else(|| FerrioxidError::Validation("no row returned".into()))?;
@@ -732,7 +753,10 @@ pub async fn update_record(
         query.value(Alias::new(name), value);
     }
     let row = db
-        .query_one(statement(db, &query)?)
+        .query_one({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(map_write)?
         .ok_or(FerrioxidError::NotFound)?;
@@ -754,7 +778,10 @@ pub async fn delete_record(
         query.and_where(condition);
     }
     let result = db
-        .execute(statement(db, &query)?)
+        .execute({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(map_write)?;
     Ok(result.rows_affected())
@@ -782,7 +809,10 @@ where
         .and_where(Expr::col(Alias::new(column)).eq(value))
         .order_by(Alias::new("id"), Order::Asc);
     let rows = db
-        .query_all(statement(db, &query)?)
+        .query_all({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     rows.into_iter()
