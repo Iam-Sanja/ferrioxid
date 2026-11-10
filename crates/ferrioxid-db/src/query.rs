@@ -2,27 +2,39 @@
 //!
 //! Column names come from the model whitelist. Values are bound parameters.
 //! `list` and `list_scoped` stay capped at 100 rows; this module is the
-//! pagination path.
+//! pagination path. `page` keeps that cap and rejects offsets above
+//! [`OFFSET_LIMIT`]. `keyset` is the stable alternative: it walks the same
+//! order, including the `id` tie-break, and does not use `OFFSET`.
+//! Aggregates and many-to-many loads are separate statements, not one query
+//! per parent row.
 
+use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
 use ferrioxid_core::{ColumnKind, ColumnSpec, FerrioxidError, FerrioxidModel, QueryScope};
 use sea_orm::sea_query::{
-    Alias, Expr, Order, PostgresQueryBuilder, Query, QueryStatementWriter, SelectStatement,
-    SimpleExpr, SqliteQueryBuilder,
+    extension::sqlite::SqliteExpr, Alias, Condition, Expr, ExprTrait, Func, JoinType, LikeExpr,
+    Order, PostgresQueryBuilder, Query, QueryStatementWriter, SelectStatement, SimpleExpr,
+    SqliteQueryBuilder,
 };
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
 use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
+use serde_json::Value as Json;
 use uuid::Uuid;
 
-use crate::sql::{is_safe_ident, row_to_json, scope_condition, LIST_LIMIT};
+use crate::sql::{
+    escape_like, is_safe_ident, row_to_json, scope_condition, scope_condition_in, LIST_LIMIT,
+};
 
 /// Maximum page size. Matches `list` and the admin list.
 pub const PAGE_LIMIT: u64 = LIST_LIMIT as u64;
-/// Maximum `OFFSET`. Larger windows need a keyset that this API does not provide.
+/// Maximum `OFFSET` for [`Select::page`]. Larger windows use [`Select::keyset`].
 pub const OFFSET_LIMIT: u64 = 1_000_000;
 /// Maximum number of bound values in one `IN` or `NOT IN` list.
 pub const IN_LIMIT: usize = 100;
+/// Maximum length of one text-search term, before LIKE or GLOB escaping.
+pub const TEXT_MATCH_LIMIT: usize = 200;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Direction {
@@ -86,6 +98,18 @@ pub enum Compare {
     NotIn(Vec<Bound>),
     IsNull,
     IsNotNull,
+    Contains {
+        value: String,
+        case_insensitive: bool,
+    },
+    StartsWith {
+        value: String,
+        case_insensitive: bool,
+    },
+    EndsWith {
+        value: String,
+        case_insensitive: bool,
+    },
 }
 
 /// A boolean expression over whitelisted columns.
@@ -159,6 +183,67 @@ impl Column {
         self.cmp(Compare::IsNotNull)
     }
 
+    /// Case-sensitive substring match. `%`, `_` and `\` in `value` are escaped.
+    ///
+    /// SQLite uses `GLOB` because its `LIKE` is case-insensitive for ASCII.
+    /// PostgreSQL uses `LIKE ... ESCAPE`. The term is a bound parameter.
+    pub fn contains(self, value: impl Into<String>) -> Predicate {
+        self.text_match(TextPosition::Contains, false, value.into())
+    }
+
+    /// Case-sensitive prefix match. See [`Column::contains`].
+    pub fn starts_with(self, value: impl Into<String>) -> Predicate {
+        self.text_match(TextPosition::StartsWith, false, value.into())
+    }
+
+    /// Case-sensitive suffix match. See [`Column::contains`].
+    pub fn ends_with(self, value: impl Into<String>) -> Predicate {
+        self.text_match(TextPosition::EndsWith, false, value.into())
+    }
+
+    /// Case-insensitive substring match via `LOWER(column) LIKE … ESCAPE '\'`.
+    ///
+    /// The pattern is folded in Rust before binding: [`fold_case_insensitive_pattern`]
+    /// uses ASCII lowercasing on SQLite and full Unicode lowercasing on PostgreSQL,
+    /// matching each backend's `LOWER(column)` behaviour. This is not Unicode
+    /// casefolding. `%`, `_` and `\` in the term are escaped and bound.
+    pub fn contains_ignore_case(self, value: impl Into<String>) -> Predicate {
+        self.text_match(TextPosition::Contains, true, value.into())
+    }
+
+    /// Case-insensitive prefix match. See [`Column::contains_ignore_case`].
+    pub fn starts_with_ignore_case(self, value: impl Into<String>) -> Predicate {
+        self.text_match(TextPosition::StartsWith, true, value.into())
+    }
+
+    /// Case-insensitive suffix match. See [`Column::contains_ignore_case`].
+    pub fn ends_with_ignore_case(self, value: impl Into<String>) -> Predicate {
+        self.text_match(TextPosition::EndsWith, true, value.into())
+    }
+
+    fn text_match(
+        self,
+        position: TextPosition,
+        case_insensitive: bool,
+        value: String,
+    ) -> Predicate {
+        let compare = match position {
+            TextPosition::Contains => Compare::Contains {
+                value,
+                case_insensitive,
+            },
+            TextPosition::StartsWith => Compare::StartsWith {
+                value,
+                case_insensitive,
+            },
+            TextPosition::EndsWith => Compare::EndsWith {
+                value,
+                case_insensitive,
+            },
+        };
+        self.cmp(compare)
+    }
+
     fn cmp(self, compare: Compare) -> Predicate {
         Predicate::Cmp {
             column: self.name,
@@ -179,6 +264,96 @@ pub fn not(predicate: Predicate) -> Predicate {
     Predicate::Not(Box::new(predicate))
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum TextPosition {
+    Contains,
+    StartsWith,
+    EndsWith,
+}
+
+/// Filters for a related model. The page window of the outer [`Select`] is not copied.
+#[derive(Debug, Clone)]
+pub struct Related<R> {
+    predicate: Predicate,
+    scope: QueryScope,
+    negated: bool,
+    _model: PhantomData<R>,
+}
+
+impl<R> Related<R> {
+    pub fn filter(mut self, predicate: Predicate) -> Self {
+        self.predicate = match self.predicate {
+            Predicate::And(mut parts) => {
+                parts.push(predicate);
+                Predicate::And(parts)
+            }
+            other => Predicate::And(vec![other, predicate]),
+        };
+        self
+    }
+
+    pub fn scope(mut self, scope: QueryScope) -> Self {
+        self.scope = scope;
+        self
+    }
+
+    /// Turns the relation check into `NOT EXISTS`.
+    pub fn negated(mut self) -> Self {
+        self.negated = true;
+        self
+    }
+
+    fn into_filter(
+        self,
+        table: &'static str,
+        columns: &'static [ColumnSpec],
+        link: RelationLink,
+    ) -> RelationFilter {
+        RelationFilter {
+            table,
+            columns,
+            link,
+            predicate: self.predicate,
+            scope: self.scope,
+            negated: self.negated,
+        }
+    }
+}
+
+impl<R: FerrioxidModel> Related<R> {
+    pub fn new() -> Self {
+        Self {
+            predicate: Predicate::And(Vec::new()),
+            scope: QueryScope::All,
+            negated: false,
+            _model: PhantomData,
+        }
+    }
+}
+
+impl<R: FerrioxidModel> Default for Related<R> {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+#[derive(Debug, Clone)]
+enum RelationLink {
+    ForeignKey { column: &'static str },
+    Has { foreign_key: &'static str },
+    Many(ManyToMany),
+}
+
+#[derive(Debug, Clone)]
+struct RelationFilter {
+    table: &'static str,
+    columns: &'static [ColumnSpec],
+    link: RelationLink,
+    predicate: Predicate,
+    scope: QueryScope,
+    negated: bool,
+}
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct QueryPage<T> {
     pub data: Vec<T>,
@@ -186,6 +361,76 @@ pub struct QueryPage<T> {
     pub offset: u64,
     pub total: i64,
     pub has_more: bool,
+}
+
+/// One keyset page. `next` is `None` when the page is empty.
+/// Pass `next` back to [`Select::keyset`] to read the following page.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct KeysetPage<T> {
+    pub data: Vec<T>,
+    pub limit: u64,
+    pub next: Option<String>,
+    pub has_more: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum AggregateFn {
+    Count,
+    Sum,
+}
+
+/// A related `COUNT` or `SUM` for [`Select::annotate`].
+pub struct Aggregate<Child> {
+    pub alias: &'static str,
+    pub function: AggregateFn,
+    pub foreign_key: &'static str,
+    pub value_column: Option<&'static str>,
+    pub child_scope: QueryScope,
+    _child: PhantomData<Child>,
+}
+
+impl<Child> Aggregate<Child> {
+    pub fn count(alias: &'static str, foreign_key: &'static str) -> Self {
+        Self {
+            alias,
+            function: AggregateFn::Count,
+            foreign_key,
+            value_column: None,
+            child_scope: QueryScope::All,
+            _child: PhantomData,
+        }
+    }
+
+    pub fn sum(alias: &'static str, foreign_key: &'static str, value_column: &'static str) -> Self {
+        Self {
+            alias,
+            function: AggregateFn::Sum,
+            foreign_key,
+            value_column: Some(value_column),
+            child_scope: QueryScope::All,
+            _child: PhantomData,
+        }
+    }
+
+    pub fn scope(mut self, scope: QueryScope) -> Self {
+        self.child_scope = scope;
+        self
+    }
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Annotated<M> {
+    pub row: M,
+    pub alias: &'static str,
+    pub value: i64,
+}
+
+/// Join table for [`load_many_to_many`]. Both columns are UUID foreign keys.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManyToMany {
+    pub join_table: &'static str,
+    pub parent_column: &'static str,
+    pub child_column: &'static str,
 }
 
 /// A bounded `SELECT` for `M`.
@@ -202,6 +447,7 @@ pub struct QueryPage<T> {
 #[derive(Debug, Clone)]
 pub struct Select<M> {
     predicate: Predicate,
+    relations: Vec<RelationFilter>,
     orders: Vec<(&'static str, Direction)>,
     limit: u64,
     offset: u64,
@@ -221,6 +467,7 @@ impl<M> Select<M> {
     pub fn new() -> Self {
         Self {
             predicate: Predicate::And(Vec::new()),
+            relations: Vec::new(),
             orders: Vec::new(),
             limit: PAGE_LIMIT,
             offset: 0,
@@ -245,6 +492,49 @@ impl<M> Select<M> {
         self
     }
 
+    /// Keeps rows whose foreign key `column` points at a row of `R` matching `related`.
+    ///
+    /// `column.foreign_table` must be `R`'s table. The related scope and predicate
+    /// run inside `EXISTS` and use the same plan as `count`, `page` and `keyset`.
+    pub fn where_related<R>(mut self, column: &'static str, related: Related<R>) -> Self
+    where
+        R: FerrioxidModel,
+    {
+        self.relations.push(related.into_filter(
+            R::descriptor().table,
+            R::columns(),
+            RelationLink::ForeignKey { column },
+        ));
+        self
+    }
+
+    /// Keeps rows that have at least one `R` row whose foreign key references this model.
+    pub fn where_has<R>(mut self, foreign_key: &'static str, related: Related<R>) -> Self
+    where
+        R: FerrioxidModel,
+    {
+        self.relations.push(related.into_filter(
+            R::descriptor().table,
+            R::columns(),
+            RelationLink::Has { foreign_key },
+        ));
+        self
+    }
+
+    /// Keeps rows linked through `link`. Both id columns must be UUIDs.
+    /// The join table is not a model; its identifiers are checked, not its rows' types.
+    pub fn where_linked<R>(mut self, link: ManyToMany, related: Related<R>) -> Self
+    where
+        R: FerrioxidModel,
+    {
+        self.relations.push(related.into_filter(
+            R::descriptor().table,
+            R::columns(),
+            RelationLink::Many(link),
+        ));
+        self
+    }
+
     pub fn order_by(mut self, column: &'static str, direction: Direction) -> Self {
         self.orders.push((column, direction));
         self
@@ -265,7 +555,7 @@ impl<M> Select<M> {
         M: FerrioxidModel + DeserializeOwned,
         C: ConnectionTrait,
     {
-        let plan = self.plan()?;
+        let plan = self.plan(db.get_database_backend())?;
         let mut query = select_body::<M>(plan.filter);
         apply_orders(&mut query, &plan.orders);
         query.limit(plan.limit).offset(plan.offset);
@@ -277,7 +567,7 @@ impl<M> Select<M> {
         M: FerrioxidModel,
         C: ConnectionTrait,
     {
-        let plan = self.plan()?;
+        let plan = self.plan(db.get_database_backend())?;
         let mut query = Query::select();
         query
             .expr_as(Expr::col(Alias::new("id")).count(), Alias::new("row_count"))
@@ -306,7 +596,7 @@ impl<M> Select<M> {
         M: FerrioxidModel,
         C: ConnectionTrait,
     {
-        let plan = self.plan()?;
+        let plan = self.plan(db.get_database_backend())?;
         let mut query = Query::select();
         query
             .expr(Expr::val(1))
@@ -341,7 +631,195 @@ impl<M> Select<M> {
         })
     }
 
-    fn plan(&self) -> Result<Plan, FerrioxidError>
+    /// Returns the next page after `cursor`.
+    ///
+    /// `None` starts at the first row. The cursor is an opaque token for the
+    /// last returned row and the planned order, including the `id` tie-break.
+    /// [`QueryScope`] is applied. Offset is not used; a non-zero offset is
+    /// rejected. Nullable and boolean order columns are rejected because their
+    /// seek comparison is not stable on both backends. The page size stays
+    /// between 1 and [`PAGE_LIMIT`].
+    pub async fn keyset<C>(
+        &self,
+        db: &C,
+        cursor: Option<&str>,
+    ) -> Result<KeysetPage<M>, FerrioxidError>
+    where
+        M: FerrioxidModel + DeserializeOwned,
+        C: ConnectionTrait,
+    {
+        if self.offset != 0 {
+            return Err(FerrioxidError::Validation(
+                "keyset pagination does not use offset".into(),
+            ));
+        }
+        let plan = self.plan(db.get_database_backend())?;
+        reject_keyset_orders(M::columns(), &plan.orders)?;
+        let mut query = select_body::<M>(plan.filter);
+        if let Some(token) = cursor {
+            let values = decode_cursor(token)?;
+            if values.len() != plan.orders.len() {
+                return Err(FerrioxidError::Validation(
+                    "keyset cursor does not match the order".into(),
+                ));
+            }
+            query.and_where(seek_expr(M::columns(), &plan.orders, &values)?);
+        }
+        apply_orders(&mut query, &plan.orders);
+        query.limit(plan.limit.saturating_add(1));
+        let mut pairs = fetch_pairs(db, &query).await?;
+        let has_more = pairs.len() as u64 > plan.limit;
+        if has_more {
+            pairs.pop();
+        }
+        let next = match pairs.last() {
+            Some((json, _)) => Some(encode_cursor(M::columns(), &plan.orders, json)?),
+            None => None,
+        };
+        Ok(KeysetPage {
+            data: pairs.into_iter().map(|(_, row)| row).collect(),
+            limit: plan.limit,
+            next,
+            has_more,
+        })
+    }
+
+    /// Attaches one related `COUNT` or `SUM` with a single grouped join.
+    ///
+    /// The parent filter, scope, order and page window stay in force. The
+    /// child scope is applied inside the aggregate and cannot be skipped.
+    /// Missing children are `0`. `order` sorts by the aggregate before the
+    /// parent order. The returned page still contains at most [`PAGE_LIMIT`]
+    /// parents.
+    pub async fn annotate<Child, C>(
+        &self,
+        db: &C,
+        spec: Aggregate<Child>,
+        order: Option<Direction>,
+    ) -> Result<Vec<Annotated<M>>, FerrioxidError>
+    where
+        M: FerrioxidModel + DeserializeOwned,
+        Child: FerrioxidModel,
+        C: ConnectionTrait,
+    {
+        let plan = self.plan(db.get_database_backend())?;
+        let child_table = Child::descriptor().table;
+        if !is_safe_ident(child_table) || !is_safe_ident(spec.foreign_key) {
+            return Err(FerrioxidError::Validation(
+                "aggregate columns are not available".into(),
+            ));
+        }
+        let child_fk = lookup(Child::columns(), spec.foreign_key)?;
+        if child_fk.kind != ColumnKind::Uuid {
+            return Err(FerrioxidError::Validation(format!(
+                "column {} is not a parent reference",
+                spec.foreign_key
+            )));
+        }
+        let mut sub = Query::select();
+        sub.column(Alias::new(spec.foreign_key))
+            .from(Alias::new(child_table))
+            .group_by_col(Alias::new(spec.foreign_key));
+        match spec.function {
+            AggregateFn::Count => {
+                sub.expr_as(
+                    Expr::col(Alias::new(spec.foreign_key)).count(),
+                    Alias::new("aggregate_value"),
+                );
+            }
+            AggregateFn::Sum => {
+                let Some(value_column) = spec.value_column else {
+                    return Err(FerrioxidError::Validation(
+                        "sum needs a value column".into(),
+                    ));
+                };
+                let column = lookup(Child::columns(), value_column)?;
+                if column.kind != ColumnKind::BigInt {
+                    return Err(FerrioxidError::Validation(format!(
+                        "column {value_column} cannot be summed"
+                    )));
+                }
+                sub.expr_as(
+                    Expr::col(Alias::new(value_column)).sum(),
+                    Alias::new("aggregate_value"),
+                );
+            }
+        }
+        if let Some(scope) = scope_condition(Child::columns(), &spec.child_scope)? {
+            sub.and_where(scope);
+        }
+        let table = M::descriptor().table;
+        let mut query = Query::select();
+        for column in M::columns() {
+            query.expr_as(
+                Expr::col((Alias::new(table), Alias::new(column.name))),
+                Alias::new(column.name),
+            );
+        }
+        let aggregate = Func::coalesce([
+            Expr::col((Alias::new("ferrioxid_agg"), Alias::new("aggregate_value"))).into(),
+            Expr::val(0).into(),
+        ]);
+        let cast = match db.get_database_backend() {
+            DatabaseBackend::Postgres => "bigint",
+            DatabaseBackend::Sqlite => "integer",
+            DatabaseBackend::MySql => {
+                return Err(FerrioxidError::database(std::io::Error::new(
+                    std::io::ErrorKind::Unsupported,
+                    "MySQL is not a Ferrioxid database",
+                )))
+            }
+        };
+        query.expr_as(
+            Func::cast_as(aggregate, Alias::new(cast)),
+            Alias::new("ferrioxid_aggregate"),
+        );
+        query.from(Alias::new(table)).join_subquery(
+            JoinType::LeftJoin,
+            sub,
+            Alias::new("ferrioxid_agg"),
+            Condition::all().add(
+                Expr::col((Alias::new("ferrioxid_agg"), Alias::new(spec.foreign_key)))
+                    .eq(Expr::col((Alias::new(table), Alias::new("id")))),
+            ),
+        );
+        if let Some(filter) = plan.filter {
+            query.and_where(filter);
+        }
+        if let Some(direction) = order {
+            query.order_by(
+                Alias::new("ferrioxid_aggregate"),
+                match direction {
+                    Direction::Asc => Order::Asc,
+                    Direction::Desc => Order::Desc,
+                },
+            );
+        }
+        apply_orders(&mut query, &plan.orders);
+        query.limit(plan.limit).offset(plan.offset);
+        note_statement();
+        let rows = db
+            .query_all(render(db.get_database_backend(), &query)?)
+            .await
+            .map_err(FerrioxidError::database)?;
+        let mut annotated = Vec::with_capacity(rows.len());
+        for row in rows {
+            let value = row
+                .try_get::<i64>("", "ferrioxid_aggregate")
+                .or_else(|_| row.try_get::<i32>("", "ferrioxid_aggregate").map(i64::from))
+                .map_err(FerrioxidError::database)?;
+            let json = row_to_json(&row, M::columns())?;
+            let model = serde_json::from_value(json).map_err(FerrioxidError::database)?;
+            annotated.push(Annotated {
+                row: model,
+                alias: spec.alias,
+                value,
+            });
+        }
+        Ok(annotated)
+    }
+
+    fn plan(&self, backend: DatabaseBackend) -> Result<Plan, FerrioxidError>
     where
         M: FerrioxidModel,
     {
@@ -378,7 +856,14 @@ impl<M> Select<M> {
         if !orders.iter().any(|(name, _)| *name == "id") {
             orders.push(("id", Direction::Asc));
         }
-        let mut filter = predicate_expr(columns, &self.predicate)?;
+        let mut filter = predicate_expr(columns, &self.predicate, backend, None)?;
+        for (index, relation) in self.relations.iter().enumerate() {
+            let exists = relation_expr::<M>(relation, index, backend)?;
+            filter = Some(match filter {
+                Some(current) => current.and(exists),
+                None => exists,
+            });
+        }
         if let Some(scope) = scope_condition(columns, &self.scope)? {
             filter = Some(match filter {
                 Some(current) => current.and(scope),
@@ -433,12 +918,14 @@ fn apply_orders(query: &mut SelectStatement, orders: &[(&str, Direction)]) {
 fn predicate_expr(
     columns: &[ColumnSpec],
     predicate: &Predicate,
+    backend: DatabaseBackend,
+    qualifier: Option<&str>,
 ) -> Result<Option<SimpleExpr>, FerrioxidError> {
     match predicate {
         Predicate::And(parts) => {
             let mut combined: Option<SimpleExpr> = None;
             for part in parts {
-                if let Some(expr) = predicate_expr(columns, part)? {
+                if let Some(expr) = predicate_expr(columns, part, backend, qualifier)? {
                     combined = Some(match combined {
                         Some(current) => current.and(expr),
                         None => expr,
@@ -453,7 +940,8 @@ fn predicate_expr(
             }
             let mut combined: Option<SimpleExpr> = None;
             for part in parts {
-                let expr = predicate_expr(columns, part)?.unwrap_or_else(|| Expr::val(1).eq(1));
+                let expr = predicate_expr(columns, part, backend, qualifier)?
+                    .unwrap_or_else(|| Expr::val(1).eq(1));
                 combined = Some(match combined {
                     Some(current) => current.or(expr),
                     None => expr,
@@ -462,16 +950,28 @@ fn predicate_expr(
             Ok(combined)
         }
         Predicate::Not(inner) => {
-            let expr = predicate_expr(columns, inner)?.unwrap_or_else(|| Expr::val(1).eq(1));
+            let expr = predicate_expr(columns, inner, backend, qualifier)?
+                .unwrap_or_else(|| Expr::val(1).eq(1));
             Ok(Some(expr.not()))
         }
-        Predicate::Cmp { column, compare } => {
-            Ok(Some(compare_expr(lookup(columns, column)?, compare)?))
-        }
+        Predicate::Cmp { column, compare } => Ok(Some(compare_expr(
+            lookup(columns, column)?,
+            compare,
+            backend,
+            qualifier,
+        )?)),
     }
 }
 
-fn compare_expr(column: &ColumnSpec, compare: &Compare) -> Result<SimpleExpr, FerrioxidError> {
+fn compare_expr(
+    column: &ColumnSpec,
+    compare: &Compare,
+    backend: DatabaseBackend,
+    qualifier: Option<&str>,
+) -> Result<SimpleExpr, FerrioxidError> {
+    if let Some(expr) = text_match_expr(column, compare, backend, qualifier)? {
+        return Ok(expr);
+    }
     let values = match compare {
         Compare::Eq(value)
         | Compare::Ne(value)
@@ -488,6 +988,9 @@ fn compare_expr(column: &ColumnSpec, compare: &Compare) -> Result<SimpleExpr, Fe
             values.clone()
         }
         Compare::IsNull | Compare::IsNotNull => Vec::new(),
+        Compare::Contains { .. } | Compare::StartsWith { .. } | Compare::EndsWith { .. } => {
+            Vec::new()
+        }
     };
     let inequality = matches!(
         compare,
@@ -502,7 +1005,7 @@ fn compare_expr(column: &ColumnSpec, compare: &Compare) -> Result<SimpleExpr, Fe
             column.name
         )));
     }
-    let expr = Expr::col(Alias::new(column.name));
+    let expr = qualified_col(qualifier, column.name);
     let bound = |value: &Bound| -> Result<Value, FerrioxidError> { bind_for_column(column, value) };
     Ok(match compare {
         Compare::Eq(value) => expr.eq(bound(value)?),
@@ -517,7 +1020,218 @@ fn compare_expr(column: &ColumnSpec, compare: &Compare) -> Result<SimpleExpr, Fe
         }
         Compare::IsNull => expr.is_null(),
         Compare::IsNotNull => expr.is_not_null(),
+        Compare::Contains { .. } | Compare::StartsWith { .. } | Compare::EndsWith { .. } => {
+            return Err(FerrioxidError::Validation(format!(
+                "column {} does not accept this comparison",
+                column.name
+            )));
+        }
     })
+}
+
+fn text_match_expr(
+    column: &ColumnSpec,
+    compare: &Compare,
+    backend: DatabaseBackend,
+    qualifier: Option<&str>,
+) -> Result<Option<SimpleExpr>, FerrioxidError> {
+    let (value, case_insensitive, position) = match compare {
+        Compare::Contains {
+            value,
+            case_insensitive,
+        } => (value, *case_insensitive, TextPosition::Contains),
+        Compare::StartsWith {
+            value,
+            case_insensitive,
+        } => (value, *case_insensitive, TextPosition::StartsWith),
+        Compare::EndsWith {
+            value,
+            case_insensitive,
+        } => (value, *case_insensitive, TextPosition::EndsWith),
+        _ => return Ok(None),
+    };
+    if !matches!(column.kind, ColumnKind::Text | ColumnKind::Choice) {
+        return Err(FerrioxidError::Validation(format!(
+            "column {} does not accept this comparison",
+            column.name
+        )));
+    }
+    if value.chars().count() > TEXT_MATCH_LIMIT {
+        return Err(FerrioxidError::Validation(format!(
+            "text search is limited to {TEXT_MATCH_LIMIT} characters"
+        )));
+    }
+    let column_expr = qualified_col(qualifier, column.name);
+    if case_insensitive {
+        let pattern = match position {
+            TextPosition::Contains => format!("%{}%", escape_like(value)),
+            TextPosition::StartsWith => format!("{}%", escape_like(value)),
+            TextPosition::EndsWith => format!("%{}", escape_like(value)),
+        };
+        let folded = fold_case_insensitive_pattern(pattern, backend);
+        return Ok(Some(
+            Expr::expr(Func::cust("LOWER").arg(column_expr))
+                .like(LikeExpr::new(folded).escape('\\')),
+        ));
+    }
+    let expr = match backend {
+        DatabaseBackend::Postgres => {
+            let pattern = match position {
+                TextPosition::Contains => format!("%{}%", escape_like(value)),
+                TextPosition::StartsWith => format!("{}%", escape_like(value)),
+                TextPosition::EndsWith => format!("%{}", escape_like(value)),
+            };
+            column_expr.like(LikeExpr::new(pattern).escape('\\'))
+        }
+        DatabaseBackend::Sqlite => {
+            let pattern = match position {
+                TextPosition::Contains => format!("*{}*", escape_glob(value)),
+                TextPosition::StartsWith => format!("{}*", escape_glob(value)),
+                TextPosition::EndsWith => format!("*{}", escape_glob(value)),
+            };
+            column_expr.glob(pattern)
+        }
+        DatabaseBackend::MySql => {
+            return Err(FerrioxidError::Validation("MySQL is not supported".into()));
+        }
+    };
+    Ok(Some(expr))
+}
+
+/// Folds a LIKE pattern so it matches `LOWER(column)` on the active backend.
+///
+/// SQLite `LOWER` affects ASCII letters only, so the pattern uses
+/// [`str::to_ascii_lowercase`]. PostgreSQL follows `LOWER` with locale-aware
+/// Unicode rules, so the pattern uses [`str::to_lowercase`].
+fn fold_case_insensitive_pattern(pattern: String, backend: DatabaseBackend) -> String {
+    match backend {
+        DatabaseBackend::Sqlite => pattern.to_ascii_lowercase(),
+        DatabaseBackend::Postgres | DatabaseBackend::MySql => pattern.to_lowercase(),
+    }
+}
+
+fn escape_glob(term: &str) -> String {
+    let mut escaped = String::new();
+    for char in term.chars() {
+        if matches!(char, '*' | '?' | '[' | ']') {
+            escaped.push('[');
+            escaped.push(char);
+            escaped.push(']');
+        } else {
+            escaped.push(char);
+        }
+    }
+    escaped
+}
+
+fn qualified_col(qualifier: Option<&str>, name: &str) -> SimpleExpr {
+    match qualifier {
+        Some(alias) => Expr::col((Alias::new(alias), Alias::new(name))).into(),
+        None => Expr::col(Alias::new(name)).into(),
+    }
+}
+
+fn relation_expr<M: FerrioxidModel>(
+    relation: &RelationFilter,
+    index: usize,
+    backend: DatabaseBackend,
+) -> Result<SimpleExpr, FerrioxidError> {
+    if !is_safe_ident(relation.table) {
+        return Err(FerrioxidError::Validation(format!(
+            "table {} is not available",
+            relation.table
+        )));
+    }
+    let parent = M::descriptor().table;
+    let alias = format!("ferrioxid_related_{index}");
+    let link = link_condition::<M>(relation, parent, &alias)?;
+    let mut query = Query::select();
+    query
+        .expr(Expr::val(1))
+        .from_as(Alias::new(relation.table), Alias::new(&alias));
+    query.and_where(link);
+    if let Some(filter) =
+        predicate_expr(relation.columns, &relation.predicate, backend, Some(&alias))?
+    {
+        query.and_where(filter);
+    }
+    if let Some(scope) = scope_condition_in(relation.columns, &relation.scope, Some(&alias))? {
+        query.and_where(scope);
+    }
+    let exists = Expr::exists(query);
+    Ok(if relation.negated {
+        exists.not()
+    } else {
+        exists
+    })
+}
+
+fn link_condition<M: FerrioxidModel>(
+    relation: &RelationFilter,
+    parent: &str,
+    alias: &str,
+) -> Result<SimpleExpr, FerrioxidError> {
+    match relation.link {
+        RelationLink::ForeignKey { column } => {
+            let parent_column = lookup(M::columns(), column)?;
+            let related_id = lookup(relation.columns, "id")?;
+            if parent_column.foreign_table != Some(relation.table)
+                || parent_column.kind != related_id.kind
+            {
+                return Err(FerrioxidError::Validation(format!(
+                    "column {} is not a foreign key to {}",
+                    parent_column.name, relation.table
+                )));
+            }
+            Ok(
+                qualified_col(Some(alias), "id")
+                    .eq(qualified_col(Some(parent), parent_column.name)),
+            )
+        }
+        RelationLink::Has { foreign_key } => {
+            let child_column = lookup(relation.columns, foreign_key)?;
+            let parent_id = lookup(M::columns(), "id")?;
+            if child_column.foreign_table != Some(parent) || child_column.kind != parent_id.kind {
+                return Err(FerrioxidError::Validation(format!(
+                    "column {foreign_key} is not a foreign key to {parent}"
+                )));
+            }
+            Ok(qualified_col(Some(alias), foreign_key).eq(qualified_col(Some(parent), "id")))
+        }
+        RelationLink::Many(link) => {
+            if !is_safe_ident(link.join_table)
+                || !is_safe_ident(link.parent_column)
+                || !is_safe_ident(link.child_column)
+                || link.join_table == parent
+                || link.join_table == relation.table
+            {
+                return Err(FerrioxidError::Validation(
+                    "many-to-many link is not available".into(),
+                ));
+            }
+            let parent_id = lookup(M::columns(), "id")?;
+            let child_id = lookup(relation.columns, "id")?;
+            if parent_id.kind != ColumnKind::Uuid || child_id.kind != ColumnKind::Uuid {
+                return Err(FerrioxidError::Validation(
+                    "many-to-many links require UUID primary keys".into(),
+                ));
+            }
+            let link_alias = format!("{alias}_link");
+            let mut membership = Query::select();
+            membership
+                .expr(Expr::val(1))
+                .from_as(Alias::new(link.join_table), Alias::new(&link_alias))
+                .and_where(
+                    qualified_col(Some(&link_alias), link.parent_column)
+                        .eq(qualified_col(Some(parent), "id")),
+                )
+                .and_where(
+                    qualified_col(Some(&link_alias), link.child_column)
+                        .eq(qualified_col(Some(alias), "id")),
+                );
+            Ok(Expr::exists(membership))
+        }
+    }
 }
 
 fn value_matches(kind: ColumnKind, value: &Bound, inequality: bool) -> bool {
@@ -631,6 +1345,211 @@ fn render(
     Ok(Statement::from_sql_and_values(backend, sql, values.0))
 }
 
+fn reject_keyset_orders(
+    columns: &[ColumnSpec],
+    orders: &[(&str, Direction)],
+) -> Result<(), FerrioxidError> {
+    for (name, _) in orders {
+        let column = lookup(columns, name)?;
+        if column.nullable || column.kind == ColumnKind::Boolean {
+            return Err(FerrioxidError::Validation(format!(
+                "keyset cannot order by {name}"
+            )));
+        }
+    }
+    Ok(())
+}
+
+fn seek_expr(
+    columns: &[ColumnSpec],
+    orders: &[(&str, Direction)],
+    values: &[Bound],
+) -> Result<SimpleExpr, FerrioxidError> {
+    let mut outer: Option<SimpleExpr> = None;
+    for index in 0..orders.len() {
+        let mut inner: Option<SimpleExpr> = None;
+        for earlier in 0..index {
+            let (name, _) = orders[earlier];
+            let column = lookup(columns, name)?;
+            let equal = Expr::col(Alias::new(name)).eq(bind_for_column(column, &values[earlier])?);
+            inner = Some(match inner {
+                Some(current) => current.and(equal),
+                None => equal,
+            });
+        }
+        let (name, direction) = orders[index];
+        let column = lookup(columns, name)?;
+        let value = bind_for_column(column, &values[index])?;
+        let compared = match direction {
+            Direction::Asc => Expr::col(Alias::new(name)).gt(value),
+            Direction::Desc => Expr::col(Alias::new(name)).lt(value),
+        };
+        let branch = match inner {
+            Some(current) => current.and(compared),
+            None => compared,
+        };
+        outer = Some(match outer {
+            Some(current) => current.or(branch),
+            None => branch,
+        });
+    }
+    outer.ok_or_else(|| FerrioxidError::Validation("keyset order is empty".into()))
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+struct CursorToken {
+    values: Vec<CursorValue>,
+}
+
+#[derive(Debug, Serialize, Deserialize)]
+enum CursorValue {
+    I64(i64),
+    Text(String),
+    Bool(bool),
+    Uuid(Uuid),
+}
+
+fn encode_cursor(
+    columns: &[ColumnSpec],
+    orders: &[(&str, Direction)],
+    row: &Json,
+) -> Result<String, FerrioxidError> {
+    let object = row.as_object().ok_or_else(|| {
+        FerrioxidError::database(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            "keyset row is not an object",
+        ))
+    })?;
+    let mut values = Vec::new();
+    for (name, _) in orders {
+        let column = lookup(columns, name)?;
+        let value = object.get(*name).ok_or_else(|| {
+            FerrioxidError::Validation(format!("keyset column {name} is missing"))
+        })?;
+        values.push(cursor_value(column, value)?);
+    }
+    let json = serde_json::to_vec(&CursorToken { values }).map_err(FerrioxidError::database)?;
+    Ok(format!("k1.{}", hex_encode(&json)))
+}
+
+fn cursor_value(column: &ColumnSpec, value: &Json) -> Result<CursorValue, FerrioxidError> {
+    if value.is_null() {
+        return Err(FerrioxidError::Validation(format!(
+            "keyset column {} is null",
+            column.name
+        )));
+    }
+    match column.kind {
+        ColumnKind::BigInt => value
+            .as_i64()
+            .map(CursorValue::I64)
+            .ok_or_else(|| invalid_cursor(column.name)),
+        ColumnKind::Boolean => value
+            .as_bool()
+            .map(CursorValue::Bool)
+            .ok_or_else(|| invalid_cursor(column.name)),
+        ColumnKind::Uuid => {
+            let text = value.as_str().ok_or_else(|| invalid_cursor(column.name))?;
+            Uuid::parse_str(text)
+                .map(CursorValue::Uuid)
+                .map_err(|_| invalid_cursor(column.name))
+        }
+        ColumnKind::Text
+        | ColumnKind::Date
+        | ColumnKind::Time
+        | ColumnKind::DateTime
+        | ColumnKind::Choice
+        | ColumnKind::Decimal => value
+            .as_str()
+            .map(|text| CursorValue::Text(text.to_owned()))
+            .ok_or_else(|| invalid_cursor(column.name)),
+    }
+}
+
+fn invalid_cursor(name: &str) -> FerrioxidError {
+    FerrioxidError::Validation(format!("keyset column {name} cannot be continued"))
+}
+
+fn decode_cursor(token: &str) -> Result<Vec<Bound>, FerrioxidError> {
+    let Some(encoded) = token.strip_prefix("k1.") else {
+        return Err(FerrioxidError::Validation(
+            "keyset cursor is not valid".into(),
+        ));
+    };
+    let bytes = hex_decode(encoded)
+        .map_err(|_| FerrioxidError::Validation("keyset cursor is not valid".into()))?;
+    let token: CursorToken = serde_json::from_slice(&bytes)
+        .map_err(|_| FerrioxidError::Validation("keyset cursor is not valid".into()))?;
+    token
+        .values
+        .into_iter()
+        .map(|value| {
+            Ok(match value {
+                CursorValue::I64(number) => Bound::I64(number),
+                CursorValue::Text(text) => Bound::Text(text),
+                CursorValue::Bool(flag) => Bound::Bool(flag),
+                CursorValue::Uuid(id) => Bound::Uuid(id),
+            })
+        })
+        .collect()
+}
+
+fn hex_encode(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
+
+fn hex_decode(text: &str) -> Result<Vec<u8>, ()> {
+    if !text.len().is_multiple_of(2) {
+        return Err(());
+    }
+    let mut out = Vec::with_capacity(text.len() / 2);
+    let bytes = text.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() {
+        let high = hex_nibble(bytes[index])?;
+        let low = hex_nibble(bytes[index + 1])?;
+        out.push((high << 4) | low);
+        index += 2;
+    }
+    Ok(out)
+}
+
+fn hex_nibble(byte: u8) -> Result<u8, ()> {
+    match byte {
+        b'0'..=b'9' => Ok(byte - b'0'),
+        b'a'..=b'f' => Ok(byte - b'a' + 10),
+        _ => Err(()),
+    }
+}
+
+async fn fetch_pairs<M, C>(
+    db: &C,
+    query: &SelectStatement,
+) -> Result<Vec<(Json, M)>, FerrioxidError>
+where
+    M: FerrioxidModel + DeserializeOwned,
+    C: ConnectionTrait,
+{
+    note_statement();
+    let rows = db
+        .query_all(render(db.get_database_backend(), query)?)
+        .await
+        .map_err(FerrioxidError::database)?;
+    let mut pairs = Vec::with_capacity(rows.len());
+    for row in rows {
+        let json = row_to_json(&row, M::columns())?;
+        let model = serde_json::from_value(json.clone()).map_err(FerrioxidError::database)?;
+        pairs.push((json, model));
+    }
+    Ok(pairs)
+}
+
 /// Loads models by primary key on `db`, which may be an open transaction.
 ///
 /// At most [`IN_LIMIT`] identifiers are sent per statement. Rows hidden by
@@ -670,6 +1589,94 @@ where
         )));
     }
     load_where::<M>(db, column, parent_ids, scope).await
+}
+
+/// Groups child rows by parent without a further query.
+pub fn group_by_parent<T>(rows: Vec<T>, parent_of: impl Fn(&T) -> Uuid) -> BTreeMap<Uuid, Vec<T>> {
+    let mut grouped = BTreeMap::new();
+    for row in rows {
+        grouped
+            .entry(parent_of(&row))
+            .or_insert_with(Vec::new)
+            .push(row);
+    }
+    grouped
+}
+
+/// Loads many-to-many children through `link`.
+///
+/// One statement reads at most [`IN_LIMIT`] parent identifiers from the join
+/// table. Children are then loaded with [`load_by_ids`] under `scope`. A child
+/// hidden by the scope is omitted. The pairs keep join-table order. An empty
+/// parent list or [`QueryScope::None`] performs no query.
+pub async fn load_many_to_many<Child>(
+    db: &impl ConnectionTrait,
+    link: ManyToMany,
+    parent_ids: &[Uuid],
+    scope: &QueryScope,
+) -> Result<Vec<(Uuid, Child)>, FerrioxidError>
+where
+    Child: FerrioxidModel + DeserializeOwned + Serialize + Clone,
+{
+    if !is_safe_ident(link.join_table)
+        || !is_safe_ident(link.parent_column)
+        || !is_safe_ident(link.child_column)
+    {
+        return Err(FerrioxidError::Validation(
+            "many-to-many columns are not available".into(),
+        ));
+    }
+    if parent_ids.is_empty() || matches!(scope, QueryScope::None) {
+        return Ok(Vec::new());
+    }
+    let mut parents = parent_ids.to_vec();
+    parents.sort();
+    parents.dedup();
+    let mut links = Vec::new();
+    for chunk in parents.chunks(IN_LIMIT) {
+        let mut query = Query::select();
+        query
+            .columns([
+                Alias::new(link.parent_column),
+                Alias::new(link.child_column),
+            ])
+            .from(Alias::new(link.join_table))
+            .and_where(Expr::col(Alias::new(link.parent_column)).is_in(chunk.iter().copied()))
+            .order_by(Alias::new(link.parent_column), Order::Asc)
+            .order_by(Alias::new(link.child_column), Order::Asc);
+        note_statement();
+        let rows = db
+            .query_all(render(db.get_database_backend(), &query)?)
+            .await
+            .map_err(FerrioxidError::database)?;
+        for row in rows {
+            let parent = read_uuid(&row, link.parent_column)?;
+            let child = read_uuid(&row, link.child_column)?;
+            links.push((parent, child));
+        }
+    }
+    let child_ids: Vec<Uuid> = links.iter().map(|(_, child)| *child).collect();
+    let children = load_by_ids::<Child>(db, &child_ids, scope).await?;
+    let mut by_id = BTreeMap::new();
+    for child in children {
+        let json = serde_json::to_value(&child).map_err(FerrioxidError::database)?;
+        by_id.insert(json_id(&json)?, child);
+    }
+    let mut pairs = Vec::new();
+    for (parent, child_id) in links {
+        if let Some(child) = by_id.get(&child_id) {
+            pairs.push((parent, child.clone()));
+        }
+    }
+    Ok(pairs)
+}
+
+fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FerrioxidError> {
+    if let Ok(id) = row.try_get::<Uuid>("", column) {
+        return Ok(id);
+    }
+    let text: String = row.try_get("", column).map_err(FerrioxidError::database)?;
+    Uuid::parse_str(&text).map_err(FerrioxidError::database)
 }
 
 /// Reads one model on `db` and applies `scope`. A hidden row is `Ok(None)`.
@@ -764,16 +1771,58 @@ fn json_id(json: &serde_json::Value) -> Result<Uuid, FerrioxidError> {
     Uuid::parse_str(text).map_err(FerrioxidError::database)
 }
 
-fn note_statement() {
-    #[cfg(test)]
-    {
-        STATEMENT_COUNT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
+pub(crate) fn note_statement() {
+    let enabled = cfg!(test) || COUNTING.with(|flag| flag.get());
+    if enabled {
+        STATEMENT_COUNT.with(|count| count.set(count.get().saturating_add(1)));
     }
 }
 
-#[cfg(test)]
-pub(crate) static STATEMENT_COUNT: std::sync::atomic::AtomicUsize =
-    std::sync::atomic::AtomicUsize::new(0);
+thread_local! {
+    static STATEMENT_COUNT: std::cell::Cell<usize> = const { std::cell::Cell::new(0) };
+    static COUNTING: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Counts model statements on this thread while it is alive.
+///
+/// `all`, `count`, `exists`, `page`, `keyset`, aggregates and the batch loaders
+/// call [`QueryCounter::record`] for their own statements. A direct
+/// `ConnectionTrait` query does not. Install the counter in application tests;
+/// library unit tests already count. The value is thread-local and is not a
+/// pool-wide total.
+pub struct QueryCounter {
+    previous: bool,
+}
+
+impl QueryCounter {
+    pub fn install() -> Self {
+        let previous = COUNTING.with(|flag| flag.replace(true));
+        STATEMENT_COUNT.with(|count| count.set(0));
+        Self { previous }
+    }
+
+    pub fn reset() {
+        STATEMENT_COUNT.with(|count| count.set(0));
+    }
+
+    pub fn get() -> usize {
+        STATEMENT_COUNT.with(|count| count.get())
+    }
+
+    /// Counts one statement the caller executed outside the model query API.
+    ///
+    /// Direct `ConnectionTrait` calls are not observed. This does not make the
+    /// counter a complete trace of every SQL statement on the connection.
+    pub fn record() {
+        note_statement();
+    }
+}
+
+impl Drop for QueryCounter {
+    fn drop(&mut self) {
+        COUNTING.with(|flag| flag.set(self.previous));
+    }
+}
 
 #[cfg(test)]
 impl<M> Select<M>
@@ -784,7 +1833,7 @@ where
         &self,
         backend: DatabaseBackend,
     ) -> Result<Statement, FerrioxidError> {
-        let plan = self.plan()?;
+        let plan = self.plan(backend)?;
         let mut query = select_body::<M>(plan.filter);
         apply_orders(&mut query, &plan.orders);
         query.limit(plan.limit).offset(plan.offset);
@@ -801,7 +1850,7 @@ mod tests {
     use sea_orm::{
         ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait,
     };
-    use serde::Deserialize;
+    use serde::{Deserialize, Serialize};
 
     use crate::connect;
 
@@ -865,7 +1914,12 @@ mod tests {
                     column("stock", ColumnKind::BigInt, false, false),
                     column("active", ColumnKind::Boolean, false, false),
                     column("price_cents", ColumnKind::BigInt, false, false),
-                    column("category_id", ColumnKind::Uuid, true, false),
+                    {
+                        let mut category = column("category_id", ColumnKind::Uuid, true, false);
+                        category.foreign_table = Some("ferrioxid_query_categories");
+                        category.foreign_column = Some("id");
+                        category
+                    },
                     column("owner_id", ColumnKind::Uuid, false, false),
                 ]
             })
@@ -1689,5 +2743,872 @@ mod tests {
         ))
         .await
         .unwrap();
+    }
+
+    #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
+    struct Tag {
+        id: Uuid,
+        item_id: Uuid,
+        amount: i64,
+        visible: bool,
+    }
+
+    const TAG_DESCRIPTOR: ModelDescriptor = ModelDescriptor {
+        name: "Tag",
+        table: "ferrioxid_query_tags",
+        api_path: "",
+        allow_anonymous: false,
+        permission: None,
+        requires_object_policy: false,
+    };
+
+    impl FerrioxidModel for Tag {
+        fn descriptor() -> &'static ModelDescriptor {
+            &TAG_DESCRIPTOR
+        }
+
+        fn columns() -> &'static [ColumnSpec] {
+            use std::sync::OnceLock;
+            static COLUMNS: OnceLock<Vec<ColumnSpec>> = OnceLock::new();
+            COLUMNS.get_or_init(|| {
+                vec![
+                    column("id", ColumnKind::Uuid, false, true),
+                    column("item_id", ColumnKind::Uuid, false, false),
+                    column("amount", ColumnKind::BigInt, false, false),
+                    column("visible", ColumnKind::Boolean, false, false),
+                ]
+            })
+        }
+
+        fn schema_sql(kind: DatabaseKind) -> String {
+            match kind {
+                DatabaseKind::Sqlite => "CREATE TABLE ferrioxid_query_tags (
+                    id text PRIMARY KEY NOT NULL,
+                    item_id text NOT NULL,
+                    amount bigint NOT NULL,
+                    visible integer NOT NULL
+                )"
+                .to_owned(),
+                DatabaseKind::Postgres => "CREATE TABLE ferrioxid_query_tags (
+                    id uuid PRIMARY KEY NOT NULL,
+                    item_id uuid NOT NULL,
+                    amount bigint NOT NULL,
+                    visible boolean NOT NULL
+                )"
+                .to_owned(),
+            }
+        }
+    }
+
+    fn tag_sql(kind: DatabaseKind) -> String {
+        let id = match kind {
+            DatabaseKind::Sqlite => "text",
+            DatabaseKind::Postgres => "uuid",
+        };
+        format!(
+            "CREATE TABLE ferrioxid_query_membership (
+                item_id {id} NOT NULL,
+                tag_id {id} NOT NULL,
+                PRIMARY KEY (item_id, tag_id)
+            )"
+        )
+    }
+
+    async fn prepare_relations(db: &impl ConnectionTrait, kind: DatabaseKind) {
+        let backend = match kind {
+            DatabaseKind::Sqlite => DatabaseBackend::Sqlite,
+            DatabaseKind::Postgres => DatabaseBackend::Postgres,
+        };
+        db.execute(Statement::from_string(backend, Tag::schema_sql(kind)))
+            .await
+            .unwrap();
+        db.execute(Statement::from_string(backend, tag_sql(kind)))
+            .await
+            .unwrap();
+        for (id, item, amount, visible) in
+            [(10_u128, 1_u128, 4_i64, 1), (11, 1, 6, 1), (12, 2, 3, 0)]
+        {
+            insert_tag(db, kind, id, item, amount, visible).await;
+        }
+        for (item, tag) in [(1_u128, 10_u128), (1, 11), (2, 12)] {
+            link_tag(db, kind, item, tag).await;
+        }
+    }
+
+    async fn insert_tag(
+        db: &impl ConnectionTrait,
+        kind: DatabaseKind,
+        id: u128,
+        item: u128,
+        amount: i64,
+        visible: i64,
+    ) {
+        let _ = kind;
+        let mut query = Query::insert();
+        query
+            .into_table(Alias::new("ferrioxid_query_tags"))
+            .columns([
+                Alias::new("id"),
+                Alias::new("item_id"),
+                Alias::new("amount"),
+                Alias::new("visible"),
+            ])
+            .values_panic([
+                Value::Uuid(Some(Box::new(Uuid::from_u128(id)))).into(),
+                Value::Uuid(Some(Box::new(Uuid::from_u128(item)))).into(),
+                Value::BigInt(Some(amount)).into(),
+                Value::Bool(Some(visible == 1)).into(),
+            ]);
+        db.execute(render(db.get_database_backend(), &query).unwrap())
+            .await
+            .unwrap();
+    }
+
+    async fn link_tag(db: &impl ConnectionTrait, kind: DatabaseKind, item: u128, tag: u128) {
+        let _ = kind;
+        let mut query = Query::insert();
+        query
+            .into_table(Alias::new("ferrioxid_query_membership"))
+            .columns([Alias::new("item_id"), Alias::new("tag_id")])
+            .values_panic([
+                Value::Uuid(Some(Box::new(Uuid::from_u128(item)))).into(),
+                Value::Uuid(Some(Box::new(Uuid::from_u128(tag)))).into(),
+            ]);
+        db.execute(render(db.get_database_backend(), &query).unwrap())
+            .await
+            .unwrap();
+    }
+
+    async fn assert_relations(db: &impl ConnectionTrait) {
+        let page = Item::query()
+            .order_by("price_cents", Direction::Asc)
+            .limit(2)
+            .keyset(db, None)
+            .await
+            .unwrap();
+        assert_eq!(page.data.len(), 2);
+        assert!(page.has_more);
+        let again = Item::query()
+            .order_by("price_cents", Direction::Asc)
+            .limit(2)
+            .keyset(db, page.next.as_deref())
+            .await
+            .unwrap();
+        let mut seen = page.data.iter().map(|row| row.id).collect::<Vec<_>>();
+        seen.extend(again.data.iter().map(|row| row.id));
+        seen.sort();
+        seen.dedup();
+        assert_eq!(seen.len(), page.data.len() + again.data.len());
+        let rejected = Item::query()
+            .order_by("category_id", Direction::Asc)
+            .keyset(db, None)
+            .await;
+        assert!(rejected.is_err());
+
+        let counts = Item::query()
+            .filter(col("id").is_in(vec![
+                Uuid::from_u128(1),
+                Uuid::from_u128(2),
+                Uuid::from_u128(3),
+            ]))
+            .annotate(
+                db,
+                Aggregate::<Tag>::count("tags", "item_id"),
+                Some(Direction::Desc),
+            )
+            .await
+            .unwrap();
+        assert_eq!(counts[0].row.id, Uuid::from_u128(1));
+        assert_eq!(counts[0].value, 2);
+        assert_eq!(counts[2].value, 0);
+        let sums = Item::query()
+            .filter(col("id").eq(Uuid::from_u128(1)))
+            .annotate(
+                db,
+                Aggregate::<Tag>::sum("amount", "item_id", "amount").scope(QueryScope::Equals {
+                    column: "visible",
+                    value: ScopeValue::Bool(true),
+                }),
+                None,
+            )
+            .await
+            .unwrap();
+        assert_eq!(sums[0].value, 10);
+
+        STATEMENT_COUNT.with(|count| count.set(0));
+        let parents = [Uuid::from_u128(1), Uuid::from_u128(2)];
+        let children = load_children::<Tag>(db, "item_id", &parents, &QueryScope::All)
+            .await
+            .unwrap();
+        let grouped = group_by_parent(children, |tag| tag.item_id);
+        assert_eq!(grouped.get(&Uuid::from_u128(1)).unwrap().len(), 2);
+        let pairs = load_many_to_many::<Tag>(
+            db,
+            ManyToMany {
+                join_table: "ferrioxid_query_membership",
+                parent_column: "item_id",
+                child_column: "tag_id",
+            },
+            &parents,
+            &QueryScope::All,
+        )
+        .await
+        .unwrap();
+        assert_eq!(pairs.len(), 3);
+        let hidden = load_many_to_many::<Tag>(
+            db,
+            ManyToMany {
+                join_table: "ferrioxid_query_membership",
+                parent_column: "item_id",
+                child_column: "tag_id",
+            },
+            &parents,
+            &QueryScope::Equals {
+                column: "visible",
+                value: ScopeValue::Bool(true),
+            },
+        )
+        .await
+        .unwrap();
+        assert_eq!(hidden.len(), 2);
+        let statements = STATEMENT_COUNT.with(|count| count.get());
+        assert!(
+            statements <= 6,
+            "relation loads issued {statements} statements"
+        );
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    async fn sqlite_keyset_annotations_and_many_to_many() {
+        let db = memory().await;
+        fixture(&db).await;
+        prepare_relations(&db, DatabaseKind::Sqlite).await;
+        assert_relations(&db).await;
+    }
+
+    #[tokio::test(flavor = "current_thread")]
+    #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
+    async fn postgres_keyset_annotations_and_many_to_many() {
+        let url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set to run the ignored PostgreSQL relation test");
+        let db = connect(&url).await.expect("postgres connection");
+        for sql in [
+            "DROP TABLE IF EXISTS ferrioxid_query_membership",
+            "DROP TABLE IF EXISTS ferrioxid_query_tags",
+            "DROP TABLE IF EXISTS ferrioxid_query_items",
+        ] {
+            db.execute(Statement::from_string(
+                DatabaseBackend::Postgres,
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap();
+        }
+        db.execute(Statement::from_string(
+            DatabaseBackend::Postgres,
+            Item::schema_sql(DatabaseKind::Postgres),
+        ))
+        .await
+        .unwrap();
+        fixture(&db).await;
+        prepare_relations(&db, DatabaseKind::Postgres).await;
+        assert_relations(&db).await;
+        for sql in [
+            "DROP TABLE IF EXISTS ferrioxid_query_membership",
+            "DROP TABLE IF EXISTS ferrioxid_query_tags",
+            "DROP TABLE IF EXISTS ferrioxid_query_items",
+        ] {
+            db.execute(Statement::from_string(
+                DatabaseBackend::Postgres,
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap();
+        }
+    }
+
+    #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+    struct Category {
+        id: Uuid,
+        name: String,
+    }
+
+    const CATEGORY_DESCRIPTOR: ModelDescriptor = ModelDescriptor {
+        name: "Category",
+        table: "ferrioxid_query_categories",
+        api_path: "",
+        allow_anonymous: false,
+        permission: None,
+        requires_object_policy: false,
+    };
+
+    impl FerrioxidModel for Category {
+        fn descriptor() -> &'static ModelDescriptor {
+            &CATEGORY_DESCRIPTOR
+        }
+
+        fn columns() -> &'static [ColumnSpec] {
+            use std::sync::OnceLock;
+            static COLUMNS: OnceLock<Vec<ColumnSpec>> = OnceLock::new();
+            COLUMNS.get_or_init(|| {
+                vec![
+                    column("id", ColumnKind::Uuid, false, true),
+                    column("name", ColumnKind::Text, false, false),
+                ]
+            })
+        }
+
+        fn schema_sql(kind: DatabaseKind) -> String {
+            match kind {
+                DatabaseKind::Sqlite => {
+                    "CREATE TABLE ferrioxid_query_categories (id text PRIMARY KEY NOT NULL, name text NOT NULL)"
+                        .to_owned()
+                }
+                DatabaseKind::Postgres => {
+                    "CREATE TABLE ferrioxid_query_categories (id uuid PRIMARY KEY NOT NULL, name text NOT NULL)"
+                        .to_owned()
+                }
+            }
+        }
+    }
+
+    #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+    struct Note {
+        id: Uuid,
+        item_id: Uuid,
+        body: String,
+    }
+
+    const NOTE_DESCRIPTOR: ModelDescriptor = ModelDescriptor {
+        name: "Note",
+        table: "ferrioxid_query_notes",
+        api_path: "",
+        allow_anonymous: false,
+        permission: None,
+        requires_object_policy: false,
+    };
+
+    impl FerrioxidModel for Note {
+        fn descriptor() -> &'static ModelDescriptor {
+            &NOTE_DESCRIPTOR
+        }
+
+        fn columns() -> &'static [ColumnSpec] {
+            use std::sync::OnceLock;
+            static COLUMNS: OnceLock<Vec<ColumnSpec>> = OnceLock::new();
+            COLUMNS.get_or_init(|| {
+                let mut item = column("item_id", ColumnKind::Uuid, false, false);
+                item.foreign_table = Some("ferrioxid_query_items");
+                item.foreign_column = Some("id");
+                vec![
+                    column("id", ColumnKind::Uuid, false, true),
+                    item,
+                    column("body", ColumnKind::Text, false, false),
+                ]
+            })
+        }
+
+        fn schema_sql(kind: DatabaseKind) -> String {
+            match kind {
+                DatabaseKind::Sqlite => {
+                    "CREATE TABLE ferrioxid_query_notes (id text PRIMARY KEY NOT NULL, item_id text NOT NULL, body text NOT NULL)"
+                        .to_owned()
+                }
+                DatabaseKind::Postgres => {
+                    "CREATE TABLE ferrioxid_query_notes (id uuid PRIMARY KEY NOT NULL, item_id uuid NOT NULL, body text NOT NULL)"
+                        .to_owned()
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn fold_case_insensitive_pattern_matches_backend_lower_rules() {
+        let pattern = format!("%{}%", escape_like("MÜNCHEN"));
+        assert_eq!(
+            super::fold_case_insensitive_pattern(pattern.clone(), DatabaseBackend::Sqlite),
+            "%mÜnchen%"
+        );
+        assert_eq!(
+            super::fold_case_insensitive_pattern(pattern, DatabaseBackend::Postgres),
+            "%münchen%"
+        );
+    }
+
+    #[test]
+    fn text_search_sql_is_bound_and_backend_specific() {
+        let select = Item::query().filter(col("name").contains("%_injection"));
+        let sqlite = select.statement_for(DatabaseBackend::Sqlite).unwrap();
+        let postgres = select.statement_for(DatabaseBackend::Postgres).unwrap();
+        assert!(sqlite.sql.contains("GLOB"));
+        assert!(!postgres.sql.contains("LIKE ?"));
+        assert!(postgres.sql.contains("$1"));
+        assert!(!sqlite.sql.contains("LIKE"));
+        assert!(postgres.sql.contains("LIKE"));
+        assert!(postgres.sql.contains("ESCAPE"));
+        assert!(!sqlite.sql.contains("%_injection"));
+        assert!(!postgres.sql.contains("%_injection"));
+        assert!(!sqlite.sql.contains("DROP"));
+        let folded = Item::query()
+            .filter(col("name").contains_ignore_case("Beta"))
+            .statement_for(DatabaseBackend::Sqlite)
+            .unwrap();
+        assert!(folded.sql.contains("LOWER("));
+        assert!(folded.sql.contains("ESCAPE"));
+        let rejected = Item::query()
+            .filter(col("stock").contains("1"))
+            .statement_for(DatabaseBackend::Sqlite)
+            .unwrap_err();
+        assert!(rejected.to_string().contains("does not accept"));
+        let long = "a".repeat(TEXT_MATCH_LIMIT + 1);
+        let limited = Item::query()
+            .filter(col("name").contains(long))
+            .statement_for(DatabaseBackend::Sqlite)
+            .unwrap_err();
+        assert!(limited.to_string().contains("200"));
+    }
+
+    #[tokio::test]
+    async fn sqlite_text_search_relations_count_and_pages() {
+        let db = memory().await;
+        assert_text_search(&db).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
+    async fn postgres_text_search_relations_count_and_pages() {
+        let url = std::env::var("DATABASE_URL")
+            .expect("DATABASE_URL must be set to run the ignored PostgreSQL text-search test");
+        let db = connect(&url).await.expect("postgres connection");
+        for sql in [
+            "DROP TABLE IF EXISTS ferrioxid_query_item_categories",
+            "DROP TABLE IF EXISTS ferrioxid_query_notes",
+            "DROP TABLE IF EXISTS ferrioxid_query_categories",
+            "DROP TABLE IF EXISTS ferrioxid_query_items",
+        ] {
+            db.execute(Statement::from_string(
+                DatabaseBackend::Postgres,
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap();
+        }
+        db.execute(Statement::from_string(
+            DatabaseBackend::Postgres,
+            Item::schema_sql(DatabaseKind::Postgres),
+        ))
+        .await
+        .unwrap();
+        assert_text_search(&db).await;
+        for sql in [
+            "DROP TABLE IF EXISTS ferrioxid_query_item_categories",
+            "DROP TABLE IF EXISTS ferrioxid_query_notes",
+            "DROP TABLE IF EXISTS ferrioxid_query_categories",
+            "DROP TABLE IF EXISTS ferrioxid_query_items",
+        ] {
+            db.execute(Statement::from_string(
+                DatabaseBackend::Postgres,
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap();
+        }
+    }
+
+    async fn assert_text_search(db: &DatabaseConnection) {
+        let kind = match db.get_database_backend() {
+            DatabaseBackend::Sqlite => DatabaseKind::Sqlite,
+            DatabaseBackend::Postgres => DatabaseKind::Postgres,
+            DatabaseBackend::MySql => panic!("MySQL is not supported"),
+        };
+        for sql in [
+            Category::schema_sql(kind),
+            Note::schema_sql(kind),
+            match kind {
+                DatabaseKind::Sqlite => {
+                    "CREATE TABLE ferrioxid_query_item_categories (item_id text NOT NULL, category_id text NOT NULL)".to_owned()
+                }
+                DatabaseKind::Postgres => {
+                    "CREATE TABLE ferrioxid_query_item_categories (item_id uuid NOT NULL, category_id uuid NOT NULL)".to_owned()
+                }
+            },
+        ] {
+            db.execute(Statement::from_string(
+                db.get_database_backend(),
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap();
+        }
+        for (id, name, category, owner) in [
+            (1_u128, "Beta", Some(50_u128), 7_u128),
+            (2, "beta", Some(51), 7),
+            (3, "100%_off", Some(50), 8),
+            (4, "100XYoff", None, 7),
+            (5, "a*b", None, 7),
+        ] {
+            insert(
+                db,
+                NewItem {
+                    id,
+                    name,
+                    stock: 1,
+                    active: true,
+                    price: i64::try_from(id).unwrap(),
+                    category,
+                    owner,
+                },
+            )
+            .await;
+        }
+        let backend = db.get_database_backend();
+        let (categories_sql, notes_sql, item_categories_sql) = match backend {
+            DatabaseBackend::Postgres => (
+                "INSERT INTO ferrioxid_query_categories (id, name) VALUES ($1, $2), ($3, $4)",
+                "INSERT INTO ferrioxid_query_notes (id, item_id, body) VALUES ($1, $2, $3)",
+                "INSERT INTO ferrioxid_query_item_categories (item_id, category_id) VALUES ($1, $2)",
+            ),
+            _ => (
+                "INSERT INTO ferrioxid_query_categories (id, name) VALUES (?, ?), (?, ?)",
+                "INSERT INTO ferrioxid_query_notes (id, item_id, body) VALUES (?, ?, ?)",
+                "INSERT INTO ferrioxid_query_item_categories (item_id, category_id) VALUES (?, ?)",
+            ),
+        };
+        db.execute(Statement::from_sql_and_values(
+            backend,
+            categories_sql,
+            [
+                uuid_value(50),
+                text_value("Tools"),
+                uuid_value(51),
+                text_value("Food"),
+            ],
+        ))
+        .await
+        .unwrap();
+        db.execute(Statement::from_sql_and_values(
+            backend,
+            notes_sql,
+            [uuid_value(90), uuid_value(1), text_value("sharp edge")],
+        ))
+        .await
+        .unwrap();
+        db.execute(Statement::from_sql_and_values(
+            backend,
+            item_categories_sql,
+            [uuid_value(4), uuid_value(50)],
+        ))
+        .await
+        .unwrap();
+
+        let literal = Item::query()
+            .filter(col("name").contains("100%_"))
+            .order_by("name", Direction::Asc)
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(names(&literal), vec!["100%_off"]);
+
+        let sensitive = Item::query()
+            .filter(col("name").contains("Beta"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(names(&sensitive), vec!["Beta"]);
+
+        let folded = Item::query()
+            .filter(col("name").contains_ignore_case("BETA"))
+            .order_by("id", Direction::Asc)
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(names(&folded), vec!["Beta", "beta"]);
+
+        let prefix = Item::query()
+            .filter(col("name").starts_with("100"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(prefix, 2);
+        let suffix = Item::query()
+            .filter(col("name").ends_with("off"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(suffix, 2);
+        let glob = Item::query()
+            .filter(col("name").contains("a*b"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(names(&glob), vec!["a*b"]);
+
+        let scoped = Item::query()
+            .filter(col("name").contains_ignore_case("beta"))
+            .scope(QueryScope::Equals {
+                column: "owner_id",
+                value: ScopeValue::Uuid(Uuid::from_u128(8)),
+            })
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(scoped, 0);
+
+        let page = Item::query()
+            .filter(col("name").starts_with("100"))
+            .order_by("name", Direction::Asc)
+            .limit(1)
+            .page(db)
+            .await
+            .unwrap();
+        assert_eq!(page.total, 2);
+        assert_eq!(page.data.len(), 1);
+        assert!(page.has_more);
+
+        let first = Item::query()
+            .filter(col("name").ends_with("off"))
+            .order_by("name", Direction::Asc)
+            .limit(1)
+            .keyset(db, None)
+            .await
+            .unwrap();
+        assert_eq!(first.data.len(), 1);
+        assert!(first.has_more);
+        let second = Item::query()
+            .filter(col("name").ends_with("off"))
+            .order_by("name", Direction::Asc)
+            .limit(1)
+            .keyset(db, first.next.as_deref())
+            .await
+            .unwrap();
+        assert_eq!(second.data.len(), 1);
+        assert_ne!(first.data[0].id, second.data[0].id);
+
+        let tools = Item::query()
+            .where_related(
+                "category_id",
+                Related::<Category>::new().filter(col("name").contains("Tool")),
+            )
+            .order_by("name", Direction::Asc)
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(names(&tools), vec!["100%_off", "Beta"]);
+
+        let noted = Item::query()
+            .where_has(
+                "item_id",
+                Related::<Note>::new().filter(col("body").contains("sharp")),
+            )
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(names(&noted), vec!["Beta"]);
+
+        let linked = Item::query()
+            .where_linked(
+                ManyToMany {
+                    join_table: "ferrioxid_query_item_categories",
+                    parent_column: "item_id",
+                    child_column: "category_id",
+                },
+                Related::<Category>::new().filter(col("name").eq("Tools")),
+            )
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(names(&linked), vec!["100XYoff"]);
+
+        let not_food = Item::query()
+            .where_related(
+                "category_id",
+                Related::<Category>::new()
+                    .filter(col("name").eq("Food"))
+                    .negated(),
+            )
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(not_food, 4);
+        let empty = Item::query()
+            .filter(col("name").contains("missing-term"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(empty, 0);
+        let prefixed = Item::query()
+            .filter(col("name").starts_with_ignore_case("100%"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(prefixed, 1);
+        let suffixed = Item::query()
+            .filter(col("name").ends_with_ignore_case("off"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(suffixed, 2);
+        insert(
+            db,
+            NewItem {
+                id: 6,
+                name: "München",
+                stock: 1,
+                active: true,
+                price: 6,
+                category: Some(50),
+                owner: 7,
+            },
+        )
+        .await;
+        let unicode = Item::query()
+            .filter(col("name").contains("Münch"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(unicode, 1);
+        match db.get_database_backend() {
+            DatabaseBackend::Sqlite => {
+                let folded = Item::query()
+                    .filter(col("name").contains_ignore_case("MÜNCHEN"))
+                    .count(db)
+                    .await
+                    .unwrap();
+                assert_eq!(folded, 0, "SQLite LOWER folds ASCII only");
+                let ascii = Item::query()
+                    .filter(col("name").contains_ignore_case("Münch"))
+                    .count(db)
+                    .await
+                    .unwrap();
+                assert_eq!(ascii, 1, "ASCII letters still match on SQLite");
+            }
+            DatabaseBackend::Postgres => {
+                let folded = Item::query()
+                    .filter(col("name").contains_ignore_case("münchen"))
+                    .count(db)
+                    .await
+                    .unwrap();
+                assert_eq!(folded, 1, "PostgreSQL LOWER folds Unicode letters");
+                let upper_term = Item::query()
+                    .filter(col("name").contains_ignore_case("MÜNCHEN"))
+                    .count(db)
+                    .await
+                    .unwrap();
+                assert_eq!(upper_term, 1, "Unicode upper search term matches München");
+            }
+            DatabaseBackend::MySql => {}
+        }
+        let combined = Item::query()
+            .filter(col("name").contains_ignore_case("beta"))
+            .where_related(
+                "category_id",
+                Related::<Category>::new().filter(col("name").eq("Tools")),
+            )
+            .limit(10)
+            .page(db)
+            .await
+            .unwrap();
+        assert_eq!(combined.total, 1);
+
+        let missing = Item::query()
+            .where_related("name", Related::<Category>::new())
+            .all(db)
+            .await
+            .unwrap_err();
+        assert!(missing.to_string().contains("not a foreign key"));
+    }
+
+    #[tokio::test]
+    async fn query_counter_does_not_see_direct_statements_or_other_threads() {
+        let db = memory().await;
+        let _counter = QueryCounter::install();
+        let before = QueryCounter::get();
+        let counted = Item::query().count(&db).await.unwrap();
+        assert_eq!(counted, 0);
+        assert!(QueryCounter::get() > before);
+        let after_model = QueryCounter::get();
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "SELECT 1".to_owned(),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(QueryCounter::get(), after_model);
+        let transaction = db.begin().await.unwrap();
+        transaction
+            .execute(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                "SELECT 1".to_owned(),
+            ))
+            .await
+            .unwrap();
+        transaction.rollback().await.unwrap();
+        assert_eq!(QueryCounter::get(), after_model);
+        let before = after_model;
+        let failed = db
+            .execute(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                "SELECT nope".to_owned(),
+            ))
+            .await;
+        assert!(failed.is_err());
+        assert_eq!(QueryCounter::get(), before);
+        QueryCounter::record();
+        assert_eq!(QueryCounter::get(), before + 1);
+        let main = QueryCounter::get();
+        let other = std::thread::spawn(|| {
+            let _counter = QueryCounter::install();
+            QueryCounter::record();
+            QueryCounter::get()
+        })
+        .join()
+        .unwrap();
+        assert_eq!(other, 1);
+        assert_eq!(QueryCounter::get(), main);
+    }
+
+    #[tokio::test]
+    async fn sqlite_uuid_text_does_not_match_a_blob_parameter() {
+        let db = connect("sqlite::memory:").await.unwrap();
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "CREATE TABLE ferrioxid_uuid_probe (id blob PRIMARY KEY NOT NULL)".to_owned(),
+        ))
+        .await
+        .unwrap();
+        let id = Uuid::from_u128(7);
+        db.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "INSERT INTO ferrioxid_uuid_probe (id) VALUES (?)",
+            [Value::Uuid(Some(Box::new(id)))],
+        ))
+        .await
+        .unwrap();
+        let typed = db
+            .query_one(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "SELECT id FROM ferrioxid_uuid_probe WHERE id = ?",
+                [Value::Uuid(Some(Box::new(id)))],
+            ))
+            .await
+            .unwrap();
+        assert!(typed.is_some());
+        let text = db
+            .query_one(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "SELECT id FROM ferrioxid_uuid_probe WHERE id = ?",
+                [Value::String(Some(Box::new(id.to_string())))],
+            ))
+            .await
+            .unwrap();
+        assert!(text.is_none());
+    }
+
+    fn uuid_value(id: u128) -> Value {
+        Value::Uuid(Some(Box::new(Uuid::from_u128(id))))
+    }
+
+    fn text_value(text: &str) -> Value {
+        Value::String(Some(Box::new(text.to_owned())))
     }
 }

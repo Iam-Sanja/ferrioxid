@@ -25,7 +25,7 @@ pub use audit::fail_next_insert;
 pub use compose::{groups as inline_form_groups, save as save_with_children, SaveResult};
 pub use filters::{AdminFilter, FilterKind, FilterOption};
 pub use registry::{AdminBranding, AdminRegistry};
-pub use views::{AdminView, ExtensionError, ViewHandler, ViewPage, ViewRequest};
+pub use views::{AdminView, ExtensionError, UploadedFile, ViewHandler, ViewPage, ViewRequest};
 pub use widgets::{AdminWidget, WidgetKind};
 
 pub fn mount(

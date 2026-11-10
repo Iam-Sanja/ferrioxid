@@ -6,5 +6,9 @@ license.workspace = true
 
 [dependencies]
 ferrioxid-core = { path = "../ferrioxid-core" }
+ferrioxid-storage = { path = "../ferrioxid-storage" }
 uuid.workspace = true
 chrono.workspace = true
+
+[dev-dependencies]
+tokio.workspace = true

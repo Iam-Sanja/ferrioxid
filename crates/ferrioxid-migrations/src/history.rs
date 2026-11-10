@@ -4,7 +4,7 @@ use crate::error::MigrationError;
 use ferrioxid_core::{ColumnKind, DatabaseKind};
 use ferrioxid_db::{kind_of, render_create_table, PhysicalColumn};
 use sea_orm::sea_query::{
-    Alias, Order, PostgresQueryBuilder, Query, SimpleExpr, SqliteQueryBuilder,
+    Alias, Expr, Order, PostgresQueryBuilder, Query, SimpleExpr, SqliteQueryBuilder,
 };
 use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
 
@@ -232,6 +232,35 @@ pub async fn insert_history_in(
         .map_err(|error| {
             MigrationError::new(format!("Could not write migration history: {error}"))
         })?;
+    Ok(())
+}
+
+pub async fn delete_history_in(
+    db: &impl ConnectionTrait,
+    history_table: &str,
+    id: &str,
+) -> Result<(), MigrationError> {
+    let backend = db.get_database_backend();
+    let mut query = Query::delete();
+    query
+        .from_table(Alias::new(history_table))
+        .and_where(Expr::col(Alias::new("id")).eq(id.to_owned()));
+    let (sql, values) = match backend {
+        DatabaseBackend::Postgres => query.build(PostgresQueryBuilder),
+        DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
+        DatabaseBackend::MySql => return Err(MigrationError::new("MySQL is not supported.")),
+    };
+    let result = db
+        .execute(Statement::from_sql_and_values(backend, sql, values.0))
+        .await
+        .map_err(|error| {
+            MigrationError::new(format!("Could not remove migration history: {error}"))
+        })?;
+    if result.rows_affected() != 1 {
+        return Err(MigrationError::new(format!(
+            "Migration history did not contain exactly one row for `{id}`."
+        )));
+    }
     Ok(())
 }
 

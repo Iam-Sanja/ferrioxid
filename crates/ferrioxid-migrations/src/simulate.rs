@@ -196,7 +196,7 @@ fn apply_one(
                 .foreign_keys
                 .push(foreign_key.clone());
         }
-        MigrationOperation::DropForeignKey { table, name } => {
+        MigrationOperation::DropForeignKey { table, name, .. } => {
             let target = table_mut(schema, table)?;
             let length = target.foreign_keys.len();
             target.foreign_keys.retain(|item| item.name != *name);

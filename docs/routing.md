@@ -34,7 +34,7 @@ Views do not receive admin permissions through registration. `allow_anonymous`, 
 
 ## Unknown paths
 
-A path without a route remains the Axum 404. `mount_pages` renders `templates/errors/404.html` when that template exists, and a built-in 404 page when it does not. A matched path with the wrong method uses `templates/errors/405.html` the same way. `views::fail_in` uses the status template for a view-generated error.
+A path without a route remains the Axum 404. `mount_pages` renders `templates/errors/404.html` when that template exists, and a built-in 404 page when it does not. A matched path with the wrong method uses `templates/errors/405.html` the same way. `views::fail` uses those same project templates after `mount_pages` installs them. `views::fail_in` still prefers the `Site` passed by the caller. Missing templates and JSON clients keep the safe framework response.
 
 ## Existing projects
 

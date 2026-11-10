@@ -147,9 +147,27 @@ pub fn inspect_directory(directory: &Path) -> DirectoryState {
         })
         .collect();
     paths.sort();
+    let mut seen_numbers = std::collections::BTreeMap::<u32, (PathBuf, String, String)>::new();
     for path in paths {
         match load_migration(&path) {
-            Ok(file) => state.files.push(file),
+            Ok(file) => {
+                if let Some(number) = migration_number(&file.id) {
+                    let operations = operation_summary(&file);
+                    if let Some((other_path, other_id, other_operations)) =
+                        seen_numbers.get(&number)
+                    {
+                        state.conflicts.push(format!(
+                            "App migration number {number:04} is used by `{other_id}` ({}) operations [{other_operations}] and `{}` ({}) operations [{operations}]. Do not delete or merge the files. Renumber the migration that has not been applied.",
+                            other_path.display(),
+                            file.id,
+                            path.display()
+                        ));
+                    } else {
+                        seen_numbers.insert(number, (path.clone(), file.id.clone(), operations));
+                    }
+                }
+                state.files.push(file);
+            }
             Err(error) => state.conflicts.push(error.0),
         }
     }
@@ -456,10 +474,98 @@ pub fn reseal_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
     Ok(file)
 }
 
+fn operation_summary(file: &MigrationFile) -> String {
+    if file.operations.is_empty() {
+        return "none".to_owned();
+    }
+    file.operations
+        .iter()
+        .map(operation_label)
+        .collect::<Vec<_>>()
+        .join(", ")
+}
+
+fn operation_label(operation: &MigrationOperation) -> &'static str {
+    match operation {
+        MigrationOperation::CreateTable { .. } => "create_table",
+        MigrationOperation::DropTable { .. } => "drop_table",
+        MigrationOperation::AddColumn { .. } => "add_column",
+        MigrationOperation::DropColumn { .. } => "drop_column",
+        MigrationOperation::AlterColumn { .. } => "alter_column",
+        MigrationOperation::RenameColumn { .. } => "rename_column",
+        MigrationOperation::RenameTable { .. } => "rename_table",
+        MigrationOperation::AddUniqueConstraint { .. } => "add_unique_constraint",
+        MigrationOperation::DropUniqueConstraint { .. } => "drop_unique_constraint",
+        MigrationOperation::AddIndex { .. } => "add_index",
+        MigrationOperation::DropIndex { .. } => "drop_index",
+        MigrationOperation::AddForeignKey { .. } => "add_foreign_key",
+        MigrationOperation::DropForeignKey { .. } => "drop_foreign_key",
+    }
+}
+
 pub fn migration_number(id: &str) -> Option<u32> {
     let (prefix, suffix) = id.split_once('_')?;
     if prefix.len() != 4 || suffix.is_empty() {
         return None;
     }
     prefix.parse().ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{inspect_directory, save_migration, seal};
+    use crate::diff::MigrationPlan;
+    use crate::snapshot::SchemaSnapshot;
+
+    #[test]
+    fn duplicate_numbers_name_both_paths_and_keep_the_files() {
+        let directory = std::env::temp_dir().join(format!(
+            "ferrioxid-mig-{}-{}",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        let plan = MigrationPlan {
+            operations: Vec::new(),
+            risks: Vec::new(),
+            refusal: None,
+        };
+        let empty = SchemaSnapshot::empty();
+        let alpha = seal(
+            "0001_alpha".into(),
+            "alpha".into(),
+            empty.clone(),
+            empty.clone(),
+            &plan,
+        )
+        .unwrap();
+        let beta = seal(
+            "0001_beta".into(),
+            "beta".into(),
+            empty.clone(),
+            empty,
+            &plan,
+        )
+        .unwrap();
+        let alpha_path = save_migration(&directory, &alpha).unwrap();
+        let beta_path = save_migration(&directory, &beta).unwrap();
+        let state = inspect_directory(&directory);
+        let message = state.conflicts.join("\n");
+        assert!(message.contains("0001_alpha"), "{message}");
+        assert!(message.contains("0001_beta"), "{message}");
+        assert!(
+            message.contains(&alpha_path.display().to_string()),
+            "{message}"
+        );
+        assert!(
+            message.contains(&beta_path.display().to_string()),
+            "{message}"
+        );
+        assert!(message.contains("Do not delete"), "{message}");
+        assert!(alpha_path.is_file());
+        assert!(beta_path.is_file());
+        let _ = std::fs::remove_dir_all(directory);
+    }
 }

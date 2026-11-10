@@ -123,7 +123,7 @@ Rust-Modelle + Makros
 - API-JSON rejections of Axum do not use the Ferrioxid fault body.
 - The HTTP list query limits the response to a maximum of 100 records; No pagination.
 - `CREATE TABLE IF NOT EXISTS` does not report schema drift.
-- OpenAPI and a general plugin system are not implemented. Auth, migrations and the native admin are available.
+- OpenAPI 3.1 is generated from registered model metadata. A general plugin system is not implemented. Auth, migrations and the native admin are available.
 
 ## 8. Admin writes in v0.18
 

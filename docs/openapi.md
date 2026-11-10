@@ -1,34 +1,47 @@
-# OpenAPI and API contracts – draft (NOT implemented)
+# OpenAPI 3.1
 
-[Overview](index.md) · **Planned:** Ferrioxid does not generate an OpenAPI specification and does not depend on `utoipa`.
+[Overview](index.md) · **Implemented** in `crates/ferrioxid-api/src/openapi.rs`. The document is built from `ModelDescriptor`, `ColumnSpec`, `NumericBound`, `FieldContract` and `AdminFieldMeta`. It does not keep a second model description.
 
-## Goal
+`App` publishes `GET /openapi.json` and, unless turned off, `GET /docs`. Admin routes are not included. `App::document` accepts an operation only when its path is already registered.
 
-Create a correct OpenAPI description from the same model definition and the HTTP routes generated. Not just copy DB fields: request, response and permissions can have different views.
+```rust
+let app = ferrioxid::App::new(db)
+    .register::<Product>()
+    .openapi(ferrioxid::OpenApiOptions {
+        enabled: true,
+        json_path: "/openapi.json".to_owned(),
+        ui_path: Some("/docs".to_owned()),
+        title: "Shop".to_owned(),
+    });
+let router = app.into_router();
+```
 
-## Planned generator
+`without_openapi` omits both routes. A path that collides with a registered route is rejected.
 
-1. Macro generates DTO metadata (`Create`, `Update`, `Response`) and validation rules.
-2. A route registry associates each method and path with its request/response types, status codes and policy.
-3. OpenAPI layer composes this data into deterministic schemas.
-4. Output is compared with actually registered routes during build/integration tests.
+## What the document contains
 
-### Contract per endpoint
+- Generated model routes: `GET` and `POST` on the collection, `GET`, `PATCH` and `DELETE` on `/{id}`. `PUT` is omitted because the generated handlers do not implement it.
+- Create, update and response schemas. Readonly fields stay on create and leave the update schema. Primary keys and managed timestamps stay on the response.
+- Required, nullable, decimal precision and scale, choice enums, `minLength`, `maxLength`, numeric `minimum` and `maximum`, and foreign-key relation metadata.
+- The list response `data`, `limit` (100) and `truncated`. The generated list does not accept filter, sort, offset or cursor query parameters. Admin `filterable` and `sortable` flags are field metadata, not public query parameters.
+- Session cookie, anonymous cookie and `x-csrf-token`. Cookie writes say that Bearer authorization is not a session.
+- Problem JSON for 401, 403, 404, 422 and 500 where those statuses are produced. 409 is not documented because the handlers do not return it.
+- `/healthz` and the mounted `/auth` routes.
 
-- Method, path, tags, summary (if available).
-- Request Body and Content Types.
-- Success: 200/201 and JSON schema.
-- Error: 401/403/404/409/422/500 after implemented semantics, no invented status codes.
-- Pagination schema only document when implemented.
-- Define security schemes from the implemented authentication contract.
+`App::document` adds `GET`, `POST`, `PUT`, `PATCH` or `DELETE` for a route the application registered itself. An unknown path, an `/admin` path, or a duplicated operation id fails when the router is built.
 
-## Design rules
+The explorer is a page served by the same process. It fetches the JSON document and can send a same-origin request. It does not load a third-party script.
 
-- `required`/min/max length traceable from field metadata.
-- Hidden/Readonly fields in the correct DTO.
-- No API consumer may derive a write permission from a DB schema.
-- Versioned API schema, stable operation IDs and deterministic sorting.
+## Example assertion
 
-## Acceptance tests
+```rust
+let document = client.get("/openapi.json").await?.json()?;
+assert_eq!(document["openapi"], "3.1.0");
+assert!(document["paths"].get("/admin").is_none());
+assert_eq!(
+    document["components"]["schemas"]["Offer"]["properties"]["price"]["x-ferrioxid-decimal"]["scale"],
+    2
+);
+```
 
-OpenAPI-JSON can be parsed/validated; Sample payloads correspond to Rust DTOs; documented and registered routes match; prohibited response fields do not appear. Sources: [api.md](api.md), [validation.md](validation.md), [auth.md](auth.md).
+The executable copy is `crates/ferrioxid/tests/openapi_client.rs`.

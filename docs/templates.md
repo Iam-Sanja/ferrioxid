@@ -55,6 +55,10 @@ The application loads the settings, opens the template directory and renders aga
 
 `index_template_renders_the_project_name` renders a temporary project. The generator writes `templates/base.html`, `index.html` and `errors/`. Generated projects must compile with `cargo check`.
 
+## Shared app templates
+
+An app publishes templates with `Registration::export_templates`. A dependent app calls `Registration::import_templates(source)` before its own `templates()` call. The source must be listed in `depends_on` and must already have exported. Imported names stay under `{source}/`. `admin/`, `base.html` and `login.html` are rejected. Two apps may both have `page.html` because the names are `shop/page.html` and `cards/page.html`. A template that imports a file the source did not export fails when that app's catalog is built, with the missing template name in the error. Project `templates/base.html` is unchanged.
+
 ## Limitations
 
 Panics do not automatically become the 500 page. `ferrioxid dev` reloads templates at process start, not every time you save without restart. Changing a Rust file restarts the process and reloads the templates. `include` for partials is possible, but the generator does not yet create its own partial file. The basic template is the common layout.

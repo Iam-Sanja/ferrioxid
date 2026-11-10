@@ -144,6 +144,7 @@ fn storage_error(error: StorageError) -> Response {
         StorageError::TooLarge => (413, "upload.too_large", "upload is too large"),
         StorageError::TypeRejected => (415, "upload.type", "file type is not allowed"),
         StorageError::Failed => (500, "request.rejected", "Request rejected"),
+        StorageError::InvalidImage => (415, "upload.image", "image was rejected"),
     };
     (
         StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_REQUEST),
@@ -255,6 +256,158 @@ fn header_value(header: &str, key: &str) -> Option<String> {
     let start = header.find(&needle)? + needle.len();
     let end = header[start..].find('"')? + start;
     Some(header[start..end].to_owned())
+}
+
+/// Maximum body accepted by [`read_multipart`]. Callers must enforce it before buffering more.
+pub const MULTIPART_BODY_LIMIT: usize = 1_048_576;
+
+const MULTIPART_PART_LIMIT: usize = 16;
+
+/// One text or file field from a `multipart/form-data` body.
+///
+/// `declared_type` is the part's Content-Type header. It is not proof of the bytes.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct FormPart {
+    pub name: String,
+    pub filename: Option<String>,
+    pub declared_type: Option<String>,
+    pub bytes: Vec<u8>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MultipartError {
+    TooLarge,
+    Malformed,
+    DuplicateField(String),
+    InvalidFilename(String),
+}
+
+impl std::fmt::Display for MultipartError {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::TooLarge => write!(formatter, "multipart body exceeds the limit"),
+            Self::Malformed => write!(formatter, "multipart body is malformed"),
+            Self::DuplicateField(name) => write!(formatter, "field `{name}` is repeated"),
+            Self::InvalidFilename(name) => write!(formatter, "filename `{name}` is not accepted"),
+        }
+    }
+}
+
+impl std::error::Error for MultipartError {}
+
+/// Parses one multipart body. Duplicate field names and path-like filenames are errors.
+///
+/// The body is not written anywhere. A value larger than [`MULTIPART_BODY_LIMIT`] is rejected
+/// before the parts are copied.
+/// Reads one text field without applying filename rules to the other parts.
+///
+/// Authentication can read `csrf_token` before a later filename is rejected.
+pub fn multipart_text_field(content_type: &str, body: &[u8], field: &str) -> Option<String> {
+    parse_parts(content_type, body, false)
+        .ok()
+        .and_then(|parts| {
+            parts.into_iter().find_map(|part| {
+                if part.name == field && part.filename.is_none() {
+                    String::from_utf8(part.bytes).ok()
+                } else {
+                    None
+                }
+            })
+        })
+}
+
+pub fn read_multipart(content_type: &str, body: &[u8]) -> Result<Vec<FormPart>, MultipartError> {
+    parse_parts(content_type, body, true)
+}
+
+fn parse_parts(
+    content_type: &str,
+    body: &[u8],
+    check_filenames: bool,
+) -> Result<Vec<FormPart>, MultipartError> {
+    if body.len() > MULTIPART_BODY_LIMIT {
+        return Err(MultipartError::TooLarge);
+    }
+    let boundary = boundary(content_type).ok_or(MultipartError::Malformed)?;
+    let delimiter = format!("--{boundary}").into_bytes();
+    if delimiter.len() < 3 {
+        return Err(MultipartError::Malformed);
+    }
+    let mut rest = body;
+    let mut parts = Vec::new();
+    let mut names = std::collections::BTreeSet::new();
+    while let Some(position) = find_subslice(rest, &delimiter) {
+        let after = &rest[position + delimiter.len()..];
+        if after.starts_with(b"--") {
+            break;
+        }
+        let after = after.strip_prefix(b"\r\n").unwrap_or(after);
+        let Some(header_end) = find_subslice(after, b"\r\n\r\n") else {
+            return Err(MultipartError::Malformed);
+        };
+        let header = String::from_utf8_lossy(&after[..header_end]);
+        let content = &after[header_end + 4..];
+        let next = find_subslice(content, &delimiter).unwrap_or(content.len());
+        let mut part_body = &content[..next];
+        if part_body.ends_with(b"\r\n") {
+            part_body = &part_body[..part_body.len() - 2];
+        }
+        let name = header_value(&header, "name").ok_or(MultipartError::Malformed)?;
+        if name.is_empty() || name.len() > 80 || name.chars().any(|char| char.is_control()) {
+            return Err(MultipartError::Malformed);
+        }
+        if !names.insert(name.clone()) {
+            return Err(MultipartError::DuplicateField(name));
+        }
+        let filename = header_value(&header, "filename");
+        if check_filenames {
+            if let Some(filename) = &filename {
+                if invalid_filename(filename) {
+                    return Err(MultipartError::InvalidFilename(filename.clone()));
+                }
+            }
+        }
+        parts.push(FormPart {
+            name,
+            filename,
+            declared_type: part_content_type(&header),
+            bytes: part_body.to_vec(),
+        });
+        if parts.len() > MULTIPART_PART_LIMIT {
+            return Err(MultipartError::Malformed);
+        }
+        rest = &content[next..];
+    }
+    if parts.is_empty() {
+        Err(MultipartError::Malformed)
+    } else {
+        Ok(parts)
+    }
+}
+
+fn invalid_filename(name: &str) -> bool {
+    name.is_empty()
+        || name.len() > 120
+        || name
+            .chars()
+            .any(|char| char.is_control() || matches!(char, '/' | '\\' | ':'))
+        || name == "."
+        || name == ".."
+}
+
+fn part_content_type(header: &str) -> Option<String> {
+    header.lines().find_map(|line| {
+        let (name, value) = line.split_once(':')?;
+        if !name.trim().eq_ignore_ascii_case("content-type") {
+            return None;
+        }
+        let value = value.trim();
+        if value.is_empty() || value.len() > 120 || value.chars().any(|char| char.is_control()) {
+            None
+        } else {
+            Some(value.to_owned())
+        }
+    })
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
@@ -377,5 +530,56 @@ mod tests {
         let (status, _) = call(app.clone(), request).await;
         assert_eq!(status, StatusCode::NO_CONTENT);
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[test]
+    fn multipart_keeps_files_and_rejects_duplicate_or_unsafe_names() {
+        let body = b"\
+--bound\r\n\
+Content-Disposition: form-data; name=\"title\"\r\n\
+\r\n\
+Hammer\r\n\
+--bound\r\n\
+Content-Disposition: form-data; name=\"file\"; filename=\"photo.png\"\r\n\
+Content-Type: image/png\r\n\
+\r\n\
+PNGDATA\r\n\
+--bound\r\n\
+Content-Disposition: form-data; name=\"alt\"; filename=\"second.jpg\"\r\n\
+Content-Type: image/jpeg\r\n\
+\r\n\
+JPEG\r\n\
+--bound--\r\n";
+        let parts = super::read_multipart("multipart/form-data; boundary=bound", body).unwrap();
+        assert_eq!(parts.len(), 3);
+        assert_eq!(parts[0].bytes, b"Hammer");
+        assert!(parts[0].filename.is_none());
+        assert_eq!(parts[1].filename.as_deref(), Some("photo.png"));
+        assert_eq!(parts[1].declared_type.as_deref(), Some("image/png"));
+        assert_eq!(parts[1].bytes, b"PNGDATA");
+        assert_eq!(parts[2].filename.as_deref(), Some("second.jpg"));
+
+        let duplicate = b"\
+--bound\r\nContent-Disposition: form-data; name=\"file\"; filename=\"a.png\"\r\n\r\nA\r\n\
+--bound\r\nContent-Disposition: form-data; name=\"file\"; filename=\"b.png\"\r\n\r\nB\r\n\
+--bound--\r\n";
+        assert!(matches!(
+            super::read_multipart("multipart/form-data; boundary=bound", duplicate),
+            Err(super::MultipartError::DuplicateField(_))
+        ));
+        let escaped = b"\
+--bound\r\nContent-Disposition: form-data; name=\"file\"; filename=\"../a.png\"\r\n\r\nA\r\n\
+--bound--\r\n";
+        assert!(matches!(
+            super::read_multipart("multipart/form-data; boundary=bound", escaped),
+            Err(super::MultipartError::InvalidFilename(_))
+        ));
+        assert!(matches!(
+            super::read_multipart(
+                "multipart/form-data; boundary=bound",
+                &vec![b'x'; 1_048_577]
+            ),
+            Err(super::MultipartError::TooLarge)
+        ));
     }
 }

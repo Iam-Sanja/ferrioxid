@@ -5,6 +5,7 @@
 
 mod baseline;
 mod diff;
+mod down;
 mod error;
 mod fixtures;
 mod history;
@@ -23,7 +24,7 @@ mod upgrade;
 
 pub use baseline::baseline_database;
 pub use diff::{
-    plan_change, plan_change_with_backfills, ApplyClass, BackfillLiteral, ColumnBackfill,
+    classify, plan_change, plan_change_with_backfills, ApplyClass, BackfillLiteral, ColumnBackfill,
     MigrationOperation, MigrationPlan, MigrationRisk,
 };
 pub use error::MigrationError;
@@ -53,7 +54,8 @@ pub use project::{
 };
 pub use runner::{
     apply_directory, apply_directory_with_history, apply_namespaced_directory, migration_status,
-    migration_status_in, namespaced_status, reseal_unapplied, ApplyReport, StatusReport,
+    migration_status_in, namespaced_status, reseal_unapplied, revert_latest, revert_namespaced,
+    ApplyReport, RevertPlan, StatusReport,
 };
 pub use snapshot::{
     is_identifier, ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, IndexSnapshot,

@@ -52,6 +52,10 @@ let (_meta, bytes) = storage.read(user_id, stored.id).await?;
 
 `cargo test -p ferrioxid-storage` stores, reads, deletes, isolates owners, rejects size, HTML and path names, and checks anonymous and third-party HTTP accesses.
 
+## Image checks
+
+`detect_type` only recognizes a signature. `inspect_image` additionally checks PNG chunk framing or JPEG markers, the declared width and height, and `ImageLimits` (`max_bytes`, `max_width`, `max_height`, `max_pixels`). It does not inflate PNG pixels or decode a JPEG scan. A later decoder can still allocate more memory than the declared size. `LocalStorage::with_check` runs a `BeforeSave` hook before creating a file. `ImageHeaderCheck` uses `inspect_image`. Files that fail the hook are not written. Uploads without a hook keep the previous behavior.
+
 ## Limitations
 
 S3 is not implemented. Malware scanning is missing. Content recognition does not replace a virus scanner. Metadata is Sidecar JSON, not a database table.

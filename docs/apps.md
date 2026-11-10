@@ -91,3 +91,5 @@ A URL prefix must not be `/admin` or `/auth` and must not break out of the path.
 8. The server starts.
 
 `with_admin` replaces the admin registry. Apps that register admin extensions come afterwards or the extensions are re-registered after `with_admin`.
+
+Shared templates use `export_templates` and `import_templates`. See [templates.md](templates.md). Cross-app foreign keys use `depends_on`, `external_tables` and `resolve_installed_schemas`; the table stays registered in one app. See [app-migrations.md](app-migrations.md). `App::strict_migrations` plus `try_into_router_strict` checks that those migrations are applied before the process serves traffic. It does not migrate.

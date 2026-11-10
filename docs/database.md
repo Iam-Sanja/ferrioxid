@@ -155,7 +155,11 @@ loop {
 
 `count` and `exists` still reject an invalid `limit` or `offset` on that builder.
 
-Supported comparisons are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_in`, `is_not_in`, `is_null` and `is_not_null`. `filter` combines with AND. `all_of`, `any_of` and `not` nest AND, OR and NOT. An empty OR matches nothing. Boolean and UUID columns accept equality, inequality, `IN`, `NOT IN` and null checks. `i64`, text, date, time and datetime also accept ranges. A comparison whose value type does not match the column is `Validation`.
+Supported comparisons are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_in`, `is_not_in`, `is_null` and `is_not_null`. Text and choice columns also accept `contains`, `starts_with` and `ends_with`. Those three are case-sensitive: PostgreSQL uses `LIKE ... ESCAPE '\'`, and SQLite uses `GLOB` because SQLite `LIKE` is case-insensitive for ASCII. `contains_ignore_case`, `starts_with_ignore_case` and `ends_with_ignore_case` use `LOWER(column) LIKE ? ESCAPE '\'` with a bound pattern. The pattern is folded in Rust before binding: ASCII lowercasing on SQLite to match SQLite `LOWER`, Unicode lowercasing on PostgreSQL to match PostgreSQL `LOWER`. `%`, `_` and `\` in the term are escaped. A term longer than 200 characters is `Validation`. Neither backend uses Unicode casefolding; SQLite still does not match `MÜNCHEN` to `München` when only non-ASCII case differs.
+
+`where_related` keeps rows whose foreign-key column points at a related model row. `where_has` keeps rows that a related model references. `where_linked` keeps rows joined through `ManyToMany`. `Related::filter` and `Related::scope` apply inside `EXISTS`, so `count`, `page`, `keyset` and the parent `QueryScope` see the same constraint. `Related::negated` emits `NOT EXISTS`. The foreign-key metadata must name the related table. A many-to-many join table must use UUID primary keys and is not itself a model.
+
+`filter` combines with AND. `all_of`, `any_of` and `not` nest AND, OR and NOT. An empty OR matches nothing. Boolean and UUID columns accept equality, inequality, `IN`, `NOT IN` and null checks. `i64`, text, date, time and datetime also accept ranges. A comparison whose value type does not match the column is `Validation`.
 
 Column names must be columns of that model and must match `[A-Za-z_][A-Za-z0-9_]*`. Unknown or unsafe names are `Validation` and are not sent to the database. Values go through SeaQuery parameters (`?` on SQLite, `$1` on PostgreSQL). `limit` and `offset` are validated integers; SeaQuery may emit them as numeric literals.
 
@@ -176,15 +180,21 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 
 ## Not implemented (planned)
 
-- `migrate down`. Explicit renames, SQLite table rebuilds and SQLite baselining are described in [migrations.md](migrations.md). Multi-model transactions are described in [transactions.md](transactions.md).
+- PostgreSQL baseline. Explicit renames, SQLite table rebuilds, SQLite baselining and `migrate down` are described in [migrations.md](migrations.md). Multi-model transactions are described in [transactions.md](transactions.md).
 - Own error codes apart from the two fixed validation texts for Unique and Foreign Key.
-- JSON columns, many-to-many relations, automatic eager loading and MySQL. Batched foreign-key and has-many reads are in [relations.md](relations.md).
+- JSON columns, automatic eager loading and MySQL. Explicit many-to-many loads and batched foreign-key reads are in [relations.md](relations.md).
 - Pool sizes and timeouts as an application configuration except for the fixed SQLite limit of a connection.
 - Optimistic locking.
 
 ## Tests
 
 `cargo test --workspace` runs `sqlite_http_roundtrip` against `sqlite::memory:` without changing `db.sqlite3`. `postgres_http_roundtrip` remains `#[ignore]` and requires `DATABASE_URL` plus a running PostgreSQL server. `.github/workflows/ci.yml` provides a separate PostgreSQL job for the ignored tests; a local workspace test run does not start that server. See [testing.md](testing.md).
+
+## UUID parameters
+
+`render_schema` stores a Ferrioxid UUID as SQLite `TEXT` and PostgreSQL `UUID`. Do not change that. A column that an application created as `BLOB` is different: `sea_orm::Value::Uuid` matches the bytes SQLite stored for a typed UUID, while `Value::String` of the hyphenated text does not. `Statement::from_sql_and_values` with `Value::Uuid` is the raw-SQL form. Prefer `Item::query()` so the column type comes from the model. `sqlite_uuid_text_does_not_match_a_blob_parameter` demonstrates the mismatch. Case-insensitive text search uses `LOWER`, which on SQLite folds ASCII only; `München` does not match `MÜNCHEN` there.
+
+`QueryCounter` counts model queries on the current thread. Call `QueryCounter::record` after a direct statement you want included. Direct SeaORM calls and failed direct statements stay uncounted. Independent threads do not share the counter.
 
 ## Admin lists
 

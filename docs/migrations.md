@@ -270,6 +270,14 @@ After that, `migrate up` will not run the already marked files again.
 
 `cargo test --workspace` runs the snapshot, diff and SQLite tests, including the CLI run against a temporary file. Covered are explicit column and table renaming, successful and failed conversion, blocked `NOT NULL` for existing `NULL` values, matching and deviating baselines, a destructive chain without baseline and `reseal` for an unchanged and already applied file. The development database `db.sqlite3` is not used. PostgreSQL remains ignored.
 
+## 12a. Strict startup and collisions
+
+`App::strict_migrations()` does not change `try_into_router`: that call returns `migration.strict` and builds nothing. `try_into_router_strict().await` reads auth, app and package status. Pending ids, checksum conflicts, missing files and schema notes containing `differs` or `neither` refuse startup. The message names the app and the migration id and says the check did not write. Apply the migration with the existing CLI. There is no automatic migrate or rollback.
+
+Two JSON files whose ids share a four-digit number are rejected. The conflict names both paths, both ids, both operation lists and says not to delete or merge them. Renumber the file that has not been applied.
+
+On Windows, a running test binary or an open SQLite pool keeps the database file and its `-wal` sidecar locked. Close the pool, use a fresh temporary directory per test, and copy a database only after connections are dropped. Do not delete a WAL file while a connection is open.
+
 ## 13. Not implemented
 
-`migrate down`, subsequent foreign key change on existing columns, baseline for PostgreSQL, substitute values for `NULL`, advisory lock, automatic migration at server startup, MySQL, many-to-many and automatic eager loading. Explicit batch reads are described in [relations.md](relations.md). Type changes other than `string` ↔ `i64` and other than nullity or bool default of the same type are rejected.
+PostgreSQL baseline, per-row substitute values for `NULL`, advisory lock, automatic migration at server startup and MySQL. `migrate down` and `migrate down --app` revert one applied file when its snapshot matches. An `ON DELETE` change is a reversible foreign-key replacement. A new required column without a default needs an explicit backfill; remaining NULL rows abort the transaction. Dropping a table or column still needs `--allow-destructive` and does not restore those rows. Many-to-many loads are described in [relations.md](relations.md). Type changes other than `string` ↔ `i64` and other than nullity or bool default of the same type are rejected.

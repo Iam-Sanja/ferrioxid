@@ -149,6 +149,7 @@ pub fn mount_pages_with(
     let mut opened = Site::open(&settings.templates_directory())?;
     opened.set_routes(routes.clone());
     let site = Arc::new(opened);
+    set_error_site(site.clone(), ErrorLabels::from_project(settings));
     let settings = settings.clone();
     let index_site = site.clone();
     let index_settings = settings.clone();
@@ -214,6 +215,106 @@ fn render_named(
             Err(_) => builtin_status(axum::http::StatusCode::INTERNAL_SERVER_ERROR, context),
         },
     }
+}
+
+#[derive(Clone, Debug)]
+pub struct ErrorLabels {
+    pub app_name: String,
+    pub project_name: String,
+    pub site_title: String,
+    pub primary_color: String,
+    pub admin: bool,
+    pub debug: bool,
+}
+
+impl ErrorLabels {
+    pub fn from_project(settings: &ProjectConfig) -> Self {
+        Self {
+            app_name: settings.app_name.clone(),
+            project_name: settings
+                .name
+                .clone()
+                .unwrap_or_else(|| settings.app_name.clone()),
+            site_title: settings.site_title.clone(),
+            primary_color: settings.primary_color.clone(),
+            admin: settings.admin_enabled,
+            debug: settings.debug,
+        }
+    }
+}
+
+struct InstalledErrors {
+    site: Arc<Site>,
+    labels: ErrorLabels,
+}
+
+static INSTALLED_ERRORS: std::sync::Mutex<Option<InstalledErrors>> = std::sync::Mutex::new(None);
+
+/// Serializes tests that read or replace the process-wide error site.
+pub static ERROR_SITE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Projektfehlerseiten für `views::fail`, wenn der Aufrufer kein `Site` übergibt.
+/// Der Rückgabewert stellt den vorherigen Stand wieder her.
+pub struct ErrorSiteGuard {
+    previous: Option<InstalledErrors>,
+}
+
+impl Drop for ErrorSiteGuard {
+    fn drop(&mut self) {
+        if let Ok(mut slot) = INSTALLED_ERRORS.lock() {
+            *slot = self.previous.take();
+        }
+    }
+}
+
+pub fn set_error_site(site: Arc<Site>, labels: ErrorLabels) {
+    if let Ok(mut slot) = INSTALLED_ERRORS.lock() {
+        *slot = Some(InstalledErrors { site, labels });
+    }
+}
+
+pub fn install_error_site(site: Arc<Site>, labels: ErrorLabels) -> ErrorSiteGuard {
+    let previous = INSTALLED_ERRORS
+        .lock()
+        .ok()
+        .and_then(|mut slot| slot.replace(InstalledErrors { site, labels }));
+    ErrorSiteGuard { previous }
+}
+
+pub fn render_installed_status(
+    name: &str,
+    locale: &str,
+    title: &str,
+    detail: &str,
+    status: u16,
+) -> Option<String> {
+    let slot = INSTALLED_ERRORS.lock().ok()?;
+    let installed = slot.as_ref()?;
+    let mut context = Context::new();
+    context.insert("locale", locale);
+    context.insert("title", title);
+    context.insert("detail", detail);
+    context.insert("status", &status);
+    context.insert("app_name", &installed.labels.app_name);
+    context.insert("project_name", &installed.labels.project_name);
+    context.insert("site_title", &installed.labels.site_title);
+    context.insert("primary_color", &installed.labels.primary_color);
+    context.insert("admin", &installed.labels.admin);
+    context.insert("debug", &installed.labels.debug);
+    for key in [
+        "not_found",
+        "server_error",
+        "forbidden",
+        "unauthorized",
+        "validation",
+        "bad_request",
+        "method_not_allowed",
+        "conflict",
+        "welcome",
+    ] {
+        context.insert(key, message(locale, key));
+    }
+    installed.site.render(name, &context).ok()
 }
 
 pub fn render_status_template(

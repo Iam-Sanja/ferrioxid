@@ -302,7 +302,10 @@ pub async fn list_records(
         query.and_where(condition);
     }
     let rows = db
-        .query_all(statement(db, &query)?)
+        .query_all({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     let truncated = rows.len() > LIST_LIMIT;
@@ -376,7 +379,10 @@ pub async fn query_admin_page(
         request.scope,
     )?;
     let count_row = db
-        .query_one(statement(db, &count_query)?)
+        .query_one({
+            crate::query::note_statement();
+            statement(db, &count_query)?
+        })
         .await
         .map_err(FerrioxidError::database)?
         .ok_or_else(|| {
@@ -415,7 +421,10 @@ pub async fn query_admin_page(
     }
     query.limit(request.limit + 1).offset(request.offset);
     let rows = db
-        .query_all(statement(db, &query)?)
+        .query_all({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     let has_more = rows.len() > request.limit as usize;
@@ -473,7 +482,10 @@ pub async fn query_labels(
             query.and_where(condition);
         }
         let rows = db
-            .query_all(statement(db, &query)?)
+            .query_all({
+                crate::query::note_statement();
+                statement(db, &query)?
+            })
             .await
             .map_err(FerrioxidError::database)?;
         for row in rows {
@@ -541,7 +553,10 @@ pub async fn date_buckets(
     query.order_by_expr(Expr::cust("bucket"), Order::Asc);
     query.limit(101);
     let rows = db
-        .query_all(statement(db, &query)?)
+        .query_all({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     let mut buckets = Vec::new();
@@ -632,19 +647,35 @@ pub(crate) fn scope_condition(
     columns: &[ColumnSpec],
     scope: &QueryScope,
 ) -> Result<Option<sea_orm::sea_query::SimpleExpr>, FerrioxidError> {
+    scope_condition_in(columns, scope, None)
+}
+
+pub(crate) fn scope_condition_in(
+    columns: &[ColumnSpec],
+    scope: &QueryScope,
+    alias: Option<&str>,
+) -> Result<Option<sea_orm::sea_query::SimpleExpr>, FerrioxidError> {
     match scope {
         QueryScope::All => Ok(None),
         QueryScope::None => Ok(Some(Expr::val(0).eq(1))),
         QueryScope::Equals { column, value } => {
             ensure_column(columns, column)?;
+            let column = qualified_col(alias, column);
             let expression = match value {
-                ScopeValue::Text(text) => Expr::col(Alias::new(*column)).eq(text.clone()),
-                ScopeValue::Uuid(id) => Expr::col(Alias::new(*column)).eq(*id),
-                ScopeValue::BigInt(number) => Expr::col(Alias::new(*column)).eq(*number),
-                ScopeValue::Bool(flag) => Expr::col(Alias::new(*column)).eq(*flag),
+                ScopeValue::Text(text) => column.eq(text.clone()),
+                ScopeValue::Uuid(id) => column.eq(*id),
+                ScopeValue::BigInt(number) => column.eq(*number),
+                ScopeValue::Bool(flag) => column.eq(*flag),
             };
             Ok(Some(expression))
         }
+    }
+}
+
+fn qualified_col(alias: Option<&str>, name: &str) -> sea_orm::sea_query::SimpleExpr {
+    match alias {
+        Some(alias) => sea_orm::sea_query::Expr::col((Alias::new(alias), Alias::new(name))).into(),
+        None => sea_orm::sea_query::Expr::col(Alias::new(name)).into(),
     }
 }
 
@@ -654,7 +685,7 @@ pub(crate) fn is_safe_ident(name: &str) -> bool {
         && chars.all(|char| char.is_ascii_alphanumeric() || char == '_')
 }
 
-fn like_pattern(term: &str) -> String {
+pub(crate) fn escape_like(term: &str) -> String {
     let mut escaped = String::new();
     for char in term.chars() {
         if matches!(char, '\\' | '%' | '_') {
@@ -662,7 +693,11 @@ fn like_pattern(term: &str) -> String {
         }
         escaped.push(char);
     }
-    format!("%{escaped}%")
+    escaped
+}
+
+fn like_pattern(term: &str) -> String {
+    format!("%{}%", escape_like(term))
 }
 
 pub async fn get_record(
@@ -681,7 +716,10 @@ pub async fn get_record(
         query.and_where(condition);
     }
     let row = db
-        .query_one(statement(db, &query)?)
+        .query_one({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     row.map(|row| row_to_json(&row, columns)).transpose()
@@ -700,7 +738,10 @@ pub async fn insert_record(
         .values_panic(values.into_iter().map(Into::into))
         .returning_all();
     let row = db
-        .query_one(statement(db, &query)?)
+        .query_one({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(map_write)?
         .ok_or_else(|| FerrioxidError::Validation("no row returned".into()))?;
@@ -732,7 +773,10 @@ pub async fn update_record(
         query.value(Alias::new(name), value);
     }
     let row = db
-        .query_one(statement(db, &query)?)
+        .query_one({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(map_write)?
         .ok_or(FerrioxidError::NotFound)?;
@@ -754,7 +798,10 @@ pub async fn delete_record(
         query.and_where(condition);
     }
     let result = db
-        .execute(statement(db, &query)?)
+        .execute({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(map_write)?;
     Ok(result.rows_affected())
@@ -782,7 +829,10 @@ where
         .and_where(Expr::col(Alias::new(column)).eq(value))
         .order_by(Alias::new("id"), Order::Asc);
     let rows = db
-        .query_all(statement(db, &query)?)
+        .query_all({
+            crate::query::note_statement();
+            statement(db, &query)?
+        })
         .await
         .map_err(FerrioxidError::database)?;
     rows.into_iter()
