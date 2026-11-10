@@ -66,7 +66,9 @@ The quality commands for this implementation are contained in the final report o
 
 ## In-process client (implemented)
 
-`ferrioxid::testing::TestClient` sends `GET`, `POST`, `PUT`, `PATCH` and `DELETE` through the Axum router. It stores `Set-Cookie` values and sends them back. `post_json` and `post_form` set the matching content type. `post_form_with_csrf` copies the `csrf_token` field from HTML. `assert_status` and `assert_json` compare the response.
+`ferrioxid::testing::TestClient` sends `GET`, `POST`, `PUT`, `PATCH` and `DELETE` through the Axum router. It stores `Set-Cookie` name/value pairs and sends them back. `post_json` and `post_form` set the matching content type. `post_form_with_csrf` copies the `csrf_token` field from HTML. `assert_status` and `assert_json` compare the response.
+
+`TestClient::request` returns `TestRequest`. `header` adds one request header such as `Origin`, `Accept` or `Authorization`. A `Cookie` header replaces the jar for that request only and does not rewrite the stored jar. `send` executes the request. `TestResponse::headers` exposes the response header map. `header` and `header_values` read `Location`, `Content-Type`, `Cache-Control` and repeated `Set-Cookie` values. `set_cookies` parses `HttpOnly`, `Secure`, `SameSite`, `Path`, `Domain` and `Max-Age`. The jar still keeps only the cookie pair and still drops a cookie whose `Max-Age` is `0`.
 
 `TestDatabase::sqlite` creates a temporary directory named `ferrioxid-test-*` and deletes only that directory. `TestDatabase::postgres` accepts a URL only when the database name contains `ferrioxid_test`. `cleanup` drops recorded PostgreSQL tables and never runs `DROP DATABASE`. A name such as `ferrioxid` is refused before a connection is opened.
 

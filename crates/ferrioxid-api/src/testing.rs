@@ -8,7 +8,7 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 
 use axum::body::Body;
-use axum::http::{header, HeaderMap, Method, Request, StatusCode};
+use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode};
 use axum::Router;
 use ferrioxid_db::QueryCounter;
 use ferrioxid_migrations::{
@@ -46,12 +46,23 @@ impl TestClient {
         self.cookies.clear();
     }
 
+    /// Builds one request. The cookie jar is sent unless this request sets `Cookie`.
+    pub fn request(&mut self, method: Method, path: impl Into<String>) -> TestRequest<'_> {
+        TestRequest {
+            client: self,
+            method,
+            path: path.into(),
+            headers: HeaderMap::new(),
+            body: Vec::new(),
+        }
+    }
+
     pub async fn get(&mut self, path: &str) -> Result<TestResponse, String> {
-        self.request(Method::GET, path, None, None).await
+        self.request(Method::GET, path).send().await
     }
 
     pub async fn delete(&mut self, path: &str) -> Result<TestResponse, String> {
-        self.request(Method::DELETE, path, None, None).await
+        self.request(Method::DELETE, path).send().await
     }
 
     pub async fn post_json(&mut self, path: &str, body: &Value) -> Result<TestResponse, String> {
@@ -71,13 +82,7 @@ impl TestClient {
         path: &str,
         fields: &[(&str, &str)],
     ) -> Result<TestResponse, String> {
-        self.request(
-            Method::POST,
-            path,
-            Some("application/x-www-form-urlencoded"),
-            Some(form_body(fields)),
-        )
-        .await
+        self.form(Method::POST, path, fields).await
     }
 
     pub async fn put_form(
@@ -85,13 +90,7 @@ impl TestClient {
         path: &str,
         fields: &[(&str, &str)],
     ) -> Result<TestResponse, String> {
-        self.request(
-            Method::PUT,
-            path,
-            Some("application/x-www-form-urlencoded"),
-            Some(form_body(fields)),
-        )
-        .await
+        self.form(Method::PUT, path, fields).await
     }
 
     pub async fn patch_form(
@@ -99,13 +98,7 @@ impl TestClient {
         path: &str,
         fields: &[(&str, &str)],
     ) -> Result<TestResponse, String> {
-        self.request(
-            Method::PATCH,
-            path,
-            Some("application/x-www-form-urlencoded"),
-            Some(form_body(fields)),
-        )
-        .await
+        self.form(Method::PATCH, path, fields).await
     }
 
     /// Reads `csrf_token` from an HTML form and posts the supplied fields with it.
@@ -127,40 +120,82 @@ impl TestClient {
         path: &str,
         body: &Value,
     ) -> Result<TestResponse, String> {
-        self.request(
-            method,
-            path,
-            Some("application/json"),
-            Some(body.to_string()),
-        )
-        .await
+        self.request(method, path)
+            .header(header::CONTENT_TYPE.as_str(), "application/json")?
+            .bytes(body.to_string().into_bytes())
+            .send()
+            .await
     }
 
-    async fn request(
+    async fn form(
         &mut self,
         method: Method,
         path: &str,
-        content_type: Option<&str>,
-        body: Option<String>,
+        fields: &[(&str, &str)],
     ) -> Result<TestResponse, String> {
-        let mut builder = Request::builder().method(method).uri(path);
-        if let Some(content_type) = content_type {
-            builder = builder.header(header::CONTENT_TYPE, content_type);
+        self.request(method, path)
+            .header(
+                header::CONTENT_TYPE.as_str(),
+                "application/x-www-form-urlencoded",
+            )?
+            .bytes(form_body(fields).into_bytes())
+            .send()
+            .await
+    }
+}
+
+/// One in-process request. Extra headers do not change the stored cookie jar.
+pub struct TestRequest<'a> {
+    client: &'a mut TestClient,
+    method: Method,
+    path: String,
+    headers: HeaderMap,
+    body: Vec<u8>,
+}
+
+impl<'a> TestRequest<'a> {
+    /// Sets one request header. `Cookie` replaces the jar for this request only.
+    pub fn header(mut self, name: &str, value: &str) -> Result<Self, String> {
+        let name = HeaderName::try_from(name).map_err(|error| error.to_string())?;
+        let value = HeaderValue::try_from(value).map_err(|error| error.to_string())?;
+        self.headers.insert(name, value);
+        Ok(self)
+    }
+
+    pub fn bytes(mut self, body: Vec<u8>) -> Self {
+        self.body = body;
+        self
+    }
+
+    pub async fn send(self) -> Result<TestResponse, String> {
+        let Self {
+            client,
+            method,
+            path,
+            mut headers,
+            body,
+        } = self;
+        if !headers.contains_key(header::COOKIE) && !client.cookies.is_empty() {
+            let value = HeaderValue::try_from(cookie_header(&client.cookies))
+                .map_err(|error| error.to_string())?;
+            headers.insert(header::COOKIE, value);
         }
-        if !self.cookies.is_empty() {
-            builder = builder.header(header::COOKIE, cookie_header(&self.cookies));
+        let mut builder = Request::builder().method(method).uri(&path);
+        for (name, value) in headers.iter() {
+            builder = builder.header(name, value);
         }
         let request = builder
-            .body(Body::from(body.unwrap_or_default()))
+            .body(Body::from(body))
             .map_err(|error| error.to_string())?;
-        let response = self
+        let response = client
             .router
             .clone()
             .oneshot(request)
             .await
             .map_err(|error| error.to_string())?;
         let status = response.status();
-        store_cookies(&mut self.cookies, response.headers());
+        let response_headers = response.headers().clone();
+        store_cookies(&mut client.cookies, &response_headers);
         let bytes = response
             .into_body()
             .collect()
@@ -169,6 +204,7 @@ impl TestClient {
             .to_bytes();
         Ok(TestResponse {
             status,
+            headers: response_headers,
             body: bytes.to_vec(),
         })
     }
@@ -176,12 +212,56 @@ impl TestClient {
 
 pub struct TestResponse {
     status: StatusCode,
+    headers: HeaderMap,
     body: Vec<u8>,
+}
+
+/// One `Set-Cookie` header, including the attributes the cookie jar does not store.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SetCookie {
+    pub name: String,
+    pub value: String,
+    pub http_only: bool,
+    pub secure: bool,
+    pub same_site: Option<String>,
+    pub path: Option<String>,
+    pub domain: Option<String>,
+    pub max_age: Option<i64>,
 }
 
 impl TestResponse {
     pub fn status(&self) -> StatusCode {
         self.status
+    }
+
+    pub fn headers(&self) -> &HeaderMap {
+        &self.headers
+    }
+
+    /// Returns the first value of `name`.
+    pub fn header(&self, name: &str) -> Result<Option<&str>, String> {
+        let name = HeaderName::try_from(name).map_err(|error| error.to_string())?;
+        match self.headers.get(&name) {
+            Some(value) => Ok(Some(value.to_str().map_err(|error| error.to_string())?)),
+            None => Ok(None),
+        }
+    }
+
+    /// Returns every value of `name`, including repeated `Set-Cookie` headers.
+    pub fn header_values(&self, name: &str) -> Result<Vec<&str>, String> {
+        let name = HeaderName::try_from(name).map_err(|error| error.to_string())?;
+        self.headers
+            .get_all(name)
+            .iter()
+            .map(|value| value.to_str().map_err(|error| error.to_string()))
+            .collect()
+    }
+
+    pub fn set_cookies(&self) -> Result<Vec<SetCookie>, String> {
+        self.header_values(header::SET_COOKIE.as_str())?
+            .into_iter()
+            .map(parse_set_cookie)
+            .collect()
     }
 
     pub fn assert_status(self, status: StatusCode) -> Result<Self, String> {
@@ -388,6 +468,54 @@ fn cookie_header(cookies: &BTreeMap<String, String>) -> String {
         .join("; ")
 }
 
+fn parse_set_cookie(raw: &str) -> Result<SetCookie, String> {
+    let (pair, attributes) = raw
+        .split_once(';')
+        .map(|(pair, rest)| (pair, rest))
+        .unwrap_or((raw, ""));
+    let Some((name, value)) = pair.split_once('=') else {
+        return Err(format!("Set-Cookie has no name/value pair: {raw}"));
+    };
+    let mut cookie = SetCookie {
+        name: name.trim().to_owned(),
+        value: value.trim().to_owned(),
+        http_only: false,
+        secure: false,
+        same_site: None,
+        path: None,
+        domain: None,
+        max_age: None,
+    };
+    if cookie.name.is_empty() {
+        return Err("Set-Cookie name is empty.".into());
+    }
+    for part in attributes.split(';').filter(|part| !part.trim().is_empty()) {
+        let part = part.trim();
+        if let Some((key, raw_value)) = part.split_once('=') {
+            let parsed = raw_value.trim();
+            match key.trim().to_ascii_lowercase().as_str() {
+                "path" => cookie.path = Some(parsed.to_owned()),
+                "domain" => cookie.domain = Some(parsed.to_owned()),
+                "samesite" => cookie.same_site = Some(parsed.to_owned()),
+                "max-age" => {
+                    cookie.max_age =
+                        Some(parsed.parse().map_err(|_| {
+                            format!("Set-Cookie Max-Age is not an integer: {parsed}")
+                        })?);
+                }
+                _ => {}
+            }
+        } else {
+            match part.to_ascii_lowercase().as_str() {
+                "httponly" => cookie.http_only = true,
+                "secure" => cookie.secure = true,
+                _ => {}
+            }
+        }
+    }
+    Ok(cookie)
+}
+
 fn store_cookies(cookies: &mut BTreeMap<String, String>, headers: &HeaderMap) {
     for value in headers.get_all(header::SET_COOKIE) {
         let Ok(text) = value.to_str() else {
@@ -431,6 +559,141 @@ fn is_identifier(name: &str) -> bool {
     let mut chars = name.chars();
     matches!(chars.next(), Some(char) if char.is_ascii_alphabetic() || char == '_')
         && chars.all(|char| char.is_ascii_alphanumeric() || char == '_')
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::body::Body;
+    use axum::extract::Request;
+    use axum::response::Response;
+    use axum::routing::any;
+
+    fn router() -> Router {
+        Router::new().route(
+            "/probe",
+            any(|request: Request| async move {
+                let origin = request
+                    .headers()
+                    .get(header::ORIGIN)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or("")
+                    .to_owned();
+                let cookie = request
+                    .headers()
+                    .get(header::COOKIE)
+                    .and_then(|value| value.to_str().ok())
+                    .unwrap_or("")
+                    .to_owned();
+                Response::builder()
+                    .status(StatusCode::SEE_OTHER)
+                    .header(header::LOCATION, "/next")
+                    .header(header::CONTENT_TYPE, "text/plain; charset=utf-8")
+                    .header(header::CACHE_CONTROL, "private, no-store")
+                    .header(
+                        header::SET_COOKIE,
+                        "ferrioxid_session=secret; HttpOnly; Secure; SameSite=Lax; Path=/",
+                    )
+                    .header(
+                        header::SET_COOKIE,
+                        "ferrioxid_anonymous=old; Max-Age=0; Path=/; SameSite=Lax",
+                    )
+                    .body(Body::from(format!("origin={origin}\ncookie={cookie}")))
+                    .unwrap()
+            }),
+        )
+    }
+
+    #[tokio::test]
+    async fn request_builder_exposes_headers_and_set_cookie_attributes() {
+        let mut client = TestClient::new(router());
+        client.set_cookie("ferrioxid_session", "stored");
+        let response = client
+            .request(Method::POST, "/probe")
+            .header(header::ORIGIN.as_str(), "https://fremd.example.invalid")
+            .unwrap()
+            .header(header::ACCEPT.as_str(), "text/html")
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(response.status(), StatusCode::SEE_OTHER);
+        assert_eq!(response.header("location").unwrap(), Some("/next"));
+        assert_eq!(
+            response.header("content-type").unwrap(),
+            Some("text/plain; charset=utf-8")
+        );
+        assert_eq!(
+            response.header("cache-control").unwrap(),
+            Some("private, no-store")
+        );
+        let text = response.text().unwrap();
+        assert!(text.contains("origin=https://fremd.example.invalid"));
+        assert!(text.contains("cookie=ferrioxid_session=stored"));
+        let cookies = response.set_cookies().unwrap();
+        assert_eq!(cookies.len(), 2);
+        assert_eq!(cookies[0].name, "ferrioxid_session");
+        assert_eq!(cookies[0].value, "secret");
+        assert!(cookies[0].http_only);
+        assert!(cookies[0].secure);
+        assert_eq!(cookies[0].same_site.as_deref(), Some("Lax"));
+        assert_eq!(cookies[0].path.as_deref(), Some("/"));
+        assert_eq!(cookies[1].name, "ferrioxid_anonymous");
+        assert_eq!(cookies[1].max_age, Some(0));
+        assert_eq!(client.cookie("ferrioxid_session"), Some("secret"));
+        assert_eq!(client.cookie("ferrioxid_anonymous"), None);
+    }
+
+    #[tokio::test]
+    async fn explicit_cookie_header_replaces_the_jar_for_one_request() {
+        let mut client = TestClient::new(router());
+        client.set_cookie("ferrioxid_session", "stored");
+        let response = client
+            .request(Method::GET, "/probe")
+            .header(header::COOKIE.as_str(), "ferrioxid_session=foreign")
+            .unwrap()
+            .send()
+            .await
+            .unwrap();
+        assert!(response
+            .text()
+            .unwrap()
+            .contains("cookie=ferrioxid_session=foreign"));
+        assert_eq!(client.cookie("ferrioxid_session"), Some("secret"));
+    }
+
+    #[tokio::test]
+    async fn csrf_helper_still_copies_the_form_token() {
+        let html = r#"<form><input type="hidden" name="csrf_token" value="abc-1"></form>"#;
+        let token = csrf_token_from_html(html).unwrap();
+        assert_eq!(token, "abc-1");
+        let mut client = TestClient::new(Router::new().route(
+            "/form",
+            any(|request: Request| async move {
+                let bytes = request.into_body().collect().await.unwrap().to_bytes();
+                Response::new(Body::from(bytes))
+            }),
+        ));
+        let response = client
+            .post_form_with_csrf("/form", html, &[("name", "Ada")])
+            .await
+            .unwrap();
+        let body = response.text().unwrap();
+        assert!(body.contains("csrf_token=abc-1"));
+        assert!(body.contains("name=Ada"));
+    }
+
+    #[test]
+    fn invalid_request_header_is_rejected() {
+        let mut client = TestClient::new(Router::new());
+        let Err(error) = client
+            .request(Method::GET, "/probe")
+            .header("origin", "bad\r\nX-Injected: 1")
+        else {
+            panic!("a header containing CR/LF was accepted");
+        };
+        assert!(!error.is_empty());
+    }
 }
 
 fn remove_owned_directory(directory: &Path) -> Result<(), String> {
