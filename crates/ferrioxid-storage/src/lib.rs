@@ -5,8 +5,13 @@
 mod http;
 mod local;
 
-pub use http::routes;
-pub use local::{detect_type, LocalStorage, StorageError, StoredFile};
+pub use http::{
+    multipart_text_field, read_multipart, routes, FormPart, MultipartError, MULTIPART_BODY_LIMIT,
+};
+pub use local::{
+    detect_type, inspect_image, BeforeSave, ImageHeaderCheck, ImageInfo, ImageLimits, LocalStorage,
+    StorageError, StoredFile,
+};
 
 use async_trait::async_trait;
 use uuid::Uuid;

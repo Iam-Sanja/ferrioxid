@@ -45,7 +45,7 @@ The HTTP test creates two users in SQLite, loads a text file, denies anonymous a
 
 ## Limitations
 
-There is no virus scanner, no image processing and no public upload URL. Multipart expects a quoted boundary and at most few parts.
+There is no virus scanner, no image processing and no public upload URL. `read_multipart` accepts a quoted boundary, at most 16 parts and 1 MiB. Duplicate names are errors. `inspect_image` is a separate, optional container check; see [storage.md](storage.md).
 
 ## Extension
 
