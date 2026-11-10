@@ -78,6 +78,8 @@ Absolute lifetime and idle timeout are `FERRIOXID_SESSION_HOURS` and `FERRIOXID_
 
 Idle timeout and absolute runtime are checked on the next request, not by a background job. A renewed session takes over the original `expires_at`.
 
+A protected POST that still carries an invalid user cookie stays unauthenticated. Do not treat that request as anonymous. The recovery sequence is: GET the login page, detect the invalid session, clear `ferrioxid_session`, let `ensure_anonymous_session` set the anonymous cookie and CSRF, then POST the login with that token and a listed `Origin`. `browser_login_flow_exposes_cookies_and_rejects_bad_sessions` in `crates/ferrioxid-api/src/testing.rs` is the executable example.
+
 ## Planned extensions
 
 Device management and a session list are not implemented. `GET /auth/csrf` recalculates the same token and does not rewrite the session. Multiple tabs remain valid. Logout, password change and expiration make the token unusable because the session itself ends. The automatic rotation per request does not occur.

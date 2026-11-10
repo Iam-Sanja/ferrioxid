@@ -72,7 +72,9 @@ The quality commands for this implementation are contained in the final report o
 
 `TestDatabase::sqlite` creates a temporary directory named `ferrioxid-test-*` and deletes only that directory. `TestDatabase::postgres` accepts a URL only when the database name contains `ferrioxid_test`. `cleanup` drops recorded PostgreSQL tables and never runs `DROP DATABASE`. A name such as `ferrioxid` is refused before a connection is opened.
 
-`ferrioxid::db::QueryCounter::install` counts model statements on the current thread. `assert_query_budget` fails when the count is above the limit. The executable example is `crates/ferrioxid/tests/openapi_client.rs`.
+`ferrioxid::db::QueryCounter::install` counts model statements on the current thread. `QueryCounter::record` counts one statement the test executed itself. Direct `ConnectionTrait` calls are not observed, and the counter is not a pool-wide total. `assert_query_budget` fails when the count is above the limit. The executable example is `crates/ferrioxid/tests/openapi_client.rs`.
+
+`TestClient::request` sends `Origin`, `Accept`, `Authorization`, `Content-Type` and any other valid header. `TestResponse::header`, `header_values` and `set_cookies` expose `Location`, `Content-Type`, `Cache-Control` and every `Set-Cookie` attribute (`HttpOnly`, `Secure`, `SameSite`, `Path`, `Max-Age`). The cookie jar still stores only the name and value. `browser_login_flow_exposes_cookies_and_rejects_bad_sessions` is the executable session example: anonymous GET, listed origin, foreign origin, missing and invalid CSRF, a user cookie that is not downgraded to the anonymous session, then a real user session and its `Location`.
 
 PostgreSQL was not running on this machine while this client was added. The ignored PostgreSQL tests were not executed.
 

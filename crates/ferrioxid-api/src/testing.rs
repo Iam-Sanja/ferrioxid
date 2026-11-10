@@ -469,10 +469,7 @@ fn cookie_header(cookies: &BTreeMap<String, String>) -> String {
 }
 
 fn parse_set_cookie(raw: &str) -> Result<SetCookie, String> {
-    let (pair, attributes) = raw
-        .split_once(';')
-        .map(|(pair, rest)| (pair, rest))
-        .unwrap_or((raw, ""));
+    let (pair, attributes) = raw.split_once(';').unwrap_or((raw, ""));
     let Some((name, value)) = pair.split_once('=') else {
         return Err(format!("Set-Cookie has no name/value pair: {raw}"));
     };
@@ -559,6 +556,21 @@ fn is_identifier(name: &str) -> bool {
     let mut chars = name.chars();
     matches!(chars.next(), Some(char) if char.is_ascii_alphabetic() || char == '_')
         && chars.all(|char| char.is_ascii_alphanumeric() || char == '_')
+}
+
+fn remove_owned_directory(directory: &Path) -> Result<(), String> {
+    let temp = std::env::temp_dir();
+    let name = directory
+        .file_name()
+        .and_then(|name| name.to_str())
+        .unwrap_or("");
+    if !name.starts_with("ferrioxid-test-") || !directory.starts_with(&temp) {
+        return Err("Refusing to delete a directory that this test did not create.".into());
+    }
+    if directory.exists() {
+        std::fs::remove_dir_all(directory).map_err(|error| error.to_string())?;
+    }
+    Ok(())
 }
 
 #[cfg(test)]
@@ -694,19 +706,159 @@ mod tests {
         };
         assert!(!error.is_empty());
     }
-}
 
-fn remove_owned_directory(directory: &Path) -> Result<(), String> {
-    let temp = std::env::temp_dir();
-    let name = directory
-        .file_name()
-        .and_then(|name| name.to_str())
-        .unwrap_or("");
-    if !name.starts_with("ferrioxid-test-") || !directory.starts_with(&temp) {
-        return Err("Refusing to delete a directory that this test did not create.".into());
+    #[tokio::test]
+    async fn browser_login_flow_exposes_cookies_and_rejects_bad_sessions() {
+        use axum::extract::State;
+        use ferrioxid_auth::{AuthConfig, AuthError, AuthService, BrowserActor};
+
+        let db = ferrioxid_db::connect("sqlite::memory:").await.unwrap();
+        ferrioxid_auth::apply_migrations(&db).await.unwrap();
+        let auth = AuthService::new(db, AuthConfig::development());
+        auth.create_user("ada@example.com", "correct-horse-battery", true, false)
+            .await
+            .unwrap();
+        let issued = auth
+            .login("ada@example.com", "correct-horse-battery", "peer")
+            .await
+            .unwrap();
+        let router = Router::new()
+            .route(
+                "/session",
+                axum::routing::get(|State(auth): State<AuthService>| async move {
+                    let session = auth
+                        .ensure_anonymous_session(&HeaderMap::new())
+                        .await
+                        .unwrap();
+                    let mut response = Response::builder().status(StatusCode::OK);
+                    if let Some(cookie) = session.cookie {
+                        response = response.header(header::SET_COOKIE, cookie);
+                    }
+                    response.body(Body::from(session.csrf_token)).unwrap()
+                }),
+            )
+            .route(
+                "/login",
+                axum::routing::post(
+                    |State(auth): State<AuthService>,
+                     headers: HeaderMap,
+                     body: axum::body::Bytes| async move {
+                        let text = String::from_utf8_lossy(&body);
+                        let token = text
+                            .split('&')
+                            .find_map(|pair| {
+                                let (key, value) = pair.split_once('=')?;
+                                (key == "csrf_token").then_some(value.to_owned())
+                            })
+                            .unwrap_or_default();
+                        match auth
+                            .authenticate_browser_form(&headers, &Method::POST, &token)
+                            .await
+                        {
+                            Ok(BrowserActor::User(_)) => Response::builder()
+                                .status(StatusCode::SEE_OTHER)
+                                .header(header::LOCATION, "/account")
+                                .body(Body::empty())
+                                .unwrap(),
+                            Ok(_) => Response::builder()
+                                .status(StatusCode::NO_CONTENT)
+                                .body(Body::empty())
+                                .unwrap(),
+                            Err(AuthError::OriginRejected | AuthError::CsrfRejected) => {
+                                Response::builder()
+                                    .status(StatusCode::FORBIDDEN)
+                                    .body(Body::from("rejected"))
+                                    .unwrap()
+                            }
+                            Err(_) => Response::builder()
+                                .status(StatusCode::UNAUTHORIZED)
+                                .body(Body::from("anonymous"))
+                                .unwrap(),
+                        }
+                    },
+                ),
+            )
+            .with_state(auth);
+        let mut client = TestClient::new(router);
+        let session = client.get("/session").await.unwrap();
+        assert_eq!(session.status(), StatusCode::OK);
+        let csrf = session.text().unwrap();
+        let cookie = session
+            .set_cookies()
+            .unwrap()
+            .into_iter()
+            .find(|cookie| cookie.name == "ferrioxid_anonymous")
+            .unwrap();
+        assert!(cookie.http_only);
+        assert_eq!(cookie.same_site.as_deref(), Some("Lax"));
+        assert_eq!(
+            client.cookie("ferrioxid_anonymous"),
+            Some(cookie.value.as_str())
+        );
+
+        let accepted = client
+            .request(Method::POST, "/login")
+            .header(header::ORIGIN.as_str(), "http://127.0.0.1:3000")
+            .unwrap()
+            .header(
+                header::CONTENT_TYPE.as_str(),
+                "application/x-www-form-urlencoded",
+            )
+            .unwrap()
+            .bytes(format!("csrf_token={csrf}").into_bytes())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(accepted.status(), StatusCode::NO_CONTENT);
+
+        let foreign = client
+            .request(Method::POST, "/login")
+            .header(header::ORIGIN.as_str(), "https://fremd.example.invalid")
+            .unwrap()
+            .header(
+                header::CONTENT_TYPE.as_str(),
+                "application/x-www-form-urlencoded",
+            )
+            .unwrap()
+            .bytes(format!("csrf_token={csrf}").into_bytes())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(foreign.status(), StatusCode::FORBIDDEN);
+
+        let missing = client.post_form("/login", &[]).await.unwrap();
+        assert_eq!(missing.status(), StatusCode::FORBIDDEN);
+        let invalid = client
+            .post_form("/login", &[("csrf_token", "not-the-token")])
+            .await
+            .unwrap();
+        assert_eq!(invalid.status(), StatusCode::FORBIDDEN);
+
+        client.set_cookie("ferrioxid_session", "not-a-user-session");
+        let downgraded = client
+            .post_form("/login", &[("csrf_token", csrf)])
+            .await
+            .unwrap();
+        assert_eq!(downgraded.status(), StatusCode::UNAUTHORIZED);
+
+        client.clear_cookies();
+        let (name, value) = issued.cookie.split_once('=').unwrap();
+        let value = value.split(';').next().unwrap();
+        client.set_cookie(name, value);
+        let user = client
+            .request(Method::POST, "/login")
+            .header(header::ORIGIN.as_str(), "http://127.0.0.1:3000")
+            .unwrap()
+            .header(
+                header::CONTENT_TYPE.as_str(),
+                "application/x-www-form-urlencoded",
+            )
+            .unwrap()
+            .bytes(format!("csrf_token={}", issued.csrf_token).into_bytes())
+            .send()
+            .await
+            .unwrap();
+        assert_eq!(user.status(), StatusCode::SEE_OTHER);
+        assert_eq!(user.header("location").unwrap(), Some("/account"));
     }
-    if directory.exists() {
-        std::fs::remove_dir_all(directory).map_err(|error| error.to_string())?;
-    }
-    Ok(())
 }
