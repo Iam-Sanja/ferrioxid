@@ -2,8 +2,8 @@
 
 use crate::error::AuthError;
 use crate::schema::{
-    ADMIN_AUDIT, MAIL_OUTBOX, PASSWORD_RESETS, PASSWORD_RESET_EXCHANGES, PERMISSIONS, ROLES,
-    ROLE_PERMISSIONS, SESSIONS, USERS, USER_ROLES,
+    ADMIN_AUDIT, ANONYMOUS_SESSIONS, MAIL_OUTBOX, PASSWORD_RESETS, PASSWORD_RESET_EXCHANGES,
+    PERMISSIONS, ROLES, ROLE_PERMISSIONS, SESSIONS, USERS, USER_ROLES,
 };
 use sea_orm::sea_query::{Alias, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder};
 use sea_orm::{ConnectionTrait, DatabaseBackend, QueryResult, Statement, Value};
@@ -21,6 +21,18 @@ pub struct UserRow {
     pub created_at: i64,
     pub updated_at: i64,
     pub last_login: Option<i64>,
+}
+
+#[derive(Debug, Clone)]
+pub struct AnonymousRow {
+    pub id: Uuid,
+    pub token_hash: String,
+    pub csrf_token_hash: String,
+    pub state: Option<String>,
+    pub created_at: i64,
+    pub expires_at: i64,
+    pub last_seen_at: i64,
+    pub revoked_at: Option<i64>,
 }
 
 #[derive(Debug, Clone)]
@@ -51,7 +63,7 @@ pub async fn insert_user(db: &impl ConnectionTrait, user: &UserRow) -> Result<()
             Alias::new("last_login"),
         ])
         .values_panic([
-            text(&user.id.to_string()),
+            uuid_expr(db.get_database_backend(), user.id),
             text(&user.email),
             text(&user.password_hash),
             flag(user.is_active),
@@ -105,7 +117,7 @@ pub async fn find_user_by_id(
             Alias::new("last_login"),
         ])
         .from(Alias::new(USERS))
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
     let row = one(db, &query).await?;
     row.map(|row| read_user(&row)).transpose()
 }
@@ -170,7 +182,7 @@ pub async fn update_password(
             (Alias::new("password_hash"), text(password_hash)),
             (Alias::new("updated_at"), number(updated_at)),
         ])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
     execute(db, &query).await
 }
 
@@ -183,7 +195,7 @@ pub async fn update_last_login(
     query
         .table(Alias::new(USERS))
         .values([(Alias::new("last_login"), number(at))])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
     execute(db, &query).await
 }
 
@@ -200,7 +212,7 @@ pub async fn set_active(
             (Alias::new("is_active"), flag(active)),
             (Alias::new("updated_at"), number(updated_at)),
         ])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
     execute(db, &query).await
 }
 
@@ -222,8 +234,8 @@ pub async fn insert_session(
             Alias::new("revoked_at"),
         ])
         .values_panic([
-            text(&session.id.to_string()),
-            text(&session.user_id.to_string()),
+            uuid_expr(db.get_database_backend(), session.id),
+            uuid_expr(db.get_database_backend(), session.user_id),
             text(&session.token_hash),
             text(&session.csrf_token_hash),
             number(session.created_at),
@@ -265,7 +277,7 @@ pub async fn touch_session(
     query
         .table(Alias::new(SESSIONS))
         .values([(Alias::new("last_seen_at"), number(last_seen_at))])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
     execute(db, &query).await
 }
 
@@ -296,7 +308,7 @@ pub async fn list_permission_codes(
         )
         .and_where(
             Expr::col((Alias::new(ROLE_PERMISSIONS), Alias::new("role_id")))
-                .eq(role_id.to_string()),
+                .eq(uuid_expr(db.get_database_backend(), role_id)),
         )
         .order_by(Alias::new("code"), Order::Asc);
     let rows = all(db, &query).await?;
@@ -320,7 +332,7 @@ pub async fn update_profile(
             (Alias::new("is_staff"), flag(staff)),
             (Alias::new("updated_at"), number(updated_at)),
         ])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
     execute(db, &query).await
 }
 
@@ -337,7 +349,100 @@ pub async fn set_staff(
             (Alias::new("is_staff"), flag(staff)),
             (Alias::new("updated_at"), number(updated_at)),
         ])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
+    execute(db, &query).await
+}
+
+pub async fn insert_anonymous(
+    db: &impl ConnectionTrait,
+    session: &AnonymousRow,
+) -> Result<(), AuthError> {
+    let mut query = Query::insert();
+    query
+        .into_table(Alias::new(ANONYMOUS_SESSIONS))
+        .columns([
+            Alias::new("id"),
+            Alias::new("token_hash"),
+            Alias::new("csrf_token_hash"),
+            Alias::new("state"),
+            Alias::new("created_at"),
+            Alias::new("expires_at"),
+            Alias::new("last_seen_at"),
+            Alias::new("revoked_at"),
+        ])
+        .values_panic([
+            uuid_expr(db.get_database_backend(), session.id),
+            text(&session.token_hash),
+            text(&session.csrf_token_hash),
+            opt_text(session.state.as_deref()),
+            number(session.created_at),
+            number(session.expires_at),
+            number(session.last_seen_at),
+            opt_number(session.revoked_at),
+        ]);
+    execute(db, &query).await
+}
+
+pub async fn find_anonymous_by_hash(
+    db: &impl ConnectionTrait,
+    token_hash: &str,
+) -> Result<Option<AnonymousRow>, AuthError> {
+    let mut query = Query::select();
+    query
+        .columns([
+            Alias::new("id"),
+            Alias::new("token_hash"),
+            Alias::new("csrf_token_hash"),
+            Alias::new("state"),
+            Alias::new("created_at"),
+            Alias::new("expires_at"),
+            Alias::new("last_seen_at"),
+            Alias::new("revoked_at"),
+        ])
+        .from(Alias::new(ANONYMOUS_SESSIONS))
+        .and_where(Expr::col(Alias::new("token_hash")).eq(token_hash));
+    let row = one(db, &query).await?;
+    row.map(|row| read_anonymous(&row)).transpose()
+}
+
+pub async fn touch_anonymous(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    last_seen_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(ANONYMOUS_SESSIONS))
+        .values([(Alias::new("last_seen_at"), number(last_seen_at))])
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
+    execute(db, &query).await
+}
+
+pub async fn revoke_anonymous(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    revoked_at: i64,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(ANONYMOUS_SESSIONS))
+        .values([(Alias::new("revoked_at"), number(revoked_at))])
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)))
+        .and_where(Expr::col(Alias::new("revoked_at")).is_null());
+    execute(db, &query).await
+}
+
+pub async fn write_anonymous_state(
+    db: &impl ConnectionTrait,
+    id: Uuid,
+    state: &str,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(ANONYMOUS_SESSIONS))
+        .values([(Alias::new("state"), text(state))])
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)))
+        .and_where(Expr::col(Alias::new("revoked_at")).is_null());
     execute(db, &query).await
 }
 
@@ -350,7 +455,7 @@ pub async fn revoke_session(
     query
         .table(Alias::new(SESSIONS))
         .values([(Alias::new("revoked_at"), number(revoked_at))])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)))
         .and_where(Expr::col(Alias::new("revoked_at")).is_null());
     execute(db, &query).await
 }
@@ -364,7 +469,9 @@ pub async fn revoke_user_sessions(
     query
         .table(Alias::new(SESSIONS))
         .values([(Alias::new("revoked_at"), number(revoked_at))])
-        .and_where(Expr::col(Alias::new("user_id")).eq(user_id.to_string()))
+        .and_where(
+            Expr::col(Alias::new("user_id")).eq(uuid_expr(db.get_database_backend(), user_id)),
+        )
         .and_where(Expr::col(Alias::new("revoked_at")).is_null());
     execute(db, &query).await
 }
@@ -397,8 +504,8 @@ pub async fn insert_password_reset(
             Alias::new("used_at"),
         ])
         .values_panic([
-            text(&id.to_string()),
-            text(&user_id.to_string()),
+            uuid_expr(db.get_database_backend(), id),
+            uuid_expr(db.get_database_backend(), user_id),
             text(token_hash),
             number(created_at),
             number(expires_at),
@@ -416,7 +523,9 @@ pub async fn active_password_resets(
     query
         .columns([Alias::new("id"), Alias::new("created_at")])
         .from(Alias::new(PASSWORD_RESETS))
-        .and_where(Expr::col(Alias::new("user_id")).eq(user_id.to_string()))
+        .and_where(
+            Expr::col(Alias::new("user_id")).eq(uuid_expr(db.get_database_backend(), user_id)),
+        )
         .and_where(Expr::col(Alias::new("used_at")).is_null())
         .and_where(Expr::col(Alias::new("expires_at")).gt(now))
         .order_by(Alias::new("created_at"), Order::Asc);
@@ -439,7 +548,7 @@ pub async fn consume_password_reset(
     query
         .table(Alias::new(PASSWORD_RESETS))
         .values([(Alias::new("used_at"), number(now))])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)))
         .and_where(Expr::col(Alias::new("used_at")).is_null())
         .and_where(Expr::col(Alias::new("expires_at")).gt(now));
     Ok(execute_rows(db, &query).await? == 1)
@@ -455,8 +564,10 @@ pub async fn invalidate_other_resets(
     query
         .table(Alias::new(PASSWORD_RESETS))
         .values([(Alias::new("used_at"), number(now))])
-        .and_where(Expr::col(Alias::new("user_id")).eq(user_id.to_string()))
-        .and_where(Expr::col(Alias::new("id")).ne(keep.to_string()))
+        .and_where(
+            Expr::col(Alias::new("user_id")).eq(uuid_expr(db.get_database_backend(), user_id)),
+        )
+        .and_where(Expr::col(Alias::new("id")).ne(uuid_expr(db.get_database_backend(), keep)))
         .and_where(Expr::col(Alias::new("used_at")).is_null());
     execute(db, &query).await
 }
@@ -505,8 +616,8 @@ pub async fn insert_reset_exchange(
             Alias::new("expires_at"),
         ])
         .values_panic([
-            text(&id.to_string()),
-            text(&reset_id.to_string()),
+            uuid_expr(db.get_database_backend(), id),
+            uuid_expr(db.get_database_backend(), reset_id),
             text(secret_hash),
             number(created_at),
             number(expires_at),
@@ -542,7 +653,7 @@ pub async fn find_exchange(
             Alias::new("used_at"),
         ])
         .from(Alias::new(PASSWORD_RESETS))
-        .and_where(Expr::col(Alias::new("id")).eq(reset_id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), reset_id)));
     let Some(row) = one(db, &reset).await? else {
         return Ok(None);
     };
@@ -565,7 +676,9 @@ pub async fn delete_user_exchanges(
     let mut ids = Query::select();
     ids.column(Alias::new("id"))
         .from(Alias::new(PASSWORD_RESETS))
-        .and_where(Expr::col(Alias::new("user_id")).eq(user_id.to_string()));
+        .and_where(
+            Expr::col(Alias::new("user_id")).eq(uuid_expr(db.get_database_backend(), user_id)),
+        );
     let mut reset_ids = Vec::new();
     for row in all(db, &ids).await? {
         reset_ids.push(required_uuid(&row, "id")?);
@@ -574,7 +687,10 @@ pub async fn delete_user_exchanges(
         let mut query = Query::delete();
         query
             .from_table(Alias::new(PASSWORD_RESET_EXCHANGES))
-            .and_where(Expr::col(Alias::new("reset_id")).eq(reset_id.to_string()));
+            .and_where(
+                Expr::col(Alias::new("reset_id"))
+                    .eq(uuid_expr(db.get_database_backend(), reset_id)),
+            );
         execute(db, &query).await?;
     }
     Ok(())
@@ -603,13 +719,10 @@ pub async fn insert_outbox(
             Alias::new("error_code"),
         ])
         .values_panic([
-            text(&id.to_string()),
+            uuid_expr(db.get_database_backend(), id),
             text(kind),
             text(recipient),
-            match reset_id {
-                Some(id) => text(&id.to_string()),
-                None => Expr::value(Value::String(None)),
-            },
+            opt_uuid_expr(db.get_database_backend(), reset_id),
             number(created_at),
             opt_number(None),
             opt_number(None),
@@ -641,7 +754,7 @@ pub async fn finish_outbox(
                 },
             ),
         ])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(db.get_database_backend(), id)));
     execute(db, &query).await
 }
 
@@ -658,10 +771,7 @@ pub async fn stale_outbox(
         .and_where(Expr::col(Alias::new("created_at")).lt(older_than));
     let mut rows = Vec::new();
     for row in all(db, &query).await? {
-        rows.push((
-            required_uuid(&row, "id")?,
-            optional_text_uuid(&row, "reset_id")?,
-        ));
+        rows.push((required_uuid(&row, "id")?, optional_uuid(&row, "reset_id")?));
     }
     Ok(rows)
 }
@@ -688,15 +798,15 @@ pub async fn insert_password_audit(
             Alias::new("operation_id"),
         ])
         .values_panic([
-            text(&Uuid::new_v4().to_string()),
+            uuid_expr(db.get_database_backend(), Uuid::new_v4()),
             number(created_at),
-            text(&actor_id.to_string()),
+            uuid_expr(db.get_database_backend(), actor_id),
             text("_ferrioxid_users"),
             text(&actor_id.to_string()),
             text("password_reset"),
             text("ok"),
             text(summary),
-            text(&operation_id.to_string()),
+            uuid_expr(db.get_database_backend(), operation_id),
         ]);
     execute(db, &query).await
 }
@@ -729,7 +839,7 @@ pub async fn ensure_named_row(
     insert
         .into_table(Alias::new(table))
         .columns([Alias::new("id"), Alias::new(column)])
-        .values_panic([text(&id.to_string()), text(value)]);
+        .values_panic([uuid_expr(db.get_database_backend(), id), text(value)]);
     execute(db, &insert).await?;
     Ok(id)
 }
@@ -746,8 +856,12 @@ pub async fn link_rows(
     existing
         .column(Alias::new("id"))
         .from(Alias::new(table))
-        .and_where(Expr::col(Alias::new(left_column)).eq(left.to_string()))
-        .and_where(Expr::col(Alias::new(right_column)).eq(right.to_string()));
+        .and_where(
+            Expr::col(Alias::new(left_column)).eq(uuid_expr(db.get_database_backend(), left)),
+        )
+        .and_where(
+            Expr::col(Alias::new(right_column)).eq(uuid_expr(db.get_database_backend(), right)),
+        );
     if one(db, &existing).await?.is_some() {
         return Ok(());
     }
@@ -760,9 +874,9 @@ pub async fn link_rows(
             Alias::new(right_column),
         ])
         .values_panic([
-            text(&Uuid::new_v4().to_string()),
-            text(&left.to_string()),
-            text(&right.to_string()),
+            uuid_expr(db.get_database_backend(), Uuid::new_v4()),
+            uuid_expr(db.get_database_backend(), left),
+            uuid_expr(db.get_database_backend(), right),
         ]);
     execute(db, &insert).await
 }
@@ -778,8 +892,12 @@ pub async fn unlink_rows(
     let mut query = Query::delete();
     query
         .from_table(Alias::new(table))
-        .and_where(Expr::col(Alias::new(left_column)).eq(left.to_string()))
-        .and_where(Expr::col(Alias::new(right_column)).eq(right.to_string()));
+        .and_where(
+            Expr::col(Alias::new(left_column)).eq(uuid_expr(db.get_database_backend(), left)),
+        )
+        .and_where(
+            Expr::col(Alias::new(right_column)).eq(uuid_expr(db.get_database_backend(), right)),
+        );
     execute(db, &query).await
 }
 
@@ -803,7 +921,8 @@ pub async fn user_has_code(
                 .equals((Alias::new(PERMISSIONS), Alias::new("id"))),
         )
         .and_where(
-            Expr::col((Alias::new(USER_ROLES), Alias::new("user_id"))).eq(user_id.to_string()),
+            Expr::col((Alias::new(USER_ROLES), Alias::new("user_id")))
+                .eq(uuid_expr(db.get_database_backend(), user_id)),
         )
         .and_where(Expr::col((Alias::new(PERMISSIONS), Alias::new("code"))).eq(code))
         .limit(1);
@@ -824,6 +943,20 @@ fn read_user(row: &QueryResult) -> Result<UserRow, AuthError> {
     })
 }
 
+fn read_anonymous(row: &QueryResult) -> Result<AnonymousRow, AuthError> {
+    // `required_uuid` akzeptiert den PostgreSQL-Typ UUID und den SQLite-Typ TEXT.
+    Ok(AnonymousRow {
+        id: required_uuid(row, "id")?,
+        token_hash: required_text(row, "token_hash")?,
+        csrf_token_hash: required_text(row, "csrf_token_hash")?,
+        state: optional_text(row, "state")?,
+        created_at: required_i64(row, "created_at")?,
+        expires_at: required_i64(row, "expires_at")?,
+        last_seen_at: required_i64(row, "last_seen_at")?,
+        revoked_at: optional_i64(row, "revoked_at")?,
+    })
+}
+
 fn read_session(row: &QueryResult) -> Result<SessionRow, AuthError> {
     Ok(SessionRow {
         id: required_uuid(row, "id")?,
@@ -841,7 +974,10 @@ fn parse_id(row: &QueryResult) -> Result<Uuid, AuthError> {
     required_uuid(row, "id")
 }
 
-fn optional_text_uuid(row: &QueryResult, column: &str) -> Result<Option<Uuid>, AuthError> {
+fn optional_uuid(row: &QueryResult, column: &str) -> Result<Option<Uuid>, AuthError> {
+    if let Ok(value) = row.try_get::<Option<Uuid>>("", column) {
+        return Ok(value);
+    }
     match row.try_get::<Option<String>>("", column) {
         Ok(Some(value)) if !value.is_empty() => value
             .parse()
@@ -895,6 +1031,36 @@ fn required_flag(row: &QueryResult, column: &str) -> Result<bool, AuthError> {
 
 fn text(value: &str) -> sea_orm::sea_query::SimpleExpr {
     Expr::value(value)
+}
+
+/// PostgreSQL-Spalten vom Typ UUID bekommen einen UUID-Parameter. SQLite speichert dieselbe Spalte als TEXT.
+fn uuid_expr(backend: DatabaseBackend, id: Uuid) -> sea_orm::sea_query::SimpleExpr {
+    match backend {
+        DatabaseBackend::Postgres => Expr::value(Value::Uuid(Some(Box::new(id)))),
+        DatabaseBackend::Sqlite | DatabaseBackend::MySql => Expr::value(id.to_string()),
+    }
+}
+
+fn opt_uuid_expr(backend: DatabaseBackend, id: Option<Uuid>) -> sea_orm::sea_query::SimpleExpr {
+    match id {
+        Some(id) => uuid_expr(backend, id),
+        None => match backend {
+            DatabaseBackend::Postgres => Expr::value(Value::Uuid(None)),
+            DatabaseBackend::Sqlite | DatabaseBackend::MySql => Expr::value(Value::String(None)),
+        },
+    }
+}
+
+fn opt_text(value: Option<&str>) -> sea_orm::sea_query::SimpleExpr {
+    match value {
+        Some(value) => Expr::value(value),
+        None => Expr::value(Option::<String>::None),
+    }
+}
+
+fn optional_text(row: &QueryResult, column: &str) -> Result<Option<String>, AuthError> {
+    row.try_get::<Option<String>>("", column)
+        .map_err(|_| AuthError::database(format!("column {column} is not text")))
 }
 
 fn number(value: i64) -> sea_orm::sea_query::SimpleExpr {
@@ -980,4 +1146,108 @@ fn unique_violation(error: &sea_orm::DbErr) -> bool {
         return false;
     };
     database.kind() == sea_orm::sqlx::error::ErrorKind::UniqueViolation
+}
+
+#[cfg(test)]
+mod anonymous_binding_tests {
+    use super::*;
+    use sea_orm::sea_query::QueryStatementWriter;
+
+    fn bound(backend: DatabaseBackend, query: &impl QueryStatementWriter) -> Vec<Value> {
+        let (_sql, values) = match backend {
+            DatabaseBackend::Postgres => query.build(PostgresQueryBuilder),
+            DatabaseBackend::Sqlite => query.build(SqliteQueryBuilder),
+            DatabaseBackend::MySql => unreachable!("MySQL is not supported"),
+        };
+        values.0
+    }
+
+    fn assert_id(backend: DatabaseBackend, value: &Value) {
+        match backend {
+            DatabaseBackend::Postgres => assert!(matches!(value, Value::Uuid(Some(_)))),
+            DatabaseBackend::Sqlite => {
+                let expected = Uuid::nil().to_string();
+                assert!(matches!(value, Value::String(Some(text)) if text.as_str() == expected));
+            }
+            DatabaseBackend::MySql => unreachable!("MySQL is not supported"),
+        }
+    }
+
+    #[test]
+    fn anonymous_id_binds_as_uuid_on_postgres_and_text_on_sqlite() {
+        let id = Uuid::nil();
+        for backend in [DatabaseBackend::Postgres, DatabaseBackend::Sqlite] {
+            let mut insert = Query::insert();
+            insert
+                .into_table(Alias::new(ANONYMOUS_SESSIONS))
+                .columns([Alias::new("id"), Alias::new("state")])
+                .values_panic([uuid_expr(backend, id), opt_text(None)]);
+            let values = bound(backend, &insert);
+            assert_id(backend, &values[0]);
+
+            let mut update = Query::update();
+            update
+                .table(Alias::new(ANONYMOUS_SESSIONS))
+                .values([(Alias::new("state"), text("{\"cart\":\"cable\"}"))])
+                .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(backend, id)))
+                .and_where(Expr::col(Alias::new("revoked_at")).is_null());
+            let values = bound(backend, &update);
+            let id_text = Uuid::nil().to_string();
+            let id_value = values
+                .iter()
+                .find(|value| match value {
+                    Value::Uuid(_) => true,
+                    Value::String(Some(text)) => text.as_str() == id_text,
+                    _ => false,
+                })
+                .expect("id parameter");
+            assert_id(backend, id_value);
+
+            let mut user = Query::insert();
+            user.into_table(Alias::new(USERS))
+                .columns([Alias::new("id"), Alias::new("email")])
+                .values_panic([uuid_expr(backend, id), text("ada@example.com")]);
+            assert_id(backend, &bound(backend, &user)[0]);
+
+            let mut session = Query::insert();
+            session
+                .into_table(Alias::new(SESSIONS))
+                .columns([Alias::new("id"), Alias::new("user_id")])
+                .values_panic([uuid_expr(backend, id), uuid_expr(backend, id)]);
+            let session_values = bound(backend, &session);
+            assert_id(backend, &session_values[0]);
+            assert_id(backend, &session_values[1]);
+
+            let mut revoke = Query::update();
+            revoke
+                .table(Alias::new(SESSIONS))
+                .values([(Alias::new("revoked_at"), number(1))])
+                .and_where(Expr::col(Alias::new("id")).eq(uuid_expr(backend, id)))
+                .and_where(Expr::col(Alias::new("user_id")).ne(uuid_expr(backend, Uuid::new_v4())));
+            let revoke_values = bound(backend, &revoke);
+            assert!(
+                revoke_values.iter().any(|value| match backend {
+                    DatabaseBackend::Postgres => matches!(value, Value::Uuid(Some(_))),
+                    DatabaseBackend::Sqlite => matches!(value, Value::String(Some(_))),
+                    DatabaseBackend::MySql => false,
+                }),
+                "session id must stay a backend uuid parameter"
+            );
+
+            let mut outbox = Query::insert();
+            outbox
+                .into_table(Alias::new(MAIL_OUTBOX))
+                .columns([Alias::new("reset_id")])
+                .values_panic([opt_uuid_expr(backend, None)]);
+            match backend {
+                DatabaseBackend::Postgres => {
+                    assert!(matches!(bound(backend, &outbox)[0], Value::Uuid(None)))
+                }
+                DatabaseBackend::Sqlite => {
+                    assert!(matches!(bound(backend, &outbox)[0], Value::String(None)))
+                }
+                DatabaseBackend::MySql => unreachable!("MySQL is not supported"),
+            }
+        }
+    }
 }

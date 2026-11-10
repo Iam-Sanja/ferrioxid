@@ -1,5 +1,6 @@
 mod admin;
-mod contact;
+
+use myshop::contact;
 
 use ferrioxid::core::FerrioxidModel;
 use ferrioxid::middleware::{apply, Standard};

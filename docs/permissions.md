@@ -51,7 +51,7 @@ Foreign Keys delete assignments via `CASCADE`.
 | Attribute | Effect |
 |---|---|
 | No permission and `allow_anonymous = false` | Every method returns 403. |
-| `allow_anonymous = true` |Public, without cookie check|
+| `allow_anonymous = true` | Public without a session cookie. A session cookie still requires CSRF on writes. |
 | `permissions = "authenticated"` | Any active authenticated session |
 | `permissions = "notes"` | `notes.read`, `notes.create`, `notes.update` or `notes.delete`, according to the method |
 

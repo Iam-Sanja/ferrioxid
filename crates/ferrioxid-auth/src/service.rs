@@ -37,18 +37,32 @@ pub struct AuthUser {
     pub session_id: Uuid,
 }
 
-#[derive(Debug)]
 pub struct IssuedSession {
     pub token: String,
     pub csrf_token: String,
     pub cookie: String,
+    /// Cookies, die der Browser zusätzlich verwerfen soll. Login löscht damit die anonyme Sitzung.
+    pub clear_cookies: Vec<String>,
     pub user: PublicUser,
+}
+
+impl std::fmt::Debug for IssuedSession {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("IssuedSession")
+            .field("token", &"[redacted]")
+            .field("csrf_token", &"[redacted]")
+            .field("cookie", &"[redacted]")
+            .field("clear_cookies", &"[redacted]")
+            .field("user", &self.user)
+            .finish()
+    }
 }
 
 #[derive(Clone)]
 pub struct AuthService {
-    db: DatabaseConnection,
-    config: AuthConfig,
+    pub(crate) db: DatabaseConnection,
+    pub(crate) config: AuthConfig,
     limiter: std::sync::Arc<Mutex<HashMap<String, Vec<i64>>>>,
 }
 
@@ -202,6 +216,18 @@ impl AuthService {
         password: &str,
         client: &str,
     ) -> Result<IssuedSession, AuthError> {
+        self.login_replacing(email, password, client, None).await
+    }
+
+    /// Login legt immer eine neue Benutzer-Sitzung an. Eine mitgeschickte anonyme Sitzung wird
+    /// in derselben Transaktion widerrufen und nicht zur Benutzer-Sitzung umgewidmet.
+    pub async fn login_replacing(
+        &self,
+        email: &str,
+        password: &str,
+        client: &str,
+        anonymous_token: Option<&str>,
+    ) -> Result<IssuedSession, AuthError> {
         let key = format!("{client}:{}", email.trim().to_lowercase());
         if self.limited(&key)? {
             return Err(AuthError::RateLimited);
@@ -228,7 +254,39 @@ impl AuthService {
         self.clear_failures(&key)?;
         let now = unix_now()?;
         store::update_last_login(&self.db, user.id, now).await?;
-        self.issue(user.id, now).await
+        let expires_at = now.saturating_add(self.config.session_ttl_secs);
+        let transaction = self.db.begin().await.map_err(AuthError::database)?;
+        let mut clear_cookies = Vec::new();
+        if let Some(token) = anonymous_token.filter(|token| !token.is_empty()) {
+            if let Some(row) = store::find_anonymous_by_hash(&transaction, &digest(token)).await? {
+                if row.revoked_at.is_none() {
+                    store::revoke_anonymous(&transaction, row.id, now).await?;
+                }
+            }
+            clear_cookies.push(crate::cookie::clear_named_cookie(
+                &self.config,
+                &self.config.anonymous_cookie_name,
+            ));
+        }
+        let issued = insert_session(
+            &transaction,
+            &self.config.csrf_secret,
+            user.id,
+            now,
+            expires_at,
+        )
+        .await?;
+        transaction.commit().await.map_err(AuthError::database)?;
+        let user = store::find_user_by_id(&self.db, user.id)
+            .await?
+            .ok_or(AuthError::Unauthenticated)?;
+        Ok(IssuedSession {
+            cookie: set_cookie(&self.config, &issued.token, self.config.session_ttl_secs),
+            token: issued.token,
+            csrf_token: issued.csrf_token,
+            clear_cookies,
+            user: public_user(&user),
+        })
     }
 
     pub async fn authenticate_token(&self, token: &str) -> Result<AuthUser, AuthError> {
@@ -314,6 +372,7 @@ impl AuthService {
             ),
             token: issued.token,
             csrf_token: issued.csrf_token,
+            clear_cookies: Vec::new(),
             user: public_user(&user),
         })
     }
@@ -732,6 +791,16 @@ impl AuthService {
         if method.is_safe() {
             return Ok(());
         }
+        if self.config.cookie_secure {
+            match presented_origin(headers).as_deref() {
+                None => return Err(AuthError::OriginRejected),
+                Some(origin) if origin.trim().eq_ignore_ascii_case("null") => {}
+                Some(origin) if !origin.to_ascii_lowercase().starts_with("https://") => {
+                    return Err(AuthError::OriginRejected);
+                }
+                Some(_) => {}
+            }
+        }
         self.allow_presented(headers)
     }
 
@@ -780,7 +849,7 @@ impl AuthService {
                 .ok_or(AuthError::Unauthenticated)?;
             let expected =
                 csrf_for_session(&self.config.csrf_secret, session.id, &session.token_hash);
-            if !constant_eq(supplied, &expected) {
+            if !token_eq(supplied, &expected) {
                 return Err(AuthError::CsrfRejected);
             }
         }
@@ -791,21 +860,6 @@ impl AuthService {
         let token =
             read_cookie(headers, &self.config.cookie_name).ok_or(AuthError::Unauthenticated)?;
         self.refresh_csrf(&token).await
-    }
-
-    async fn issue(&self, user_id: Uuid, now: i64) -> Result<IssuedSession, AuthError> {
-        let expires_at = now.saturating_add(self.config.session_ttl_secs);
-        let issued =
-            insert_session(&self.db, &self.config.csrf_secret, user_id, now, expires_at).await?;
-        let user = store::find_user_by_id(&self.db, user_id)
-            .await?
-            .ok_or(AuthError::Unauthenticated)?;
-        Ok(IssuedSession {
-            cookie: set_cookie(&self.config, &issued.token, self.config.session_ttl_secs),
-            token: issued.token,
-            csrf_token: issued.csrf_token,
-            user: public_user(&user),
-        })
     }
 
     async fn open_session(&self, token: &str) -> Result<SessionRow, AuthError> {
@@ -900,7 +954,7 @@ async fn insert_session(
     Ok(RawSession { token, csrf_token })
 }
 
-fn csrf_for_session(secret: &[u8; 32], session_id: Uuid, token_hash: &str) -> String {
+pub(crate) fn csrf_for_session(secret: &[u8; 32], session_id: Uuid, token_hash: &str) -> String {
     use hmac::{Hmac, Mac};
     let mut mac = Hmac::<sha2::Sha256>::new_from_slice(secret).expect("csrf hmac key");
     mac.update(b"ferrioxid-csrf-v1");
@@ -969,15 +1023,19 @@ pub fn unix_now() -> Result<i64, AuthError> {
         .map_err(|_| AuthError::Validation("system clock is invalid".into()))
 }
 
-fn random_token() -> String {
+pub(crate) fn random_token() -> String {
     let mut bytes = [0u8; 32];
     OsRng.fill_bytes(&mut bytes);
     base64url(&bytes)
 }
 
-fn digest(value: &str) -> String {
+pub(crate) fn digest(value: &str) -> String {
     let digest = Sha256::digest(value.as_bytes());
     digest.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+pub(crate) fn token_eq(supplied: &str, expected: &str) -> bool {
+    constant_eq(&digest(supplied), &digest(expected))
 }
 
 fn constant_eq(left: &str, right: &str) -> bool {

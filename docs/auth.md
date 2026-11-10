@@ -32,7 +32,8 @@ Passwords use Argon2id and must contain 12 to 128 characters. The CLI reads pass
 
 - `AuthConfig`, `AuthConfig::development`, `AuthConfig::from_env`, `AuthConfig::apply_bound_address`
 - `AuthService::create_user`, `list_users`, `set_user_active`
-- `login`, `logout`, `authenticate_token`, `change_password`, `rotate_session`
+- `login`, `login_replacing`, `logout`, `authenticate_token`, `change_password`, `rotate_session`
+- `ensure_anonymous_session`, `authenticate_browser_form`, `authenticate_anonymous_csrf`, `guard_cookie_write`, `read_anonymous_state`, `write_anonymous_state`
 - `authorize`, `ensure_role`, `grant_permission`, `revoke_permission`, `assign_role`, `revoke_role`
 - `request_reset`, `exchange_token`, `complete_reset`
 - `apply_migrations`
@@ -57,7 +58,8 @@ A new password has 12 to 128 characters. The hash uses Argon2id, version `0x13`,
 - The admin writes staff and role changes to the same user record. The next `authenticate_token` check reads the updated flags without deleting the session.
 - Login is limited to five failed attempts per process in 15 minutes. The key is peer plus normalized email.
 - `X-Forwarded-For` applies only if `FERRIOXID_TRUST_PROXY` is expressly `1` or `true`. The first hop is evaluated.
-- Security logs never include passwords, session tokens, login CSRF cookies or form tokens.
+- Security logs never include passwords, session tokens, anonymous tokens, login CSRF cookies or form tokens. `AnonymousSession`'s `Debug` output redacts the CSRF token and cookie. Database errors are still logged by the existing auth error path and can contain SQL text, not the raw cookie.
+- Anonymous and authenticated sessions are different tables and cookies. A user cookie is never downgraded to an anonymous session. Login always creates a new user session id.
 - Without `FERRIOXID_ALLOWED_ORIGINS`, `AuthConfig::apply_bound_address` replaces the development allowlist with loopback origins for the bound address. Public hosts and request Host headers are never added. `Origin: null` is invalid except for the explicit same-origin browser case documented in [csrf.md](csrf.md). Requests without Origin or Referer still require the login CSRF cookie and token.
 
 ## Error cases

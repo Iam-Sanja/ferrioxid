@@ -37,6 +37,7 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
         .route("/auth/logout", post(logout))
         .route("/auth/me", get(me))
         .route("/auth/csrf", get(csrf))
+        .route("/auth/anonymous", get(anonymous_session))
         .route("/auth/change-password", post(change_password))
         .route(
             "/auth/password-reset",
@@ -90,17 +91,20 @@ async fn login(
         return auth_error(error);
     }
     let client = auth.client_key(&headers, &peer.0);
-    match auth.login(&body.email, &body.password, &client).await {
+    let anonymous = crate::cookie::read_cookie(&headers, &auth.config().anonymous_cookie_name);
+    match auth
+        .login_replacing(&body.email, &body.password, &client, anonymous.as_deref())
+        .await
+    {
         Ok(issued) => {
             let mut response = Json(json!({
                 "user": issued.user,
                 "csrf_token": issued.csrf_token
             }))
             .into_response();
-            if let Ok(value) = HeaderValue::from_str(&issued.cookie) {
-                response
-                    .headers_mut()
-                    .insert(axum::http::header::SET_COOKIE, value);
+            append_cookie(&mut response, &issued.cookie);
+            for cookie in &issued.clear_cookies {
+                append_cookie(&mut response, cookie);
             }
             response
         }
@@ -117,20 +121,63 @@ async fn logout(State(state): State<AppState>, headers: HeaderMap) -> axum::resp
         );
     };
     let token = crate::cookie::read_cookie(&headers, &auth.config().cookie_name);
+    let anonymous = crate::cookie::read_cookie(&headers, &auth.config().anonymous_cookie_name);
     if token.is_some() {
         match auth.authenticate(&headers, &axum::http::Method::POST).await {
             Ok(_) => {}
+            Err(AuthError::Unauthenticated) if anonymous.is_some() => {
+                if let Err(error) = anonymous_logout(auth, &headers).await {
+                    return auth_error(error);
+                }
+            }
             Err(AuthError::Unauthenticated) => {}
             Err(error) => return auth_error(error),
+        }
+    } else if anonymous.is_some() {
+        if let Err(error) = anonymous_logout(auth, &headers).await {
+            return auth_error(error);
         }
     }
     match auth.logout(token.as_deref()).await {
         Ok(cookie) => {
+            if let Some(anonymous) = anonymous.as_deref() {
+                if let Err(error) = auth.revoke_anonymous_token(anonymous).await {
+                    return auth_error(error);
+                }
+            }
             let mut response = StatusCode::NO_CONTENT.into_response();
-            if let Ok(value) = HeaderValue::from_str(&cookie) {
-                response
-                    .headers_mut()
-                    .insert(axum::http::header::SET_COOKIE, value);
+            append_cookie(&mut response, &cookie);
+            if anonymous.is_some() {
+                match auth.clear_anonymous_cookie() {
+                    Ok(cookie) => append_cookie(&mut response, &cookie),
+                    Err(error) => return auth_error(error),
+                }
+            }
+            response
+        }
+        Err(error) => auth_error(error),
+    }
+}
+
+async fn anonymous_session(
+    State(state): State<AppState>,
+    headers: HeaderMap,
+) -> axum::response::Response {
+    let Some(auth) = state.auth.as_ref() else {
+        return error_response(
+            StatusCode::FORBIDDEN,
+            "Forbidden",
+            "authentication is not configured",
+        );
+    };
+    if let Err(error) = auth.presented_origin_allowed(&headers) {
+        return auth_error(error);
+    }
+    match auth.ensure_anonymous_session(&headers).await {
+        Ok(session) => {
+            let mut response = Json(json!({ "csrf_token": session.csrf_token })).into_response();
+            if let Some(cookie) = &session.cookie {
+                append_cookie(&mut response, cookie);
             }
             response
         }
@@ -220,6 +267,27 @@ pub async fn current_user(
     let _ = peer;
     let auth = state.auth.as_ref().ok_or(AuthError::Forbidden)?;
     auth.authenticate(headers, method).await
+}
+
+async fn anonymous_logout(
+    auth: &crate::service::AuthService,
+    headers: &HeaderMap,
+) -> Result<(), AuthError> {
+    let supplied = headers
+        .get(crate::service::csrf_header_name())
+        .and_then(|value| value.to_str().ok())
+        .unwrap_or("");
+    auth.authenticate_anonymous_csrf(headers, &axum::http::Method::POST, supplied)
+        .await
+        .map(|_| ())
+}
+
+fn append_cookie(response: &mut axum::response::Response, value: &str) {
+    if let Ok(header) = HeaderValue::from_str(value) {
+        response
+            .headers_mut()
+            .append(axum::http::header::SET_COOKIE, header);
+    }
 }
 
 fn auth_error(error: AuthError) -> axum::response::Response {

@@ -20,8 +20,8 @@ sea-orm.workspace = true
 serde_json.workspace = true
 tracing.workspace = true
 uuid.workspace = true
+http-body-util = "0.1"
 
 [dev-dependencies]
-http-body-util = "0.1"
 tokio = { workspace = true }
 tower = { version = "0.5", features = ["util"] }

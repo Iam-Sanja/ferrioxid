@@ -4,7 +4,7 @@
 
 ## Responsibility
 
-`ferrioxid-middleware` applies Tower layers to an Axum router. Authentication, sessions and CSRF checks remain in the handlers.
+`ferrioxid-middleware` applies Tower layers to an Axum router. It does not authenticate users and it does not authorize a request. Cookie-write CSRF is installed by `App::into_router` in `ferrioxid-api`, before `with_state`, so generated projects and `allow_anonymous` routes receive it without a handler calling `guard_cookie_write`. This crate does not create an anonymous session and does not reject a cookie-less POST.
 
 ## Crates and files
 
@@ -23,7 +23,7 @@ Tower runs the last layer added first. `apply` is therefore attached in this ord
 2. Request-ID
 3. Access-Log
 4. Security headers
-5. Route, then Auth, Session and CSRF in the handler
+5. Cookie-write CSRF inside `App::into_router`, then the route and its authorization check
 
 ## Configuration
 
@@ -31,7 +31,7 @@ Tower runs the last layer added first. `apply` is therefore attached in this ord
 
 ## Security
 
-The log contains method, path, status, duration and request ID. Query, cookies, `Authorization`, CSRF, passwords and multipart content are not written. Response headers are `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`. A content security policy is not set so that the admin does not break. The middleware does not replace an authorization check.
+The log contains method, path, status, duration and request ID. Query, cookies, `Authorization`, CSRF, passwords and multipart content are not written. Response headers are `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`. A content security policy is not set so that the admin does not break. Neither this crate nor the cookie-CSRF layer replaces an authorization check. A cookie-less `allow_anonymous` write remains public.
 
 The `x-ferrioxid-trace-order` header is a test probe and does not affect routing.
 

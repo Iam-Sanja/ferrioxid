@@ -77,6 +77,8 @@ Each of these alerts has an individual justification in the ledger; test classif
 
 The known strings are public inputs to isolated tests. Changing them to random strings would not fix a deployed credential and would obscure the reason for this verdict.
 
+PR #62 added four more in-memory fixtures in `anonymous_tests.rs`, `anonymous_contact.rs` and `cookie_csrf.rs`. CodeQL reported eight call sites, two per fixture. They open `sqlite::memory:` and never an environment-selected database. The password is the same public fixture, assembled in `memory_fixture_password` so the test source no longer passes a string literal into `create_user` or `login`.
+
 ### False positives: #93 and #94
 
 Both are failed-status assertion messages in `html_admin_works_without_javascript`, which opens `sqlite::memory:` and runs its own server on `127.0.0.1:0`.

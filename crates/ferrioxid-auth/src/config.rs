@@ -12,10 +12,12 @@ pub enum CookieSameSite {
     Strict,
 }
 
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub struct AuthConfig {
     pub environment: Environment,
     pub cookie_name: String,
+    /// Getrennt vom Login-Cookie. Der Name ist fest, damit eine App ihn nicht auf das Login-Cookie legt.
+    pub anonymous_cookie_name: String,
     pub cookie_secure: bool,
     pub same_site: CookieSameSite,
     pub session_ttl_secs: i64,
@@ -28,11 +30,32 @@ pub struct AuthConfig {
     pub csrf_secret: [u8; 32],
 }
 
+impl std::fmt::Debug for AuthConfig {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("AuthConfig")
+            .field("environment", &self.environment)
+            .field("cookie_name", &self.cookie_name)
+            .field("anonymous_cookie_name", &self.anonymous_cookie_name)
+            .field("cookie_secure", &self.cookie_secure)
+            .field("same_site", &self.same_site)
+            .field("session_ttl_secs", &self.session_ttl_secs)
+            .field("idle_timeout_secs", &self.idle_timeout_secs)
+            .field("allowed_origins", &self.allowed_origins)
+            .field("trust_proxy", &self.trust_proxy)
+            .field("login_max_attempts", &self.login_max_attempts)
+            .field("login_window_secs", &self.login_window_secs)
+            .field("csrf_secret", &"[redacted]")
+            .finish()
+    }
+}
+
 impl AuthConfig {
     pub fn development() -> Self {
         Self {
             environment: Environment::Development,
             cookie_name: "ferrioxid_session".to_owned(),
+            anonymous_cookie_name: "ferrioxid_anonymous".to_owned(),
             cookie_secure: false,
             same_site: CookieSameSite::Lax,
             session_ttl_secs: 12 * 60 * 60,

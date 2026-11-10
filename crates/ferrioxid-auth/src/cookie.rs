@@ -3,18 +3,24 @@
 use crate::config::{AuthConfig, CookieSameSite};
 
 pub fn set_cookie(config: &AuthConfig, token: &str, max_age: i64) -> String {
+    set_named_cookie(config, &config.cookie_name, token, max_age)
+}
+
+pub fn clear_cookie(config: &AuthConfig) -> String {
+    clear_named_cookie(config, &config.cookie_name)
+}
+
+pub fn set_named_cookie(config: &AuthConfig, name: &str, token: &str, max_age: i64) -> String {
     format!(
-        "{}={token}; HttpOnly; Path=/; SameSite={}; Max-Age={max_age}{}",
-        config.cookie_name,
+        "{name}={token}; HttpOnly; Path=/; SameSite={}; Max-Age={max_age}{}",
         same_site(config.same_site),
         secure(config)
     )
 }
 
-pub fn clear_cookie(config: &AuthConfig) -> String {
+pub fn clear_named_cookie(config: &AuthConfig, name: &str) -> String {
     format!(
-        "{}=; HttpOnly; Path=/; SameSite={}; Max-Age=0{}",
-        config.cookie_name,
+        "{name}=; HttpOnly; Path=/; SameSite={}; Max-Age=0{}",
         same_site(config.same_site),
         secure(config)
     )

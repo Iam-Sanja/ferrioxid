@@ -15,13 +15,13 @@
 
 ## Authentication (actual, v0.7)
 
-Users, Argon2id, server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model permissions are implemented. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [permissions.md](permissions.md) and [policies.md](policies.md).
+Users, Argon2id, server-side sessions, anonymous server-side sessions, HttpOnly cookies, CSRF for cookie write accesses, roles and model permissions are implemented. Anonymous sessions and their CSRF checks are **In PR** until this change is merged. Details are available in [auth.md](auth.md), [sessions.md](sessions.md), [csrf.md](csrf.md), [permissions.md](permissions.md) and [policies.md](policies.md).
 
 `allow_anonymous = true` remains an explicit public release. Product and category in myshop are such demo endpoints. Protected routes refuse without session and right.
 
 ## Remaining gaps (actual)
 
-OAuth, MFA and JWT for external APIs remain unimplemented; password reset is available as described in [password-reset.md](password-reset.md). Login rate limits are process-local. Object-filtered lists require explicit [query scopes](query-scopes.md). Anonymous routes do not check CSRF because they do not authorize access through a cookie. Concurrent PATCH requests have no version field to detect lost updates. Public deployment still requires appropriate proxy and operational controls.
+OAuth, MFA and JWT for external APIs remain unimplemented; password reset is available as described in [password-reset.md](password-reset.md). Login rate limits are process-local. Object-filtered lists require explicit [query scopes](query-scopes.md). `App::into_router` rejects cookie-authenticated POST, PUT, PATCH and DELETE requests unless the session CSRF check passes. That layer covers generated `allow_anonymous` JSON routes and handlers that forget `guard_cookie_write`. A request with neither `ferrioxid_session` nor `ferrioxid_anonymous` stays unauthenticated, including `Authorization: Bearer`; the bearer value is not validated. `allow_anonymous` therefore still permits a cookie-less write. myshop `/contact` rejects every POST when no `AuthService` is configured. `IssuedSession`, `IssuedExchange` and `AuthConfig` debug output redacts the raw session token, CSRF token, cookie and CSRF key. Concurrent PATCH requests have no version field to detect lost updates. Public deployment still requires appropriate proxy and operational controls. When `Secure` is on, an unsafe cookie request without `Origin` or `Referer` is rejected. The proxy must forward those headers. `X-Forwarded-For` is used only for the login rate-limit key when `FERRIOXID_TRUST_PROXY` is set. It is not an origin. Routes attached after `into_router` are outside this layer. Development with `cookie_secure = false` still allows a missing origin.
 
 ## Planned threat model
 
