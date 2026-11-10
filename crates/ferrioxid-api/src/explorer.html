@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>/*TITLE*/ API</title>
+<style>
+body { font-family: sans-serif; margin: 2rem; line-height: 1.4; }
+button, select, input, textarea { font: inherit; }
+pre { white-space: pre-wrap; background: #f4f4f4; padding: 1rem; }
+li { margin: 0.4rem 0; }
+</style>
+</head>
+<body>
+<h1>/*TITLE*/</h1>
+<p>This page reads <code>/*SPEC*/</code> and only shows operations from that document.</p>
+<p id="status">Loading the document.</p>
+<ul id="operations"></ul>
+<h2>Try a request</h2>
+<form id="try">
+<label>Method <select id="method"><option>GET</option><option>POST</option><option>PUT</option><option>PATCH</option><option>DELETE</option></select></label>
+<label>Path <input id="path" size="48" required></label>
+<label>JSON body <textarea id="body" rows="4" cols="60"></textarea></label>
+<button type="submit">Send</button>
+</form>
+<pre id="result"></pre>
+<script>
+const specUrl = /*SPEC_JS*/;
+const statusNode = document.querySelector("#status");
+const list = document.querySelector("#operations");
+const pathInput = document.querySelector("#path");
+fetch(specUrl).then(response => response.json()).then(spec => {
+  statusNode.textContent = spec.info.title + " (" + spec.openapi + ")";
+  Object.keys(spec.paths).sort().forEach(path => {
+    Object.keys(spec.paths[path]).forEach(method => {
+      const item = document.createElement("li");
+      const button = document.createElement("button");
+      button.type = "button";
+      button.textContent = method.toUpperCase() + " " + path;
+      button.addEventListener("click", () => {
+        pathInput.value = path;
+        document.querySelector("#method").value = method.toUpperCase();
+        document.querySelector("#result").textContent = JSON.stringify(spec.paths[path][method], null, 2);
+      });
+      item.append(button);
+      list.append(item);
+    });
+  });
+}).catch(error => { statusNode.textContent = String(error); });
+document.querySelector("#try").addEventListener("submit", async event => {
+  event.preventDefault();
+  const method = document.querySelector("#method").value;
+  const target = pathInput.value;
+  const raw = document.querySelector("#body").value.trim();
+  const init = { method: method, headers: {}, credentials: "same-origin" };
+  if (raw) {
+    init.headers["content-type"] = "application/json";
+    init.body = raw;
+  }
+  const response = await fetch(target, init);
+  document.querySelector("#result").textContent = response.status + "\n" + await response.text();
+});
+</script>
+</body>
+</html>

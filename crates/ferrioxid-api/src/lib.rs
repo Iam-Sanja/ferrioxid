@@ -22,8 +22,11 @@ use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::json;
 
 mod cookie_guard;
+pub mod openapi;
+pub mod testing;
 
 pub use cookie_guard::require_browser;
+pub use openapi::{OpenApiOperation, OpenApiOptions};
 
 pub mod apps;
 pub mod pages;
@@ -48,6 +51,9 @@ pub struct App {
     catalog: apps::TemplateCatalog,
     statics: Vec<apps::StaticMount>,
     browser_required: bool,
+    openapi: OpenApiOptions,
+    openapi_operations: Vec<OpenApiOperation>,
+    documented: Vec<openapi::DocumentedModel>,
 }
 
 impl App {
@@ -69,7 +75,30 @@ impl App {
             catalog: apps::TemplateCatalog::default(),
             statics: Vec::new(),
             browser_required: false,
+            openapi: OpenApiOptions::default(),
+            openapi_operations: Vec::new(),
+            documented: Vec::new(),
         }
+    }
+
+    /// Replaces the OpenAPI JSON path, the optional explorer, or turns both off.
+    pub fn openapi(mut self, options: OpenApiOptions) -> Self {
+        self.openapi = options;
+        self
+    }
+
+    pub fn without_openapi(mut self) -> Self {
+        self.openapi.enabled = false;
+        self
+    }
+
+    /// Documents one route that `urls` or `merge` already registered.
+    ///
+    /// A path that is not registered, including admin paths, is rejected when the
+    /// router is built.
+    pub fn document(mut self, operation: OpenApiOperation) -> Self {
+        self.openapi_operations.push(operation);
+        self
     }
 
     /// POST, PUT, PATCH and DELETE require a browser session cookie and its CSRF proof.
@@ -164,6 +193,17 @@ impl App {
         }
         self.remember(descriptor.table, descriptor.api_path, &detail_path);
         self.schemas.push((descriptor.table, M::columns()));
+        let access = if descriptor.allow_anonymous {
+            openapi::ModelAccess::Anonymous
+        } else if descriptor.requires_object_policy {
+            openapi::ModelAccess::PolicyUnbound
+        } else if let Some(permission) = descriptor.permission {
+            openapi::ModelAccess::Permission(permission)
+        } else {
+            openapi::ModelAccess::Denied
+        };
+        self.documented
+            .push(openapi::DocumentedModel::from_model::<M>(access));
     }
 
     /// Bindet eine Objektregel. Listen und Schreibzugriffe verwenden denselben Query-Scope.
@@ -199,6 +239,10 @@ impl App {
         );
         self.remember(descriptor.table, descriptor.api_path, &detail_path);
         self.schemas.push((descriptor.table, M::columns()));
+        self.documented
+            .push(openapi::DocumentedModel::from_model::<M>(
+                openapi::ModelAccess::Policy,
+            ));
     }
 
     fn remember(&mut self, table: &str, path: &str, detail: &str) {
@@ -258,6 +302,8 @@ impl App {
                     .as_ref()
                     .is_some_and(|settings| !settings.apps.is_empty()));
         let app = if needs_validation { self.seal()? } else { self };
+        openapi::check(&app)
+            .map_err(|detail| crate::apps::AppError::new("openapi.path", detail))?;
         Ok(app.finish_router())
     }
 
@@ -272,6 +318,8 @@ impl App {
     }
 
     fn finish_router(self) -> Router {
+        let specification = self.openapi.enabled.then(|| openapi::specification(&self));
+        let openapi_options = self.openapi.clone();
         let state = AppState {
             db: self.db,
             auth: self.auth,
@@ -306,6 +354,11 @@ impl App {
         }
         let mut catalog = self.catalog;
         catalog.set_routes(self.names.clone());
+        let router = if let Some(specification) = specification {
+            openapi::mount(router, specification, &openapi_options)
+        } else {
+            router
+        };
         let router = router.layer(axum::Extension(std::sync::Arc::new(catalog)));
         let router = router.layer(axum::Extension(std::sync::Arc::new(self.names)));
         if let Some(settings) = self.settings {

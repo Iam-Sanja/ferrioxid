@@ -4,7 +4,10 @@ extern crate self as ferrioxid;
 pub use async_trait;
 pub use chrono;
 pub use ferrioxid_admin as admin;
-pub use ferrioxid_api::{apps, pages, require_browser, urls, views, web, App};
+pub use ferrioxid_api::{
+    apps, openapi, pages, require_browser, testing, urls, views, web, App, OpenApiOperation,
+    OpenApiOptions,
+};
 pub use ferrioxid_auth as auth;
 pub use ferrioxid_core as core;
 pub use ferrioxid_db as db;
