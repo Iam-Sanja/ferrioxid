@@ -118,6 +118,8 @@ pub struct StaticMount {
 #[derive(Default)]
 pub struct TemplateCatalog {
     sites: BTreeMap<String, Site>,
+    exported: BTreeMap<String, Vec<(String, String)>>,
+    imported: BTreeMap<String, Vec<(String, String)>>,
 }
 
 impl TemplateCatalog {
@@ -252,12 +254,23 @@ impl<'a> Registration<'a> {
         directory: impl AsRef<Path>,
         mode: TemplateMode,
     ) -> Result<(), AppError> {
-        let files = collect_templates(
+        let mut files = collect_templates(
             self.name,
             directory.as_ref(),
             mode,
             self.app.settings.as_ref(),
         )?;
+        if let Some(imported) = self.app.catalog.imported.remove(self.name) {
+            for (name, body) in imported {
+                if files.iter().any(|(existing, _)| existing == &name) {
+                    return Err(AppError::new(
+                        "app.template.import",
+                        format!("`{name}` collides with a template of `{}`.", self.name),
+                    ));
+                }
+                files.push((name, body));
+            }
+        }
         let site = Site::from_named(&files, &self.app.names)
             .map_err(|error| AppError::new("app.template", error.to_string()))?;
         if self
