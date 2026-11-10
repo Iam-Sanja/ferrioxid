@@ -194,7 +194,8 @@ mod tests {
                     .rsplit_once('/')
                     .ok_or_else(|| "DATABASE_URL must include a database name.".to_owned())?;
                 let db_name = format!("ferrioxid_test_{}", uuid::Uuid::new_v4().simple());
-                let admin = ferrioxid_db::connect(base_url)
+                let admin_url = format!("{prefix}/template1");
+                let admin = ferrioxid_db::connect(&admin_url)
                     .await
                     .map_err(|error| error.to_string())?;
                 admin
@@ -207,7 +208,7 @@ mod tests {
                 Ok(Self {
                     url: format!("{prefix}/{db_name}"),
                     db_name,
-                    admin_url: base_url.to_owned(),
+                    admin_url,
                 })
             }
 
@@ -215,6 +216,16 @@ mod tests {
                 let admin = ferrioxid_db::connect(&self.admin_url)
                     .await
                     .map_err(|error| error.to_string())?;
+                let escaped = self.db_name.replace('\'', "''");
+                let _ = admin
+                    .execute(Statement::from_string(
+                        DatabaseBackend::Postgres,
+                        format!(
+                            "SELECT pg_terminate_backend(pid) FROM pg_stat_activity \
+                             WHERE datname = '{escaped}' AND pid <> pg_backend_pid()"
+                        ),
+                    ))
+                    .await;
                 admin
                     .execute(Statement::from_string(
                         DatabaseBackend::Postgres,
@@ -382,7 +393,10 @@ mod tests {
         };
         let bound = values
             .iter()
-            .map(|value| sea_orm::Value::Uuid(Some(Box::new(*value))))
+            .map(|value| match backend {
+                DatabaseBackend::Postgres => sea_orm::Value::Uuid(Some(Box::new(*value))),
+                _ => sea_orm::Value::String(Some(Box::new(value.to_string()))),
+            })
             .collect::<Vec<_>>();
         db.execute(Statement::from_sql_and_values(
             backend,
