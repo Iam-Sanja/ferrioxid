@@ -73,6 +73,8 @@ These commands were run on `feat/framework-completion` after the TestShop integr
 
 The SQLite constraint test now expects an `ON DELETE` change to be written as a reversible foreign-key replacement. That matches the down-migration behavior. TestShop `cargo test --test api_docs` passed against a database copy. `cargo test --workspace` for this OpenAPI and test-client change passed. Eleven PostgreSQL tests stayed ignored because `DATABASE_URL` was unset and nothing was listening on `127.0.0.1:5432`. They are not a pass.
 
+Shop findings F01–F13 are addressed on `feat/framework-completion` as features, diagnostics or documentation. PostgreSQL runtime tests stay `#[ignore]` until `DATABASE_URL` points at a disposable database whose name contains `ferrioxid_test`. An ignored test is not a pass. `QueryCounter` still does not observe direct SeaORM statements unless the caller uses `QueryCounter::record`.
+
 ## Limits that remain on purpose
 
 - A request with no session cookie is still a stateless write on `allow_anonymous` routes. Opt in with `require_browser` or `App::require_browser_writes` where the browser must prove a session.

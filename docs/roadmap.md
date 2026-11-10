@@ -165,4 +165,4 @@ Tested on 2026-11-07: Impeccable is below `.cursor/skills/impeccable/` and has b
 3. Bulk actions are POST, confirmation and a transaction. A denied line does not change a line.
 4. Model changes and their audit entry share a transaction. The history for Staff is limited to own events.
 
-Acceptance and limits are in [admin-ux-backlog.md](admin-ux-backlog.md).
+Acceptance and limits are in [admin-ux-backlog.md](admin-ux-backlog.md). The shop verification list for the local framework changes is [framework-shop-verification.md](framework-shop-verification.md).
