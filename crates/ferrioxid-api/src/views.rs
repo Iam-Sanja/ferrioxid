@@ -466,33 +466,37 @@ mod tests {
     #[tokio::test]
     async fn responses_keep_problem_json_and_escape_html() {
         let headers = axum::http::HeaderMap::new();
-        let response = validation(&headers, "name", "<script>");
+        let mut html_headers = axum::http::HeaderMap::new();
+        html_headers.insert("accept", "text/html".parse().unwrap());
+        let (response, page, hidden) = {
+            let _site = crate::pages::ERROR_SITE_TESTS.lock().unwrap();
+            let response = validation(&headers, "name", "<script>");
+            let page = fail(
+                &html_headers,
+                None,
+                StatusCode::NOT_FOUND,
+                "resource.not_found",
+                "<script>",
+                false,
+            );
+            let hidden = fail(
+                &headers,
+                None,
+                StatusCode::INTERNAL_SERVER_ERROR,
+                "server.error",
+                "password=super-secret-value",
+                true,
+            );
+            (response, page, hidden)
+        };
         assert_eq!(response.status(), StatusCode::UNPROCESSABLE_ENTITY);
         let bytes = response.into_body().collect().await.unwrap().to_bytes();
         let body = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(body.contains("validation.field"));
-        let mut html_headers = axum::http::HeaderMap::new();
-        html_headers.insert("accept", "text/html".parse().unwrap());
-        let page = fail(
-            &html_headers,
-            None,
-            StatusCode::NOT_FOUND,
-            "resource.not_found",
-            "<script>",
-            false,
-        );
         let bytes = page.into_body().collect().await.unwrap().to_bytes();
         let page = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(page.contains("&lt;script&gt;"));
         assert!(!page.contains("<script>"));
-        let hidden = fail(
-            &headers,
-            None,
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "server.error",
-            "password=super-secret-value",
-            true,
-        );
         let bytes = hidden.into_body().collect().await.unwrap().to_bytes();
         let hidden = String::from_utf8(bytes.to_vec()).unwrap();
         assert!(!hidden.contains("super-secret-value"));
@@ -625,28 +629,57 @@ mod tests {
             &crate::urls::RouteMap::default(),
         )
         .unwrap();
-        let _guard = crate::pages::install_error_site(
-            std::sync::Arc::new(site),
-            crate::pages::ErrorLabels {
-                app_name: "TestShop".into(),
-                project_name: "TestShop".into(),
-                site_title: "TestShop".into(),
-                primary_color: "#112233".into(),
-                admin: false,
-                debug: false,
-            },
-        );
         let mut headers = axum::http::HeaderMap::new();
         headers.insert("accept", "text/html".parse().unwrap());
         headers.insert("accept-language", "de".parse().unwrap());
-        let page = fail(
-            &headers,
-            None,
-            StatusCode::NOT_FOUND,
-            "resource.missing",
-            "gone",
-            false,
-        );
+        let (page, hidden, api, fallback) = {
+            let _site = crate::pages::ERROR_SITE_TESTS.lock().unwrap();
+            let _guard = crate::pages::install_error_site(
+                std::sync::Arc::new(site),
+                crate::pages::ErrorLabels {
+                    app_name: "TestShop".into(),
+                    project_name: "TestShop".into(),
+                    site_title: "TestShop".into(),
+                    primary_color: "#112233".into(),
+                    admin: false,
+                    debug: false,
+                },
+            );
+            (
+                fail(
+                    &headers,
+                    None,
+                    StatusCode::NOT_FOUND,
+                    "resource.missing",
+                    "gone",
+                    false,
+                ),
+                fail(
+                    &headers,
+                    None,
+                    StatusCode::INTERNAL_SERVER_ERROR,
+                    "server.error",
+                    "SELECT id FROM notes",
+                    false,
+                ),
+                fail(
+                    &axum::http::HeaderMap::new(),
+                    None,
+                    StatusCode::NOT_FOUND,
+                    "resource.missing",
+                    "gone",
+                    false,
+                ),
+                fail(
+                    &headers,
+                    None,
+                    StatusCode::FORBIDDEN,
+                    "auth.forbidden",
+                    "no",
+                    false,
+                ),
+            )
+        };
         let body = String::from_utf8(
             page.into_body()
                 .collect()
@@ -659,14 +692,6 @@ mod tests {
         assert!(body.contains("PROJECT-404"), "{body}");
         assert!(body.contains("Diese Seite existiert nicht."), "{body}");
         assert!(body.contains("TestShop"), "{body}");
-        let hidden = fail(
-            &headers,
-            None,
-            StatusCode::INTERNAL_SERVER_ERROR,
-            "server.error",
-            "SELECT id FROM notes",
-            false,
-        );
         let hidden_body = String::from_utf8(
             hidden
                 .into_body()
@@ -683,14 +708,6 @@ mod tests {
             "{hidden_body}"
         );
         assert!(!hidden_body.contains("SELECT"), "{hidden_body}");
-        let api = fail(
-            &axum::http::HeaderMap::new(),
-            None,
-            StatusCode::NOT_FOUND,
-            "resource.missing",
-            "gone",
-            false,
-        );
         assert!(api
             .headers()
             .get(CONTENT_TYPE)
@@ -701,14 +718,6 @@ mod tests {
             String::from_utf8(api.into_body().collect().await.unwrap().to_bytes().to_vec())
                 .unwrap();
         assert!(!api_body.contains("PROJECT-404"), "{api_body}");
-        let fallback = fail(
-            &headers,
-            None,
-            StatusCode::FORBIDDEN,
-            "auth.forbidden",
-            "no",
-            false,
-        );
         let fallback_body = String::from_utf8(
             fallback
                 .into_body()

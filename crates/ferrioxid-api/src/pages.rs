@@ -250,6 +250,9 @@ struct InstalledErrors {
 
 static INSTALLED_ERRORS: std::sync::Mutex<Option<InstalledErrors>> = std::sync::Mutex::new(None);
 
+/// Serializes tests that read or replace the process-wide error site.
+pub static ERROR_SITE_TESTS: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
 /// Projektfehlerseiten für `views::fail`, wenn der Aufrufer kein `Site` übergibt.
 /// Der Rückgabewert stellt den vorherigen Stand wieder her.
 pub struct ErrorSiteGuard {
