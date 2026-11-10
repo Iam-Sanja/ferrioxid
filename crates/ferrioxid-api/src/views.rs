@@ -263,6 +263,15 @@ fn respond(
                     status.as_u16(),
                 )
             })
+            .or_else(|| {
+                crate::pages::render_installed_status(
+                    template_name(status),
+                    locale,
+                    title,
+                    &shown,
+                    status.as_u16(),
+                )
+            })
             .unwrap_or_else(|| {
                 format!(
                     "<!DOCTYPE html><html lang=\"{locale}\"><head><meta charset=\"utf-8\"><title>{}</title></head><body><h1>{}</h1><p>{}</p></body></html>",
@@ -597,5 +606,120 @@ mod tests {
             .and_then(|value| value.to_str().ok())
             .unwrap_or("")
             .contains("application/json"));
+    }
+
+    #[tokio::test]
+    async fn fail_renders_the_installed_project_template() {
+        use axum::http::header::CONTENT_TYPE;
+        let site = crate::pages::Site::from_named(
+            &[
+                (
+                    "errors/404.html".to_owned(),
+                    "<p>PROJECT-404 {{ not_found }} {{ app_name }}</p>".to_owned(),
+                ),
+                (
+                    "errors/500.html".to_owned(),
+                    "<p>PROJECT-500 {{ detail }}</p>".to_owned(),
+                ),
+            ],
+            &crate::urls::RouteMap::default(),
+        )
+        .unwrap();
+        let _guard = crate::pages::install_error_site(
+            std::sync::Arc::new(site),
+            crate::pages::ErrorLabels {
+                app_name: "TestShop".into(),
+                project_name: "TestShop".into(),
+                site_title: "TestShop".into(),
+                primary_color: "#112233".into(),
+                admin: false,
+                debug: false,
+            },
+        );
+        let mut headers = axum::http::HeaderMap::new();
+        headers.insert("accept", "text/html".parse().unwrap());
+        headers.insert("accept-language", "de".parse().unwrap());
+        let page = fail(
+            &headers,
+            None,
+            StatusCode::NOT_FOUND,
+            "resource.missing",
+            "gone",
+            false,
+        );
+        let body = String::from_utf8(
+            page.into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(body.contains("PROJECT-404"), "{body}");
+        assert!(body.contains("Diese Seite existiert nicht."), "{body}");
+        assert!(body.contains("TestShop"), "{body}");
+        let hidden = fail(
+            &headers,
+            None,
+            StatusCode::INTERNAL_SERVER_ERROR,
+            "server.error",
+            "SELECT id FROM notes",
+            false,
+        );
+        let hidden_body = String::from_utf8(
+            hidden
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(hidden_body.contains("PROJECT-500"), "{hidden_body}");
+        assert!(
+            hidden_body.contains("Internal server error"),
+            "{hidden_body}"
+        );
+        assert!(!hidden_body.contains("SELECT"), "{hidden_body}");
+        let api = fail(
+            &axum::http::HeaderMap::new(),
+            None,
+            StatusCode::NOT_FOUND,
+            "resource.missing",
+            "gone",
+            false,
+        );
+        assert!(api
+            .headers()
+            .get(CONTENT_TYPE)
+            .and_then(|value| value.to_str().ok())
+            .unwrap_or("")
+            .contains("application/json"));
+        let api_body =
+            String::from_utf8(api.into_body().collect().await.unwrap().to_bytes().to_vec())
+                .unwrap();
+        assert!(!api_body.contains("PROJECT-404"), "{api_body}");
+        let fallback = fail(
+            &headers,
+            None,
+            StatusCode::FORBIDDEN,
+            "auth.forbidden",
+            "no",
+            false,
+        );
+        let fallback_body = String::from_utf8(
+            fallback
+                .into_body()
+                .collect()
+                .await
+                .unwrap()
+                .to_bytes()
+                .to_vec(),
+        )
+        .unwrap();
+        assert!(fallback_body.contains("<h1>"), "{fallback_body}");
+        assert!(!fallback_body.contains("PROJECT-404"), "{fallback_body}");
     }
 }
