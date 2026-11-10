@@ -48,6 +48,10 @@ OAuth, MFA and JWT for external APIs remain unimplemented; password reset is ava
 
 **Note:** `SECURITY.md` in the repository currently contains only a brief project information, not an established vulnerability disclosure process. It must be maintained for public releases.
 
+`FerrioxidError::Database` displays `database operation failed`. `ferrioxid_core::diagnostic_chain` joins the source chain for server logs and redacts values after `password=`, `secret=`, `token=`, `csrf_token=`, `ferrioxid_session=` and `ferrioxid_anonymous=`. Do not send that string to the browser.
+
+An invalid user cookie on an unsafe browser POST is not replaced by an anonymous session. Clear the cookie, call `ensure_anonymous_session` on the next GET, and post the new anonymous CSRF. The executable example is `browser_login_flow_exposes_cookies_and_rejects_bad_sessions`.
+
 ## Admin
 
 The admin checks session, active user, staff, model right, object rule and write access CSRF. Path parameters are not unchecked to SQL identifiers. Sorting, searching and filtering are whitelists. Details and known limits are given in [admin-security.md](admin-security.md).

@@ -289,6 +289,63 @@ impl FerrioxidError {
     }
 }
 
+/// Joins `Display` and `source` for server logs.
+///
+/// The result can contain SQL text from a database driver. Do not write it to
+/// an HTTP response. Values that follow `password`, `secret`, `token`,
+/// `csrf_token` or a Ferrioxid session cookie name are replaced.
+pub fn diagnostic_chain(error: &dyn std::error::Error) -> String {
+    let mut parts = Vec::new();
+    let mut current = Some(error);
+    let mut depth = 0;
+    while let Some(item) = current {
+        if depth == 8 {
+            break;
+        }
+        parts.push(redact_secrets(&item.to_string()));
+        current = item.source();
+        depth += 1;
+    }
+    parts.join(" | ")
+}
+
+fn redact_secrets(text: &str) -> String {
+    let lower = text.to_ascii_lowercase();
+    let mut result = String::with_capacity(text.len());
+    let mut cursor = 0;
+    while cursor < text.len() {
+        if let Some((key_len, value_end)) = secret_at(&lower, cursor) {
+            result.push_str(&text[cursor..cursor + key_len]);
+            result.push_str("[redacted]");
+            cursor = value_end;
+            continue;
+        }
+        let next = text[cursor..].chars().next().unwrap_or('\u{FFFD}');
+        result.push(next);
+        cursor += next.len_utf8();
+    }
+    result
+}
+
+fn secret_at(lower: &str, index: usize) -> Option<(usize, usize)> {
+    const KEYS: [&str; 6] = [
+        "password=",
+        "secret=",
+        "token=",
+        "csrf_token=",
+        "ferrioxid_session=",
+        "ferrioxid_anonymous=",
+    ];
+    let rest = lower.get(index..)?;
+    let key = KEYS.iter().copied().find(|key| rest.starts_with(key))?;
+    let mut end = index + key.len();
+    let bytes = lower.as_bytes();
+    while end < bytes.len() && !matches!(bytes[end], b' ' | b'\n' | b'\r' | b'\t' | b'&' | b';') {
+        end += 1;
+    }
+    Some((key.len(), end))
+}
+
 /// Modelle mit den beiden verwalteten Zeitstempeln.
 pub trait HasTimestamps {
     fn created_at(&self) -> chrono::DateTime<chrono::Utc>;
@@ -354,5 +411,25 @@ pub fn check_email(field: &str, value: &str) -> Result<(), FerrioxidError> {
         Err(FerrioxidError::Validation(format!(
             "field:{field}: validation.email"
         )))
+    }
+}
+
+#[cfg(test)]
+mod diagnostic_tests {
+    use super::{diagnostic_chain, FerrioxidError};
+
+    #[test]
+    fn database_display_hides_the_source_and_the_chain_redacts_secrets() {
+        let error = FerrioxidError::database(std::io::Error::other(
+            "password=hunter2 csrf_token=abc123 near users",
+        ));
+        assert_eq!(error.to_string(), "database operation failed");
+        assert!(!error.to_string().contains("hunter2"));
+        let chain = diagnostic_chain(&error);
+        assert!(chain.contains("database operation failed"));
+        assert!(chain.contains("password=[redacted]"));
+        assert!(chain.contains("csrf_token=[redacted]"));
+        assert!(!chain.contains("hunter2"));
+        assert!(!chain.contains("abc123"));
     }
 }
