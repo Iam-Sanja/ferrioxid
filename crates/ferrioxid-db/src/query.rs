@@ -201,10 +201,12 @@ impl Column {
         self.text_match(TextPosition::EndsWith, false, value.into())
     }
 
-    /// Case-insensitive substring match via `LOWER(column) LIKE LOWER(?) ESCAPE`.
+    /// Case-insensitive substring match via `LOWER(column) LIKE … ESCAPE '\'`.
     ///
-    /// SQLite `LOWER` folds ASCII only. PostgreSQL uses the database's `LOWER`.
-    /// This is not Unicode casefolding. `%`, `_` and `\` are escaped and bound.
+    /// The pattern is folded in Rust before binding: [`fold_case_insensitive_pattern`]
+    /// uses ASCII lowercasing on SQLite and full Unicode lowercasing on PostgreSQL,
+    /// matching each backend's `LOWER(column)` behaviour. This is not Unicode
+    /// casefolding. `%`, `_` and `\` in the term are escaped and bound.
     pub fn contains_ignore_case(self, value: impl Into<String>) -> Predicate {
         self.text_match(TextPosition::Contains, true, value.into())
     }
@@ -1066,9 +1068,10 @@ fn text_match_expr(
             TextPosition::StartsWith => format!("{}%", escape_like(value)),
             TextPosition::EndsWith => format!("%{}", escape_like(value)),
         };
+        let folded = fold_case_insensitive_pattern(pattern, backend);
         return Ok(Some(
             Expr::expr(Func::cust("LOWER").arg(column_expr))
-                .like(LikeExpr::new(pattern.to_lowercase()).escape('\\')),
+                .like(LikeExpr::new(folded).escape('\\')),
         ));
     }
     let expr = match backend {
@@ -1093,6 +1096,18 @@ fn text_match_expr(
         }
     };
     Ok(Some(expr))
+}
+
+/// Folds a LIKE pattern so it matches `LOWER(column)` on the active backend.
+///
+/// SQLite `LOWER` affects ASCII letters only, so the pattern uses
+/// [`str::to_ascii_lowercase`]. PostgreSQL follows `LOWER` with locale-aware
+/// Unicode rules, so the pattern uses [`str::to_lowercase`].
+fn fold_case_insensitive_pattern(pattern: String, backend: DatabaseBackend) -> String {
+    match backend {
+        DatabaseBackend::Sqlite => pattern.to_ascii_lowercase(),
+        DatabaseBackend::Postgres | DatabaseBackend::MySql => pattern.to_lowercase(),
+    }
 }
 
 fn escape_glob(term: &str) -> String {
@@ -3108,6 +3123,19 @@ mod tests {
     }
 
     #[test]
+    fn fold_case_insensitive_pattern_matches_backend_lower_rules() {
+        let pattern = format!("%{}%", escape_like("MÜNCHEN"));
+        assert_eq!(
+            super::fold_case_insensitive_pattern(pattern.clone(), DatabaseBackend::Sqlite),
+            "%mÜnchen%"
+        );
+        assert_eq!(
+            super::fold_case_insensitive_pattern(pattern, DatabaseBackend::Postgres),
+            "%münchen%"
+        );
+    }
+
+    #[test]
     fn text_search_sql_is_bound_and_backend_specific() {
         let select = Item::query().filter(col("name").contains("%_injection"));
         let sqlite = select.statement_for(DatabaseBackend::Sqlite).unwrap();
@@ -3439,13 +3467,36 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(unicode, 1);
-        if db.get_database_backend() == DatabaseBackend::Sqlite {
-            let folded = Item::query()
-                .filter(col("name").contains_ignore_case("MÜNCHEN"))
-                .count(db)
-                .await
-                .unwrap();
-            assert_eq!(folded, 0);
+        match db.get_database_backend() {
+            DatabaseBackend::Sqlite => {
+                let folded = Item::query()
+                    .filter(col("name").contains_ignore_case("MÜNCHEN"))
+                    .count(db)
+                    .await
+                    .unwrap();
+                assert_eq!(folded, 0, "SQLite LOWER folds ASCII only");
+                let ascii = Item::query()
+                    .filter(col("name").contains_ignore_case("Münch"))
+                    .count(db)
+                    .await
+                    .unwrap();
+                assert_eq!(ascii, 1, "ASCII letters still match on SQLite");
+            }
+            DatabaseBackend::Postgres => {
+                let folded = Item::query()
+                    .filter(col("name").contains_ignore_case("münchen"))
+                    .count(db)
+                    .await
+                    .unwrap();
+                assert_eq!(folded, 1, "PostgreSQL LOWER folds Unicode letters");
+                let upper_term = Item::query()
+                    .filter(col("name").contains_ignore_case("MÜNCHEN"))
+                    .count(db)
+                    .await
+                    .unwrap();
+                assert_eq!(upper_term, 1, "Unicode upper search term matches München");
+            }
+            DatabaseBackend::MySql => {}
         }
         let combined = Item::query()
             .filter(col("name").contains_ignore_case("beta"))
