@@ -190,6 +190,12 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 
 `cargo test --workspace` runs `sqlite_http_roundtrip` against `sqlite::memory:` without changing `db.sqlite3`. `postgres_http_roundtrip` remains `#[ignore]` and requires `DATABASE_URL` plus a running PostgreSQL server. `.github/workflows/ci.yml` provides a separate PostgreSQL job for the ignored tests; a local workspace test run does not start that server. See [testing.md](testing.md).
 
+## UUID parameters
+
+`render_schema` stores a Ferrioxid UUID as SQLite `TEXT` and PostgreSQL `UUID`. Do not change that. A column that an application created as `BLOB` is different: `sea_orm::Value::Uuid` matches the bytes SQLite stored for a typed UUID, while `Value::String` of the hyphenated text does not. `Statement::from_sql_and_values` with `Value::Uuid` is the raw-SQL form. Prefer `Item::query()` so the column type comes from the model. `sqlite_uuid_text_does_not_match_a_blob_parameter` demonstrates the mismatch. Case-insensitive text search uses `LOWER`, which on SQLite folds ASCII only; `München` does not match `MÜNCHEN` there.
+
+`QueryCounter` counts model queries on the current thread. Call `QueryCounter::record` after a direct statement you want included. Direct SeaORM calls and failed direct statements stay uncounted. Independent threads do not share the counter.
+
 ## Admin lists
 
 `query_admin_page` in `crates/ferrioxid-db/src/sql.rs` uses the same SeaQuery layer. Column names come from the descriptor, values are parameters. The search is `LIKE` with `ESCAPE` and runs under SQLite. PostgreSQL gets the same expression, no dialect-specific input from the interface. The public list limit remains 100. The admin page is at most 100 lines, plus one line to detect `has_more`.

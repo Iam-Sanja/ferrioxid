@@ -1776,8 +1776,11 @@ thread_local! {
 
 /// Counts model statements on this thread while it is alive.
 ///
-/// Library unit tests already count. Application tests call [`QueryCounter::install`]
-/// because a dependency is not built with `cfg(test)`.
+/// `all`, `count`, `exists`, `page`, `keyset`, aggregates and the batch loaders
+/// call [`QueryCounter::record`] for their own statements. A direct
+/// `ConnectionTrait` query does not. Install the counter in application tests;
+/// library unit tests already count. The value is thread-local and is not a
+/// pool-wide total.
 pub struct QueryCounter {
     previous: bool,
 }
@@ -1795,6 +1798,14 @@ impl QueryCounter {
 
     pub fn get() -> usize {
         STATEMENT_COUNT.with(|count| count.get())
+    }
+
+    /// Counts one statement the caller executed outside the model query API.
+    ///
+    /// Direct `ConnectionTrait` calls are not observed. This does not make the
+    /// counter a complete trace of every SQL statement on the connection.
+    pub fn record() {
+        note_statement();
     }
 }
 
@@ -3382,6 +3393,62 @@ mod tests {
             .await
             .unwrap();
         assert_eq!(not_food, 4);
+        let empty = Item::query()
+            .filter(col("name").contains("missing-term"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(empty, 0);
+        let prefixed = Item::query()
+            .filter(col("name").starts_with_ignore_case("100%"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(prefixed, 1);
+        let suffixed = Item::query()
+            .filter(col("name").ends_with_ignore_case("off"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(suffixed, 2);
+        insert(
+            db,
+            NewItem {
+                id: 6,
+                name: "München",
+                stock: 1,
+                active: true,
+                price: 6,
+                category: Some(50),
+                owner: 7,
+            },
+        )
+        .await;
+        let unicode = Item::query()
+            .filter(col("name").contains("Münch"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(unicode, 1);
+        if db.get_database_backend() == DatabaseBackend::Sqlite {
+            let folded = Item::query()
+                .filter(col("name").contains_ignore_case("MÜNCHEN"))
+                .count(db)
+                .await
+                .unwrap();
+            assert_eq!(folded, 0);
+        }
+        let combined = Item::query()
+            .filter(col("name").contains_ignore_case("beta"))
+            .where_related(
+                "category_id",
+                Related::<Category>::new().filter(col("name").eq("Tools")),
+            )
+            .limit(10)
+            .page(db)
+            .await
+            .unwrap();
+        assert_eq!(combined.total, 1);
 
         let missing = Item::query()
             .where_related("name", Related::<Category>::new())
@@ -3389,6 +3456,92 @@ mod tests {
             .await
             .unwrap_err();
         assert!(missing.to_string().contains("not a foreign key"));
+    }
+
+    #[tokio::test]
+    async fn query_counter_does_not_see_direct_statements_or_other_threads() {
+        let db = memory().await;
+        let _counter = QueryCounter::install();
+        let before = QueryCounter::get();
+        let counted = Item::query().count(&db).await.unwrap();
+        assert_eq!(counted, 0);
+        assert!(QueryCounter::get() > before);
+        let after_model = QueryCounter::get();
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "SELECT 1".to_owned(),
+        ))
+        .await
+        .unwrap();
+        assert_eq!(QueryCounter::get(), after_model);
+        let transaction = db.begin().await.unwrap();
+        transaction
+            .execute(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                "SELECT 1".to_owned(),
+            ))
+            .await
+            .unwrap();
+        transaction.rollback().await.unwrap();
+        assert_eq!(QueryCounter::get(), after_model);
+        let before = after_model;
+        let failed = db
+            .execute(Statement::from_string(
+                DatabaseBackend::Sqlite,
+                "SELECT nope".to_owned(),
+            ))
+            .await;
+        assert!(failed.is_err());
+        assert_eq!(QueryCounter::get(), before);
+        QueryCounter::record();
+        assert_eq!(QueryCounter::get(), before + 1);
+        let main = QueryCounter::get();
+        let other = std::thread::spawn(|| {
+            let _counter = QueryCounter::install();
+            QueryCounter::record();
+            QueryCounter::get()
+        })
+        .join()
+        .unwrap();
+        assert_eq!(other, 1);
+        assert_eq!(QueryCounter::get(), main);
+    }
+
+    #[tokio::test]
+    async fn sqlite_uuid_text_does_not_match_a_blob_parameter() {
+        let db = connect("sqlite::memory:").await.unwrap();
+        db.execute(Statement::from_string(
+            DatabaseBackend::Sqlite,
+            "CREATE TABLE ferrioxid_uuid_probe (id blob PRIMARY KEY NOT NULL)".to_owned(),
+        ))
+        .await
+        .unwrap();
+        let id = Uuid::from_u128(7);
+        db.execute(Statement::from_sql_and_values(
+            DatabaseBackend::Sqlite,
+            "INSERT INTO ferrioxid_uuid_probe (id) VALUES (?)",
+            [Value::Uuid(Some(Box::new(id)))],
+        ))
+        .await
+        .unwrap();
+        let typed = db
+            .query_one(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "SELECT id FROM ferrioxid_uuid_probe WHERE id = ?",
+                [Value::Uuid(Some(Box::new(id)))],
+            ))
+            .await
+            .unwrap();
+        assert!(typed.is_some());
+        let text = db
+            .query_one(Statement::from_sql_and_values(
+                DatabaseBackend::Sqlite,
+                "SELECT id FROM ferrioxid_uuid_probe WHERE id = ?",
+                [Value::String(Some(Box::new(id.to_string())))],
+            ))
+            .await
+            .unwrap();
+        assert!(text.is_none());
     }
 
     fn uuid_value(id: u128) -> Value {
