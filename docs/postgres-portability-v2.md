@@ -169,18 +169,40 @@ Lokal ausgeführte SQLite- und Typprüfungen:
 - PostgreSQL-Parameter sind `ChronoDate` und `ChronoDateTimeUtc`. SQLite-Datum bleibt `YYYY-MM-DD`.
 - Fixture: ungültiges Datum vor dem Schreiben, SQLite-Dump, erneutes Laden, kanonische Werte einschließlich Decimal, UUID und Fremdschlüssel.
 
-Am 2026-11-11 auf diesem Arbeitsstand, ohne gesetzte `DATABASE_URL`:
+Am 2026-11-11 ohne gesetzte `DATABASE_URL`:
 
 - `cargo fmt --all -- --check` bestanden.
 - `cargo clippy --workspace --all-targets -- -D warnings` bestanden. Die bestehende Meldung `linker_messages` in `ferrioxid-macros` bleibt eine Warnung und ist kein Fehler.
-- `cargo test --workspace -- --test-threads=8` bestanden, 0 fehlgeschlagen, 16 ignoriert. Die neuen SQLite- und Typprüfungen in diesem Lauf sind bestanden: Admin-Suche, temporale Filter und Keyset, Fixture-Roundtrip, Ablehnung einer nicht freigegebenen Admin-Datenbank.
+- `cargo test --workspace -- --test-threads=8` bestanden, 0 fehlgeschlagen, 16 ignoriert. Die neuen SQLite- und Typprüfungen in diesem Lauf sind bestanden.
 - `cargo build --workspace` bestanden.
 
-PostgreSQL 18.6 wurde nicht ausgeführt. `127.0.0.1:5432` war geschlossen, `DATABASE_URL` war nicht gesetzt, und es war kein PostgreSQL-Dienst sowie kein `psql` oder `postgres` im `PATH`. Die ignorierten PostgreSQL-Tests gelten dadurch nicht als bestanden. PostgreSQL 16 in GitHub-CI ist in der Workflow-Datei ergänzt, aber nicht gelaufen, weil dieser Branch nicht gepusht wird.
+Danach lief PostgreSQL 18.6 lokal über `pg_ctl`, nur auf `127.0.0.1:5432`. Es ist kein Windows-Dienst. Die Rolle `ferrioxid` hatte kein `CREATEDB`; das Attribut wurde für diese lokale Testrolle gesetzt, nicht `SUPERUSER`. Die bestehenden Datenbanken `ferrioxid` und `ferrioxid_migrations_down_test` wurden nicht als Schreibziel verwendet. Neue Laufzeittests legen `ferrioxid_test_<32 hex>` an und löschen nur diesen Namen. Die ältere CI-Reihe lief gegen drei leere Datenbanken derselben Form. Diese drei Datenbanken wurden nach dem Lauf gelöscht. Die Tabellenlisten der beiden bestehenden Datenbanken waren danach unverändert, und keine `ferrioxid_test_*`-Datenbank blieb übrig.
+
+Auf PostgreSQL 18.6 bestanden:
+
+- `postgres_admin_search_runtime`
+- `postgres_temporal_filters_and_keyset`
+- `fixtures::tests::postgres_temporal_fixture_roundtrip`
+- `testing::tests::postgres_isolated_databases_do_not_share_rows`
+- `postgres_http_roundtrip`
+- `postgres_migration_roundtrip`
+- `postgres_enforces_cross_app_foreign_keys`
+- `postgres_anonymous_session_roundtrip`
+- `postgres_decimal_and_choice_roundtrip`
+- `fixtures::tests::postgres_fixture_roundtrip`
+- `down::tests::postgres_reverts_backfill_and_foreign_key`
+- `postgres_filters_and_pages_runtime`
+- `postgres_transaction_query_and_rollback_runtime`
+- `postgres_keyset_annotations_and_many_to_many`
+- `postgres_text_search_relations_count_and_pages`
+- `fresh_postgres_initializes_auth_jobs_and_application`
+
+PostgreSQL 16 in GitHub-CI ist in der Workflow-Datei ergänzt, aber nicht gelaufen, weil dieser Branch nicht gepusht wird. Ein grüner Workspace-Lauf ohne `--ignored` führt diese Tests weiterhin nicht aus.
 
 ## Verbleibende Einschränkungen
 
-- Die Admin-Suche und die Modellsuche falten Großschreibung unterschiedlich je Backend. Deutsche Produktnamen mit `Ü` brauchen einen ausdrücklichen Treffertest auf beiden Servern.
+- Die Admin-Suche faltet Großschreibung je Backend unterschiedlich. Auf diesem PostgreSQL-18.6-Cluster hat `MÜNCHEN` die Zeile `München` getroffen. Das bleibt von der Datenbank-Locale abhängig und ist keine Zusage für jeden PostgreSQL-16-CI-Lauf.
+- `DisposablePostgres` löscht nur `ferrioxid_test_` plus 32 Hexzeichen. Ein Panic vor `drop_database` lässt diese Datenbank stehen. Der Pool wird vor dem Löschen geschlossen; `DROP DATABASE … WITH (FORCE)` hat auf PostgreSQL 18.6 für den Besitzer mit `CREATEDB` funktioniert.
 - SQLite speichert Zeitpunkte als Text mit `+00:00`. Vergleiche laufen über den Treibertext, nicht über eine native Uhr.
 - `TestDatabase::postgres` isoliert Tests weiterhin nicht.
 - `postgres_isolated` braucht `CREATEDB`. Ohne dieses Recht legt der Test keine Ersatzdatenbank in einer fremden Datenbank an.
