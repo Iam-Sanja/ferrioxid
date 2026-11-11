@@ -22,7 +22,7 @@ Die Tabelle beschreibt die öffentliche Ferrioxid-API für gewöhnliche Modellop
 | Atomares `increment` und `decrement` | Vollständig für Ganzzahlspalten. Betrag größer als null. Überlauf, Unterlauf und Modellgrenzen ändern die Zeile nicht. | Ja | Ja |
 | Multiplikation und Division | Nicht unterstützt | Nein | Nein |
 | Transaktion und Rollback | Vollständig über `begin`, `commit` und `rollback` | Ja | Ja |
-| Zeilensperre | Teilweise und nicht gleichbedeutend. PostgreSQL: `SELECT … FOR UPDATE` auf getroffene Zeilen. SQLite: dieselbe Bedingung schreibt den Primärschlüssel auf sich selbst. Null Zeilen reservieren nichts. | Ja, Schreibsperre | Ja, `FOR UPDATE` |
+| Zeilensperre | Teilweise und nicht gleichbedeutend. PostgreSQL: `SELECT … FOR UPDATE` auf getroffene Zeilen. SQLite: datenbankweite Schreibreservierung durch eine `UPDATE`-Anweisung ohne getroffene Zeile. Trigger und `ON UPDATE CASCADE` laufen dafür nicht. Null Zeilen reservieren nichts. | Ja, dateiweite Schreibsperre | Ja, zeilenweise `FOR UPDATE` |
 | Erstanlage gegen Doppelanlage | Vollständig nur mit echtem Unique-Constraint. Ein vorheriges Lesen genügt nicht. `on_conflict_do_nothing` lässt die vorhandene Zeile stehen. | Ja | Ja |
 | Upsert mit Überschreiben | Nicht unterstützt | Nein | Nein |
 | `rows_affected` | Vollständig bei Insert, Update und Delete dieser API | Ja | Ja |

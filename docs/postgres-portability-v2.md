@@ -121,9 +121,11 @@ Product::query()
 
 `update_matching` und `delete_matching` lehnen eine Abfrage ohne Filter, Relationsprädikat oder einschränkenden Scope ab. `update_all` und `delete_all` sind die ausdrückliche Form. `QueryScope::None` trifft weiterhin nichts. Das Seitenlimit von 100 begrenzt diese Schreibanweisungen nicht. Spaltennamen kommen aus dem Modell. Werte sind gebundene Parameter.
 
-Diese Sammelwege prüfen Spalte und Typ. Sie führen die Feldregeln von `create`, `update` und `delete` nicht aus. Eine E-Mail- oder Längenregel eines Einzelupdates gilt hier nicht automatisch.
+Diese Sammelwege prüfen Spalte und Typ. Eine E-Mail- oder Längenregel eines Einzelupdates gilt hier nicht automatisch.
 
-`lock_existing` verlangt eine offene `DatabaseTransaction`. PostgreSQL erzeugt `SELECT … FOR UPDATE` für die getroffenen Zeilen. SQLite kennt diese Anweisung nicht. Dort schreibt dieselbe Bedingung den Primärschlüssel auf sich selbst und nimmt damit die Schreibsperre, die SQLite anbietet. Null Zeilen legen nichts an und reservieren keine noch nicht vorhandene Zeile. Zwei gleichzeitige Erstanlagen brauchen einen echten Unique-Constraint. `on_conflict_do_nothing` ignoriert genau diesen Konflikt und überschreibt die vorhandene Zeile nicht. Ein Überschreiben bei Konflikt gibt es nicht.
+`lock_existing` verlangt eine offene `DatabaseTransaction`. PostgreSQL erzeugt `SELECT … FOR UPDATE` für die getroffenen Zeilen. SQLite kennt diese Anweisung nicht. Dort nimmt eine `UPDATE`-Anweisung ohne getroffene Zeile die datenbankweite Schreibreservierung bis `COMMIT` oder `ROLLBACK`. Gespeicherte Werte bleiben stehen, deshalb laufen `AFTER UPDATE`-Trigger und `ON UPDATE CASCADE` nicht. Eine andere Schreibverbindung auf dieselbe Datei wartet, auch wenn sie eine andere Zeile ändern will. Null Zeilen legen nichts an und reservieren keine noch nicht vorhandene Zeile. Zwei gleichzeitige Erstanlagen brauchen einen echten Unique-Constraint. `on_conflict_do_nothing` ignoriert genau diesen Konflikt und überschreibt die vorhandene Zeile nicht. Ein Überschreiben bei Konflikt gibt es nicht.
+
+`update_all` und `delete_all` entfernen einen gesetzten `QueryScope` nicht. `QueryScope::All` ist die ausdrückliche Anfrage für alle Zeilen. Die Spalte eines `QueryScope::Equals` kann der Sammelupdate nicht ändern. Ein Sammelupdate ist nicht `ModelRepository::update`. Spalten mit `in_update = false` werden abgelehnt. Textlänge, E-Mail und Slug werden nicht geprüft. Deklarierte Zahlengrenzen gelten für `set`, `increment` und `decrement`.
 
 PostgreSQL meldet `ON DELETE RESTRICT` als SQLSTATE 23001. Das Framework ordnet 23001 derselben Validierung zu wie eine Fremdschlüsselverletzung. SQLite verwendet für denselben Fall den festen Text `FOREIGN KEY constraint failed`.
 
@@ -152,6 +154,7 @@ Die neuen PostgreSQL-Tests sind `#[ignore]`. Ein ignorierter Lauf zählt nicht a
 - `fixtures::tests::postgres_temporal_fixture_roundtrip`
 - `testing::tests::postgres_isolated_databases_do_not_share_rows`
 - `write::tests::postgres_shop_cases`
+- `write::tests::postgres_write_security`
 - `desk` `postgres_same_operations`
 
 Lokal ausgeführte SQLite- und Typprüfungen:
@@ -185,6 +188,7 @@ Auf PostgreSQL 18.6 bestanden:
 - `fixtures::tests::postgres_temporal_fixture_roundtrip`
 - `testing::tests::postgres_isolated_databases_do_not_share_rows`
 - `write::tests::postgres_shop_cases`
+- `write::tests::postgres_write_security`
 - `desk` `postgres_same_operations`
 - `postgres_http_roundtrip`
 - `postgres_migration_roundtrip`
