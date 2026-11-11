@@ -11,7 +11,7 @@ Dieser Bericht prüft die Framework-Feststellungen aus `FERRIOXID_PROBLEME_V2.md
 | V2-06 | Vorhanden | `constrain` in `crates/ferrioxid-db/src/sql.rs` | `contains_ignore_case` baut `LOWER(spalte) LIKE` mit `LikeExpr` und backendabhängigem Platzhalter | Dieselbe Ausdrucksform für die Admin-Suche |
 | V2-07 | Vorhanden | `bind_for_column`, `seek_expr`, `cursor_value` in `crates/ferrioxid-db/src/query.rs` | `ferrioxid_core::parse_date`, `parse_time`, `parse_datetime_utc`; Modell-Inserts binden Chrono-Werte | Gemeinsamer Binder für Filter, Relationen und Keyset |
 | V2-08 | Vorhanden | `bind_value`, `read_cell` in `crates/ferrioxid-migrations/src/fixtures.rs` | Dieselben Parser; `json_temporal` liest native Typen bereits | JSON bleibt ISO, die Datenbankgrenze bindet und liest typisiert |
-| V2-09 | Grenze, nicht als kleiner Patch umgesetzt | `ModelRepository` in `crates/ferrioxid-db/src/lib.rs` | `update_tx` / `delete_tx` pro Primärschlüssel, `delete_record` liefert `rows_affected`, SeaORM kann Ausdrücke und `LockType` | Separat planen, siehe unten |
+| V2-09 | Öffentliche Schreib-API in `crates/ferrioxid-db/src/write.rs` | `Select` und `ModelQuery` | Einzelzeile über `ModelRepository`, `rows_affected` bei `delete_record` | Gefiltertes Update und Delete, atomare Ganzzahl, Sperre, `on_conflict_do_nothing` |
 | V2-11 | Vorhanden | `TestDatabase::postgres` in `crates/ferrioxid-api/src/testing.rs` | `down.rs` legt bereits `ferrioxid_test_<uuid>` an | Expliziter Modus `postgres_isolated` |
 
 V2-01 bis V2-05, V2-10 und V2-12 liegen im TestShop. Dieses Repository ändert sie nicht.
@@ -68,8 +68,10 @@ Ein fehlgeschlagenes Anlegen ist kein stiller Rückfall auf die Admin-Datenbank.
 - `ferrioxid_db::DisposablePostgres::create` und `drop_database` sind dieselbe Grundlage für Crate-Tests.
 - `format_datetime` behält einen vorhandenen Sekundenbruchteil. Ganze Sekunden bleiben ohne Dezimalpunkt.
 - Die Admin-Suche und die temporalen Filter ändern ihre Aufrufe nicht. PostgreSQL bindet andere Parametertypen als zuvor. Ungültige Datums- und Zeittexte, die früher als Text gebunden wurden, sind jetzt `Validation`.
-
-Es gibt keine neue Abfrage-API neben `Select`.
+- `Select::update_matching`, `Select::update_all`, `Select::delete_matching`, `Select::delete_all` und `Select::lock_existing`.
+- `ModelQuery::insert`, `RowInsert::on_conflict_do_nothing`.
+- `ColumnUpdate::set`, `set_null`, `increment`, `decrement`.
+- `WriteResult.rows_affected` und `LockResult.rows`.
 
 ## Betroffene Rust-Dateien
 
@@ -78,6 +80,8 @@ Es gibt keine neue Abfrage-API neben `Select`.
 - `crates/ferrioxid-db/src/query.rs`
 - `crates/ferrioxid-db/src/lib.rs`
 - `crates/ferrioxid-db/src/testing.rs`
+- `crates/ferrioxid-db/src/write.rs`
+- `examples/desk`
 - `crates/ferrioxid-migrations/src/fixtures.rs`
 - `crates/ferrioxid-migrations/Cargo.toml`
 - `crates/ferrioxid-api/src/testing.rs`
@@ -97,55 +101,42 @@ Es gibt keine neue Abfrage-API neben `Select`.
 
 Beide Backends lehnen Offsets außer UTC ab. Beide behandeln `%`, `_` und `\` in der Admin-Suche als Literale.
 
-## V2-09: nicht in diesem Branch umgesetzt
+## V2-09: öffentliche Schreib-API
 
-`ModelRepository` kann eine Zeile anhand ihrer UUID lesen, ersetzen und löschen, auch innerhalb einer Transaktion und mit `QueryScope`. `delete_record` gibt die betroffene Zeilenzahl zurück. `update_record` setzt konkrete Spaltenwerte. Das ist kein atomares `stock = stock - menge` und kein gefiltertes Löschen vieler Zeilen.
-
-SeaORM kann darunter `UPDATE` mit Ausdrücken, `DELETE` mit Bedingung und `rows_affected` ausführen. `QuerySelect::lock(LockType::Update)` erzeugt auf PostgreSQL eine Zeilensperre. SQLite versteht `FOR UPDATE` nicht. Eine Ferrioxid-SQLite-Verbindung ist auf eine Connection begrenzt. Das serialisiert Schreibvorgänge in diesem Prozess, nicht zuverlässig über mehrere Prozesse hinweg, und es sperrt keine Zeile, die noch nicht existiert.
-
-Deshalb reicht ein überall gleiches `FOR UPDATE` nicht. Zwei gleichzeitige Erstanlagen eines Warenkorbs finden keine Zeile zum Sperren. Dieselbe Grenze gilt für das Adresslimit, wenn keine vorhandene Besitzerzeile serialisiert wird.
-
-Eine kleine API wäre später ungefähr:
+`ModelRepository` bleibt der Weg für eine Zeile: lesen, anlegen, ersetzen, löschen, auch in einer Transaktion und mit `QueryScope`. Zusätzlich stehen gefilterte Sammeländerungen in `crates/ferrioxid-db/src/write.rs`.
 
 ```rust
-// Nicht implementiert. Nur der vorgeschlagene Zuschnitt.
-pub struct WriteResult { pub rows_affected: u64 }
-
-// Bestand senken, nur wenn Bestand und Preis noch passen.
-// rows_affected == 0 ist die fachliche Ablehnung, kein zweites SELECT.
-update_matching(filter, assign_bigint("stock", Add(-qty)))
-
-// Positionen eines bestätigten Besitzers löschen oder umhängen.
-delete_matching(filter)
-update_matching(filter, assign("cart_id", new_id))
-
-// Vorhandene Besitzerzeile sperren.
-// PostgreSQL: SELECT … FOR UPDATE.
-// SQLite: Schreibtransaktion und eine schreibende Berührung dieser Zeile.
-// Kein Treffer bleibt ein eigenes Ergebnis und begründet keine Erstanlage.
-lock_existing(id)
+Product::query()
+    .filter(col("id").eq(product))
+    .filter(col("active").eq(true))
+    .filter(col("stock").gte(quantity))
+    .filter(col("price_cents").eq(price_cents))
+    .update_matching()
+    .decrement("stock", quantity)
+    .execute(db)
+    .await?;
 ```
 
-Hooks, Validierung und Scopes müssen dabei ausdrücklich gelten oder ausdrücklich ausgenommen sein. Massenänderungen dürfen Modell-Hooks nicht still überspringen, ohne das zu sagen. Das ist mehr als ein lokaler Binder-Fix und bleibt eine eigene Aufgabe.
+`rows_affected == 0` heißt, die Bedingung hat keine Zeile geändert. Das ist kein zweites Lesen. `increment` und `decrement` rechnen in derselben Anweisung. Der Betrag muss größer als null sein, die Spalte eine Ganzzahl. Passt das Ergebnis nicht in `i64` oder in die am Modell deklarierte Grenze, bleibt die Zeile unverändert. Es gibt keine still überlaufende Arithmetik, keine Multiplikation und keine Division.
 
-Bis dahin kann der Shop für diese fünf Fälle SeaQuery-Ausdrücke mit dem Verbindungs-Backend bauen und `rows_affected` auswerten. Rohe `?`-Zeichenketten bleiben auch danach falsch.
+`update_matching` und `delete_matching` lehnen eine Abfrage ohne Filter, Relationsprädikat oder einschränkenden Scope ab. `update_all` und `delete_all` sind die ausdrückliche Form. `QueryScope::None` trifft weiterhin nichts. Das Seitenlimit von 100 begrenzt diese Schreibanweisungen nicht. Spaltennamen kommen aus dem Modell. Werte sind gebundene Parameter.
 
-Konkrete Shop-Fälle, die diese API tragen soll:
+Diese Sammelwege prüfen Spalte und Typ. Sie führen die Feldregeln von `create`, `update` und `delete` nicht aus. Eine E-Mail- oder Längenregel eines Einzelupdates gilt hier nicht automatisch.
 
-1. Bestand um eine Menge senken, nur wenn der Bestand reicht.
-2. Dieselbe Senkung nur zulassen, wenn der zuvor geprüfte Preis noch gilt. Positionssumme und Gesamtsumme müssen denselben Snapshot verwenden.
-3. Warenkorbpositionen nur mit Besitzerprüfung entfernen.
-4. Warenkorbpositionen atomar einem bestätigten Besitzer zuordnen.
-5. Eine vorhandene Besitzerzeile in der Transaktion sperren. Das Sperren einer fehlenden Warenkorbzeile löst die gleichzeitige Erstanlage nicht.
+`lock_existing` verlangt eine offene `DatabaseTransaction`. PostgreSQL erzeugt `SELECT … FOR UPDATE` für die getroffenen Zeilen. SQLite kennt diese Anweisung nicht. Dort schreibt dieselbe Bedingung den Primärschlüssel auf sich selbst und nimmt damit die Schreibsperre, die SQLite anbietet. Null Zeilen legen nichts an und reservieren keine noch nicht vorhandene Zeile. Zwei gleichzeitige Erstanlagen brauchen einen echten Unique-Constraint. `on_conflict_do_nothing` ignoriert genau diesen Konflikt und überschreibt die vorhandene Zeile nicht. Ein Überschreiben bei Konflikt gibt es nicht.
+
+PostgreSQL meldet `ON DELETE RESTRICT` als SQLSTATE 23001. Das Framework ordnet 23001 derselben Validierung zu wie eine Fremdschlüsselverletzung. SQLite verwendet für denselben Fall den festen Text `FOREIGN KEY constraint failed`.
+
+`examples/desk` führt dieselben Aufrufe auf einer frischen SQLite-Datei und auf einer isolierten PostgreSQL-Datenbank aus. Die Geschäftslogik enthält keine selbst geschriebenen SQL-Anweisungen. Die Migration entsteht aus den Modelldefinitionen.
 
 ## Offene Shop-Aufgaben
 
 Diese Punkte sind im TestShop zu ändern, nicht im Framework-Branch:
 
-- V2-01: sieben direkte SQL-Stellen mit SQLite-`?` auf vorhandene Ferrioxid-Abfragen oder backendgerechte SeaQuery-Ausdrücke umstellen.
+- V2-01: sieben direkte SQL-Stellen auf `Select`, `update_matching`, `delete_matching` und `insert` umstellen. Keine eigenen `?`-Texte.
 - V2-02: Katalog von `active=1` und `instr` auf `col("active").eq(true)`, `any_of` / `contains_ignore_case`, `where_has` und `keyset` umstellen.
-- V2-03: Erstanlage und Adresslimit über eine vorhandene Besitzerzeile oder eine eindeutige aktive Zuordnung serialisieren.
-- V2-04: Checkout-Preis und Positionen aus einem Snapshot schreiben.
+- V2-03: Erstanlage über einen Unique-Constraint oder `on_conflict_do_nothing`. Das Adresslimit sperrt die vorhandene Besitzerzeile mit `lock_existing` und zählt danach.
+- V2-04: Checkout-Preis als Filter von `decrement` verwenden. `rows_affected == 0` ist der veraltete Preis.
 - V2-05: Warenkorbanzahl über `Aggregate::sum` lesen.
 - V2-10: Shoptests gegen isolierte PostgreSQL-Fixtures ausführen, nicht nur gegen `TestDatabase::sqlite`.
 - V2-12: PostgreSQL-Backup und Datenübernahme getrennt von der SQLite-Sicherung dokumentieren. V2-08 ist die Fixture-Grundlage, kein Ersatz für `pg_dump`.
@@ -160,6 +151,8 @@ Die neuen PostgreSQL-Tests sind `#[ignore]`. Ein ignorierter Lauf zählt nicht a
 - `postgres_temporal_filters_and_keyset`
 - `fixtures::tests::postgres_temporal_fixture_roundtrip`
 - `testing::tests::postgres_isolated_databases_do_not_share_rows`
+- `write::tests::postgres_shop_cases`
+- `desk` `postgres_same_operations`
 
 Lokal ausgeführte SQLite- und Typprüfungen:
 
@@ -176,6 +169,13 @@ Am 2026-11-11 ohne gesetzte `DATABASE_URL`:
 - `cargo test --workspace -- --test-threads=8` bestanden, 0 fehlgeschlagen, 16 ignoriert. Die neuen SQLite- und Typprüfungen in diesem Lauf sind bestanden.
 - `cargo build --workspace` bestanden.
 
+Nach der Schreib-API, wieder ohne gesetzte `DATABASE_URL`:
+
+- `cargo fmt --all -- --check` bestanden.
+- `cargo clippy --workspace --all-targets -- -D warnings` bestanden. `linker_messages` in `ferrioxid-macros` bleibt eine Warnung und ist kein Fehler.
+- `cargo test --workspace -- --test-threads=8` bestanden, 0 fehlgeschlagen. `write::tests::sqlite_shop_cases` und `examples/desk` `sqlite_same_operations` sind in diesem Lauf bestanden. Die ignorierten PostgreSQL-Tests liefen nicht.
+- `cargo build --workspace` bestanden.
+
 Danach lief PostgreSQL 18.6 lokal über `pg_ctl`, nur auf `127.0.0.1:5432`. Es ist kein Windows-Dienst. Die Rolle `ferrioxid` hatte kein `CREATEDB`; das Attribut wurde für diese lokale Testrolle gesetzt, nicht `SUPERUSER`. Die bestehenden Datenbanken `ferrioxid` und `ferrioxid_migrations_down_test` wurden nicht als Schreibziel verwendet. Neue Laufzeittests legen `ferrioxid_test_<32 hex>` an und löschen nur diesen Namen. Die ältere CI-Reihe lief gegen drei leere Datenbanken derselben Form. Diese drei Datenbanken wurden nach dem Lauf gelöscht. Die Tabellenlisten der beiden bestehenden Datenbanken waren danach unverändert, und keine `ferrioxid_test_*`-Datenbank blieb übrig.
 
 Auf PostgreSQL 18.6 bestanden:
@@ -184,6 +184,8 @@ Auf PostgreSQL 18.6 bestanden:
 - `postgres_temporal_filters_and_keyset`
 - `fixtures::tests::postgres_temporal_fixture_roundtrip`
 - `testing::tests::postgres_isolated_databases_do_not_share_rows`
+- `write::tests::postgres_shop_cases`
+- `desk` `postgres_same_operations`
 - `postgres_http_roundtrip`
 - `postgres_migration_roundtrip`
 - `postgres_enforces_cross_app_foreign_keys`
@@ -206,5 +208,6 @@ PostgreSQL 16 in GitHub-CI ist in der Workflow-Datei ergänzt, aber nicht gelauf
 - SQLite speichert Zeitpunkte als Text mit `+00:00`. Vergleiche laufen über den Treibertext, nicht über eine native Uhr.
 - `TestDatabase::postgres` isoliert Tests weiterhin nicht.
 - `postgres_isolated` braucht `CREATEDB`. Ohne dieses Recht legt der Test keine Ersatzdatenbank in einer fremden Datenbank an.
-- V2-09 ist nicht implementiert. Gleichzeitige Erstanlage, Preiswechsel im Checkout und große besitzgeprüfte Schreibvorgänge bleiben Shop-Arbeit.
+- Die Schreib-API überschreibt bei einem Unique-Konflikt nicht und bietet keine Multiplikation oder Division. Der TestShop selbst ist in diesem Branch nicht umgestellt.
+- `postgres_same_operations` erwartet auf PostgreSQL, dass `LOWER` den Buchstaben `ü` faltet. Eine `C`-Locale tut das nicht. Das lokale PostgreSQL 18.6 und das CI-Image `postgres:16` sind UTF-8-Locales. SQLite faltet in diesem Test nur ASCII, deshalb findet `MÜNCHEN` dort `München` nicht.
 - Ein grüner `cargo test --workspace` ohne `--ignored` führt die neuen PostgreSQL-Tests nicht aus.

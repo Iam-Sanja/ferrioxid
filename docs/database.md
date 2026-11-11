@@ -172,13 +172,27 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 - Page size is 1..=100 (`PAGE_LIMIT`). Offset is at most 1_000_000 (`OFFSET_LIMIT`).
 - One `IN` or `NOT IN` list holds 1..=100 values (`IN_LIMIT`). An empty list is an error, not `IN ()`.
 - `all` never scans the whole table. A result larger than 100 rows requires further pages.
-- There is no `SUM`, grouping, annotation or arbitrary SQL expression.
+- `annotate` adds one related `COUNT` or `SUM`. There is no general `GROUP BY` and no arbitrary SQL expression.
 - MySQL is rejected.
 - SQLite behavior is covered by `cargo test -p ferrioxid-db`. PostgreSQL SQL generation is asserted in the same crate. `postgres_filters_and_pages_runtime` is `#[ignore]` and runs only with `DATABASE_URL` and a disposable PostgreSQL database. A local workspace run does not mark that test as passed.
 
 ## Fixtures
 
 `ferrioxid dumpdata` and `ferrioxid loaddata` read and write versioned JSON through the schema snapshot. Decimal values travel as strings and are stored as the same 16-byte coefficient used by model inserts. The default load inserts new primary keys and rolls back the whole file when any row conflicts. Details, the confirmed `--truncate` flag and the cycle limit are in [fixtures.md](fixtures.md).
+
+## Filtered writes
+
+`Select::update_matching`, `delete_matching` and `lock_existing` are in `crates/ferrioxid-db/src/write.rs`. `ModelQuery::insert` is the typed insert. Values and arithmetic amounts are bound parameters. Column names must be model fields; a name such as `stock = 0; DROP TABLE` is rejected before SQL is built.
+
+`update_matching` and `delete_matching` refuse a query that has no filter, relation predicate or restricting scope. `update_all` and `delete_all` are the explicit forms for an intentional full-table write. `QueryScope::None` still matches nothing. The page limit does not cap a bulk delete.
+
+`set` writes one bound value. `increment` and `decrement` are one SQL update of the form `column = column + amount`, with `amount > 0` and an integer column. The statement also requires the current value to stay inside `i64` and any numeric bound. A row outside that window is left unchanged and is not counted in `rows_affected`. There is no multiply or divide helper.
+
+`lock_existing` must run on `DatabaseTransaction`. PostgreSQL emits `SELECT ... FOR UPDATE`. SQLite updates the primary key to itself, which takes the write lock SQLite actually provides. Zero locked rows do not reserve a row that does not exist yet. A first insert is protected by a real unique constraint, including `on_conflict_do_nothing` on that constraint. Conflict handling does not overwrite an existing row.
+
+These bulk statements do not run the single-row field contracts used by `update_record`. `rows_affected == 0` means the predicate matched nothing, including a failed stock or price condition. `rows_affected == 1` means that one row changed. SQLite connections set `busy_timeout` to five seconds; a lock that SQLite reports immediately as busy still surfaces as a database error.
+
+`examples/desk` is a small application on this API: models, one generated migration, a URL, a template and the shop operations. `sqlite_same_operations` runs in the workspace tests. `postgres_same_operations` is ignored and listed in the PostgreSQL 16 job. The same Rust source talks to either database through `connect`. SQLite `LOWER` folds ASCII only, so `MÜNCHEN` does not find `München`. A PostgreSQL cluster whose `LOWER` follows a UTF-8 locale can find that row. SQLite `BINARY` order places `Muenchen` before `München`. PostgreSQL order follows the database collation. The capability table is [orm-capability-matrix.md](orm-capability-matrix.md).
 
 ## Not implemented (planned)
 
