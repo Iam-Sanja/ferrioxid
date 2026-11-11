@@ -6,7 +6,10 @@
 
 use std::collections::{BTreeMap, BTreeSet, HashMap};
 
-use ferrioxid_core::{decode_decimal, encode_decimal, format_decimal, parse_decimal, ColumnKind};
+use ferrioxid_core::{
+    decode_decimal, encode_decimal, format_decimal, parse_date, parse_datetime_utc, parse_decimal,
+    parse_time, ColumnKind,
+};
 use sea_orm::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, DbErr, Statement, TransactionTrait, Value,
 };
@@ -211,11 +214,7 @@ fn validate_value(
                 )));
             }
         }
-        ColumnKind::Uuid
-        | ColumnKind::Text
-        | ColumnKind::Date
-        | ColumnKind::Time
-        | ColumnKind::DateTime => {
+        ColumnKind::Uuid | ColumnKind::Text => {
             if !value.is_string() {
                 return Err(MigrationError::new(format!(
                     "Field '{}' must be a JSON string.",
@@ -223,8 +222,30 @@ fn validate_value(
                 )));
             }
         }
+        ColumnKind::Date => {
+            require_temporal(column, value, parse_date)?;
+        }
+        ColumnKind::Time => {
+            require_temporal(column, value, parse_time)?;
+        }
+        ColumnKind::DateTime => {
+            require_temporal(column, value, parse_datetime_utc)?;
+        }
     }
     Ok(())
+}
+
+fn require_temporal<T>(
+    column: &crate::snapshot::ColumnSnapshot,
+    value: &Json,
+    parse: fn(&str) -> Result<T, &'static str>,
+) -> Result<(), MigrationError> {
+    let text = value.as_str().ok_or_else(|| {
+        MigrationError::new(format!("Field '{}' must be a JSON string.", column.name))
+    })?;
+    parse(text)
+        .map(|_| ())
+        .map_err(|error| MigrationError::new(format!("Field '{}': {error}", column.name)))
 }
 
 fn order_records(
@@ -563,6 +584,11 @@ fn bind_value(
             ColumnKind::BigInt => Value::BigInt(None),
             ColumnKind::Boolean => Value::Bool(None),
             ColumnKind::Uuid if backend == DatabaseBackend::Postgres => Value::Uuid(None),
+            ColumnKind::Date if backend == DatabaseBackend::Postgres => Value::ChronoDate(None),
+            ColumnKind::Time if backend == DatabaseBackend::Postgres => Value::ChronoTime(None),
+            ColumnKind::DateTime if backend == DatabaseBackend::Postgres => {
+                Value::ChronoDateTimeUtc(None)
+            }
             _ => Value::String(None),
         });
     }
@@ -581,14 +607,42 @@ fn bind_value(
         ColumnKind::BigInt => Ok(Value::BigInt(Some(value.as_i64().expect("validated")))),
         ColumnKind::Boolean => Ok(Value::Bool(Some(value.as_bool().expect("validated")))),
         ColumnKind::Uuid => pk_value(backend, value.as_str().expect("validated")),
-        ColumnKind::Text
-        | ColumnKind::Choice
-        | ColumnKind::Date
-        | ColumnKind::Time
-        | ColumnKind::DateTime => Ok(Value::String(Some(Box::new(
+        ColumnKind::Text | ColumnKind::Choice => Ok(Value::String(Some(Box::new(
             value.as_str().expect("validated").to_owned(),
         )))),
+        ColumnKind::Date => {
+            let date = parse_date(value.as_str().expect("validated")).map_err(|error| {
+                MigrationError::new(format!("Field '{}': {error}", column.name))
+            })?;
+            Ok(match backend {
+                DatabaseBackend::Postgres => Value::ChronoDate(Some(Box::new(date))),
+                _ => Value::String(Some(Box::new(ferrioxid_core::temporal::format_date(date)))),
+            })
+        }
+        ColumnKind::Time => {
+            let time = parse_time(value.as_str().expect("validated")).map_err(|error| {
+                MigrationError::new(format!("Field '{}': {error}", column.name))
+            })?;
+            Ok(match backend {
+                DatabaseBackend::Postgres => Value::ChronoTime(Some(Box::new(time))),
+                _ => Value::String(Some(Box::new(ferrioxid_core::temporal::format_time(time)))),
+            })
+        }
+        ColumnKind::DateTime => {
+            let instant =
+                parse_datetime_utc(value.as_str().expect("validated")).map_err(|error| {
+                    MigrationError::new(format!("Field '{}': {error}", column.name))
+                })?;
+            Ok(match backend {
+                DatabaseBackend::Postgres => Value::ChronoDateTimeUtc(Some(Box::new(instant))),
+                _ => Value::String(Some(Box::new(canonical_datetime(instant)))),
+            })
+        }
     }
+}
+
+fn canonical_datetime(value: chrono::DateTime<chrono::Utc>) -> String {
+    ferrioxid_core::temporal::format_datetime(value)
 }
 
 fn pk_value(backend: DatabaseBackend, pk: &str) -> Result<Value, MigrationError> {
@@ -727,11 +781,7 @@ fn read_cell(
                 None => Json::Null,
             })
         }
-        ColumnKind::Text
-        | ColumnKind::Choice
-        | ColumnKind::Date
-        | ColumnKind::Time
-        | ColumnKind::DateTime => {
+        ColumnKind::Text | ColumnKind::Choice => {
             let value = row
                 .try_get::<Option<String>>("", &column.name)
                 .map_err(map_db)?;
@@ -739,6 +789,57 @@ fn read_cell(
                 Some(value) => Json::String(value),
                 None => Json::Null,
             })
+        }
+        ColumnKind::Date => read_temporal(
+            row,
+            column,
+            |date: chrono::NaiveDate| ferrioxid_core::temporal::format_date(date),
+            parse_date,
+            ferrioxid_core::temporal::format_date,
+        ),
+        ColumnKind::Time => read_temporal(
+            row,
+            column,
+            |time: chrono::NaiveTime| ferrioxid_core::temporal::format_time(time),
+            parse_time,
+            ferrioxid_core::temporal::format_time,
+        ),
+        ColumnKind::DateTime => read_temporal(
+            row,
+            column,
+            canonical_datetime,
+            parse_datetime_utc,
+            canonical_datetime,
+        ),
+    }
+}
+
+fn read_temporal<T, U>(
+    row: &sea_orm::QueryResult,
+    column: &crate::snapshot::ColumnSnapshot,
+    format_native: impl FnOnce(T) -> String,
+    parse: fn(&str) -> Result<U, &'static str>,
+    format_parsed: impl FnOnce(U) -> String,
+) -> Result<Json, MigrationError>
+where
+    T: sea_orm::TryGetable,
+{
+    if let Ok(value) = row.try_get::<Option<T>>("", &column.name) {
+        return Ok(match value {
+            Some(value) => Json::String(format_native(value)),
+            None => Json::Null,
+        });
+    }
+    let value = row
+        .try_get::<Option<String>>("", &column.name)
+        .map_err(map_db)?;
+    match value {
+        None => Ok(Json::Null),
+        Some(text) => {
+            let parsed = parse(&text).map_err(|error| {
+                MigrationError::new(format!("Field '{}': {error}", column.name))
+            })?;
+            Ok(Json::String(format_parsed(parsed)))
         }
     }
 }
@@ -1213,5 +1314,258 @@ mod tests {
         ))
         .await
         .ok();
+    }
+
+    fn temporal_schema() -> SchemaSnapshot {
+        let mut amount = column("amount", LogicalType::Decimal, false);
+        amount.precision = Some(10);
+        amount.scale = Some(2);
+        SchemaSnapshot::from_tables(vec![
+            TableSnapshot {
+                name: "fx_owners".into(),
+                columns: vec![
+                    column("id", LogicalType::Uuid, false),
+                    column("name", LogicalType::String, false),
+                ],
+                unique_constraints: Vec::new(),
+                indexes: Vec::new(),
+                foreign_keys: Vec::new(),
+            },
+            TableSnapshot {
+                name: "fx_events".into(),
+                columns: vec![
+                    column("id", LogicalType::Uuid, false),
+                    column("owner_id", LogicalType::Uuid, false),
+                    column("event_date", LogicalType::Date, false),
+                    column("start_time", LogicalType::Time, false),
+                    column("created_at", LogicalType::DateTime, false),
+                    column("closed_on", LogicalType::Date, true),
+                    column("ends_at", LogicalType::Time, true),
+                    column("updated_at", LogicalType::DateTime, true),
+                    amount,
+                ],
+                unique_constraints: Vec::new(),
+                indexes: Vec::new(),
+                foreign_keys: vec![foreign_key("fk_fx_events_owner", "owner_id", "fx_owners")],
+            },
+        ])
+    }
+
+    fn temporal_fixture() -> &'static str {
+        r#"{
+          "ferrioxid": 1,
+          "records": [
+            {
+              "model": "fx_owners",
+              "pk": "22222222-2222-4222-8222-222222222222",
+              "fields": { "name": "Ada" }
+            },
+            {
+              "model": "fx_events",
+              "pk": "11111111-1111-4111-8111-111111111111",
+              "fields": {
+                "owner_id": "22222222-2222-4222-8222-222222222222",
+                "event_date": "2026-11-11",
+                "start_time": "14:30",
+                "created_at": "2026-11-11T13:30:00.123456Z",
+                "closed_on": null,
+                "ends_at": null,
+                "updated_at": "2026-11-11T13:30:00+00:00",
+                "amount": "12.50"
+              }
+            }
+          ]
+        }"#
+    }
+
+    fn assert_temporal(file: &super::FixtureFile) {
+        let event = file
+            .records
+            .iter()
+            .find(|record| record.model == "fx_events")
+            .unwrap();
+        assert_eq!(event.pk, "11111111-1111-4111-8111-111111111111");
+        assert_eq!(
+            event
+                .fields
+                .get("event_date")
+                .and_then(|value| value.as_str()),
+            Some("2026-11-11")
+        );
+        assert_eq!(
+            event
+                .fields
+                .get("start_time")
+                .and_then(|value| value.as_str()),
+            Some("14:30:00")
+        );
+        assert_eq!(
+            event
+                .fields
+                .get("created_at")
+                .and_then(|value| value.as_str()),
+            Some("2026-11-11T13:30:00.123456Z")
+        );
+        assert!(event.fields.get("closed_on").unwrap().is_null());
+        assert!(event.fields.get("ends_at").unwrap().is_null());
+        assert_eq!(
+            event
+                .fields
+                .get("updated_at")
+                .and_then(|value| value.as_str()),
+            Some("2026-11-11T13:30:00Z")
+        );
+        assert_eq!(
+            event.fields.get("amount").and_then(|value| value.as_str()),
+            Some("12.50")
+        );
+        assert_eq!(
+            event
+                .fields
+                .get("owner_id")
+                .and_then(|value| value.as_str()),
+            Some("22222222-2222-4222-8222-222222222222")
+        );
+    }
+
+    async fn create_temporal_tables(db: &DatabaseConnection) {
+        let statements: &[&str] = match db.get_database_backend() {
+            sea_orm::DatabaseBackend::Sqlite => &[
+                "CREATE TABLE fx_owners (id TEXT PRIMARY KEY, name TEXT NOT NULL)",
+                "CREATE TABLE fx_events (
+                    id TEXT PRIMARY KEY,
+                    owner_id TEXT NOT NULL REFERENCES fx_owners(id),
+                    event_date TEXT NOT NULL,
+                    start_time TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    closed_on TEXT,
+                    ends_at TEXT,
+                    updated_at TEXT,
+                    amount BLOB NOT NULL
+                )",
+            ],
+            sea_orm::DatabaseBackend::Postgres => &[
+                "CREATE TABLE fx_owners (id UUID PRIMARY KEY, name TEXT NOT NULL)",
+                "CREATE TABLE fx_events (
+                    id UUID PRIMARY KEY,
+                    owner_id UUID NOT NULL REFERENCES fx_owners(id),
+                    event_date DATE NOT NULL,
+                    start_time TIME NOT NULL,
+                    created_at TIMESTAMPTZ NOT NULL,
+                    closed_on DATE,
+                    ends_at TIME,
+                    updated_at TIMESTAMPTZ,
+                    amount BYTEA NOT NULL
+                )",
+            ],
+            sea_orm::DatabaseBackend::MySql => panic!("mysql is not a test backend"),
+        };
+        for statement in statements {
+            db.execute(Statement::from_string(
+                db.get_database_backend(),
+                (*statement).to_owned(),
+            ))
+            .await
+            .expect(statement);
+        }
+    }
+
+    #[test]
+    fn temporal_fixture_rejects_an_invalid_date_before_writing() {
+        let file = parse_fixture(
+            r#"{
+              "ferrioxid": 1,
+              "records": [{
+                "model": "fx_events",
+                "pk": "11111111-1111-4111-8111-111111111111",
+                "fields": {
+                  "owner_id": "22222222-2222-4222-8222-222222222222",
+                  "event_date": "2026-02-31",
+                  "start_time": "14:30:00",
+                  "created_at": "2026-11-11T13:30:00Z",
+                  "amount": "12.50"
+                }
+              }]
+            }"#,
+        )
+        .unwrap();
+        let error = prepare_records(&temporal_schema(), &file, None).unwrap_err();
+        assert!(error.0.contains("validation.date"));
+    }
+
+    #[tokio::test]
+    async fn sqlite_temporal_fixture_roundtrip_keeps_canonical_values() {
+        let db = database().await;
+        create_temporal_tables(&db).await;
+        let schema = temporal_schema();
+        let file = parse_fixture(temporal_fixture()).unwrap();
+        load_fixture(&db, &schema, &file, &LoadRequest::default())
+            .await
+            .unwrap();
+        let dumped = dump_fixture(&db, &schema, None).await.unwrap();
+        assert_temporal(&dumped);
+        load_fixture(
+            &db,
+            &schema,
+            &dumped,
+            &LoadRequest {
+                truncate: true,
+                ..LoadRequest::default()
+            },
+        )
+        .await
+        .unwrap();
+        let again = dump_fixture(&db, &schema, None).await.unwrap();
+        assert_temporal(&again);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
+    async fn postgres_temporal_fixture_roundtrip() {
+        let sqlite = database().await;
+        create_temporal_tables(&sqlite).await;
+        let schema = temporal_schema();
+        let file = parse_fixture(temporal_fixture()).unwrap();
+        load_fixture(&sqlite, &schema, &file, &LoadRequest::default())
+            .await
+            .unwrap();
+        let from_sqlite = dump_fixture(&sqlite, &schema, None).await.unwrap();
+        assert_temporal(&from_sqlite);
+
+        let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let disposable = ferrioxid_db::DisposablePostgres::create(&admin)
+            .await
+            .expect("isolated postgres");
+        let postgres = ferrioxid_db::connect(disposable.url())
+            .await
+            .expect("postgres");
+        create_temporal_tables(&postgres).await;
+        load_fixture(&postgres, &schema, &from_sqlite, &LoadRequest::default())
+            .await
+            .expect("postgres load");
+        let from_postgres = dump_fixture(&postgres, &schema, None)
+            .await
+            .expect("postgres dump");
+        assert_temporal(&from_postgres);
+        load_fixture(
+            &postgres,
+            &schema,
+            &from_postgres,
+            &LoadRequest {
+                truncate: true,
+                ..LoadRequest::default()
+            },
+        )
+        .await
+        .expect("postgres reload");
+        let reloaded = dump_fixture(&postgres, &schema, None)
+            .await
+            .expect("postgres reload dump");
+        assert_temporal(&reloaded);
+        postgres.close().await.expect("close");
+        disposable
+            .drop_database()
+            .await
+            .expect("drop isolated database");
     }
 }

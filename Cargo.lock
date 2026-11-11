@@ -893,6 +893,7 @@ name = "ferrioxid-migrations"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "chrono",
  "ferrioxid-core",
  "ferrioxid-db",
  "sea-orm",
