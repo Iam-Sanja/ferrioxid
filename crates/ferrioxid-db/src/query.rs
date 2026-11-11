@@ -459,6 +459,12 @@ pub trait ModelQuery: FerrioxidModel + DeserializeOwned + Sized {
     fn query() -> Select<Self> {
         Select::new()
     }
+
+    /// Builds one typed insert. A unique violation stays an error unless the
+    /// caller asks for [`crate::write::RowInsert::on_conflict_do_nothing`].
+    fn insert() -> crate::write::RowInsert<Self> {
+        crate::write::RowInsert::new()
+    }
 }
 
 impl<M> ModelQuery for M where M: FerrioxidModel + DeserializeOwned {}
@@ -490,6 +496,55 @@ impl<M> Select<M> {
     pub fn scope(mut self, scope: QueryScope) -> Self {
         self.scope = scope;
         self
+    }
+
+    /// Updates rows that match the filters and [`QueryScope`].
+    ///
+    /// The statement is refused when that combination would match every row.
+    /// [`Select::update_all`] is the explicit form for that case. Assignments
+    /// are type-checked and bound. This path does not apply the field rules or
+    /// return value of `update` / `update_tx`, and it does not run per-row hooks.
+    pub fn update_matching(self) -> crate::write::ColumnUpdate<M> {
+        crate::write::ColumnUpdate::new(self, false)
+    }
+
+    /// Updates every row the scope allows, even when no filter was added.
+    ///
+    /// [`QueryScope::None`] still matches nothing. The same hook limitation as
+    /// [`Select::update_matching`] applies.
+    pub fn update_all(self) -> crate::write::ColumnUpdate<M> {
+        crate::write::ColumnUpdate::new(self, true)
+    }
+
+    /// Deletes rows that match the filters and [`QueryScope`].
+    ///
+    /// Refuses an unfiltered delete. [`Select::delete_all`] is the explicit
+    /// form. The delete is one statement and is not capped by [`PAGE_LIMIT`].
+    /// Database foreign keys apply. Per-row delete hooks are not run.
+    pub fn delete_matching(self) -> crate::write::FilteredDelete<M> {
+        crate::write::FilteredDelete::new(self, false)
+    }
+
+    /// Deletes every row the scope allows.
+    pub fn delete_all(self) -> crate::write::FilteredDelete<M> {
+        crate::write::FilteredDelete::new(self, true)
+    }
+
+    /// Locks the rows that match, inside an open transaction.
+    ///
+    /// PostgreSQL uses `SELECT … FOR UPDATE` and locks only matched rows.
+    /// SQLite has no row lock. The same predicate runs `UPDATE … SET id = id`,
+    /// which makes other writers wait until commit. A result of zero does not
+    /// insert anything and is not a reservation for a later insert. A unique
+    /// constraint is what stops two concurrent first inserts.
+    pub async fn lock_existing(
+        self,
+        db: &sea_orm::DatabaseTransaction,
+    ) -> Result<crate::write::LockResult, FerrioxidError>
+    where
+        M: FerrioxidModel,
+    {
+        crate::write::lock_existing::<M>(self, db).await
     }
 
     /// Keeps rows whose foreign key `column` points at a row of `R` matching `related`.
@@ -822,6 +877,37 @@ impl<M> Select<M> {
             });
         }
         Ok(annotated)
+    }
+
+    pub(crate) fn write_filter(
+        &self,
+        backend: DatabaseBackend,
+    ) -> Result<Option<SimpleExpr>, FerrioxidError>
+    where
+        M: FerrioxidModel,
+    {
+        let columns = M::columns();
+        let table = M::descriptor().table;
+        if !is_safe_ident(table) {
+            return Err(FerrioxidError::Validation(format!(
+                "table {table} is not available"
+            )));
+        }
+        let mut filter = predicate_expr(columns, &self.predicate, backend, None)?;
+        for (index, relation) in self.relations.iter().enumerate() {
+            let exists = relation_expr::<M>(relation, index, backend)?;
+            filter = Some(match filter {
+                Some(current) => current.and(exists),
+                None => exists,
+            });
+        }
+        if let Some(scope) = scope_condition(columns, &self.scope)? {
+            filter = Some(match filter {
+                Some(current) => current.and(scope),
+                None => scope,
+            });
+        }
+        Ok(filter)
     }
 
     fn plan(&self, backend: DatabaseBackend) -> Result<Plan, FerrioxidError>
@@ -1251,7 +1337,7 @@ fn value_matches(kind: ColumnKind, value: &Bound, inequality: bool) -> bool {
     }
 }
 
-fn bind_for_column(
+pub(crate) fn bind_for_column(
     column: &ColumnSpec,
     value: &Bound,
     backend: DatabaseBackend,

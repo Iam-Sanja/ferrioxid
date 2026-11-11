@@ -864,7 +864,7 @@ where
         .collect()
 }
 
-fn map_write(error: sea_orm::DbErr) -> FerrioxidError {
+pub(crate) fn map_write(error: sea_orm::DbErr) -> FerrioxidError {
     if let Some(mapped) = constraint_violation(&error) {
         return mapped;
     }
@@ -880,6 +880,12 @@ fn constraint_violation(error: &sea_orm::DbErr) -> Option<FerrioxidError> {
         sea_orm::sqlx::error::ErrorKind::ForeignKeyViolation => Some(FerrioxidError::Validation(
             "foreign key constraint violated".into(),
         )),
+        // PostgreSQL reports ON DELETE/UPDATE RESTRICT as 23001, not 23503.
+        sea_orm::sqlx::error::ErrorKind::Other if database.code().as_deref() == Some("23001") => {
+            Some(FerrioxidError::Validation(
+                "foreign key constraint violated".into(),
+            ))
+        }
         // SQLite setzt ON DELETE/UPDATE RESTRICT als internes RAISE um.
         // Der erweiterte Code ist dann 1811 (SQLITE_CONSTRAINT_TRIGGER) und nicht 787.
         // Die Meldung ist der feste Text dieser Implementierung.
