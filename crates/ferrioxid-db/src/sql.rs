@@ -5,8 +5,8 @@ use ferrioxid_core::{
     ReferentialAction, ScopeValue,
 };
 use sea_orm::sea_query::{
-    Alias, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Index, Order, PostgresQueryBuilder,
-    Query, SqliteQueryBuilder, Table,
+    Alias, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, LikeExpr, Order,
+    PostgresQueryBuilder, Query, SqliteQueryBuilder, Table,
 };
 use sea_orm::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, QueryResult, Statement, Value,
@@ -362,6 +362,7 @@ pub async fn query_admin_page(
             "page size must be between 1 and 100".into(),
         ));
     }
+    let backend = db.get_database_backend();
     let mut count_query = Query::select();
     count_query
         .expr_as(
@@ -371,6 +372,7 @@ pub async fn query_admin_page(
         .from(Alias::new(table));
     constrain(
         &mut count_query,
+        backend,
         columns,
         request.search_columns,
         request.search,
@@ -401,6 +403,7 @@ pub async fn query_admin_page(
         .from(Alias::new(table));
     constrain(
         &mut query,
+        backend,
         columns,
         request.search_columns,
         request.search,
@@ -542,6 +545,7 @@ pub async fn date_buckets(
         .from(Alias::new(table));
     constrain(
         &mut query,
+        db.get_database_backend(),
         columns,
         search_columns,
         search,
@@ -593,8 +597,10 @@ fn bucket_expression(
     }
 }
 
+#[allow(clippy::too_many_arguments)]
 fn constrain(
     query: &mut sea_orm::sea_query::SelectStatement,
+    backend: DatabaseBackend,
     columns: &[ColumnSpec],
     search_columns: &[&str],
     search: Option<&str>,
@@ -603,14 +609,15 @@ fn constrain(
     scope: &QueryScope,
 ) -> Result<(), FerrioxidError> {
     if let Some(term) = search.filter(|term| !term.is_empty()) {
-        let pattern = like_pattern(term);
+        let pattern = fold_case_insensitive_pattern(like_pattern(term), backend);
         let mut any = Vec::new();
         for column in search_columns {
             ensure_column(columns, column)?;
-            any.push(Expr::cust_with_values(
-                format!("LOWER(\"{column}\") LIKE LOWER(?) ESCAPE '\\'"),
-                [Value::from(pattern.clone())],
-            ));
+            let column_expr = Expr::col(Alias::new(*column));
+            any.push(
+                Expr::expr(Func::cust("LOWER").arg(column_expr))
+                    .like(LikeExpr::new(pattern.clone()).escape('\\')),
+            );
         }
         if let Some(first) = any.into_iter().reduce(|left, right| left.or(right)) {
             query.cond_where(first);
@@ -698,6 +705,20 @@ pub(crate) fn escape_like(term: &str) -> String {
 
 fn like_pattern(term: &str) -> String {
     format!("%{}%", escape_like(term))
+}
+
+/// Folds a LIKE pattern so it matches `LOWER(column)` on the active backend.
+///
+/// SQLite `LOWER` affects ASCII letters only, so the pattern uses
+/// [`str::to_ascii_lowercase`]. PostgreSQL follows `LOWER` with locale-aware
+/// Unicode rules, so the pattern uses [`str::to_lowercase`]. The same rules
+/// are used by the model text filters. Neither backend promises identical
+/// results for `München` and `MÜNCHEN`.
+pub(crate) fn fold_case_insensitive_pattern(pattern: String, backend: DatabaseBackend) -> String {
+    match backend {
+        DatabaseBackend::Sqlite => pattern.to_ascii_lowercase(),
+        DatabaseBackend::Postgres | DatabaseBackend::MySql => pattern.to_lowercase(),
+    }
 }
 
 pub async fn get_record(
@@ -1088,3 +1109,265 @@ impl std::fmt::Display for UnsupportedBackend {
 }
 
 impl std::error::Error for UnsupportedBackend {}
+
+#[cfg(test)]
+mod tests {
+    use ferrioxid_core::{ColumnKind, ColumnSpec, QueryScope, ScopeValue};
+    use sea_orm::sea_query::{Alias, PostgresQueryBuilder, Query};
+    use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
+    use uuid::Uuid;
+
+    use super::{constrain, query_admin_page, AdminPageRequest};
+    use crate::connect;
+
+    fn column(name: &'static str, kind: ColumnKind, primary_key: bool) -> ColumnSpec {
+        ColumnSpec {
+            name,
+            kind,
+            nullable: false,
+            primary_key,
+            default_bool: None,
+            unique: false,
+            indexed: false,
+            foreign_table: None,
+            foreign_column: None,
+            on_delete: None,
+            precision: 0,
+            scale: 0,
+            choices: &[],
+        }
+    }
+
+    fn columns() -> Vec<ColumnSpec> {
+        vec![
+            column("id", ColumnKind::Uuid, true),
+            column("name", ColumnKind::Text, false),
+            column("sku", ColumnKind::Text, false),
+            column("owner_id", ColumnKind::Uuid, false),
+        ]
+    }
+
+    fn owner_scope(owner: u128) -> QueryScope {
+        QueryScope::Equals {
+            column: "owner_id",
+            value: ScopeValue::Uuid(Uuid::from_u128(owner)),
+        }
+    }
+
+    #[test]
+    fn postgres_admin_search_binds_the_pattern_without_a_question_mark() {
+        let mut query = Query::select();
+        query
+            .column(Alias::new("id"))
+            .from(Alias::new("ferrioxid_admin_search"));
+        constrain(
+            &mut query,
+            DatabaseBackend::Postgres,
+            &columns(),
+            &["name", "sku"],
+            Some("Hemd%_\\"),
+            &[],
+            &[],
+            &QueryScope::All,
+        )
+        .unwrap();
+        let (sql, values) = query.build(PostgresQueryBuilder);
+        assert!(sql.contains("$1"));
+        assert!(sql.contains("$2"));
+        assert!(!sql.contains('?'));
+        assert!(sql.contains("ESCAPE"));
+        assert!(!sql.contains("Hemd"));
+        assert!(!sql.contains("DROP"));
+        assert_eq!(values.0.len(), 2);
+        for value in &values.0 {
+            match value {
+                Value::String(Some(pattern)) => {
+                    assert_eq!(pattern.as_str(), "%hemd\\%\\_\\\\%");
+                }
+                other => panic!("expected a bound text pattern, got {other:?}"),
+            }
+        }
+        let sqlite = Query::select()
+            .column(Alias::new("id"))
+            .from(Alias::new("ferrioxid_admin_search"))
+            .to_owned();
+        let mut sqlite = sqlite;
+        constrain(
+            &mut sqlite,
+            DatabaseBackend::Sqlite,
+            &columns(),
+            &["name"],
+            Some("MÜNCHEN"),
+            &[],
+            &[],
+            &QueryScope::All,
+        )
+        .unwrap();
+        let (_, sqlite_values) = sqlite.build(sea_orm::sea_query::SqliteQueryBuilder);
+        match &sqlite_values.0[0] {
+            Value::String(Some(pattern)) => assert_eq!(pattern.as_str(), "%mÜnchen%"),
+            other => panic!("expected sqlite ASCII folding, got {other:?}"),
+        }
+    }
+
+    async fn create_search_table(db: &DatabaseConnection) {
+        let sql = match db.get_database_backend() {
+            DatabaseBackend::Sqlite => {
+                "CREATE TABLE ferrioxid_admin_search (id text PRIMARY KEY, name text NOT NULL, sku text NOT NULL, owner_id text NOT NULL)"
+            }
+            DatabaseBackend::Postgres => {
+                "CREATE TABLE ferrioxid_admin_search (id uuid PRIMARY KEY, name text NOT NULL, sku text NOT NULL, owner_id uuid NOT NULL)"
+            }
+            DatabaseBackend::MySql => panic!("mysql is not a test backend"),
+        };
+        db.execute(Statement::from_string(
+            db.get_database_backend(),
+            sql.to_owned(),
+        ))
+        .await
+        .unwrap();
+    }
+
+    async fn seed(db: &DatabaseConnection) {
+        let rows = [
+            (1_u128, "Hemd", "SKU-1", 1_u128),
+            (2, "100%", "SKU-2", 1),
+            (3, "a_b", "SKU-3", 2),
+            (4, "a\\b", "SKU-4", 1),
+            (5, "München", "city", 1),
+            (6, "shirt-a", "S1", 1),
+            (7, "shirt-b", "S2", 1),
+            (8, "shirt-c", "S3", 1),
+        ];
+        for (id, name, sku, owner) in rows {
+            crate::insert_record(
+                db,
+                "ferrioxid_admin_search",
+                &columns(),
+                vec![
+                    Value::Uuid(Some(Box::new(Uuid::from_u128(id)))),
+                    Value::String(Some(Box::new(name.to_owned()))),
+                    Value::String(Some(Box::new(sku.to_owned()))),
+                    Value::Uuid(Some(Box::new(Uuid::from_u128(owner)))),
+                ],
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    async fn search<'a>(
+        db: &DatabaseConnection,
+        term: Option<&'a str>,
+        scope: &'a QueryScope,
+        offset: u64,
+        limit: u64,
+    ) -> super::AdminPage {
+        query_admin_page(
+            db,
+            "ferrioxid_admin_search",
+            &columns(),
+            AdminPageRequest {
+                search_columns: &["name", "sku"],
+                search: term,
+                sort_column: "name",
+                descending: false,
+                equal_filters: &[],
+                bounds: &[],
+                offset,
+                limit,
+                scope,
+            },
+        )
+        .await
+        .unwrap()
+    }
+
+    async fn exercise_admin_search(db: &DatabaseConnection) {
+        let owner = owner_scope(1);
+        let all = QueryScope::All;
+        assert_eq!(search(db, Some("Hemd"), &all, 0, 10).await.total, 1);
+        assert_eq!(search(db, Some("hemd"), &all, 0, 10).await.total, 1);
+        assert_eq!(search(db, Some("%"), &all, 0, 10).await.total, 1);
+        assert_eq!(search(db, Some("_"), &all, 0, 10).await.total, 1);
+        assert_eq!(search(db, Some("\\"), &all, 0, 10).await.total, 1);
+        assert_eq!(search(db, Some("SKU-1"), &all, 0, 10).await.total, 1);
+        assert_eq!(
+            search(
+                db,
+                Some("'); DROP TABLE ferrioxid_admin_search; --"),
+                &all,
+                0,
+                10
+            )
+            .await
+            .total,
+            0
+        );
+        let empty = search(db, Some(""), &owner, 0, 10).await;
+        assert_eq!(empty.total, 7);
+        assert_eq!(search(db, None, &QueryScope::None, 0, 10).await.total, 0);
+        let shirts = search(db, Some("shirt"), &owner, 0, 2).await;
+        assert_eq!(shirts.total, 3);
+        assert_eq!(shirts.rows.len(), 2);
+        assert!(shirts.has_more);
+        let next = search(db, Some("shirt"), &owner, 2, 2).await;
+        assert_eq!(next.total, 3);
+        assert_eq!(next.rows.len(), 1);
+        assert!(!next.has_more);
+        let hidden = search(db, Some("a_b"), &owner, 0, 10).await;
+        assert_eq!(hidden.total, 0);
+        let visible = search(db, Some("a_b"), &all, 0, 10).await;
+        assert_eq!(visible.total, 1);
+        let folded = search(db, Some("MÜNCHEN"), &all, 0, 10).await.total;
+        match db.get_database_backend() {
+            DatabaseBackend::Sqlite => assert_eq!(folded, 0),
+            DatabaseBackend::Postgres => assert_eq!(folded, 1),
+            DatabaseBackend::MySql => panic!("mysql is not a test backend"),
+        }
+        let rejected = query_admin_page(
+            db,
+            "ferrioxid_admin_search",
+            &columns(),
+            AdminPageRequest {
+                search_columns: &["missing"],
+                search: Some("Hemd"),
+                sort_column: "name",
+                descending: false,
+                equal_filters: &[],
+                bounds: &[],
+                offset: 0,
+                limit: 10,
+                scope: &all,
+            },
+        )
+        .await;
+        assert!(rejected.is_err());
+    }
+
+    #[tokio::test]
+    async fn sqlite_admin_search_matches_literals_scopes_and_pages() {
+        let db = connect("sqlite::memory:").await.unwrap();
+        create_search_table(&db).await;
+        seed(&db).await;
+        exercise_admin_search(&db).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
+    async fn postgres_admin_search_runtime() {
+        let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let disposable = crate::DisposablePostgres::create(&admin)
+            .await
+            .expect("isolated postgres");
+        let db = connect(disposable.url()).await.expect("postgres");
+        create_search_table(&db).await;
+        seed(&db).await;
+        exercise_admin_search(&db).await;
+        db.close().await.expect("close");
+        disposable
+            .drop_database()
+            .await
+            .expect("drop isolated database");
+    }
+}
