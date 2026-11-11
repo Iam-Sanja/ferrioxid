@@ -663,7 +663,12 @@ impl<M> Select<M> {
                     "keyset cursor does not match the order".into(),
                 ));
             }
-            query.and_where(seek_expr(M::columns(), &plan.orders, &values)?);
+            query.and_where(seek_expr(
+                M::columns(),
+                &plan.orders,
+                &values,
+                db.get_database_backend(),
+            )?);
         }
         apply_orders(&mut query, &plan.orders);
         query.limit(plan.limit.saturating_add(1));
@@ -1006,7 +1011,9 @@ fn compare_expr(
         )));
     }
     let expr = qualified_col(qualifier, column.name);
-    let bound = |value: &Bound| -> Result<Value, FerrioxidError> { bind_for_column(column, value) };
+    let bound = |value: &Bound| -> Result<Value, FerrioxidError> {
+        bind_for_column(column, value, backend)
+    };
     Ok(match compare {
         Compare::Eq(value) => expr.eq(bound(value)?),
         Compare::Ne(value) => expr.ne(bound(value)?),
@@ -1098,16 +1105,8 @@ fn text_match_expr(
     Ok(Some(expr))
 }
 
-/// Folds a LIKE pattern so it matches `LOWER(column)` on the active backend.
-///
-/// SQLite `LOWER` affects ASCII letters only, so the pattern uses
-/// [`str::to_ascii_lowercase`]. PostgreSQL follows `LOWER` with locale-aware
-/// Unicode rules, so the pattern uses [`str::to_lowercase`].
 fn fold_case_insensitive_pattern(pattern: String, backend: DatabaseBackend) -> String {
-    match backend {
-        DatabaseBackend::Sqlite => pattern.to_ascii_lowercase(),
-        DatabaseBackend::Postgres | DatabaseBackend::MySql => pattern.to_lowercase(),
-    }
+    crate::sql::fold_case_insensitive_pattern(pattern, backend)
 }
 
 fn escape_glob(term: &str) -> String {
@@ -1252,7 +1251,17 @@ fn value_matches(kind: ColumnKind, value: &Bound, inequality: bool) -> bool {
     }
 }
 
-fn bind_for_column(column: &ColumnSpec, value: &Bound) -> Result<Value, FerrioxidError> {
+fn bind_for_column(
+    column: &ColumnSpec,
+    value: &Bound,
+    backend: DatabaseBackend,
+) -> Result<Value, FerrioxidError> {
+    if matches!(
+        column.kind,
+        ColumnKind::Date | ColumnKind::Time | ColumnKind::DateTime
+    ) {
+        return bind_temporal(column, value, backend);
+    }
     if column.kind == ColumnKind::Decimal {
         let Bound::Text(text) = value else {
             return Err(FerrioxidError::Validation(format!(
@@ -1287,6 +1296,74 @@ fn bind_for_column(column: &ColumnSpec, value: &Bound) -> Result<Value, Ferrioxi
         }
     }
     Ok(bound_value(value))
+}
+
+/// Binds a logical temporal value.
+///
+/// `DateTime` is an absolute UTC instant. `parse_datetime_utc` accepts `Z` and
+/// `+00:00` and rejects every other offset instead of converting it. Subsecond
+/// precision from the parsed instant is kept in the parameter.
+/// PostgreSQL receives `date`, `time` or `timestamptz`. SQLite columns stay
+/// text: dates and times use the canonical strings, and a timestamp uses the
+/// RFC 3339 text that the SQLite driver writes for `DateTime<Utc>`.
+fn bind_temporal(
+    column: &ColumnSpec,
+    value: &Bound,
+    backend: DatabaseBackend,
+) -> Result<Value, FerrioxidError> {
+    let Bound::Text(text) = value else {
+        return Err(FerrioxidError::Validation(format!(
+            "column {} does not accept this comparison",
+            column.name
+        )));
+    };
+    let invalid = |code: &str| FerrioxidError::Validation(format!("column {} {code}", column.name));
+    match column.kind {
+        ColumnKind::Date => {
+            let date = ferrioxid_core::parse_date(text).map_err(invalid)?;
+            Ok(match backend {
+                DatabaseBackend::Postgres => Value::ChronoDate(Some(Box::new(date))),
+                DatabaseBackend::Sqlite => {
+                    Value::String(Some(Box::new(ferrioxid_core::temporal::format_date(date))))
+                }
+                DatabaseBackend::MySql => {
+                    return Err(FerrioxidError::Validation("MySQL is not supported".into()));
+                }
+            })
+        }
+        ColumnKind::Time => {
+            let time = ferrioxid_core::parse_time(text).map_err(invalid)?;
+            Ok(match backend {
+                DatabaseBackend::Postgres => Value::ChronoTime(Some(Box::new(time))),
+                DatabaseBackend::Sqlite => {
+                    Value::String(Some(Box::new(ferrioxid_core::temporal::format_time(time))))
+                }
+                DatabaseBackend::MySql => {
+                    return Err(FerrioxidError::Validation("MySQL is not supported".into()));
+                }
+            })
+        }
+        ColumnKind::DateTime => {
+            let instant = ferrioxid_core::parse_datetime_utc(text).map_err(invalid)?;
+            Ok(match backend {
+                DatabaseBackend::Postgres => Value::ChronoDateTimeUtc(Some(Box::new(instant))),
+                DatabaseBackend::Sqlite => {
+                    Value::String(Some(Box::new(sqlite_datetime_text(instant))))
+                }
+                DatabaseBackend::MySql => {
+                    return Err(FerrioxidError::Validation("MySQL is not supported".into()));
+                }
+            })
+        }
+        _ => Err(FerrioxidError::Validation(format!(
+            "column {} does not accept this comparison",
+            column.name
+        ))),
+    }
+}
+
+fn sqlite_datetime_text(value: chrono::DateTime<chrono::Utc>) -> String {
+    value.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, false)
 }
 
 fn bound_value(value: &Bound) -> Value {
@@ -1364,6 +1441,7 @@ fn seek_expr(
     columns: &[ColumnSpec],
     orders: &[(&str, Direction)],
     values: &[Bound],
+    backend: DatabaseBackend,
 ) -> Result<SimpleExpr, FerrioxidError> {
     let mut outer: Option<SimpleExpr> = None;
     for index in 0..orders.len() {
@@ -1371,7 +1449,8 @@ fn seek_expr(
         for earlier in 0..index {
             let (name, _) = orders[earlier];
             let column = lookup(columns, name)?;
-            let equal = Expr::col(Alias::new(name)).eq(bind_for_column(column, &values[earlier])?);
+            let equal =
+                Expr::col(Alias::new(name)).eq(bind_for_column(column, &values[earlier], backend)?);
             inner = Some(match inner {
                 Some(current) => current.and(equal),
                 None => equal,
@@ -1379,7 +1458,7 @@ fn seek_expr(
         }
         let (name, direction) = orders[index];
         let column = lookup(columns, name)?;
-        let value = bind_for_column(column, &values[index])?;
+        let value = bind_for_column(column, &values[index], backend)?;
         let compared = match direction {
             Direction::Asc => Expr::col(Alias::new(name)).gt(value),
             Direction::Desc => Expr::col(Alias::new(name)).lt(value),
@@ -3602,6 +3681,437 @@ mod tests {
             .await
             .unwrap();
         assert!(text.is_none());
+    }
+
+    #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+    struct TemporalParent {
+        id: Uuid,
+        name: String,
+    }
+
+    #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+    struct TemporalEvent {
+        id: Uuid,
+        label: String,
+        opened_on: String,
+        starts_at: String,
+        created_at: String,
+        closed_on: Option<String>,
+        parent_id: Uuid,
+    }
+
+    const TEMPORAL_PARENT: ModelDescriptor = ModelDescriptor {
+        name: "TemporalParent",
+        table: "ferrioxid_temporal_parents",
+        api_path: "",
+        allow_anonymous: false,
+        permission: None,
+        requires_object_policy: false,
+    };
+
+    const TEMPORAL_EVENT: ModelDescriptor = ModelDescriptor {
+        name: "TemporalEvent",
+        table: "ferrioxid_temporal_events",
+        api_path: "",
+        allow_anonymous: false,
+        permission: None,
+        requires_object_policy: false,
+    };
+
+    impl FerrioxidModel for TemporalParent {
+        fn descriptor() -> &'static ModelDescriptor {
+            &TEMPORAL_PARENT
+        }
+
+        fn columns() -> &'static [ColumnSpec] {
+            use std::sync::OnceLock;
+            static COLUMNS: OnceLock<Vec<ColumnSpec>> = OnceLock::new();
+            COLUMNS.get_or_init(|| {
+                vec![
+                    column("id", ColumnKind::Uuid, false, true),
+                    column("name", ColumnKind::Text, false, false),
+                ]
+            })
+        }
+
+        fn schema_sql(kind: DatabaseKind) -> String {
+            match kind {
+                DatabaseKind::Sqlite => {
+                    "CREATE TABLE ferrioxid_temporal_parents (id text PRIMARY KEY NOT NULL, name text NOT NULL)"
+                        .to_owned()
+                }
+                DatabaseKind::Postgres => {
+                    "CREATE TABLE ferrioxid_temporal_parents (id uuid PRIMARY KEY NOT NULL, name text NOT NULL)"
+                        .to_owned()
+                }
+            }
+        }
+    }
+
+    impl FerrioxidModel for TemporalEvent {
+        fn descriptor() -> &'static ModelDescriptor {
+            &TEMPORAL_EVENT
+        }
+
+        fn columns() -> &'static [ColumnSpec] {
+            use std::sync::OnceLock;
+            static COLUMNS: OnceLock<Vec<ColumnSpec>> = OnceLock::new();
+            COLUMNS.get_or_init(|| {
+                let mut parent = column("parent_id", ColumnKind::Uuid, false, false);
+                parent.foreign_table = Some("ferrioxid_temporal_parents");
+                parent.foreign_column = Some("id");
+                vec![
+                    column("id", ColumnKind::Uuid, false, true),
+                    column("label", ColumnKind::Text, false, false),
+                    column("opened_on", ColumnKind::Date, false, false),
+                    column("starts_at", ColumnKind::Time, false, false),
+                    column("created_at", ColumnKind::DateTime, false, false),
+                    column("closed_on", ColumnKind::Date, true, false),
+                    parent,
+                ]
+            })
+        }
+
+        fn schema_sql(kind: DatabaseKind) -> String {
+            match kind {
+                DatabaseKind::Sqlite => "CREATE TABLE ferrioxid_temporal_events (
+                    id text PRIMARY KEY NOT NULL,
+                    label text NOT NULL,
+                    opened_on text NOT NULL,
+                    starts_at text NOT NULL,
+                    created_at text NOT NULL,
+                    closed_on text,
+                    parent_id text NOT NULL
+                )"
+                .to_owned(),
+                DatabaseKind::Postgres => "CREATE TABLE ferrioxid_temporal_events (
+                    id uuid PRIMARY KEY NOT NULL,
+                    label text NOT NULL,
+                    opened_on date NOT NULL,
+                    starts_at time NOT NULL,
+                    created_at timestamptz NOT NULL,
+                    closed_on date,
+                    parent_id uuid NOT NULL
+                )"
+                .to_owned(),
+            }
+        }
+    }
+
+    fn date_value(text: &str) -> Value {
+        Value::ChronoDate(Some(Box::new(ferrioxid_core::parse_date(text).unwrap())))
+    }
+
+    fn time_value(text: &str) -> Value {
+        Value::ChronoTime(Some(Box::new(ferrioxid_core::parse_time(text).unwrap())))
+    }
+
+    fn instant_value(text: &str) -> Value {
+        Value::ChronoDateTimeUtc(Some(Box::new(
+            ferrioxid_core::parse_datetime_utc(text).unwrap(),
+        )))
+    }
+
+    async fn insert_temporal(db: &impl ConnectionTrait, kind: DatabaseKind) {
+        db.execute(Statement::from_string(
+            db.get_database_backend(),
+            TemporalParent::schema_sql(kind),
+        ))
+        .await
+        .unwrap();
+        db.execute(Statement::from_string(
+            db.get_database_backend(),
+            TemporalEvent::schema_sql(kind),
+        ))
+        .await
+        .unwrap();
+        for (id, name) in [(10_u128, "kept"), (11, "other")] {
+            crate::insert_record(
+                db,
+                TemporalParent::descriptor().table,
+                TemporalParent::columns(),
+                vec![uuid_value(id), text_value(name)],
+            )
+            .await
+            .unwrap();
+        }
+        let rows = [
+            (
+                1_u128,
+                "first",
+                "2026-11-10",
+                "09:00:00",
+                "2026-11-10T08:00:00Z",
+                Some("2026-11-10"),
+                11_u128,
+            ),
+            (
+                2,
+                "fraction",
+                "2026-11-11",
+                "14:30:00",
+                "2026-11-11T13:30:00.123456Z",
+                None,
+                10,
+            ),
+            (
+                3,
+                "last",
+                "2026-11-12",
+                "18:00:00",
+                "2026-11-12T13:30:00Z",
+                None,
+                10,
+            ),
+        ];
+        for (id, label, opened, starts, created, closed, parent) in rows {
+            crate::insert_record(
+                db,
+                TemporalEvent::descriptor().table,
+                TemporalEvent::columns(),
+                vec![
+                    uuid_value(id),
+                    text_value(label),
+                    date_value(opened),
+                    time_value(starts),
+                    instant_value(created),
+                    match closed {
+                        Some(day) => date_value(day),
+                        None => Value::ChronoDate(None),
+                    },
+                    uuid_value(parent),
+                ],
+            )
+            .await
+            .unwrap();
+        }
+    }
+
+    fn temporal_labels(rows: &[TemporalEvent]) -> Vec<&str> {
+        rows.iter().map(|row| row.label.as_str()).collect()
+    }
+
+    async fn exercise_temporal_filters(db: &impl ConnectionTrait) {
+        let stored = TemporalEvent::query()
+            .order_by("opened_on", Direction::Asc)
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&stored), vec!["first", "fraction", "last"]);
+        assert_eq!(stored[1].created_at, "2026-11-11T13:30:00.123456Z");
+        assert_eq!(stored[1].starts_at, "14:30:00");
+        assert_eq!(stored[1].closed_on, None);
+
+        let equal = TemporalEvent::query()
+            .filter(col("opened_on").eq("2026-11-11"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&equal), vec!["fraction"]);
+        let after = TemporalEvent::query()
+            .filter(col("opened_on").gt("2026-11-11"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&after), vec!["last"]);
+        let from = TemporalEvent::query()
+            .filter(col("opened_on").gte("2026-11-11"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(from, 2);
+        let before = TemporalEvent::query()
+            .filter(col("opened_on").lt("2026-11-11"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&before), vec!["first"]);
+        let until = TemporalEvent::query()
+            .filter(col("opened_on").lte("2026-11-10"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(until, 1);
+        let listed = TemporalEvent::query()
+            .filter(col("opened_on").is_in(["2026-11-10", "2026-11-12"]))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(listed, 2);
+        let open = TemporalEvent::query()
+            .filter(col("closed_on").is_null())
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(open, 2);
+        let closed = TemporalEvent::query()
+            .filter(col("closed_on").eq("2026-11-10"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&closed), vec!["first"]);
+        let afternoon = TemporalEvent::query()
+            .filter(col("starts_at").eq("14:30"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&afternoon), vec!["fraction"]);
+        let later = TemporalEvent::query()
+            .filter(col("starts_at").gt("14:30:00"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&later), vec!["last"]);
+        let precise = TemporalEvent::query()
+            .filter(col("created_at").eq("2026-11-11T13:30:00.123456Z"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&precise), vec!["fraction"]);
+        let truncated = TemporalEvent::query()
+            .filter(col("created_at").eq("2026-11-11T13:30:00Z"))
+            .count(db)
+            .await
+            .unwrap();
+        assert_eq!(truncated, 0);
+        let after_instant = TemporalEvent::query()
+            .filter(col("created_at").gt("2026-11-11T13:30:00.123456Z"))
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(temporal_labels(&after_instant), vec!["last"]);
+        assert!(TemporalEvent::query()
+            .filter(col("opened_on").eq("2026-02-31"))
+            .all(db)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("validation.date"));
+        assert!(TemporalEvent::query()
+            .filter(col("starts_at").eq("24:00:00"))
+            .all(db)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("validation.time"));
+        assert!(TemporalEvent::query()
+            .filter(col("starts_at").eq("14:30:00.5"))
+            .all(db)
+            .await
+            .is_err());
+        assert!(TemporalEvent::query()
+            .filter(col("created_at").eq("2026-11-11T13:30:00+02:00"))
+            .all(db)
+            .await
+            .unwrap_err()
+            .to_string()
+            .contains("validation.datetime_offset"));
+
+        let related = TemporalParent::query()
+            .where_has::<TemporalEvent>(
+                "parent_id",
+                Related::new().filter(col("opened_on").eq("2026-11-11")),
+            )
+            .all(db)
+            .await
+            .unwrap();
+        assert_eq!(
+            related
+                .iter()
+                .map(|row| row.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["kept"]
+        );
+
+        let mut cursor = None;
+        let mut seen = Vec::new();
+        for _ in 0..3 {
+            let page = TemporalEvent::query()
+                .order_by("opened_on", Direction::Asc)
+                .limit(1)
+                .keyset(db, cursor.as_deref())
+                .await
+                .unwrap();
+            assert_eq!(page.data.len(), 1);
+            assert!(page.has_more || seen.len() == 2);
+            seen.push(page.data[0].label.clone());
+            cursor = page.next;
+        }
+        assert_eq!(seen, vec!["first", "fraction", "last"]);
+        let done = TemporalEvent::query()
+            .order_by("opened_on", Direction::Asc)
+            .limit(1)
+            .keyset(db, cursor.as_deref())
+            .await
+            .unwrap();
+        assert!(done.data.is_empty());
+    }
+
+    #[test]
+    fn temporal_parameters_follow_the_column_kind() {
+        let date = TemporalEvent::query().filter(col("opened_on").eq("2026-11-11"));
+        let postgres = date.statement_for(DatabaseBackend::Postgres).unwrap();
+        assert!(postgres.sql.contains("$1"));
+        assert!(!postgres.sql.contains('?'));
+        assert!(matches!(
+            postgres.values.as_ref().unwrap().0[0],
+            Value::ChronoDate(Some(_))
+        ));
+        let sqlite = date.statement_for(DatabaseBackend::Sqlite).unwrap();
+        match &sqlite.values.as_ref().unwrap().0[0] {
+            Value::String(Some(value)) => assert_eq!(value.as_str(), "2026-11-11"),
+            other => panic!("expected sqlite date text, got {other:?}"),
+        }
+        let instant =
+            TemporalEvent::query().filter(col("created_at").eq("2026-11-11T13:30:00.123456Z"));
+        let parsed = ferrioxid_core::parse_datetime_utc("2026-11-11T13:30:00.123456Z").unwrap();
+        let driver = parsed.to_rfc3339_opts(chrono::SecondsFormat::AutoSi, false);
+        assert_ne!(driver, "2026-11-11T13:30:00.123456Z");
+        match &instant
+            .statement_for(DatabaseBackend::Sqlite)
+            .unwrap()
+            .values
+            .as_ref()
+            .unwrap()
+            .0[0]
+        {
+            Value::String(Some(value)) => assert_eq!(value.as_str(), driver),
+            other => panic!("expected sqlite datetime text, got {other:?}"),
+        }
+        assert!(matches!(
+            instant
+                .statement_for(DatabaseBackend::Postgres)
+                .unwrap()
+                .values
+                .as_ref()
+                .unwrap()
+                .0[0],
+            Value::ChronoDateTimeUtc(Some(_))
+        ));
+    }
+
+    #[tokio::test]
+    async fn sqlite_temporal_filters_relations_and_keyset_pages() {
+        let db = connect("sqlite::memory:").await.unwrap();
+        insert_temporal(&db, DatabaseKind::Sqlite).await;
+        exercise_temporal_filters(&db).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
+    async fn postgres_temporal_filters_and_keyset() {
+        let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let disposable = crate::DisposablePostgres::create(&admin)
+            .await
+            .expect("isolated postgres");
+        let db = connect(disposable.url()).await.expect("postgres");
+        insert_temporal(&db, DatabaseKind::Postgres).await;
+        exercise_temporal_filters(&db).await;
+        db.close().await.expect("close");
+        disposable
+            .drop_database()
+            .await
+            .expect("drop isolated database");
     }
 
     fn uuid_value(id: u128) -> Value {

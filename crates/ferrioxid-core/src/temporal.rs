@@ -1,6 +1,6 @@
 //! Kalenderdatum, Tageszeit und UTC-Zeitpunkt. Keine stillen Zeitzonenverschiebungen.
 
-use chrono::{DateTime, NaiveDate, NaiveTime, Timelike, Utc};
+use chrono::{DateTime, NaiveDate, NaiveTime, SecondsFormat, Timelike, Utc};
 use serde::Deserialize;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -65,7 +65,11 @@ pub fn format_time(value: NaiveTime) -> String {
 }
 
 pub fn format_datetime(value: DateTime<Utc>) -> String {
-    value.format("%Y-%m-%dT%H:%M:%SZ").to_string()
+    if value.timestamp_subsec_nanos() == 0 {
+        value.format("%Y-%m-%dT%H:%M:%SZ").to_string()
+    } else {
+        value.to_rfc3339_opts(SecondsFormat::AutoSi, true)
+    }
 }
 
 pub fn datetime_local_value(value: &str) -> String {
@@ -177,6 +181,8 @@ mod tests {
         assert_eq!(parse_time("24:00:00"), Err("validation.time"));
         let instant = parse_datetime_utc("2026-11-07T13:30:00Z").unwrap();
         assert_eq!(format_datetime(instant), "2026-11-07T13:30:00Z");
+        let fractional = parse_datetime_utc("2026-11-07T13:30:00.123456Z").unwrap();
+        assert_eq!(format_datetime(fractional), "2026-11-07T13:30:00.123456Z");
         assert_eq!(
             parse_datetime_utc("2026-11-07T13:30:00+02:00"),
             Err("validation.datetime_offset")
