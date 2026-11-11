@@ -571,6 +571,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "desk"
+version = "0.1.0"
+dependencies = [
+ "axum",
+ "ferrioxid",
+ "serde",
+ "tera",
+ "tokio",
+ "uuid",
+]
+
+[[package]]
 name = "deunicode"
 version = "1.6.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

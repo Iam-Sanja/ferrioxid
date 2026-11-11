@@ -8,7 +8,8 @@ members = [
   "crates/ferrioxid-forms", "crates/ferrioxid-static", "crates/ferrioxid-storage",
   "crates/ferrioxid-middleware", "crates/ferrioxid-mail", "crates/ferrioxid-jobs",
   "examples/myshop",
-  "examples/notes"
+  "examples/notes",
+  "examples/desk"
 ]
 
 [workspace.package]
