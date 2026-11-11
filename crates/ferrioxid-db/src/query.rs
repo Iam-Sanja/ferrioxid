@@ -510,8 +510,13 @@ impl<M> Select<M> {
 
     /// Updates every row the scope allows, even when no filter was added.
     ///
-    /// [`QueryScope::None`] still matches nothing. The same hook limitation as
-    /// [`Select::update_matching`] applies.
+    /// The [`QueryScope`] stays in force. [`QueryScope::None`] still matches
+    /// nothing. [`QueryScope::All`] is the explicit request for every row.
+    /// This does not clear a scope that was already set. The same hook
+    /// limitation as [`Select::update_matching`] applies. A bulk update is
+    /// not `ModelRepository::update`: readonly and managed columns are
+    /// rejected when the model declares them, and the column fixed by
+    /// [`QueryScope::Equals`] cannot be assigned.
     pub fn update_all(self) -> crate::write::ColumnUpdate<M> {
         crate::write::ColumnUpdate::new(self, true)
     }
@@ -526,6 +531,9 @@ impl<M> Select<M> {
     }
 
     /// Deletes every row the scope allows.
+    ///
+    /// The [`QueryScope`] stays in force. [`QueryScope::All`] is the explicit
+    /// request for every row. This does not clear a scope that was already set.
     pub fn delete_all(self) -> crate::write::FilteredDelete<M> {
         crate::write::FilteredDelete::new(self, true)
     }
@@ -533,10 +541,13 @@ impl<M> Select<M> {
     /// Locks the rows that match, inside an open transaction.
     ///
     /// PostgreSQL uses `SELECT … FOR UPDATE` and locks only matched rows.
-    /// SQLite has no row lock. The same predicate runs `UPDATE … SET id = id`,
-    /// which makes other writers wait until commit. A result of zero does not
-    /// insert anything and is not a reservation for a later insert. A unique
-    /// constraint is what stops two concurrent first inserts.
+    /// SQLite has no row lock. The call first runs an `UPDATE` that matches
+    /// no row, which takes the database reserved lock until commit or
+    /// rollback. It does not change a stored value, so `AFTER UPDATE`
+    /// triggers and `ON UPDATE CASCADE` do not run. Other writers on that
+    /// file wait, including writers of a different row. A result of zero
+    /// does not insert anything and is not a reservation for a later insert.
+    /// A unique constraint is what stops two concurrent first inserts.
     pub async fn lock_existing(
         self,
         db: &sea_orm::DatabaseTransaction,
@@ -908,6 +919,10 @@ impl<M> Select<M> {
             });
         }
         Ok(filter)
+    }
+
+    pub(crate) fn write_scope(&self) -> &QueryScope {
+        &self.scope
     }
 
     fn plan(&self, backend: DatabaseBackend) -> Result<Plan, FerrioxidError>
@@ -1342,6 +1357,12 @@ pub(crate) fn bind_for_column(
     value: &Bound,
     backend: DatabaseBackend,
 ) -> Result<Value, FerrioxidError> {
+    if !value_matches(column.kind, value, false) {
+        return Err(FerrioxidError::Validation(format!(
+            "column {} does not accept this value",
+            column.name
+        )));
+    }
     if matches!(
         column.kind,
         ColumnKind::Date | ColumnKind::Time | ColumnKind::DateTime

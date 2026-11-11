@@ -114,4 +114,5 @@ jobs:
           cargo test -p ferrioxid-migrations --lib fixtures::tests::postgres_temporal_fixture_roundtrip -- --ignored
           cargo test -p ferrioxid-api --lib testing::tests::postgres_isolated_databases_do_not_share_rows -- --ignored
           cargo test -p ferrioxid-db --lib write::tests::postgres_shop_cases -- --ignored
+          cargo test -p ferrioxid-db --lib write::tests::postgres_write_security -- --ignored
           cargo test -p desk --test flow -- --ignored postgres_same_operations

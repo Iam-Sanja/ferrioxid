@@ -115,7 +115,13 @@ impl<M> ColumnUpdate<M> {
                 )));
             }
             seen.push(name);
-            apply_assignment::<M>(&mut query, columns, assignment, backend)?;
+            apply_assignment::<M>(
+                &mut query,
+                columns,
+                assignment,
+                backend,
+                self.query.write_scope(),
+            )?;
         }
         let result = db
             .execute({
@@ -302,22 +308,47 @@ pub(crate) async fn lock_existing<M: FerrioxidModel>(
         DatabaseBackend::Sqlite => {
             // A preceding SELECT would take a shared lock. Two transactions
             // that then both try to write can deadlock and return SQLITE_BUSY
-            // immediately. The write itself is the lock. Zero changed rows
-            // still does not insert a missing record.
-            let mut update = Query::update();
-            update
+            // immediately. A zero-row UPDATE takes the reserved lock without
+            // changing a row, so table triggers and ON UPDATE actions do not
+            // run. The count uses the caller's filter and scope.
+            let mut reserve = Query::update();
+            reserve
                 .table(Alias::new(table))
                 .value(Alias::new("id"), Expr::col(Alias::new("id")))
+                .and_where(Expr::val(0).eq(1));
+            db.execute({
+                crate::query::note_statement();
+                sql::statement(db, &reserve)?
+            })
+            .await
+            .map_err(FerrioxidError::database)?;
+            let mut count = Query::select();
+            count
+                .expr_as(
+                    Expr::col(Alias::new("id")).count(),
+                    Alias::new("locked_rows"),
+                )
+                .from(Alias::new(table))
                 .and_where(filter);
-            let result = db
-                .execute({
+            let row = db
+                .query_one({
                     crate::query::note_statement();
-                    sql::statement(db, &update)?
+                    sql::statement(db, &count)?
                 })
                 .await
-                .map_err(sql::map_write)?;
+                .map_err(FerrioxidError::database)?
+                .ok_or_else(|| {
+                    FerrioxidError::database(std::io::Error::new(
+                        std::io::ErrorKind::UnexpectedEof,
+                        "lock count returned no row",
+                    ))
+                })?;
+            let rows = row
+                .try_get::<i64>("", "locked_rows")
+                .or_else(|_| row.try_get::<i32>("", "locked_rows").map(i64::from))
+                .map_err(FerrioxidError::database)?;
             Ok(LockResult {
-                rows: result.rows_affected(),
+                rows: u64::try_from(rows).unwrap_or(0),
             })
         }
         DatabaseBackend::MySql => Err(FerrioxidError::Validation("MySQL is not supported".into())),
@@ -340,6 +371,7 @@ fn apply_assignment<M: FerrioxidModel>(
     columns: &[ColumnSpec],
     assignment: &Assignment,
     backend: DatabaseBackend,
+    scope: &ferrioxid_core::QueryScope,
 ) -> Result<(), FerrioxidError> {
     let column = column_spec(columns, assignment.column())?;
     if column.primary_key {
@@ -348,8 +380,37 @@ fn apply_assignment<M: FerrioxidModel>(
             column.name
         )));
     }
+    if M::field_contracts()
+        .iter()
+        .any(|contract| contract.column == column.name && !contract.in_update)
+    {
+        return Err(FerrioxidError::Validation(format!(
+            "column {} is not writable",
+            column.name
+        )));
+    }
+    if let ferrioxid_core::QueryScope::Equals { column: fixed, .. } = scope {
+        if *fixed == column.name {
+            return Err(FerrioxidError::Validation(format!(
+                "column {} is fixed by the query scope",
+                column.name
+            )));
+        }
+    }
     match assignment {
         Assignment::Set { value, .. } => {
+            if let (ColumnKind::BigInt, Bound::I64(number)) = (column.kind, value) {
+                if let Some(bound) = bound_for::<M>(column.name) {
+                    if bound.min.is_some_and(|min| *number < min)
+                        || bound.max.is_some_and(|max| *number > max)
+                    {
+                        return Err(FerrioxidError::Validation(format!(
+                            "column {} is outside its numeric bound",
+                            column.name
+                        )));
+                    }
+                }
+            }
             let bound = bind_for_column(column, value, backend)?;
             query.value(Alias::new(column.name), bound);
         }
@@ -550,16 +611,18 @@ mod tests {
     use std::sync::OnceLock;
 
     use ferrioxid_core::{
-        ColumnKind, ColumnSpec, DatabaseKind, FerrioxidModel, ModelDescriptor, NumericBound,
-        QueryScope, ReferentialAction, ScopeValue, TableConstraints,
+        ColumnKind, ColumnSpec, DatabaseKind, FerrioxidModel, FieldContract, ModelDescriptor,
+        NumericBound, QueryScope, ReferentialAction, ScopeValue, TableConstraints,
     };
-    use sea_orm::{ConnectionTrait, DatabaseConnection, Statement, TransactionTrait};
+    use sea_orm::{
+        ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait, Value,
+    };
     use serde::Deserialize;
     use uuid::Uuid;
 
     use super::*;
     use crate::sql::{render_table_bundle, ForeignKeyClause, PhysicalColumn};
-    use crate::{col, connect, kind_of, ModelQuery};
+    use crate::{any_of, col, connect, kind_of, ModelQuery};
 
     fn id(value: u128) -> Uuid {
         Uuid::from_u128(value)
@@ -1277,6 +1340,662 @@ mod tests {
         };
         tx.commit().await.unwrap();
         inserted
+    }
+
+    #[derive(Debug, Clone, Deserialize, PartialEq, Eq)]
+    struct Note {
+        id: Uuid,
+        owner_id: Uuid,
+        name: String,
+        stock: i64,
+        sealed: i64,
+        bonus: Option<i64>,
+    }
+
+    impl FerrioxidModel for Note {
+        fn descriptor() -> &'static ModelDescriptor {
+            static VALUE: OnceLock<ModelDescriptor> = OnceLock::new();
+            VALUE.get_or_init(|| descriptor("Note", "ferrioxid_write_notes"))
+        }
+        fn columns() -> &'static [ColumnSpec] {
+            static VALUE: OnceLock<Vec<ColumnSpec>> = OnceLock::new();
+            VALUE.get_or_init(|| {
+                vec![
+                    column("id", ColumnKind::Uuid, false, true),
+                    column("owner_id", ColumnKind::Uuid, false, false),
+                    column("name", ColumnKind::Text, false, false),
+                    column("stock", ColumnKind::BigInt, false, false),
+                    column("sealed", ColumnKind::BigInt, false, false),
+                    column("bonus", ColumnKind::BigInt, true, false),
+                ]
+            })
+        }
+        fn numeric_bounds() -> &'static [NumericBound] {
+            static VALUE: &[NumericBound] = &[NumericBound {
+                column: "stock",
+                min: Some(0),
+                max: Some(10),
+            }];
+            VALUE
+        }
+        fn field_contracts() -> &'static [FieldContract] {
+            static VALUE: &[FieldContract] = &[
+                FieldContract {
+                    column: "name",
+                    in_create: true,
+                    in_update: true,
+                    create_required: true,
+                    min_length: Some(5),
+                    max_length: Some(40),
+                    format: None,
+                },
+                FieldContract {
+                    column: "sealed",
+                    in_create: true,
+                    in_update: false,
+                    create_required: true,
+                    min_length: None,
+                    max_length: None,
+                    format: None,
+                },
+            ];
+            VALUE
+        }
+        fn schema_sql(kind: DatabaseKind) -> String {
+            render_table_bundle(
+                kind,
+                Self::descriptor().table,
+                &physical(Self::columns()),
+                &[],
+                &[],
+                &[],
+            )
+            .join(";\n")
+        }
+    }
+
+    fn owner_scope(owner: u128) -> QueryScope {
+        QueryScope::Equals {
+            column: "owner_id",
+            value: ScopeValue::Uuid(id(owner)),
+        }
+    }
+
+    async fn insert_note(
+        db: &DatabaseConnection,
+        note: u128,
+        owner: u128,
+        name: &str,
+        stock: i64,
+        bonus: Option<i64>,
+    ) {
+        let mut insert = Note::insert()
+            .value("id", id(note))
+            .value("owner_id", id(owner))
+            .value("name", name)
+            .value("stock", stock)
+            .value("sealed", 7_i64);
+        if let Some(bonus) = bonus {
+            insert = insert.value("bonus", bonus);
+        }
+        insert.execute(db).await.unwrap();
+    }
+
+    async fn one_note(db: &DatabaseConnection, note: u128) -> Note {
+        Note::query()
+            .filter(col("id").eq(id(note)))
+            .all(db)
+            .await
+            .unwrap()
+            .remove(0)
+    }
+
+    async fn count_sql(db: &DatabaseConnection, sql: &str) -> i64 {
+        let row = db
+            .query_one(Statement::from_string(
+                db.get_database_backend(),
+                sql.to_owned(),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        row.try_get::<i64>("", "n")
+            .or_else(|_| row.try_get::<i32>("", "n").map(i64::from))
+            .unwrap()
+    }
+
+    async fn install_audit(db: &DatabaseConnection) {
+        let kind = kind_of(db.get_database_backend()).unwrap();
+        apply(db, &Note::schema_sql(kind)).await;
+        let statements: &[&str] = match kind {
+            DatabaseKind::Sqlite => &[
+                "CREATE TABLE ferrioxid_write_audit (id INTEGER PRIMARY KEY AUTOINCREMENT, note_id TEXT NOT NULL, name TEXT NOT NULL)",
+                "CREATE TABLE ferrioxid_write_note_children (id TEXT PRIMARY KEY, note_id TEXT NOT NULL REFERENCES ferrioxid_write_notes(id) ON UPDATE CASCADE)",
+                "CREATE TRIGGER ferrioxid_note_audit AFTER UPDATE ON ferrioxid_write_notes BEGIN INSERT INTO ferrioxid_write_audit(note_id, name) VALUES (NEW.id, NEW.name); END",
+            ],
+            DatabaseKind::Postgres => &[
+                "CREATE TABLE ferrioxid_write_audit (id integer GENERATED BY DEFAULT AS IDENTITY PRIMARY KEY, note_id uuid NOT NULL, name text NOT NULL)",
+                "CREATE TABLE ferrioxid_write_note_children (id uuid PRIMARY KEY, note_id uuid NOT NULL REFERENCES ferrioxid_write_notes(id) ON UPDATE CASCADE)",
+                "CREATE FUNCTION ferrioxid_note_audit() RETURNS trigger AS $$ BEGIN INSERT INTO ferrioxid_write_audit(note_id, name) VALUES (NEW.id, NEW.name); RETURN NEW; END $$ LANGUAGE plpgsql",
+                "CREATE TRIGGER ferrioxid_note_audit AFTER UPDATE ON ferrioxid_write_notes FOR EACH ROW EXECUTE FUNCTION ferrioxid_note_audit()",
+            ],
+        };
+        for statement in statements {
+            apply(db, statement).await;
+        }
+    }
+
+    async fn link_child(db: &DatabaseConnection) {
+        let sql = match kind_of(db.get_database_backend()).unwrap() {
+            DatabaseKind::Sqlite => {
+                "INSERT INTO ferrioxid_write_note_children (id, note_id) SELECT '00000000-0000-0000-0000-00000000005a', id FROM ferrioxid_write_notes WHERE name = 'alpha'"
+            }
+            DatabaseKind::Postgres => {
+                "INSERT INTO ferrioxid_write_note_children (id, note_id) SELECT '00000000-0000-0000-0000-00000000005a'::uuid, id FROM ferrioxid_write_notes WHERE name = 'alpha'"
+            }
+        };
+        apply(db, sql).await;
+    }
+
+    async fn security_cases(url: &str) {
+        let db = connect(url).await.unwrap();
+        install_audit(&db).await;
+        let kind = kind_of(db.get_database_backend()).unwrap();
+        for (note, owner, name, stock, bonus) in [
+            (11_u128, 1_u128, "alpha", 5_i64, None),
+            (12, 1, "shared", 5, Some(2_i64)),
+            (21, 2, "beta", 5, None),
+            (22, 2, "shared", 5, None),
+        ] {
+            insert_note(&db, note, owner, name, stock, bonus).await;
+        }
+        link_child(&db).await;
+
+        let renamed = Note::query()
+            .scope(owner_scope(1))
+            .filter(col("name").eq("alpha"))
+            .update_matching()
+            .set("name", "ab")
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(renamed.rows_affected, 1);
+        assert_eq!(one_note(&db, 11).await.name, "ab");
+        assert_eq!(one_note(&db, 21).await.name, "beta");
+
+        let scoped_all = Note::query()
+            .scope(owner_scope(1))
+            .update_all()
+            .set("stock", 4_i64)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(scoped_all.rows_affected, 2);
+        assert_eq!(one_note(&db, 21).await.stock, 5);
+        assert_eq!(one_note(&db, 22).await.stock, 5);
+
+        let or_filter = Note::query()
+            .scope(owner_scope(1))
+            .filter(any_of([
+                col("name").eq("shared"),
+                col("owner_id").eq(id(2)),
+            ]))
+            .update_matching()
+            .set("stock", 3_i64)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(or_filter.rows_affected, 1);
+        assert_eq!(one_note(&db, 12).await.stock, 3);
+        assert_eq!(one_note(&db, 22).await.stock, 5);
+
+        let empty = Note::query()
+            .scope(owner_scope(1))
+            .update_matching()
+            .set("stock", 2_i64)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(empty.rows_affected, 2);
+        assert_eq!(one_note(&db, 22).await.stock, 5);
+        let refused = Note::query()
+            .update_matching()
+            .set("stock", 1_i64)
+            .execute(&db)
+            .await
+            .expect_err("unfiltered");
+        assert!(matches!(refused, FerrioxidError::Validation(_)));
+        let none = Note::query()
+            .scope(QueryScope::None)
+            .update_all()
+            .set("stock", 1_i64)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(none.rows_affected, 0);
+
+        let injected_column = Note::query()
+            .scope(owner_scope(1))
+            .update_matching()
+            .set("name; DROP TABLE ferrioxid_write_notes", "gone")
+            .execute(&db)
+            .await
+            .expect_err("column");
+        assert!(matches!(injected_column, FerrioxidError::Validation(_)));
+        let injected_value = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("name", "x'; DROP TABLE ferrioxid_write_notes; --")
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(injected_value.rows_affected, 1);
+        assert_eq!(
+            one_note(&db, 11).await.name,
+            "x'; DROP TABLE ferrioxid_write_notes; --"
+        );
+        assert_eq!(
+            Note::query().count(&db).await.unwrap(),
+            4,
+            "the table is still present"
+        );
+
+        let primary = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("id", id(99))
+            .execute(&db)
+            .await
+            .expect_err("primary key");
+        assert!(matches!(primary, FerrioxidError::Validation(_)));
+        let sealed = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("sealed", 0_i64)
+            .execute(&db)
+            .await
+            .expect_err("readonly contract");
+        assert!(validation(sealed).contains("not writable"));
+        assert_eq!(one_note(&db, 11).await.sealed, 7);
+        let moved = Note::query()
+            .scope(owner_scope(1))
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("owner_id", id(2))
+            .execute(&db)
+            .await
+            .expect_err("scope column");
+        assert!(validation(moved).contains("fixed by the query scope"));
+        assert_eq!(one_note(&db, 11).await.owner_id, id(1));
+        let privileged = Note::query()
+            .filter(col("id").eq(id(21)))
+            .update_matching()
+            .set("owner_id", id(1))
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(privileged.rows_affected, 1);
+        assert_eq!(one_note(&db, 21).await.owner_id, id(1));
+        Note::query()
+            .filter(col("id").eq(id(21)))
+            .update_matching()
+            .set("owner_id", id(2))
+            .execute(&db)
+            .await
+            .unwrap();
+
+        let low = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("stock", -1_i64)
+            .execute(&db)
+            .await
+            .expect_err("negative");
+        assert!(validation(low).contains("numeric bound"));
+        let high = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("stock", 11_i64)
+            .execute(&db)
+            .await
+            .expect_err("overflow bound");
+        assert!(validation(high).contains("numeric bound"));
+        Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("stock", 10_i64)
+            .execute(&db)
+            .await
+            .unwrap();
+        let overflow = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .increment("stock", 1)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(overflow.rows_affected, 0);
+        assert_eq!(one_note(&db, 11).await.stock, 10);
+        Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("stock", 0_i64)
+            .execute(&db)
+            .await
+            .unwrap();
+        let underflow = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .decrement("stock", 1)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(underflow.rows_affected, 0);
+        assert_eq!(one_note(&db, 11).await.stock, 0);
+        let null_bonus = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .increment("bonus", 1)
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(null_bonus.rows_affected, 0);
+        assert_eq!(one_note(&db, 11).await.bonus, None);
+        let wrong_type = Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("stock", "nope")
+            .execute(&db)
+            .await
+            .expect_err("type");
+        assert!(matches!(wrong_type, FerrioxidError::Validation(_)));
+        Note::query()
+            .filter(col("id").eq(id(11)))
+            .update_matching()
+            .set("name", "after-error")
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(one_note(&db, 11).await.name, "after-error");
+
+        let duplicate = Note::insert()
+            .value("id", id(11))
+            .value("owner_id", id(1))
+            .value("name", "duplicate")
+            .value("stock", 1_i64)
+            .value("sealed", 7_i64)
+            .execute(&db)
+            .await
+            .expect_err("unique id");
+        assert!(validation(duplicate).contains("unique"));
+        let removed_child = Note::query()
+            .filter(col("id").eq(id(11)))
+            .delete_matching()
+            .execute(&db)
+            .await
+            .expect_err("foreign key");
+        assert!(validation(removed_child).contains("foreign key"));
+        assert_eq!(one_note(&db, 11).await.name, "after-error");
+
+        let before_rollback =
+            count_sql(&db, "SELECT COUNT(*) AS n FROM ferrioxid_write_audit").await;
+        let tx = db.begin().await.unwrap();
+        Note::query()
+            .filter(col("id").eq(id(12)))
+            .update_matching()
+            .set("name", "rolled")
+            .execute(&tx)
+            .await
+            .unwrap();
+        tx.rollback().await.unwrap();
+        assert_eq!(one_note(&db, 12).await.name, "shared");
+        assert_eq!(
+            count_sql(&db, "SELECT COUNT(*) AS n FROM ferrioxid_write_audit").await,
+            before_rollback
+        );
+
+        let before_lock = count_sql(&db, "SELECT COUNT(*) AS n FROM ferrioxid_write_audit").await;
+        let tx = db.begin().await.unwrap();
+        let missing = Note::query()
+            .filter(col("id").eq(id(99)))
+            .lock_existing(&tx)
+            .await
+            .unwrap();
+        assert_eq!(missing.rows, 0);
+        let owned = Note::query()
+            .scope(owner_scope(2))
+            .lock_existing(&tx)
+            .await
+            .unwrap();
+        assert_eq!(owned.rows, 2);
+        tx.rollback().await.unwrap();
+        assert_eq!(
+            count_sql(&db, "SELECT COUNT(*) AS n FROM ferrioxid_write_audit").await,
+            before_lock
+        );
+
+        let hold = db.begin().await.unwrap();
+        let locked = Note::query()
+            .filter(col("id").eq(id(11)))
+            .lock_existing(&hold)
+            .await
+            .unwrap();
+        assert_eq!(locked.rows, 1);
+        let second = if url.starts_with("sqlite:") {
+            connect(url).await.unwrap()
+        } else {
+            db.clone()
+        };
+        let waiting = tokio::spawn(async move {
+            let started = std::time::Instant::now();
+            let tx = second.begin().await.unwrap();
+            let locked = Note::query()
+                .filter(col("id").eq(id(22)))
+                .lock_existing(&tx)
+                .await
+                .unwrap();
+            tx.commit().await.unwrap();
+            (started.elapsed(), locked.rows)
+        });
+        tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+        if kind == DatabaseKind::Sqlite {
+            assert!(
+                !waiting.is_finished(),
+                "sqlite reserved lock covers a different row"
+            );
+            hold.commit().await.unwrap();
+            let (elapsed, rows) = waiting.await.unwrap();
+            assert!(elapsed >= std::time::Duration::from_millis(350));
+            assert_eq!(rows, 1);
+        } else {
+            let (elapsed, rows) =
+                tokio::time::timeout(std::time::Duration::from_millis(800), waiting)
+                    .await
+                    .expect("postgres locks the other row without waiting")
+                    .unwrap();
+            assert!(elapsed < std::time::Duration::from_millis(700));
+            assert_eq!(rows, 1);
+            hold.commit().await.unwrap();
+        }
+        assert_eq!(
+            count_sql(&db, "SELECT COUNT(*) AS n FROM ferrioxid_write_audit").await,
+            before_lock
+        );
+        assert_eq!(
+            count_sql(
+                &db,
+                "SELECT COUNT(*) AS n FROM ferrioxid_write_note_children AS child JOIN ferrioxid_write_notes AS note ON note.id = child.note_id",
+            )
+            .await,
+            1
+        );
+
+        let before_real = count_sql(&db, "SELECT COUNT(*) AS n FROM ferrioxid_write_audit").await;
+        Note::query()
+            .filter(col("id").eq(id(12)))
+            .update_matching()
+            .set("name", "audited")
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(
+            count_sql(&db, "SELECT COUNT(*) AS n FROM ferrioxid_write_audit").await,
+            before_real + 1
+        );
+        let tx = db.begin().await.unwrap();
+        Note::query()
+            .filter(col("id").eq(id(12)))
+            .update_matching()
+            .set("name", "temporary")
+            .execute(&tx)
+            .await
+            .unwrap();
+        tx.rollback().await.unwrap();
+        assert_eq!(one_note(&db, 12).await.name, "audited");
+        assert_eq!(
+            count_sql(&db, "SELECT COUNT(*) AS n FROM ferrioxid_write_audit").await,
+            before_real + 1
+        );
+
+        if kind == DatabaseKind::Sqlite {
+            let hold = db.begin().await.unwrap();
+            Note::query()
+                .filter(col("id").eq(id(11)))
+                .lock_existing(&hold)
+                .await
+                .unwrap();
+            let other = connect(url).await.unwrap();
+            other
+                .execute(Statement::from_string(
+                    DatabaseBackend::Sqlite,
+                    "PRAGMA busy_timeout = 200".to_owned(),
+                ))
+                .await
+                .unwrap();
+            let started = std::time::Instant::now();
+            let busy = other
+                .execute(Statement::from_sql_and_values(
+                    DatabaseBackend::Sqlite,
+                    "UPDATE ferrioxid_write_notes SET stock = ? WHERE id = ?",
+                    [Value::BigInt(Some(1)), Value::Uuid(Some(Box::new(id(22))))],
+                ))
+                .await;
+            let elapsed = started.elapsed();
+            assert!(busy.is_err(), "busy_timeout surfaces the lock");
+            assert!(elapsed >= std::time::Duration::from_millis(150));
+            assert!(elapsed < std::time::Duration::from_secs(2));
+            hold.rollback().await.unwrap();
+            other
+                .execute(Statement::from_sql_and_values(
+                    DatabaseBackend::Sqlite,
+                    "UPDATE ferrioxid_write_notes SET stock = ? WHERE id = ?",
+                    [Value::BigInt(Some(1)), Value::Uuid(Some(Box::new(id(22))))],
+                ))
+                .await
+                .expect("the connection accepts a write after the lock is released");
+            assert_eq!(one_note(&db, 22).await.stock, 1);
+        } else {
+            let hold = db.begin().await.unwrap();
+            Note::query()
+                .filter(col("id").eq(id(11)))
+                .lock_existing(&hold)
+                .await
+                .unwrap();
+            let second = db.clone();
+            let waiting = tokio::spawn(async move {
+                let started = std::time::Instant::now();
+                let tx = second.begin().await.unwrap();
+                let changed = Note::query()
+                    .filter(col("id").eq(id(11)))
+                    .update_matching()
+                    .set("stock", 6_i64)
+                    .execute(&tx)
+                    .await
+                    .unwrap();
+                tx.commit().await.unwrap();
+                (started.elapsed(), changed.rows_affected)
+            });
+            tokio::time::sleep(std::time::Duration::from_millis(400)).await;
+            assert!(
+                !waiting.is_finished(),
+                "postgres row lock blocks the same row"
+            );
+            hold.rollback().await.unwrap();
+            let (elapsed, rows) = waiting.await.unwrap();
+            assert!(elapsed >= std::time::Duration::from_millis(350));
+            assert_eq!(rows, 1);
+            assert_eq!(one_note(&db, 11).await.stock, 6);
+        }
+
+        insert_note(&db, 31, 1, "doomed", 1, None).await;
+        insert_note(&db, 32, 2, "kept", 1, None).await;
+        let deleted = Note::query()
+            .scope(owner_scope(1))
+            .filter(col("id").eq(id(31)))
+            .delete_matching()
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(deleted.rows_affected, 1);
+        assert!(Note::query()
+            .filter(col("id").eq(id(31)))
+            .all(&db)
+            .await
+            .unwrap()
+            .is_empty());
+        assert_eq!(one_note(&db, 32).await.name, "kept");
+        let deleted_scope = Note::query()
+            .scope(owner_scope(2))
+            .filter(col("name").eq("kept"))
+            .delete_all()
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(deleted_scope.rows_affected, 1);
+        assert_eq!(one_note(&db, 22).await.owner_id, id(2));
+        insert_note(&db, 41, 3, "whole", 1, None).await;
+        let cleared = Note::query()
+            .scope(owner_scope(3))
+            .delete_all()
+            .execute(&db)
+            .await
+            .unwrap();
+        assert_eq!(cleared.rows_affected, 1);
+        assert_eq!(one_note(&db, 22).await.owner_id, id(2));
+        assert!(Note::query()
+            .filter(col("id").eq(id(41)))
+            .all(&db)
+            .await
+            .unwrap()
+            .is_empty());
+    }
+
+    #[tokio::test]
+    async fn sqlite_write_security() {
+        let path = std::env::temp_dir().join(format!(
+            "ferrioxid-write-security-{}.sqlite",
+            Uuid::new_v4().simple()
+        ));
+        let url = format!(
+            "sqlite://{}?mode=rwc",
+            path.display().to_string().replace('\\', "/")
+        );
+        security_cases(&url).await;
+        let _ = std::fs::remove_file(path);
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
+    async fn postgres_write_security() {
+        let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let disposable = crate::DisposablePostgres::create(&admin)
+            .await
+            .expect("isolated postgres");
+        security_cases(disposable.url()).await;
+        disposable
+            .drop_database()
+            .await
+            .expect("drop isolated database");
     }
 
     #[tokio::test]
