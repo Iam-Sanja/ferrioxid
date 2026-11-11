@@ -1,0 +1,16 @@
+[package]
+name = "desk"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+ferrioxid = { path = "../../crates/ferrioxid" }
+axum.workspace = true
+tokio.workspace = true
+serde.workspace = true
+tera = "1"
+uuid.workspace = true
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }

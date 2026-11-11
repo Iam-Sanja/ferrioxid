@@ -109,3 +109,10 @@ jobs:
           cargo test -p ferrioxid-db --lib -- --ignored postgres_transaction_query_and_rollback_runtime
           cargo test -p ferrioxid-db --lib -- --ignored postgres_keyset_annotations_and_many_to_many
           cargo test -p ferrioxid-db --lib -- --ignored postgres_text_search_relations_count_and_pages
+          cargo test -p ferrioxid-db --lib -- --ignored postgres_admin_search_runtime
+          cargo test -p ferrioxid-db --lib -- --ignored postgres_temporal_filters_and_keyset
+          cargo test -p ferrioxid-migrations --lib fixtures::tests::postgres_temporal_fixture_roundtrip -- --ignored
+          cargo test -p ferrioxid-api --lib testing::tests::postgres_isolated_databases_do_not_share_rows -- --ignored
+          cargo test -p ferrioxid-db --lib write::tests::postgres_shop_cases -- --ignored
+          cargo test -p ferrioxid-db --lib write::tests::postgres_write_security -- --ignored
+          cargo test -p desk --test flow -- --ignored postgres_same_operations

@@ -37,7 +37,7 @@ GET    /auth/csrf
 
 Schema fields include `name`, `label`, `type` (`string`, `integer`, `boolean`, `uuid`), `required`, `readonly`, `nullable`, `searchable`, `sortable`, `filterable`, `list_display` and `foreign_key`. Hidden and sensitive fields are omitted.
 
-List parameters are `page` starting at 1, `page_size` from 1 to 100, `sort`, `dir=desc`, `q` and `filter.{feld}`. Sorting adds the primary key as a tie-breaker. Search uses `LOWER(spalte) LIKE LOWER(?) ESCAPE '\'` with a bound pattern.
+List parameters are `page` starting at 1, `page_size` from 1 to 100, `sort`, `dir=desc`, `q` and `filter.{feld}`. Sorting adds the primary key as a tie-breaker. Search uses `LOWER(column) LIKE <bound pattern> ESCAPE '\'`. The placeholder is `?` on SQLite and `$1` on PostgreSQL. `%`, `_` and `\` in the term stay literals. Case folding follows the backend `LOWER` rules documented in [database.md](database.md): SQLite folds ASCII only, so `München` does not match `MÜNCHEN` there.
 
 ## List
 

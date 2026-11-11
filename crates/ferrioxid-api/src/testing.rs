@@ -1,8 +1,9 @@
 //! In-process HTTP client, isolated databases, and fixture loading.
 //!
 //! The client calls the Axum router directly. It does not open a socket.
-//! PostgreSQL cleanup drops only tables recorded on a database whose name
-//! contains `ferrioxid_test`. It never issues `DROP DATABASE`.
+//! `postgres` checks the database name and drops only recorded tables. That is
+//! not isolation between tests. `postgres_isolated` creates one
+//! `ferrioxid_test_<uuid>` database and drops only that database.
 
 use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
@@ -10,7 +11,7 @@ use std::path::{Path, PathBuf};
 use axum::body::Body;
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode};
 use axum::Router;
-use ferrioxid_db::QueryCounter;
+use ferrioxid_db::{DisposablePostgres, QueryCounter};
 use ferrioxid_migrations::{
     load_fixture, FixtureFile, LoadReport, LoadRequest, MigrationError, SchemaSnapshot,
 };
@@ -318,6 +319,7 @@ pub struct TestDatabase {
     kind: DatabaseKind,
     directory: Option<PathBuf>,
     tables: Vec<String>,
+    owned_database: Option<DisposablePostgres>,
 }
 
 enum DatabaseKind {
@@ -341,10 +343,15 @@ impl TestDatabase {
             kind: DatabaseKind::Sqlite,
             directory: Some(directory),
             tables: Vec::new(),
+            owned_database: None,
         })
     }
 
     /// Accepts only a PostgreSQL URL whose database name contains `ferrioxid_test`.
+    ///
+    /// The URL is used as given. Tests that share it also share its tables and
+    /// migration history. This method does not create a database and never
+    /// runs `DROP DATABASE`.
     pub fn postgres(url: &str) -> Result<Self, String> {
         let name = postgres_database_name(url)?;
         if !name.contains("ferrioxid_test") {
@@ -358,6 +365,24 @@ impl TestDatabase {
             kind: DatabaseKind::Postgres,
             directory: None,
             tables: Vec::new(),
+            owned_database: None,
+        })
+    }
+
+    /// Creates one new `ferrioxid_test_<uuid>` database and connects only to it.
+    ///
+    /// `admin_url` must name an approved test database. Creating the database
+    /// requires `CREATEDB` or an equivalent role. [`Self::cleanup`] drops only
+    /// the database this call created.
+    pub async fn postgres_isolated(admin_url: &str) -> Result<Self, String> {
+        let owned = DisposablePostgres::create(admin_url).await?;
+        let url = owned.url().to_owned();
+        Ok(Self {
+            url,
+            kind: DatabaseKind::Postgres,
+            directory: None,
+            tables: Vec::new(),
+            owned_database: Some(owned),
         })
     }
 
@@ -381,13 +406,18 @@ impl TestDatabase {
         Ok(())
     }
 
-    /// Drops recorded tables. SQLite cleanup also deletes the temporary directory.
+    /// Drops recorded tables, or the database created by [`Self::postgres_isolated`].
+    /// SQLite cleanup also deletes the temporary directory. An isolated PostgreSQL
+    /// database is dropped by name; recorded tables in another database are not.
     pub async fn cleanup(mut self) -> Result<(), String> {
         if matches!(self.kind, DatabaseKind::Postgres) && self.directory.is_some() {
             return Err("A PostgreSQL test database has no local directory to delete.".into());
         }
         match self.kind {
             DatabaseKind::Postgres => {
+                if let Some(owned) = self.owned_database.take() {
+                    return owned.drop_database().await;
+                }
                 if !self.tables.is_empty() {
                     let db = self.connect().await?;
                     for table in &self.tables {
@@ -868,5 +898,63 @@ mod tests {
             .unwrap();
         assert_eq!(user.status(), StatusCode::SEE_OTHER);
         assert_eq!(user.header("location").unwrap(), Some("/account"));
+    }
+
+    #[tokio::test]
+    async fn postgres_isolated_refuses_an_unapproved_database_before_connecting() {
+        let error = match TestDatabase::postgres_isolated(
+            "postgres://ferrioxid:secret@127.0.0.1:5432/shop",
+        )
+        .await
+        {
+            Ok(_) => panic!("an unapproved database was accepted"),
+            Err(error) => error,
+        };
+        assert!(error.contains("Refusing"));
+        assert!(error.contains("shop"));
+        assert!(!error.contains("secret"));
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
+    async fn postgres_isolated_databases_do_not_share_rows() {
+        let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let left = TestDatabase::postgres_isolated(&admin)
+            .await
+            .expect("left database");
+        let right = TestDatabase::postgres_isolated(&admin)
+            .await
+            .expect("right database");
+        assert_ne!(left.url(), right.url());
+        let left_db = left.connect().await.expect("left connection");
+        let right_db = right.connect().await.expect("right connection");
+        left_db
+            .execute(Statement::from_string(
+                sea_orm::DatabaseBackend::Postgres,
+                "CREATE TABLE ferrioxid_isolation_probe (id integer PRIMARY KEY)".to_owned(),
+            ))
+            .await
+            .expect("create probe");
+        left_db
+            .execute(Statement::from_string(
+                sea_orm::DatabaseBackend::Postgres,
+                "INSERT INTO ferrioxid_isolation_probe (id) VALUES (1)".to_owned(),
+            ))
+            .await
+            .expect("insert probe");
+        let missing = right_db
+            .execute(Statement::from_string(
+                sea_orm::DatabaseBackend::Postgres,
+                "SELECT id FROM ferrioxid_isolation_probe".to_owned(),
+            ))
+            .await;
+        assert!(missing.is_err(), "the second database saw the first table");
+        left_db.close().await.expect("close left");
+        right_db.close().await.expect("close right");
+        let left_url = left.url().to_owned();
+        left.cleanup().await.expect("drop left");
+        right.cleanup().await.expect("drop right");
+        let gone = ferrioxid_db::connect(&left_url).await;
+        assert!(gone.is_err(), "cleanup left the isolated database in place");
     }
 }

@@ -10,6 +10,8 @@ Ferrioxid distinguishes three types. They are not converted into each other.
 | `chrono::NaiveTime` | `Time` |Time of day without date| `14:30:00` |
 | `chrono::DateTime<Utc>` | `DateTime` | Absolute instant | `2026-11-07T13:30:00Z` |
 
+A non-zero fraction is part of the canonical form, for example `2026-11-07T13:30:00.123456Z`. Whole seconds stay without a decimal.
+
 `Option<T>` makes the column nullable. `NaiveDate` represents a calendar date without timezone conversion. The macro accepts only `DateTime<Utc>` for timestamp fields; other timezone parameters are rejected.
 
 ## JSON
@@ -51,4 +53,5 @@ The types are exported through `ferrioxid::prelude`. Existing models do not need
 
 - No duration and no `DateTime<Local>`.
 - No silently changing a column of text to a date.
-- PostgreSQL column types are implemented. A run against a PostgreSQL server is not executed in this version.
+- PostgreSQL stores `date`, `time` and `timestamptz`. Filters and fixtures bind those native types. SQLite stores the same logical values as text. `DateTime` remains UTC: `Z` and `+00:00` are accepted, and every other offset is rejected.
+- A local PostgreSQL run of the new filter and fixture tests is recorded in [postgres-portability-v2.md](postgres-portability-v2.md). An ignored test that did not execute is not a pass.

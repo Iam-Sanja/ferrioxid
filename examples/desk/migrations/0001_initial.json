@@ -1,0 +1,536 @@
+{
+  "format_version": 1,
+  "id": "0001_initial",
+  "name": "initial",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": []
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "desk_addresses",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "owner_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "label",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_desk_addresses_owner_id_desk_owners_id",
+            "columns": [
+              "owner_id"
+            ],
+            "referenced_table": "desk_owners",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "desk_carts",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "owner_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_desk_carts_owner_id",
+            "columns": [
+              "owner_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_desk_carts_owner_id_desk_owners_id",
+            "columns": [
+              "owner_id"
+            ],
+            "referenced_table": "desk_owners",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "desk_categories",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "name": "desk_lines",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "cart_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "owner_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "sku",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "qty",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "moved",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_desk_lines_cart_id_desk_carts_id",
+            "columns": [
+              "cart_id"
+            ],
+            "referenced_table": "desk_carts",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk_desk_lines_owner_id_desk_owners_id",
+            "columns": [
+              "owner_id"
+            ],
+            "referenced_table": "desk_owners",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "desk_owners",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ]
+      },
+      {
+        "name": "desk_products",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "stock",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "price_cents",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "owner_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "category_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_desk_products_category_id_desk_categories_id",
+            "columns": [
+              "category_id"
+            ],
+            "referenced_table": "desk_categories",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk_desk_products_owner_id_desk_owners_id",
+            "columns": [
+              "owner_id"
+            ],
+            "referenced_table": "desk_owners",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "create_table",
+      "table": {
+        "name": "desk_categories",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "desk_owners",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "desk_addresses",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "owner_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "label",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_desk_addresses_owner_id_desk_owners_id",
+            "columns": [
+              "owner_id"
+            ],
+            "referenced_table": "desk_owners",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "desk_carts",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "owner_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq_desk_carts_owner_id",
+            "columns": [
+              "owner_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_desk_carts_owner_id_desk_owners_id",
+            "columns": [
+              "owner_id"
+            ],
+            "referenced_table": "desk_owners",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "desk_lines",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "cart_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "owner_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "sku",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "qty",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "moved",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_desk_lines_cart_id_desk_carts_id",
+            "columns": [
+              "cart_id"
+            ],
+            "referenced_table": "desk_carts",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk_desk_lines_owner_id_desk_owners_id",
+            "columns": [
+              "owner_id"
+            ],
+            "referenced_table": "desk_owners",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "desk_products",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "stock",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "price_cents",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "owner_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "category_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk_desk_products_category_id_desk_categories_id",
+            "columns": [
+              "category_id"
+            ],
+            "referenced_table": "desk_categories",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk_desk_products_owner_id_desk_owners_id",
+            "columns": [
+              "owner_id"
+            ],
+            "referenced_table": "desk_owners",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "restrict",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "2d2efe628daff1f989238f61cd9dfd8d14511059376b399428d40f08d57a5d38"
+}

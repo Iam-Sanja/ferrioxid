@@ -161,6 +161,8 @@ Supported comparisons are `eq`, `ne`, `gt`, `gte`, `lt`, `lte`, `is_in`, `is_not
 
 `filter` combines with AND. `all_of`, `any_of` and `not` nest AND, OR and NOT. An empty OR matches nothing. Boolean and UUID columns accept equality, inequality, `IN`, `NOT IN` and null checks. `i64`, text, date, time and datetime also accept ranges. A comparison whose value type does not match the column is `Validation`.
 
+Date, time and datetime filters accept the canonical strings from [date-time-types.md](date-time-types.md). Invalid calendar dates, times and non-UTC offsets are `Validation` before a statement is sent. PostgreSQL binds `date`, `time` and `timestamptz`. SQLite keeps text columns: a date is `YYYY-MM-DD`, a time is `HH:MM:SS`, and a timestamp is the RFC 3339 text the SQLite driver writes for `DateTime<Utc>` (`+00:00`, with fractional seconds when the instant has them). `DateTime` is an absolute UTC instant. `Z` and `+00:00` are the same instant; any other offset is rejected and is not converted. Direct filters, `where_related`, `where_has` and keyset continuation use this binder. A whole-second JSON value stays `2026-11-07T13:30:00Z`. A non-zero fraction is kept, for example `2026-11-07T13:30:00.123456Z`.
+
 Column names must be columns of that model and must match `[A-Za-z_][A-Za-z0-9_]*`. Unknown or unsafe names are `Validation` and are not sent to the database. Values go through SeaQuery parameters (`?` on SQLite, `$1` on PostgreSQL). `limit` and `offset` are validated integers; SeaQuery may emit them as numeric literals.
 
 Ordering can list several columns. If `id` is absent, the query appends `id ASC`. Pages of an unchanged filtered set do not overlap or skip when walked with a constant page size. An insert, delete or sort-key update between two requests can move offset pages. This is not keyset pagination and not a snapshot across requests. Read both pages inside one transaction when the set must stay still.
@@ -170,13 +172,29 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 - Page size is 1..=100 (`PAGE_LIMIT`). Offset is at most 1_000_000 (`OFFSET_LIMIT`).
 - One `IN` or `NOT IN` list holds 1..=100 values (`IN_LIMIT`). An empty list is an error, not `IN ()`.
 - `all` never scans the whole table. A result larger than 100 rows requires further pages.
-- There is no `SUM`, grouping, annotation or arbitrary SQL expression.
+- `annotate` adds one related `COUNT` or `SUM`. There is no general `GROUP BY` and no arbitrary SQL expression.
 - MySQL is rejected.
 - SQLite behavior is covered by `cargo test -p ferrioxid-db`. PostgreSQL SQL generation is asserted in the same crate. `postgres_filters_and_pages_runtime` is `#[ignore]` and runs only with `DATABASE_URL` and a disposable PostgreSQL database. A local workspace run does not mark that test as passed.
 
 ## Fixtures
 
 `ferrioxid dumpdata` and `ferrioxid loaddata` read and write versioned JSON through the schema snapshot. Decimal values travel as strings and are stored as the same 16-byte coefficient used by model inserts. The default load inserts new primary keys and rolls back the whole file when any row conflicts. Details, the confirmed `--truncate` flag and the cycle limit are in [fixtures.md](fixtures.md).
+
+## Filtered writes
+
+`Select::update_matching`, `delete_matching` and `lock_existing` are in `crates/ferrioxid-db/src/write.rs`. `ModelQuery::insert` is the typed insert. Values and arithmetic amounts are bound parameters. Column names must be model fields; a name such as `stock = 0; DROP TABLE` is rejected before SQL is built.
+
+`update_matching` and `delete_matching` refuse a query that has no filter, relation predicate or restricting scope. `update_all` and `delete_all` are the explicit forms for an intentional full-table write. `QueryScope::None` still matches nothing. The page limit does not cap a bulk delete.
+
+`set` writes one bound value. `increment` and `decrement` are one SQL update of the form `column = column + amount`, with `amount > 0` and an integer column. The statement also requires the current value to stay inside `i64` and any numeric bound. A row outside that window is left unchanged and is not counted in `rows_affected`. There is no multiply or divide helper.
+
+`lock_existing` must run on `DatabaseTransaction`. PostgreSQL emits `SELECT ... FOR UPDATE` and locks only the matched rows. SQLite has no row lock. It runs an `UPDATE` whose predicate matches nothing, which takes the database reserved lock until commit or rollback and does not change a stored value. `AFTER UPDATE` triggers and `ON UPDATE CASCADE` do not run for that statement. Another writer on the same SQLite file waits, including a writer of a different row. Zero locked rows do not reserve a row that does not exist yet. A first insert is protected by a real unique constraint, including `on_conflict_do_nothing` on that constraint. Conflict handling does not overwrite an existing row.
+
+`update_all` and `delete_all` keep the `QueryScope`. `QueryScope::All` is the explicit whole-table request. `QueryScope::Equals` still limits the rows, and that scope column cannot be assigned by the bulk update. A bulk update is not `ModelRepository::update`. When the model declares a field contract with `in_update = false`, the bulk builder rejects that column. Text length, email and slug rules are not applied. Declared numeric bounds are applied to `set`, `increment` and `decrement`.
+
+Text, email and slug rules from `update_record` are not repeated here. `rows_affected == 0` means the predicate matched nothing, including a failed stock or price condition. `rows_affected == 1` means that one row changed. SQLite connections set `busy_timeout` to five seconds; a lock that SQLite reports immediately as busy still surfaces as a database error.
+
+`examples/desk` is a small application on this API: models, one generated migration, a URL, a template and the shop operations. `sqlite_same_operations` runs in the workspace tests. `postgres_same_operations` is ignored and listed in the PostgreSQL 16 job. The same Rust source talks to either database through `connect`. SQLite `LOWER` folds ASCII only, so `MÜNCHEN` does not find `München`. A PostgreSQL cluster whose `LOWER` follows a UTF-8 locale can find that row. SQLite `BINARY` order places `Muenchen` before `München`. PostgreSQL order follows the database collation. The capability table is [orm-capability-matrix.md](orm-capability-matrix.md). The write-path audit is [orm-write-security-audit.md](orm-write-security-audit.md).
 
 ## Not implemented (planned)
 
@@ -198,4 +216,4 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 
 ## Admin lists
 
-`query_admin_page` in `crates/ferrioxid-db/src/sql.rs` uses the same SeaQuery layer. Column names come from the descriptor, values are parameters. The search is `LIKE` with `ESCAPE` and runs under SQLite. PostgreSQL gets the same expression, no dialect-specific input from the interface. The public list limit remains 100. The admin page is at most 100 lines, plus one line to detect `has_more`.
+`query_admin_page` in `crates/ferrioxid-db/src/sql.rs` uses the same SeaQuery layer. Column names come from the descriptor and must be on the search allowlist. The search is `LOWER(column) LIKE ? ESCAPE '\'` on SQLite and `LOWER(column) LIKE $1 ESCAPE '\'` on PostgreSQL. The pattern is bound, not concatenated, and `%`, `_` and `\` in the term are literals. The pattern is folded in Rust with the same ASCII-versus-Unicode rule as `contains_ignore_case`. An empty search adds no predicate. Scope, count and the page window stay in force. The public list limit remains 100. The admin page is at most 100 lines, plus one line to detect `has_more`.

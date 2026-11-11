@@ -31,7 +31,7 @@ Fixtures move rows. They are not migrations, they do not change tables, and the 
 }
 ```
 
-`model` is the table name. `pk` is that table's `id`. A table without a single primary key named `id` is rejected before any write. Decimal values are JSON strings, never JSON numbers. Choice values are the stored token (`active`), not the display label. Dates, times and UUIDs are strings. Integers are signed 64-bit JSON numbers. Booleans are `true` or `false`.
+`model` is the table name. `pk` is that table's `id`. A table without a single primary key named `id` is rejected before any write. Decimal values are JSON strings, never JSON numbers. Choice values are the stored token (`active`), not the display label. Dates, times, datetimes and UUIDs are strings. Integers are signed 64-bit JSON numbers. Booleans are `true` or `false`. A date must be `YYYY-MM-DD`. A time is `HH:MM` or `HH:MM:SS` and is dumped as `HH:MM:SS`. A datetime must be UTC (`Z` or `+00:00`) and is dumped with `Z`, including a fractional second when one was stored. Other offsets and invalid calendar values are rejected before a write.
 
 The loader orders records by foreign keys. A product may appear before its category in the file. The category is inserted first when both rows are in the same file. A foreign key that points at a row already stored in the database is also accepted, including a parent table declared as another app's external table.
 
@@ -72,7 +72,7 @@ assert!(report.written);
 
 ## Databases and limits
 
-SQLite and PostgreSQL use the same JSON file. Decimal columns are stored as the 16-byte coefficient from [models.md](models.md), not as `REAL` or text, so a later dump prints the same decimal string. Choice columns stay text. Identifiers in SQL are quoted and must already be plain identifiers; values are bound parameters.
+SQLite and PostgreSQL use the same JSON file. Decimal columns are stored as the 16-byte coefficient from [models.md](models.md), not as `REAL` or text, so a later dump prints the same decimal string. Choice columns stay text. On PostgreSQL, UUID, date, time and datetime values are bound as native parameters; SQLite binds the canonical text. Nulls use the same typed parameter family. Identifiers in SQL are quoted and must already be plain identifiers; values are bound parameters.
 
 The import is one transaction. A failure rolls back every insert and every `--truncate` delete from that command. SQLite foreign keys are enabled on the Ferrioxid connection, so a truncate that would orphan a row outside the selected tables fails and rolls back.
 

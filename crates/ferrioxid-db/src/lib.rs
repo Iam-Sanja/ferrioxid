@@ -2,7 +2,9 @@
 
 mod query;
 mod sql;
+mod testing;
 mod unit;
+mod write;
 
 pub use query::{
     all_of, any_of, col, group_by_parent, load_by_ids, load_children, load_many_to_many, not,
@@ -11,7 +13,9 @@ pub use query::{
     OFFSET_LIMIT, PAGE_LIMIT, TEXT_MATCH_LIMIT,
 };
 
+pub use testing::DisposablePostgres;
 pub use unit::conclude;
+pub use write::{ColumnUpdate, FilteredDelete, LockResult, RowInsert, WriteResult};
 
 use ferrioxid_core::{FerrioxidError, FerrioxidModel};
 use sea_orm::{DatabaseConnection, DatabaseTransaction};
@@ -177,7 +181,13 @@ pub async fn connect(url: &str) -> Result<DatabaseConnection, sea_orm::DbErr> {
     if url.starts_with("sqlite:") {
         // One connection keeps in-memory databases and file locks predictable.
         options.max_connections(1);
-        options.map_sqlx_sqlite_opts(|sqlite| sqlite.pragma("foreign_keys", "ON"));
+        // Writers wait instead of failing immediately when another connection
+        // holds the SQLite lock. This is not a row lock.
+        options.map_sqlx_sqlite_opts(|sqlite| {
+            sqlite
+                .pragma("foreign_keys", "ON")
+                .pragma("busy_timeout", "5000")
+        });
     }
     sea_orm::Database::connect(options).await
 }
