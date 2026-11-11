@@ -2,6 +2,7 @@
 
 mod query;
 mod sql;
+mod testing;
 mod unit;
 
 pub use query::{
@@ -11,6 +12,7 @@ pub use query::{
     OFFSET_LIMIT, PAGE_LIMIT, TEXT_MATCH_LIMIT,
 };
 
+pub use testing::DisposablePostgres;
 pub use unit::conclude;
 
 use ferrioxid_core::{FerrioxidError, FerrioxidModel};
