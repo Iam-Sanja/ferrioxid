@@ -1,0 +1,58 @@
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_DB: ferrioxid_test_deploy
+      POSTGRES_USER: ferrioxid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ferrioxid_dev_only}
+    volumes:
+      - ferrioxid_deploy_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ferrioxid -d ferrioxid_test_deploy"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    networks:
+      - internal
+
+  app:
+    build:
+      context: ..
+      dockerfile: deploy/Dockerfile
+    environment:
+      DATABASE_URL: postgres://ferrioxid:${POSTGRES_PASSWORD:-ferrioxid_dev_only}@db:5432/ferrioxid_test_deploy
+      BIND_ADDRESS: 0.0.0.0:8080
+      FERRIOXID_ENV: production
+      FERRIOXID_COOKIE_SECURE: "1"
+      FERRIOXID_CSRF_SECRET: ${FERRIOXID_CSRF_SECRET:?set 64 hex characters}
+      FERRIOXID_ALLOWED_ORIGINS: https://localhost:8443
+      FERRIOXID_LOG_FORMAT: json
+    depends_on:
+      db:
+        condition: service_healthy
+    networks:
+      - internal
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/readyz"]
+      interval: 10s
+      timeout: 3s
+      retries: 10
+
+  proxy:
+    image: caddy:2-alpine
+    ports:
+      - "127.0.0.1:8443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      app:
+        condition: service_healthy
+    networks:
+      - internal
+
+networks:
+  internal:
+    driver: bridge
+
+volumes:
+  ferrioxid_deploy_pg:

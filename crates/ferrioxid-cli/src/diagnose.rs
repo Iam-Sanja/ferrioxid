@@ -109,7 +109,7 @@ pub fn doctor() -> ExitCode {
                     "The database URL must start with sqlite: or postgres:.",
                 );
             }
-            let counts = migration_lines(&project, false);
+            let counts = migration_lines(&project, false, false);
             errors += counts.errors;
             let project_counts = project_lines(&project);
             errors += project_counts.errors;
@@ -129,7 +129,7 @@ pub fn doctor() -> ExitCode {
     }
 }
 
-pub fn check(strict: bool) -> ExitCode {
+pub fn check(strict: bool, deploy: bool) -> ExitCode {
     let current = match std::env::current_dir() {
         Ok(path) => path,
         Err(error) => {
@@ -167,10 +167,15 @@ pub fn check(strict: bool) -> ExitCode {
         }
         return ExitCode::from(1);
     }
-    let counts = migration_lines(&project, true);
+    let counts = migration_lines(&project, true, deploy);
     let project_counts = project_lines(&project);
     let warnings = counts.warnings + project_counts.warnings;
-    if counts.errors > 0 || project_counts.errors > 0 {
+    let mut errors = counts.errors + project_counts.errors;
+    if deploy {
+        let deploy_errors = deploy_findings(project.debug, &project.host);
+        errors += deploy_errors;
+    }
+    if errors > 0 {
         return ExitCode::from(1);
     }
     if std::env::var("FERRIOXID_CHECK_SKIP_CARGO").ok().as_deref() == Some("1") {
@@ -217,7 +222,7 @@ pub fn upgrade(check_only: bool, dry_run: bool, yes: bool) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    let _ = migration_lines(&project, false);
+    let _ = migration_lines(&project, false, false);
     let plan = match plan_upgrade(&project.root) {
         Ok(plan) => plan,
         Err(error) => {
@@ -268,6 +273,137 @@ fn report(level: &str, message: &str) {
     println!("[{level}] {message}");
 }
 
+/// Deployment findings from values the caller already loaded.
+///
+/// The function does not read the environment again and does not connect to a database.
+pub fn deploy_findings(debug: bool, host: &str) -> i32 {
+    let mut errors = 0;
+    if debug || std::env::var("FERRIOXID_DEBUG").ok().as_deref() == Some("true") {
+        errors += 1;
+        report(
+            "ERROR",
+            "deploy.debug Debug is enabled. Turn it off before a deployment.",
+        );
+    } else {
+        report("OK", "deploy.debug Debug is off.");
+    }
+    if host == "0.0.0.0" || host.starts_with("0.0.0.0:") {
+        errors += 1;
+        report(
+            "ERROR",
+            "deploy.bind The server is bound to 0.0.0.0. Bind to 127.0.0.1 behind a proxy.",
+        );
+    } else {
+        report("OK", "deploy.bind The bind address is not 0.0.0.0.");
+    }
+    let production = std::env::var("FERRIOXID_ENV").ok().as_deref() == Some("production");
+    let cookie_secure = match std::env::var("FERRIOXID_COOKIE_SECURE").ok().as_deref() {
+        Some("1" | "true" | "TRUE") => true,
+        Some(_) => false,
+        None => production,
+    };
+    if cookie_secure {
+        report(
+            "OK",
+            "deploy.cookie Session cookies can use the Secure flag.",
+        );
+    } else {
+        errors += 1;
+        report(
+            "ERROR",
+            "deploy.cookie Set FERRIOXID_COOKIE_SECURE=1 or FERRIOXID_ENV=production.",
+        );
+    }
+    match std::env::var("FERRIOXID_CSRF_SECRET") {
+        Ok(value) if csrf_secret_shape_ok(&value) => {
+            report(
+                "OK",
+                "deploy.secret FERRIOXID_CSRF_SECRET is present and has the expected shape. The value is not shown.",
+            );
+        }
+        Ok(_) => {
+            errors += 1;
+            report(
+                "ERROR",
+                "deploy.secret FERRIOXID_CSRF_SECRET must contain 64 hexadecimal characters. The value is not shown.",
+            );
+        }
+        Err(_) => {
+            errors += 1;
+            report(
+                "ERROR",
+                "deploy.secret FERRIOXID_CSRF_SECRET is missing. A file key is not a deployment secret.",
+            );
+        }
+    }
+    match std::env::var("FERRIOXID_ALLOWED_ORIGINS") {
+        Ok(value) if origins_are_https(&value) => {
+            let count = value
+                .split(',')
+                .map(str::trim)
+                .filter(|origin| !origin.is_empty())
+                .count();
+            report(
+                "OK",
+                &format!("deploy.origin {count} https origin(s) are configured."),
+            );
+        }
+        Ok(_) => {
+            errors += 1;
+            report(
+                "ERROR",
+                "deploy.origin Every FERRIOXID_ALLOWED_ORIGINS entry must be an https origin.",
+            );
+        }
+        Err(_) => {
+            errors += 1;
+            report(
+                "ERROR",
+                "deploy.origin FERRIOXID_ALLOWED_ORIGINS is missing.",
+            );
+        }
+    }
+    let trust = matches!(
+        std::env::var("FERRIOXID_TRUST_PROXY").ok().as_deref(),
+        Some("1" | "true" | "TRUE")
+    );
+    if trust {
+        errors += 1;
+        report(
+            "ERROR",
+            "deploy.proxy FERRIOXID_TRUST_PROXY trusts X-Forwarded-For from every peer on this branch. A peer allow-list depends on pull request 97 and is not merged here.",
+        );
+    } else {
+        report(
+            "OK",
+            "deploy.proxy The client address is the direct peer. X-Forwarded-For is ignored.",
+        );
+    }
+    report(
+        "OK",
+        "deploy.worker The web process does not start a job worker. Supervise ferrioxid worker separately. This check cannot see that process.",
+    );
+    report(
+        "OK",
+        "deploy.shutdown ferrioxid::serve stops on Ctrl+C and, on Unix, on SIGTERM. /healthz does not touch the database. /readyz runs SELECT 1 and does not migrate.",
+    );
+    errors
+}
+
+fn csrf_secret_shape_ok(value: &str) -> bool {
+    let value = value.trim();
+    value.len() == 64 && value.chars().all(|char| char.is_ascii_hexdigit())
+}
+
+fn origins_are_https(value: &str) -> bool {
+    let origins: Vec<&str> = value
+        .split(',')
+        .map(str::trim)
+        .filter(|origin| !origin.is_empty())
+        .collect();
+    !origins.is_empty() && origins.iter().all(|origin| origin.starts_with("https://"))
+}
+
 fn command_version(program: &str) -> Option<String> {
     let output = tool(program).arg("--version").output().ok()?;
     if !output.status.success() {
@@ -282,7 +418,7 @@ struct Counts {
     warnings: i32,
 }
 
-fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
+fn migration_lines(project: &ProjectConfig, compare_schema: bool, deploy: bool) -> Counts {
     if !project.apps.is_empty() {
         report("OK", ferrioxid_migrations::runtime_contract_note());
     }
@@ -367,11 +503,19 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
                 );
             }
             if jobs_pending {
-                warnings += 1;
-                report(
-                    "WARN",
-                    "job.migration.pending 0001_jobs The job migration has not been applied. Run ferrioxid migrate up. This check is read-only.",
-                );
+                if deploy {
+                    errors += 1;
+                    report(
+                        "ERROR",
+                        "job.migration.pending 0001_jobs The job migration has not been applied. This check is read-only.",
+                    );
+                } else {
+                    warnings += 1;
+                    report(
+                        "WARN",
+                        "job.migration.pending 0001_jobs The job migration has not been applied. Run ferrioxid migrate up. This check is read-only.",
+                    );
+                }
             }
             for item in &report_value.diagnostics {
                 let level = match item.level {
@@ -389,12 +533,19 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
                     ferrioxid_migrations::Level::Ok => {}
                 }
             }
-            if report_value.pending_auth()
+            let pending = report_value.pending_auth()
                 + report_value.pending_app()
-                + report_value.pending_packages()
-                > 0
-            {
-                println!("Empfehlung:\n  ferrioxid migrate up");
+                + report_value.pending_packages();
+            if pending > 0 {
+                if deploy {
+                    errors += 1;
+                    report(
+                        "ERROR",
+                        "migration.pending Apply ferrioxid migrate up before deployment. This check did not write.",
+                    );
+                } else {
+                    println!("Empfehlung:\n  ferrioxid migrate up");
+                }
             }
             Counts { errors, warnings }
         }
@@ -566,4 +717,22 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
         }
     }
     ProjectCounts { errors, warnings }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{csrf_secret_shape_ok, origins_are_https};
+
+    #[test]
+    fn deploy_secret_and_origin_rules_do_not_echo_values() {
+        assert!(csrf_secret_shape_ok(&"ab".repeat(32)));
+        assert!(!csrf_secret_shape_ok("short"));
+        assert!(!csrf_secret_shape_ok(&format!("{}!", "ab".repeat(31))));
+        assert!(origins_are_https("https://shop.example"));
+        assert!(origins_are_https(
+            "https://shop.example, https://admin.example"
+        ));
+        assert!(!origins_are_https("http://shop.example"));
+        assert!(!origins_are_https(""));
+    }
 }

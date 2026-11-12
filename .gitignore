@@ -40,6 +40,7 @@ Desktop.ini
 .idea/
 .vscode/
 *.swp
+node_modules/
 
 # Local framework metadata and embedded admin build output.
 .ferrioxid/
