@@ -141,7 +141,7 @@ Vorher und nachher: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_
 4. `ad6bb8b` merge(pr-100): integrate developer apps aliases and project files
 5. `63a648f` test(integration): cover the combined pull requests 97-100
 6. `f479808` docs: record the local integration of pull requests 97-100
-7. Release-Absicherung nach `f479808`: der Audit-Test liest `FERRIOXID_POSTGRES_ADMIN` oder `DATABASE_URL`, der PostgreSQL-Job führt `postgres_keyset_annotations_and_many_to_many` aus, und [security-rsa.md](security-rsa.md) beschreibt den Abbau von `RUSTSEC-2023-0071`.
+7. `e451da9` fix(test): read the audit database from DATABASE_URL. Der Audit-Test liest `FERRIOXID_POSTGRES_ADMIN` oder `DATABASE_URL`, der PostgreSQL-Job führt `postgres_keyset_annotations_and_many_to_many` aus, und [security-rsa.md](security-rsa.md) beschreibt den Abbau von `RUSTSEC-2023-0071`.
 
 ## Risiken
 
