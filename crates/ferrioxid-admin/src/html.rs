@@ -501,7 +501,11 @@ async fn model_list(
         )
         .await;
     };
-    if gate(&state, &user, model.as_ref(), "read").await.is_err() || list_blocked(model.as_ref()) {
+    if gate(&state, &registry, &user, model.as_ref(), "read")
+        .await
+        .is_err()
+        || list_blocked(model.as_ref())
+    {
         return error_page(
             &state,
             &headers,
@@ -519,7 +523,11 @@ async fn model_list(
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(1)
         .max(1);
-    let (sort, descending) = match resolved_sort(model.meta(), &params) {
+    let (sort, descending) = match resolved_sort(
+        registry.field_slice(model.meta()),
+        registry.ordering_of(model.meta()),
+        &params,
+    ) {
         Ok(value) => value,
         Err(()) => {
             return error_page(
@@ -538,6 +546,7 @@ async fn model_list(
     let filters = match filters_from(
         raw.as_deref().unwrap_or(""),
         model.columns(),
+        &registry,
         model.meta(),
         registry.filters(),
     ) {
@@ -560,9 +569,8 @@ async fn model_list(
         .iter()
         .map(|(name, value)| (*name, value.clone()))
         .collect();
-    let search_columns: Vec<&str> = model
-        .meta()
-        .fields
+    let search_columns: Vec<&str> = registry
+        .field_slice(model.meta())
         .iter()
         .filter(|field| field.searchable)
         .map(|field| field.name)
@@ -610,7 +618,7 @@ async fn model_list(
             .await;
         }
     };
-    let page_size = u64::from(model.meta().per_page.clamp(1, 100));
+    let page_size = u64::from(registry.per_page_of(model.meta()).clamp(1, 100));
     let listed = model
         .page(
             &state.db,
@@ -645,14 +653,14 @@ async fn model_list(
         redact(model.meta(), row);
     }
     let columns = list_columns(
-        model.meta(),
+        registry.field_slice(model.meta()),
         model.columns(),
         &model_key,
         &params,
         &sort,
         descending,
     );
-    let links = link_names(model.meta(), model.columns());
+    let links = link_names(registry.field_slice(model.meta()), model.columns());
     let relations = match relation_names(&registry, &state, &user, model.columns(), &rows).await {
         Ok(relations) => relations,
         Err(_) => {
@@ -884,7 +892,10 @@ async fn model_detail(
         )
         .await;
     };
-    if gate(&state, &user, model.as_ref(), "read").await.is_err() {
+    if gate(&state, &registry, &user, model.as_ref(), "read")
+        .await
+        .is_err()
+    {
         return error_page(
             &state,
             &headers,
@@ -910,7 +921,9 @@ async fn model_detail(
         )
         .await;
     };
-    let can_update = gate(&state, &user, model.as_ref(), "update").await.is_ok()
+    let can_update = gate(&state, &registry, &user, model.as_ref(), "update")
+        .await
+        .is_ok()
         && read_visible(&state, &user, model.as_ref(), id, "update")
             .await
             .is_some();
@@ -924,7 +937,9 @@ async fn model_detail(
         )
         .await;
     }
-    let can_delete = gate(&state, &user, model.as_ref(), "delete").await.is_ok()
+    let can_delete = gate(&state, &registry, &user, model.as_ref(), "delete")
+        .await
+        .is_ok()
         && read_visible(&state, &user, model.as_ref(), id, "delete")
             .await
             .is_some();
@@ -1095,7 +1110,10 @@ async fn model_delete(
         )
         .await;
     };
-    if gate(&state, &user, model.as_ref(), "delete").await.is_err() {
+    if gate(&state, &registry, &user, model.as_ref(), "delete")
+        .await
+        .is_err()
+    {
         return error_page(
             &state,
             &headers,
@@ -1121,7 +1139,7 @@ async fn model_delete(
         )
         .await;
     };
-    let named = display_column(model.meta(), model.columns())
+    let named = display_column(registry.field_slice(model.meta()), model.columns())
         .and_then(|name| record.get(name))
         .and_then(Value::as_str)
         .filter(|value| !value.is_empty())
@@ -1196,7 +1214,9 @@ async fn model_remove(
         )
         .await;
     };
-    if gate(&state, &user, model.as_ref(), "delete").await.is_err()
+    if gate(&state, &registry, &user, model.as_ref(), "delete")
+        .await
+        .is_err()
         || read_visible(&state, &user, model.as_ref(), id, "delete")
             .await
             .is_none()
@@ -1852,7 +1872,7 @@ async fn pick_page(
     } else {
         "create"
     };
-    if gate(state, &user, model.as_ref(), action_name)
+    if gate(state, registry, &user, model.as_ref(), action_name)
         .await
         .is_err()
     {
@@ -1954,7 +1974,7 @@ async fn pick_page(
         )
         .await;
     }
-    let Some(label) = display_column(target.meta(), target.columns()) else {
+    let Some(label) = display_column(registry.field_slice(target.meta()), target.columns()) else {
         return error_page(
             state,
             headers,
@@ -1972,10 +1992,9 @@ async fn pick_page(
         .and_then(|value| value.parse::<u32>().ok())
         .unwrap_or(1)
         .clamp(1, 10_000);
-    let page_size = u64::from(target.meta().per_page.clamp(1, 100));
-    let search_columns: Vec<&str> = target
-        .meta()
-        .fields
+    let page_size = u64::from(registry.per_page_of(target.meta()).clamp(1, 100));
+    let search_columns: Vec<&str> = registry
+        .field_slice(target.meta())
         .iter()
         .filter(|item| item.searchable && !item.hidden && !sensitive(item.name))
         .map(|item| item.name)
@@ -2127,7 +2146,7 @@ async fn form_page(
         .await;
     };
     let action_name = if id.is_some() { "update" } else { "create" };
-    if gate(state, &user, model.as_ref(), action_name)
+    if gate(state, registry, &user, model.as_ref(), action_name)
         .await
         .is_err()
     {
@@ -2173,7 +2192,7 @@ async fn form_page(
         .map(str::to_owned);
     let csrf = session_csrf(state.auth.as_ref().unwrap(), headers).await;
     let fields = input_fields(&locale, registry, state, &user, model.as_ref(), &values).await;
-    let sections = form_sections(model.meta(), &fields);
+    let sections = form_sections(registry.fieldsets_of(model.meta()), &fields);
     let (inline_groups, basis) = if model.meta().inlines.iter().any(|item| item.form) {
         crate::compose::groups(
             &state.db,
@@ -2216,12 +2235,12 @@ async fn form_page(
         json!({
             "model_key": model_key,
             "existing": id.is_some(),
-            "can_create": gate(state, &user, model.as_ref(), "create").await.is_ok(),
+            "can_create": gate(state, registry, &user, model.as_ref(), "create").await.is_ok(),
             "inlines": if let Some(record_id) = id {
                 inline_sections(state, registry, &user, model.as_ref(), record_id, &inline_query, true, &locale).await
             } else { Vec::new() },
             "delete_href": if let Some(record_id) = id {
-                (gate(state, &user, model.as_ref(), "delete").await.is_ok()
+                (gate(state, registry, &user, model.as_ref(), "delete").await.is_ok()
                     && read_visible(state, &user, model.as_ref(), record_id, "delete").await.is_some())
                     .then(|| format!("/admin/models/{model_key}/{record_id}/delete"))
             } else {
@@ -2292,7 +2311,7 @@ async fn save_form(
         .await;
     };
     let action_name = if id.is_some() { "update" } else { "create" };
-    if gate(state, &user, model.as_ref(), action_name)
+    if gate(state, registry, &user, model.as_ref(), action_name)
         .await
         .is_err()
     {
@@ -2327,7 +2346,7 @@ async fn save_form(
         )
         .await;
     }
-    if let Err(message) = reject_locked(model.meta(), &object, id.is_none())
+    if let Err(message) = reject_locked(registry.field_slice(model.meta()), &object, id.is_none())
         .and_then(|()| crate::widgets::enforce(registry.widgets(), model.meta().key, &object))
     {
         let text = validation_text(&locale, &message);
@@ -2666,7 +2685,7 @@ async fn input_fields(
         .unwrap_or("")
         .to_owned();
     let mut fields = Vec::new();
-    for field in model.meta().fields {
+    for field in registry.field_slice(model.meta()) {
         if field.hidden || sensitive(field.name) {
             continue;
         }
@@ -2753,7 +2772,7 @@ async fn input_fields(
             input["input"] = json!(input_type);
         } else if column.foreign_table.is_some() {
             input["kind"] = json!("select");
-            input["options"] = relation_options(
+            let (choices, truncated) = relation_options(
                 registry,
                 state,
                 user,
@@ -2761,6 +2780,8 @@ async fn input_fields(
                 current.as_str().unwrap_or(""),
             )
             .await;
+            input["options"] = choices;
+            input["truncated"] = json!(truncated);
             // Retain an unavailable current relation instead of silently selecting NULL.
             if let Some(id) = current.as_str().filter(|id| !id.is_empty()) {
                 if let Some(options) = input["options"].as_array_mut() {
@@ -2822,30 +2843,31 @@ async fn relation_options(
     user: &AuthUser,
     column: &ColumnSpec,
     current: &str,
-) -> Value {
+) -> (Value, bool) {
     let Some(table) = column.foreign_table else {
-        return json!([]);
+        return (json!([]), false);
     };
     let Some(target) = registry.model_for_table(table) else {
-        return json!([]);
+        return (json!([]), false);
     };
     if list_blocked(target.as_ref())
         || permit(state.auth.as_ref().unwrap(), user, target.meta(), "read")
             .await
             .is_err()
     {
-        return json!([]);
+        return (json!([]), false);
     }
-    let Some(label) = display_column(target.meta(), target.columns()) else {
-        return json!([]);
+    let Some(label) = display_column(registry.field_slice(target.meta()), target.columns()) else {
+        return (json!([]), false);
     };
     let scope = access_scope(target.as_ref(), user, false);
-    let Ok((rows, _, _)) = target
+    let Ok((rows, _, total)) = target
         .page(&state.db, &[], None, label, false, &[], &[], 0, 100, &scope)
         .await
     else {
-        return json!([]);
+        return (json!([]), false);
     };
+    let truncated = total > rows.len() as i64;
     let mut options: Vec<Value> = rows
         .into_iter()
         .filter_map(|row| {
@@ -2875,7 +2897,7 @@ async fn relation_options(
             }
         }
     }
-    Value::Array(options)
+    (Value::Array(options), truncated)
 }
 
 fn pick_path(model_key: &str, values: &Map<String, Value>, _field: &str) -> String {
@@ -2914,8 +2936,8 @@ fn apply_picks(
     }
 }
 
-fn form_sections(meta: &ferrioxid_core::AdminModelMeta, fields: &[Value]) -> Vec<Value> {
-    if meta.fieldsets.is_empty() {
+fn form_sections(fieldsets: &[ferrioxid_core::AdminFieldset], fields: &[Value]) -> Vec<Value> {
+    if fieldsets.is_empty() {
         return vec![json!({
             "name": "",
             "description": "",
@@ -2923,7 +2945,7 @@ fn form_sections(meta: &ferrioxid_core::AdminModelMeta, fields: &[Value]) -> Vec
             "fields": fields
         })];
     }
-    meta.fieldsets
+    fieldsets
         .iter()
         .map(|section| {
             let group: Vec<&Value> = fields
@@ -3080,11 +3102,12 @@ fn visible_fields(
 }
 
 fn resolved_sort(
-    meta: &ferrioxid_core::AdminModelMeta,
+    fields: &[ferrioxid_core::AdminFieldMeta],
+    ordering: Option<&str>,
     params: &HashMap<String, String>,
 ) -> Result<(String, bool), ()> {
     if let Some(sort) = params.get("sort").filter(|value| !value.is_empty()) {
-        if meta.fields.iter().any(|field| {
+        if fields.iter().any(|field| {
             field.name == sort && !field.hidden && (field.sortable || field.name == "id")
         }) {
             Ok((
@@ -3094,7 +3117,7 @@ fn resolved_sort(
         } else {
             Err(())
         }
-    } else if let Some(ordering) = meta.ordering {
+    } else if let Some(ordering) = ordering {
         Ok((
             ordering.trim_start_matches('-').to_owned(),
             ordering.starts_with('-'),
@@ -3107,8 +3130,11 @@ fn resolved_sort(
     }
 }
 
-fn link_names(meta: &ferrioxid_core::AdminModelMeta, specs: &[ColumnSpec]) -> Vec<&'static str> {
-    let listed = listed_fields(meta, specs);
+fn link_names(
+    fields: &[ferrioxid_core::AdminFieldMeta],
+    specs: &[ColumnSpec],
+) -> Vec<&'static str> {
+    let listed = listed_fields(fields, specs);
     let chosen: Vec<&'static str> = listed
         .iter()
         .filter(|field| field.list_link)
@@ -3126,7 +3152,7 @@ fn link_names(meta: &ferrioxid_core::AdminModelMeta, specs: &[ColumnSpec]) -> Ve
 }
 
 fn list_columns(
-    meta: &ferrioxid_core::AdminModelMeta,
+    fields: &[ferrioxid_core::AdminFieldMeta],
     specs: &[ColumnSpec],
     model: &str,
     params: &HashMap<String, String>,
@@ -3134,7 +3160,7 @@ fn list_columns(
     descending: bool,
 ) -> Vec<Value> {
     let dir = if descending { "desc" } else { "asc" };
-    listed_fields(meta, specs)
+    listed_fields(fields, specs)
         .into_iter()
         .map(|field| {
             let next_dir = if sort == field.name && dir != "desc" {
@@ -3167,36 +3193,33 @@ fn list_columns(
 ///
 /// `hidden` und sensible Namen fallen in jedem Schritt weg. Ein Feld heißt nicht zwingend `name`.
 fn listed_fields<'a>(
-    meta: &'a ferrioxid_core::AdminModelMeta,
+    fields: &'a [ferrioxid_core::AdminFieldMeta],
     specs: &[ColumnSpec],
 ) -> Vec<&'a ferrioxid_core::AdminFieldMeta> {
     let visible = |field: &ferrioxid_core::AdminFieldMeta| !field.hidden && !sensitive(field.name);
-    let explicit: Vec<_> = meta
-        .fields
+    let explicit: Vec<_> = fields
         .iter()
         .filter(|field| field.list_display && field.name != "id" && visible(field))
         .collect();
     if !explicit.is_empty() {
-        return meta
-            .fields
+        return fields
             .iter()
             .filter(|field| field.list_display && visible(field))
             .collect();
     }
     let mut chosen = Vec::new();
-    let text = meta.fields.iter().find(|field| {
+    let text = fields.iter().find(|field| {
         field.name != "id"
             && visible(field)
             && column_kind(specs, field.name) == Some(ColumnKind::Text)
     });
-    let other = meta.fields.iter().find(|field| {
+    let other = fields.iter().find(|field| {
         field.name != "id" && visible(field) && column_kind(specs, field.name).is_some()
     });
     if let Some(field) = text.or(other) {
         chosen.push(field);
     }
-    if let Some(id) = meta
-        .fields
+    if let Some(id) = fields
         .iter()
         .find(|field| field.name == "id" && visible(field))
     {
@@ -3222,8 +3245,8 @@ async fn filter_inputs(
     params: &HashMap<String, String>,
 ) -> Vec<Value> {
     let mut filters = Vec::new();
-    for field in meta
-        .fields
+    for field in registry
+        .field_slice(meta)
         .iter()
         .filter(|field| field.filterable && !field.hidden)
     {
@@ -3233,10 +3256,10 @@ async fn filter_inputs(
             .cloned()
             .unwrap_or_default();
         let (kind, options) = match column {
-            Some(column) if column.foreign_table.is_some() => (
-                "uuid",
-                relation_options(registry, state, user, column, &raw).await,
-            ),
+            Some(column) if column.foreign_table.is_some() => {
+                let (options, _) = relation_options(registry, state, user, column, &raw).await;
+                ("uuid", options)
+            }
             Some(column) if column.kind == ColumnKind::Boolean => ("boolean", json!([])),
             Some(column) if column.kind == ColumnKind::BigInt => ("number", json!([])),
             Some(column) if column.kind == ColumnKind::Date => ("date", json!([])),
@@ -3432,7 +3455,8 @@ async fn relation_names(
             );
             continue;
         }
-        let Some(label) = display_column(target.meta(), target.columns()) else {
+        let Some(label) = display_column(registry.field_slice(target.meta()), target.columns())
+        else {
             resolved.insert(
                 table.to_owned(),
                 RelationLabels {
@@ -4653,7 +4677,7 @@ async fn keep_draft(
         .await;
     };
     let action_name = if id.is_some() { "update" } else { "create" };
-    if gate(state, &user, model.as_ref(), action_name)
+    if gate(state, registry, &user, model.as_ref(), action_name)
         .await
         .is_err()
     {
@@ -4683,7 +4707,7 @@ async fn keep_draft(
         )
         .await;
     };
-    let allowed = model.meta().fields.iter().any(|item| {
+    let allowed = registry.field_slice(model.meta()).iter().any(|item| {
         item.name == field
             && !item.hidden
             && !item.readonly
@@ -4793,7 +4817,9 @@ async fn inline_new(
     if read_visible(&state, &user, parent.as_ref(), id, "read")
         .await
         .is_none()
-        || gate(&state, &user, child.as_ref(), "create").await.is_err()
+        || gate(&state, &registry, &user, child.as_ref(), "create")
+            .await
+            .is_err()
     {
         return error_page(
             &state,
@@ -4929,7 +4955,9 @@ async fn inline_create(
     if read_visible(&state, &user, parent.as_ref(), id, "read")
         .await
         .is_none()
-        || gate(&state, &user, child.as_ref(), "create").await.is_err()
+        || gate(&state, &registry, &user, child.as_ref(), "create")
+            .await
+            .is_err()
     {
         let _ = audit::insert(
             &state.db,
@@ -4971,7 +4999,7 @@ async fn inline_create(
         "_cancel".to_owned(),
         json!(format!("/admin/models/{model_key}/{id}")),
     );
-    if let Err(message) = reject_locked(child.meta(), &object, true) {
+    if let Err(message) = reject_locked(registry.field_slice(child.meta()), &object, true) {
         let text = validation_text(&locale, &message);
         raw.insert(
             "__error".into(),
@@ -5387,7 +5415,7 @@ async fn inline_sections(
             .and_then(|value| value.parse::<u32>().ok())
             .unwrap_or(1)
             .clamp(1, 10_000);
-        let limit = u64::from(child.meta().per_page.clamp(1, 25));
+        let limit = u64::from(registry.per_page_of(child.meta()).clamp(1, 25));
         let scope = access_scope(child.as_ref(), user, false);
         let filters = [(spec.column, DbValue::from(parent_id))];
         let Ok((rows, has_more, _)) = child
@@ -5584,7 +5612,11 @@ async fn stage_bulk(
         .await;
     }
     let ids = if form.get("scope").map(String::as_str) == Some("page") {
-        let (sort, descending) = match resolved_sort(model.meta(), &form) {
+        let (sort, descending) = match resolved_sort(
+            registry.field_slice(model.meta()),
+            registry.ordering_of(model.meta()),
+            &form,
+        ) {
             Ok(value) => value,
             Err(()) => {
                 return error_page(
@@ -5603,6 +5635,7 @@ async fn stage_bulk(
         let filters = match filters_from(
             &String::from_utf8_lossy(body),
             model.columns(),
+            registry,
             model.meta(),
             registry.filters(),
         ) {
@@ -5626,10 +5659,9 @@ async fn stage_bulk(
             .and_then(|value| value.parse::<u32>().ok())
             .unwrap_or(1)
             .max(1);
-        let page_size = u64::from(model.meta().per_page.clamp(1, 100));
-        let search: Vec<&str> = model
-            .meta()
-            .fields
+        let page_size = u64::from(registry.per_page_of(model.meta()).clamp(1, 100));
+        let search: Vec<&str> = registry
+            .field_slice(model.meta())
             .iter()
             .filter(|field| field.searchable && !field.hidden && !sensitive(field.name))
             .map(|field| field.name)

@@ -133,11 +133,33 @@ async fn schema(
     }
     let mut actions = Vec::new();
     for action in ["read", "create", "update", "delete"] {
-        if permit(auth, &user, model.meta(), action).await.is_ok() {
+        if permit(auth, &user, model.meta(), action).await.is_err() {
+            continue;
+        }
+        if let Some(code) = registry.action_permission(model.meta().key, action) {
+            match auth.holds(&user, code).await {
+                Ok(true) => actions.push(action),
+                Ok(false) => {}
+                Err(_) => {
+                    return failure(
+                        StatusCode::INTERNAL_SERVER_ERROR,
+                        "permission lookup failed",
+                    )
+                }
+            }
+        } else {
             actions.push(action);
         }
     }
-    Json(schema_json(model.as_ref(), &actions)).into_response()
+    Json(schema_json(
+        model.meta().key,
+        model.meta().label,
+        list_blocked(model.as_ref()),
+        registry.field_slice(model.meta()),
+        model.columns(),
+        &actions,
+    ))
+    .into_response()
 }
 
 async fn records(
@@ -155,7 +177,7 @@ async fn records(
     let Some(model) = registry.find(&model_key) else {
         return failure(StatusCode::NOT_FOUND, "model was not found");
     };
-    if let Err(error) = gate(&state, &user, model.as_ref(), "read").await {
+    if let Err(error) = gate(&state, &registry, &user, model.as_ref(), "read").await {
         return ferrioxid_failure(error);
     }
     if list_blocked(model.as_ref()) {
@@ -167,10 +189,9 @@ async fn records(
     let scope = access_scope(model.as_ref(), &user, false);
     let page = params.page.unwrap_or(1).max(1);
     let page_size = params.page_size.unwrap_or(25).clamp(1, 100);
+    let fields = registry.field_slice(model.meta());
     let sort = params.sort.as_deref().unwrap_or("id");
-    if !model
-        .meta()
-        .fields
+    if !fields
         .iter()
         .any(|field| field.name == sort && (field.sortable || field.name == "id"))
     {
@@ -180,9 +201,7 @@ async fn records(
         );
     }
     let descending = matches!(params.dir.as_deref(), Some("desc"));
-    let search_columns: Vec<&str> = model
-        .meta()
-        .fields
+    let search_columns: Vec<&str> = fields
         .iter()
         .filter(|field| field.searchable)
         .map(|field| field.name)
@@ -193,6 +212,7 @@ async fn records(
     let filters = match filters_from(
         raw.as_deref().unwrap_or(""),
         model.columns(),
+        &registry,
         model.meta(),
         registry.filters(),
     ) {
@@ -248,7 +268,7 @@ async fn read_record(
     let Some(model) = registry.find(&model_key) else {
         return failure(StatusCode::NOT_FOUND, "model was not found");
     };
-    if let Err(error) = gate(&state, &user, model.as_ref(), "read").await {
+    if let Err(error) = gate(&state, &registry, &user, model.as_ref(), "read").await {
         return ferrioxid_failure(error);
     }
     record_or_hidden(&user, model.as_ref(), &state, id, "read").await
@@ -268,7 +288,7 @@ async fn create_record(
     let Some(model) = registry.find(&model_key) else {
         return failure(StatusCode::NOT_FOUND, "model was not found");
     };
-    if let Err(error) = gate(&state, &user, model.as_ref(), "create").await {
+    if let Err(error) = gate(&state, &registry, &user, model.as_ref(), "create").await {
         return ferrioxid_failure(error);
     }
     let Some(object) = body.as_object() else {
@@ -277,7 +297,7 @@ async fn create_record(
             "request body must be an object",
         );
     };
-    if let Err(message) = reject_locked(model.meta(), object, true) {
+    if let Err(message) = reject_locked(registry.field_slice(model.meta()), object, true) {
         return failure(StatusCode::UNPROCESSABLE_ENTITY, &message);
     }
     match model.create(&state.db, body, &user).await {
@@ -303,7 +323,7 @@ async fn update_record(
     let Some(model) = registry.find(&model_key) else {
         return failure(StatusCode::NOT_FOUND, "model was not found");
     };
-    if let Err(error) = gate(&state, &user, model.as_ref(), "update").await {
+    if let Err(error) = gate(&state, &registry, &user, model.as_ref(), "update").await {
         return ferrioxid_failure(error);
     }
     let Some(object) = body.as_object() else {
@@ -312,7 +332,7 @@ async fn update_record(
             "request body must be an object",
         );
     };
-    if let Err(message) = reject_locked(model.meta(), object, false) {
+    if let Err(message) = reject_locked(registry.field_slice(model.meta()), object, false) {
         return failure(StatusCode::UNPROCESSABLE_ENTITY, &message);
     }
     let scope = access_scope(model.as_ref(), &user, true);
@@ -348,7 +368,7 @@ async fn delete_record(
     let Some(model) = registry.find(&model_key) else {
         return failure(StatusCode::NOT_FOUND, "model was not found");
     };
-    if let Err(error) = gate(&state, &user, model.as_ref(), "delete").await {
+    if let Err(error) = gate(&state, &registry, &user, model.as_ref(), "delete").await {
         return ferrioxid_failure(error);
     }
     let scope = access_scope(model.as_ref(), &user, true);
@@ -383,7 +403,7 @@ async fn relation_options(
     let Some(model) = registry.find(&model_key) else {
         return failure(StatusCode::NOT_FOUND, "model was not found");
     };
-    if let Err(error) = gate(&state, &user, model.as_ref(), "read").await {
+    if let Err(error) = gate(&state, &registry, &user, model.as_ref(), "read").await {
         return ferrioxid_failure(error);
     }
     let Some(column) = model.columns().iter().find(|column| column.name == field) else {
@@ -432,7 +452,7 @@ async fn relation_options(
     if let Err(error) = permit(auth, &user, target.meta(), "read").await {
         return ferrioxid_failure(error);
     }
-    let Some(label) = display_column(target.meta(), target.columns()) else {
+    let Some(label) = display_column(registry.field_slice(target.meta()), target.columns()) else {
         return failure(
             StatusCode::UNPROCESSABLE_ENTITY,
             "relation has no searchable display field",
@@ -830,6 +850,7 @@ fn needs_object_check(model: &dyn ManagedModel, user: &AuthUser) -> bool {
 
 pub(crate) async fn gate(
     state: &AppState,
+    registry: &AdminRegistry,
     user: &AuthUser,
     model: &dyn ManagedModel,
     action: &str,
@@ -844,7 +865,14 @@ pub(crate) async fn gate(
             "authentication is not configured".into(),
         ));
     };
-    permit(auth, user, model.meta(), action).await
+    permit(auth, user, model.meta(), action).await?;
+    if let Some(code) = registry.action_permission(model.meta().key, action) {
+        let allowed = auth.holds(user, code).await.map_err(FerrioxidError::from)?;
+        if !allowed {
+            return Err(FerrioxidError::Forbidden);
+        }
+    }
+    Ok(())
 }
 
 pub(crate) async fn permit(
@@ -899,7 +927,7 @@ fn superuser_only(user: &AuthUser) -> Result<(), axum::response::Response> {
 }
 
 pub(crate) fn reject_locked(
-    meta: &AdminModelMeta,
+    fields: &[AdminFieldMeta],
     object: &Map<String, Value>,
     creating: bool,
 ) -> Result<(), String> {
@@ -907,7 +935,7 @@ pub(crate) fn reject_locked(
         if sensitive(key) {
             return Err(format!("field:{key}: field is not writable"));
         }
-        let Some(field) = meta.fields.iter().find(|field| field.name == key) else {
+        let Some(field) = fields.iter().find(|field| field.name == key) else {
             return Err(format!("field:{key}: field is not writable"));
         };
         if field.hidden || field.readonly || (creating && key == "id") {
@@ -920,9 +948,11 @@ pub(crate) fn reject_locked(
 pub(crate) fn filters_from(
     raw: &str,
     columns: &[ColumnSpec],
+    registry: &AdminRegistry,
     meta: &AdminModelMeta,
     custom: &[crate::filters::AdminFilter],
 ) -> Result<Vec<(&'static str, DbValue)>, String> {
+    let fields = registry.field_slice(meta);
     let mut filters = Vec::new();
     for pair in raw.split('&').filter(|pair| !pair.is_empty()) {
         let (key, value) = pair.split_once('=').unwrap_or((pair, ""));
@@ -942,11 +972,7 @@ pub(crate) fn filters_from(
             filters.push(filter.bind(columns, &value)?);
             continue;
         }
-        let Some(meta_field) = meta
-            .fields
-            .iter()
-            .find(|candidate| candidate.name == field_name)
-        else {
+        let Some(meta_field) = fields.iter().find(|candidate| candidate.name == field_name) else {
             return Err("filter field is not allowed".into());
         };
         if !meta_field.filterable || meta_field.hidden {
@@ -1006,7 +1032,7 @@ fn filter_value(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
 }
 
 pub(crate) fn display_column(
-    meta: &AdminModelMeta,
+    fields: &[AdminFieldMeta],
     columns: &[ColumnSpec],
 ) -> Option<&'static str> {
     let usable = |field: &AdminFieldMeta| {
@@ -1017,32 +1043,37 @@ pub(crate) fn display_column(
                 .iter()
                 .any(|column| column.name == field.name && column.kind == ColumnKind::Text)
     };
-    meta.fields
+    fields
         .iter()
         .find(|field| field.list_display && usable(field))
         .or_else(|| {
-            meta.fields
+            fields
                 .iter()
                 .find(|field| field.searchable && usable(field))
         })
-        .or_else(|| meta.fields.iter().find(|field| usable(field)))
+        .or_else(|| fields.iter().find(|field| usable(field)))
         .map(|field| field.name)
 }
 
-fn schema_json(model: &dyn ManagedModel, actions: &[&str]) -> Value {
-    let fields: Vec<Value> = model
-        .meta()
-        .fields
+fn schema_json(
+    key: &str,
+    label: &str,
+    list_blocked: bool,
+    fields: &[AdminFieldMeta],
+    columns: &[ColumnSpec],
+    actions: &[&str],
+) -> Value {
+    let rendered: Vec<Value> = fields
         .iter()
         .filter(|field| !field.hidden && !sensitive(field.name))
-        .map(|field| field_json(field, model.columns()))
+        .map(|field| field_json(field, columns))
         .collect();
     json!({
-        "model": model.meta().key,
-        "label": model.meta().label,
-        "list_blocked": list_blocked(model),
+        "model": key,
+        "label": label,
+        "list_blocked": list_blocked,
         "actions": actions,
-        "fields": fields
+        "fields": rendered
     })
 }
 

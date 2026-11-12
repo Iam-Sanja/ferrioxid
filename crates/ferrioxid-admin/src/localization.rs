@@ -67,6 +67,11 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "Save and add another",
     ),
     ("pick_more", "Weiter suchen", "Search further"),
+    (
+        "lookup_truncated",
+        "Die Auswahl zeigt die ersten 100 Treffer. Weitere Werte stehen in der Suche.",
+        "The list shows the first 100 matches. Use search for the rest.",
+    ),
     ("pick_heading", "Eintrag wählen", "Choose a record"),
     (
         "pick_empty",

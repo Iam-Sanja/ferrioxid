@@ -9,3 +9,5 @@
 Without installed apps and without `[app.<name>]`, `into_router` remains the previous way. myshop uses it unchanged.
 
 The CLI only reads `ferrioxid.toml`. It does not run the Rust code of the app. `check`, `doctor` and `migrate status` say this explicitly and do not report the TOML migrations as confirmed against `registry.migrations`. The process start is the place that compares both sides. Diagnostic commands do not create a database file and a history table.
+
+`AppConfig::version` and `requires` are checked by `install`. `upgrade_plan` and `uninstall_plan` describe the next build. They do not apply SQL and they do not drop rows. See [reusable-apps.md](reusable-apps.md).

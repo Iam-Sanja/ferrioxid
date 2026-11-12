@@ -29,6 +29,8 @@ pub use cookie_guard::require_browser;
 pub use openapi::{OpenApiOperation, OpenApiOptions};
 
 pub mod apps;
+pub mod crud;
+pub mod flash;
 pub mod pages;
 pub mod urls;
 pub mod views;
@@ -44,6 +46,7 @@ pub struct App {
     routes: Router<AppState>,
     schemas: Vec<(&'static str, &'static [ColumnSpec])>,
     installed: Vec<String>,
+    versions: Vec<(String, String)>,
     sealed: bool,
     paths: BTreeSet<String>,
     tables: BTreeSet<String>,
@@ -69,6 +72,7 @@ impl App {
             routes: Router::new(),
             schemas: Vec::new(),
             installed: Vec::new(),
+            versions: Vec::new(),
             sealed: false,
             paths: BTreeSet::new(),
             tables: BTreeSet::new(),
