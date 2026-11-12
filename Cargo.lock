@@ -846,6 +846,7 @@ dependencies = [
  "chrono",
  "ferrioxid-core",
  "ferrioxid-storage",
+ "serde_json",
  "tokio",
  "uuid",
 ]
