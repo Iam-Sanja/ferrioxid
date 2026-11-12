@@ -108,6 +108,18 @@ async fn account(
 
 State-changing requests must pass `authenticate_csrf`. View helpers do not replace that check.
 
+## Lists, notices and flash messages
+
+`page_window` accepts pages from 1 and a size from 1 to 100. `pagination_href` stays on one local path and rejects `scope`, `csrf` and `token` query keys. `require_scope` rejects `QueryScope::None` before a read. `scoped_list` and `scoped_get` pass that scope into the existing query functions. They do not build a scope from the request.
+
+`create_flash_table` creates `_ferrioxid_flashes`. `push_flash` stores one line, at most 240 characters, for a session id. `take_flashes` returns those rows and deletes them in the same transaction. A second take is empty. `render_flashes` escapes the text. `ferrioxid dev` does not create this table.
+
+```rust
+ferrioxid::views::push_flash(&db, user.session_id, ferrioxid::views::FlashLevel::Success, "Saved").await?;
+let messages = ferrioxid::views::take_flashes(&db, user.session_id).await?;
+let html = ferrioxid::views::render_flashes(&messages);
+```
+
 ## Tests
 
 `redirect_rejects_external_targets`, `responses_keep_problem_json_and_escape_html` and `staff_route_and_request_id_stay_closed` in `views.rs` cover redirects, responses and staff access. HTML is escaped. A 422 response without `text/html` remains problem JSON. Staff routes reject requests without a session. The response includes a request-ID header when standard middleware is installed.

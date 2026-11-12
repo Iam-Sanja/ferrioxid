@@ -41,6 +41,20 @@ App::new(db).with_auth(auth).with_admin(admin)
 
 The surface is below `http://127.0.0.1:3000/admin`. The API is under `/admin/api`.
 
+## Typed configuration
+
+`ModelAdmin` narrows an existing `AdminModelMeta`. It does not start a second admin. Call `check` with the model metadata and columns, then `AdminRegistry::configure`, then `seal`. Until `seal`, the derive metadata stays in effect. A configuration can reduce list, search and filter fields, mark more fields readonly or hidden, replace fieldsets, set ordering and page size, and require an extra `resource.action` code through `holds`. It cannot reveal a sensitive or hidden field. Foreign keys of a configured model must point at a table that is also in the registry. Inlines stay on the model derive. Has-many editing remains `save_with_children`. Many-to-many membership uses `replace_links` inside one transaction. The HTML picker already pages past 100 rows; the select shows the first 100 and links to that search.
+
+```rust
+let notes = ModelAdmin::new("notes")
+    .list_display(&["title"])
+    .search_fields(&["title"])
+    .readonly(&["body"])
+    .action_permission("update", "notes.publish")
+    .check(Note::admin_meta().unwrap(), Note::columns())?;
+let registry = AdminRegistry::new().add::<Note>().configure(notes)?.seal()?;
+```
+
 ## Security
 
 Admin model and directory requests require a valid session and `is_staff = true`; public configuration and login routes are exceptions. `allow_anonymous` never grants admin access. Superusers still need staff access. Models with no admin permission are available only to superusers. Bound object policies filter lists through SQL query scopes and check individual records.

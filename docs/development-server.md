@@ -22,7 +22,7 @@ Both commands read `ferrioxid.toml` in the working directory or a parent directo
 
 ## Configuration
 
-`BIND_ADDRESS` and `DATABASE_URL` apply to the started process. Before the build, `ferrioxid dev` checks the migration situation only by reading. Pending migrations or a non-auditable database result in a warning and not an abort. Nothing is migrated. `ferrioxid build` and `ferrioxid dev` do not start Node.js. The admin is included in the rust binary. The warning describes [migration-diagnostics.md](migration-diagnostics.md).
+`BIND_ADDRESS` and `DATABASE_URL` apply to the started process. Before the build, `ferrioxid dev` checks the migration situation only by reading. Pending migrations or a non-auditable database result in a warning and not an abort. Nothing is migrated. A busy `127.0.0.1`, `localhost` or `::1` port stops the command before the process starts. `ferrioxid build` and `ferrioxid dev` do not start Node.js. The admin is included in the rust binary. The warning describes [migration-diagnostics.md](migration-diagnostics.md).
 
 ## Data flow
 

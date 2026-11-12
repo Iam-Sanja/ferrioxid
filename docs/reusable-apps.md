@@ -26,3 +26,14 @@ let app = ferrioxid::App::new(database)
 - App settings are `[custom.<app>]` and `ProjectConfig::custom_settings`. `Registration::project` provides the configuration only if `with_settings` was called before `install`. Framework keys are not replaced.
 - External app migrations live in their own directory and are registered through `registry.migrations` and declared in `[app.<name>]`. Version identity comes from the file ID and checksum rather than a separate version field.
 - `install` does not change the database.
+
+## Versions, upgrades and removal
+
+`AppConfig::version("1.2.0")` records `major.minor.patch`. `requires("shop", "1.0.0")` refuses installation until that app is already installed at that version or newer. `upgrade_plan` refuses a downgrade and does not apply migrations or write rows. Run `ferrioxid migrate` for schema changes. `uninstall_plan` tells the next build to stop calling `install`. It does not drop tables, rows or migration history, and it does not unload a running process. Removing data needs an explicit migration written for that purpose. The same app type can be installed into two separate `App` values. Ferrioxid still does not load a dynamic library.
+
+```rust
+let plan = app.upgrade_plan("catalog", Some("1.2.0"), "1.3.0")?;
+assert!(!plan.applies_migrations);
+let removal = app.uninstall_plan("catalog")?;
+assert!(!removal.drops_tables && !removal.drops_rows);
+```

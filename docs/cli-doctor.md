@@ -43,6 +43,8 @@ It reads `ferrioxid.toml`. `DATABASE_URL` may replace the database entry. `check
 
 `doctor` in the Ferrioxid workspace itself reports missing `src/main.rs` and `src/lib.rs` because the workspace root is not an application. The command applies to generated projects and to `examples/myshop` only if there is a separate `ferrioxid.toml` there. The workspace file remains valid for `migrate`.
 
+A loopback `server.port` is probed with a bind that is released immediately. A busy port is a warning in `doctor` and an error in `ferrioxid dev`. `ferrioxid dev` prints that it does not apply migrations. A declared `[app.<name>]` with a missing migrations directory is an error. The command still does not load the app crate; `App::install` remains the registration.
+
 ## Security rules
 
 Connection strings are never printed. `doctor` and `check` create neither SQLite files nor history tables; `check` writes no migrations.

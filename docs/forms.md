@@ -21,6 +21,8 @@ The facade exports the module as `ferrioxid::forms`.
 
 `model_fields` builds fields from `ColumnSpec` and `AdminFieldMeta`, but only for names in the explicit allow-list. A name that is not a column, a duplicate, a primary key, or an admin field marked sensitive, readonly or hidden returns `FormSetupError` and creates no field. `bind_model` distinguishes `SubmitMode::Create`, `Replace` and `Patch`. Create and Replace require every required field and turn a missing optional field into `BoundValue::Null`. Patch keeps a missing key as `BoundValue::Unchanged`. Posted names outside the field list produce `validation.unknown_field`, including when a client adds a column the allow-list omitted. `choices` rejects values that are not in the supplied list with `validation.choice`.
 
+`FormValues::parse_urlencoded` and `FormValues::parse_json` both feed `bind_submission`. Duplicate keys are `validation.duplicate`. Names in the protected list are `validation.readonly` and are removed before binding, so a forged readonly or disabled field cannot overwrite the stored value. `apply_contracts` copies `min_length`, `max_length` and `format` from `FieldContract`. Lengths count Unicode scalar values. `render_relation_select` renders only the options the caller already limited with `QueryScope`. `inspect_upload` rejects traversal, size, a content type outside the policy, and image bytes that do not match PNG, JPEG, GIF or WebP. `plan_formset` counts creates, updates and deletes. The caller writes those rows in one database transaction and rolls the transaction back when validation fails.
+
 `#[derive(FerrioxidForm)]` with `#[form(model = Type)]` builds a form from the model allow-list. `bind_formset` accepts at most 100 rows named `{prefix}_{index}_{field}`. `store_upload` rejects `..`, slashes and NUL, then stores the bytes through `LocalStorage`. Numeric `min` and `max` come from the model column metadata. The HTML `required` attribute does not replace the server check.
 
 ## Data flow
@@ -65,7 +67,7 @@ let _title = &bound[0].value;
 
 ## Limitations
 
-There is no form set, no file fields in the form API, and no proc macro. `model_fields` does not read per-column min/max attributes, because those are not part of `ColumnSpec`. Numeric ranges stay on `required_i64`. The model macro does not yet call the common core. Formsets remain absent.
+File inputs use `enctype="multipart/form-data"`. The stored path still comes from `store_upload`, which ignores the client file name. A formset plan does not open a transaction by itself. Remote storage is not included. `parse_json` accepts only a flat object of strings, numbers, booleans and null.
 
 ## Extension
 
