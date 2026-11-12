@@ -56,6 +56,52 @@ Vorhandene Tests, die das Zusammenspiel mitabdecken:
 - `conflicting_secret_aliases_fail_closed`
 - `conflicting_smtp_passwords_are_rejected`
 
+## Release-Absicherung am 12. November 2026
+
+GitHub Actions auf dem ersten Push von `work/integration` (`f479808`):
+
+| Check | Ergebnis |
+|---|---|
+| Rust (ubuntu-latest) | bestanden |
+| Rust (windows-latest) | bestanden, 25m 41s |
+| PostgreSQL | fehlgeschlagen |
+| Cargo audit | bestanden, mit der bestehenden RSA-Ausnahme |
+| CodeQL Rust, Actions, JavaScript, Python | bestanden |
+
+Der PostgreSQL-Job scheiterte nur an `postgres_matching_uses_the_record_id_not_a_similar_name`. Der Test öffnete fest `postgresql://postgres@127.0.0.1:5432/postgres`. In GitHub Actions gibt es die Rolle `postgres` nicht. Die Admin-URL ist jetzt `FERRIOXID_POSTGRES_ADMIN`, sonst `DATABASE_URL`. `DisposablePostgres` legt weiterhin nur `ferrioxid_test_*` an und löscht nur diese Datenbank. Lokal gegen `postgresql://postgres@127.0.0.1:5432/postgres` war der Test danach grün. `ferrioxid` blieb bei 15 öffentlichen Tabellen, `ferrioxid_migrations_down_test` bei 1.
+
+`postgres_keyset_annotations_and_many_to_many` lief lokal gegen eine neu angelegte Datenbank `ferrioxid_test_013b7cba8b9478b7b66a12455f3a8ea9` und wurde danach gelöscht. Der Test löscht nur `ferrioxid_query_membership`, `ferrioxid_query_tags` und `ferrioxid_query_items`. Dieselben Zähler der beiden bestehenden Kataloge blieben unverändert. Der GitHub-PostgreSQL-Job führt denselben Test jetzt in seinem frischen Container aus. Lokal darf `DATABASE_URL` dafür nicht auf `ferrioxid` oder `ferrioxid_migrations_down_test` zeigen.
+
+HTTP- und CLI-Abnahme, jeweils SQLite im Prozess, ohne Browserfenster:
+
+- `direct_admin_login_survives_require_browser_writes_from_a_fresh_jar`
+- `sqlite_auth_http_permissions_and_csrf`
+- `admin_v018_drafts_inlines_bulk_and_audit`
+- `migrate_make_up_and_status_use_a_temporary_sqlite_database`
+
+Docker ist auf dieser Maschine nicht installiert. `examples/deploy/compose.yaml` wurde gelesen und nicht gestartet. PostgreSQL darin hat keinen veröffentlichten Host-Port. Das Passwort kommt aus der Umgebung. `embedded-migrate` beendet sich nach Auth, Login und einem Job. Ein dauerhafter App-Container und eine Browserabnahme über Caddy sind Folgearbeit, kein Teil dieses Integrationscommits.
+
+## Kompatibilität
+
+Neue Generatorprojekte schreiben `ferrioxid.toml` und setzen `BIND_ADDRESS=127.0.0.1:3000`. Sie setzen `FERRIOXID_TRUST_PROXY` nicht. Für sie ändert die Peer-Liste nichts.
+
+Bestehende Deployments, die `FERRIOXID_TRUST_PROXY=true` ohne `FERRIOXID_TRUSTED_PROXIES` nutzen, akzeptieren `X-Forwarded-For` danach von keinem Peer. Die Peer-Adresse des Reverse-Proxy muss gesetzt werden. `FERRUM_TRUSTED_PROXIES` gilt nur, wenn der neue Name fehlt oder denselben Wert hat.
+
+Ein Verzeichnis mit nur `ferrum.toml` wird weiter geladen. Liegen `ferrioxid.toml` und `ferrum.toml` zusammen, bricht das Lesen ab. `DATABASE_URL` und `BIND_ADDRESS` haben keinen Legacy-Namen. Generierte Projekte, die bereits `ferrioxid.toml` verwenden und keine widersprüchlichen `FERRUM_*`-Variablen setzen, starten unverändert.
+
+`#[field(json)]` verändert keine vorhandene Textspalte. Eine JSON-Spalte braucht eine neue Migration.
+
+## Issue #8
+
+`rsa 0.9.10` bleibt eine Lockfile-Abhängigkeit von `sqlx-mysql 0.8.6`. Der aktivierte Graph enthält sie nicht. Der ungefilterte Audit bleibt absichtlich rot. Ein Patch auf `rsa` 0.10 ist keine Lösung, weil `sqlx-mysql` 0.9 erwartet. Der konkrete Weg ist ein späteres SQLx-Release mit `rsa >= 0.10`, danach `cargo update -p sqlx-mysql` und erst dann das Entfernen der Ausnahme. Details stehen in [security-rsa.md](security-rsa.md).
+
+## Folgeaufgaben
+
+- Docker-Compose auf einer Maschine mit Docker starten und den Exit-Code von `embedded-migrate` prüfen. Der Compose-App-Dienst ist kein dauerhafter Webserver.
+- Browserabnahme von Admin-Login, Formular und Audit-Timeline.
+- Issue #8 schließen, sobald SQLx die RSA-Abhängigkeit anhebt.
+- Kein Merge nach `main` in diesem Durchlauf.
+
 ## Qualität
 
 Lokal auf `work/integration`, nicht GitHub-CI:
@@ -65,7 +111,7 @@ Lokal auf `work/integration`, nicht GitHub-CI:
 | `cargo fmt --all -- --check` | ok |
 | `cargo clippy --workspace --all-targets -- -D warnings` | ok. Die bestehende `linker_messages`-Warnung von `ferrioxid-macros` bleibt und wird von `-D warnings` nicht abgelehnt. |
 | `cargo test --workspace` | ok |
-| `cargo build --workspace` | ok |
+| `cargo build --workspace` | ok. Dieselbe Folge lief nach der Audit-Korrektur erneut durch: Formatierung, Clippy, `cargo test --workspace` und Build, Exit-Code 0. Ignorierte PostgreSQL-Tests dieses Workspace-Laufs waren übersprungen, weil `DATABASE_URL` nicht gesetzt war. |
 | `cargo metadata --locked` | ok |
 | `cargo tree ... -i rsa` und `-i sqlx-mysql` | nothing to print |
 | `cargo audit` | nur `RUSTSEC-2023-0071` (`rsa` 0.9.10, lockfile-only) |
@@ -85,7 +131,7 @@ Admin-URL für `DisposablePostgres`: `postgresql://postgres@127.0.0.1:5432/postg
 
 Vorher und nachher: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_down_test` 1 öffentliche Tabelle, keine übrige `ferrioxid_test_*`-Datenbank.
 
-`postgres_keyset_annotations_and_many_to_many` wurde lokal nicht ausgeführt. Der Test schreibt in die durch `DATABASE_URL` benannte Datenbank und löscht dort eigene Tabellen. Er darf nicht gegen die befüllten Kataloge `ferrioxid` oder `ferrioxid_migrations_down_test` laufen.
+`postgres_keyset_annotations_and_many_to_many` lief gegen die isolierte Datenbank `ferrioxid_test_013b7cba8b9478b7b66a12455f3a8ea9` und wurde danach gelöscht. Der Test schreibt nur `ferrioxid_query_membership`, `ferrioxid_query_tags` und `ferrioxid_query_items`. Er darf nicht gegen die befüllten Kataloge `ferrioxid` oder `ferrioxid_migrations_down_test` laufen.
 
 ## Commits auf `work/integration`
 
@@ -94,16 +140,19 @@ Vorher und nachher: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_
 3. `9a13229` merge(pr-99): integrate native admin audit timeline
 4. `ad6bb8b` merge(pr-100): integrate developer apps aliases and project files
 5. `63a648f` test(integration): cover the combined pull requests 97-100
+6. `f479808` docs: record the local integration of pull requests 97-100
+7. Release-Absicherung nach `f479808`: der Audit-Test liest `FERRIOXID_POSTGRES_ADMIN` oder `DATABASE_URL`, der PostgreSQL-Job führt `postgres_keyset_annotations_and_many_to_many` aus, und [security-rsa.md](security-rsa.md) beschreibt den Abbau von `RUSTSEC-2023-0071`.
 
 ## Risiken
 
-- GitHub-CI auf diesem Integrationsbranch ist noch nicht gelaufen.
-- Docker ist auf dieser Maschine nicht gestartet. `examples/deploy/compose.yaml` wurde nicht gebootet.
-- Browserabnahme der Admin-Timeline und der CSRF-Login-Ausnahme fehlt.
+- Der erste GitHub-Lauf auf `f479808` war auf Ubuntu, Windows, Cargo audit und CodeQL grün und auf PostgreSQL rot, weil der Audit-Test die Rolle `postgres` verlangte. Der Folgecommit liest `DATABASE_URL`. Der neue Lauf ist erst nach dem Push belegt.
+- Docker ist auf dieser Maschine nicht installiert. `examples/deploy/compose.yaml` wurde nicht gebootet.
+- Eine Desktop-Browserabnahme fehlt. Die HTTP-Verträge liefen über den Axum-Router.
 - `load_one_to_one` lädt nicht automatisch in Admin-Listen. Die vorhandene Inline-Liste bleibt bei höchstens 25 Zeilen.
-- Issue #8 bleibt offen: `rsa` liegt weiter nur im Lockfile über optionales SQLx-MySQL.
+- Issue #8 bleibt offen, bis SQLx `rsa >= 0.10` zieht. Die Ausnahme wird nicht erweitert.
 - Ein Rollback von #98 nach einer bereits angelegten JSON-Spalte braucht eine eigene Schemaentscheidung.
 - Alias-Konflikte, die vor #100 still auf `FERRIOXID_*` fielen, sind jetzt Startfehler.
+- Der PostgreSQL-16-Log des ersten Laufs enthielt `unsupported jsonb version number 110` während `postgres_grouped_report_scope_json_and_one_to_one`. Der Test selbst war grün. Das ist keine stille Freigabe und bleibt eine Folgeprüfung, kein Schemaumbau in diesem Commit.
 
 ## Rollback
 

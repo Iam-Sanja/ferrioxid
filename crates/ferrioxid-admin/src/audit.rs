@@ -400,7 +400,10 @@ mod tests {
     #[ignore = "creates and drops one ferrioxid_test_* PostgreSQL database"]
     async fn postgres_matching_uses_the_record_id_not_a_similar_name() {
         let admin = std::env::var("FERRIOXID_POSTGRES_ADMIN")
-            .unwrap_or_else(|_| "postgresql://postgres@127.0.0.1:5432/postgres".to_owned());
+            .ok()
+            .filter(|value| !value.is_empty())
+            .or_else(|| std::env::var("DATABASE_URL").ok())
+            .expect("FERRIOXID_POSTGRES_ADMIN or DATABASE_URL must name an approved PostgreSQL admin database");
         let disposable = ferrioxid_db::DisposablePostgres::create(&admin)
             .await
             .expect("disposable database");
