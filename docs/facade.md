@@ -9,7 +9,7 @@ The `ferrioxid`-Crate is the public entry point. It exports `App`, `FerrioxidMod
 ### Current exports
 
 - `ferrioxid::App`, `ferrioxid::pages`, `ferrioxid::web`
-- `ferrioxid::forms`, `ferrioxid::static_files`, `ferrioxid::storage`, `ferrioxid::middleware`
+- `ferrioxid::forms`, `ferrioxid::static_files`, `ferrioxid::storage`, `ferrioxid::cache`, `ferrioxid::middleware`
 - `ferrioxid::core` (`ferrioxid-core`)
 - `ferrioxid::db` (`ferrioxid-db`)
 - `ferrioxid::FerrioxidModel` (Macro)

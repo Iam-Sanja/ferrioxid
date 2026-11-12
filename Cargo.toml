@@ -4,7 +4,7 @@ exclude = ["vendor/sqlx-sqlite"]
 members = [
   "crates/ferrioxid", "crates/ferrioxid-core", "crates/ferrioxid-macros",
   "crates/ferrioxid-db", "crates/ferrioxid-api", "crates/ferrioxid-cli",
-  "crates/ferrioxid-migrations", "crates/ferrioxid-auth", "crates/ferrioxid-admin",
+  "crates/ferrioxid-migrations", "crates/ferrioxid-auth", "crates/ferrioxid-cache", "crates/ferrioxid-admin",
   "crates/ferrioxid-forms", "crates/ferrioxid-static", "crates/ferrioxid-storage",
   "crates/ferrioxid-middleware", "crates/ferrioxid-mail", "crates/ferrioxid-jobs",
   "examples/myshop",
