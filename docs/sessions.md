@@ -80,6 +80,10 @@ Idle timeout and absolute runtime are checked on the next request, not by a back
 
 A protected POST that still carries an invalid user cookie stays unauthenticated. Do not treat that request as anonymous. The recovery sequence is: GET the login page, detect the invalid session, clear `ferrioxid_session`, let `ensure_anonymous_session` set the anonymous cookie and CSRF, then POST the login with that token and a listed `Origin`. `browser_login_flow_exposes_cookies_and_rejects_bad_sessions` in `crates/ferrioxid-api/src/testing.rs` is the executable example.
 
+## Session list and revocation
+
+`list_sessions` returns open sessions for the current user: id, timestamps and whether the row is the current session. It does not return token hashes and does not touch `last_seen_at`. `POST /auth/sessions/revoke` removes one session. A session owned by someone else is forbidden unless the caller is a superuser. `revoke_other_sessions` keeps the caller's current session. Password change and deactivation still revoke every session.
+
 ## Planned extensions
 
-Device management and a session list are not implemented. `GET /auth/csrf` recalculates the same token and does not rewrite the session. Multiple tabs remain valid. Logout, password change and expiration make the token unusable because the session itself ends. The automatic rotation per request does not occur.
+Device names and push logout are not implemented. `GET /auth/csrf` recalculates the same token and does not rewrite the session. Multiple tabs remain valid until one of them is revoked. Logout, password change and expiration make the token unusable because the session itself ends. The automatic rotation per request does not occur.

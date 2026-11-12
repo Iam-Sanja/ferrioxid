@@ -196,7 +196,8 @@ async fn sessions_permissions_and_repeatable_migrations() {
             "0002_admin_journal".to_owned(),
             "0003_audit_operation".to_owned(),
             "0004_password_reset".to_owned(),
-            "0005_anonymous_sessions".to_owned()
+            "0005_anonymous_sessions".to_owned(),
+            "0006_account_security".to_owned()
         ]
     );
     assert_eq!(auth.list_users().await.unwrap().len(), 2);

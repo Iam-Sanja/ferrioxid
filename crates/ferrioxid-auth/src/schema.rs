@@ -21,6 +21,9 @@ pub const ADMIN_AUDIT: &str = "_ferrioxid_admin_audit";
 pub const PASSWORD_RESETS: &str = "_ferrioxid_password_resets";
 pub const PASSWORD_RESET_EXCHANGES: &str = "_ferrioxid_password_reset_exchanges";
 pub const MAIL_OUTBOX: &str = "_ferrioxid_mail_outbox";
+pub const MFA_TOTP: &str = "_ferrioxid_mfa_totp";
+pub const RECOVERY_CODES: &str = "_ferrioxid_recovery_codes";
+pub const LOGIN_CHALLENGES: &str = "_ferrioxid_login_challenges";
 
 pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
@@ -181,6 +184,102 @@ fn anonymous_migration_file() -> Result<MigrationFile, AuthError> {
 }
 
 #[cfg(test)]
+fn ensure_account_security_migration() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let path = migrations_dir().join("0006_account_security.json");
+        if path.exists() {
+            return;
+        }
+        let file =
+            account_security_migration_file().expect("account security schema can be sealed");
+        ferrioxid_migrations::save_migration(&migrations_dir(), &file).expect("write migration");
+    });
+}
+
+#[cfg(test)]
+fn account_security_migration_file() -> Result<MigrationFile, AuthError> {
+    let previous = ferrioxid_migrations::load_migration(
+        &migrations_dir().join("0005_anonymous_sessions.json"),
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let mut to = previous.to_snapshot.clone();
+    to.tables.push(mfa_totp());
+    to.tables.push(recovery_codes());
+    to.tables.push(login_challenges());
+    to.validate()
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let plan = plan_change(&previous.to_snapshot, &to)
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    if let Some(reason) = &plan.refusal {
+        return Err(AuthError::Validation(reason.clone()));
+    }
+    seal(
+        "0006_account_security".to_owned(),
+        "account_security".to_owned(),
+        previous.to_snapshot,
+        to,
+        &plan,
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
+#[cfg(test)]
+fn mfa_totp() -> TableSnapshot {
+    table(
+        MFA_TOTP,
+        vec![
+            column("user_id", LogicalType::Uuid, true, false, None),
+            column("nonce", LogicalType::String, false, false, None),
+            column("ciphertext", LogicalType::String, false, false, None),
+            column("confirmed_at", LogicalType::I64, false, true, None),
+            column("created_at", LogicalType::I64, false, false, None),
+            column("last_used_step", LogicalType::I64, false, true, None),
+        ],
+        Vec::new(),
+        Vec::new(),
+        vec![foreign_key(MFA_TOTP, "user_id", USERS)],
+    )
+}
+
+#[cfg(test)]
+fn recovery_codes() -> TableSnapshot {
+    table(
+        RECOVERY_CODES,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("user_id", LogicalType::Uuid, false, false, None),
+            column("code_hash", LogicalType::String, false, false, None),
+            column("used_at", LogicalType::I64, false, true, None),
+            column("created_at", LogicalType::I64, false, false, None),
+        ],
+        vec![unique(RECOVERY_CODES, &["code_hash"])],
+        Vec::new(),
+        vec![foreign_key(RECOVERY_CODES, "user_id", USERS)],
+    )
+}
+
+#[cfg(test)]
+fn login_challenges() -> TableSnapshot {
+    table(
+        LOGIN_CHALLENGES,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("user_id", LogicalType::Uuid, false, false, None),
+            column("token_hash", LogicalType::String, false, false, None),
+            column("expires_at", LogicalType::I64, false, false, None),
+            column("consumed_at", LogicalType::I64, false, true, None),
+            column("attempts", LogicalType::I64, false, false, None),
+            column("created_at", LogicalType::I64, false, false, None),
+        ],
+        vec![unique(LOGIN_CHALLENGES, &["token_hash"])],
+        Vec::new(),
+        vec![foreign_key(LOGIN_CHALLENGES, "user_id", USERS)],
+    )
+}
+
+#[cfg(test)]
 fn anonymous_sessions() -> TableSnapshot {
     table(
         ANONYMOUS_SESSIONS,
@@ -270,6 +369,8 @@ fn mail_outbox() -> TableSnapshot {
 }
 
 pub async fn apply_migrations(db: &DatabaseConnection) -> Result<Vec<String>, AuthError> {
+    #[cfg(test)]
+    ensure_account_security_migration();
     let report = apply_directory_with_history(db, &migrations_dir(), false, AUTH_HISTORY_TABLE)
         .await
         .map_err(|error| AuthError::Validation(error.to_string()))?;

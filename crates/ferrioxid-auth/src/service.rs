@@ -3,9 +3,7 @@
 use crate::config::AuthConfig;
 use crate::cookie::{clear_cookie, read_cookie, set_cookie};
 use crate::error::AuthError;
-use crate::password::{
-    hash_password, validate_new_password, verify_against_dummy, verify_password,
-};
+use crate::password::{hash_password, validate_new_password, verify_password};
 use crate::schema::{PERMISSIONS, ROLES, ROLE_PERMISSIONS, USER_ROLES};
 use crate::store::{self, SessionRow, UserRow};
 use argon2::password_hash::rand_core::{OsRng, RngCore};
@@ -228,65 +226,32 @@ impl AuthService {
         client: &str,
         anonymous_token: Option<&str>,
     ) -> Result<IssuedSession, AuthError> {
-        let key = format!("{client}:{}", email.trim().to_lowercase());
-        if self.limited(&key)? {
-            return Err(AuthError::RateLimited);
-        }
-        let normalized = match normalize_email(email) {
-            Ok(value) => value,
-            Err(_) => {
-                verify_against_dummy(password);
-                self.record_failure(&key)?;
-                return Err(AuthError::InvalidCredentials);
-            }
-        };
-        let user = store::find_user_by_email(&self.db, &normalized).await?;
-        let Some(user) = user else {
-            verify_against_dummy(password);
-            self.record_failure(&key)?;
-            return Err(AuthError::InvalidCredentials);
-        };
-        let matches = verify_password(password, &user.password_hash).unwrap_or(false);
-        if !matches || !user.is_active {
-            self.record_failure(&key)?;
-            return Err(AuthError::InvalidCredentials);
-        }
-        self.clear_failures(&key)?;
+        let identity = self
+            .verify_identity(&crate::provider::PasswordProvider, email, password, client)
+            .await?;
         let now = unix_now()?;
-        store::update_last_login(&self.db, user.id, now).await?;
-        let expires_at = now.saturating_add(self.config.session_ttl_secs);
-        let transaction = self.db.begin().await.map_err(AuthError::database)?;
-        let mut clear_cookies = Vec::new();
-        if let Some(token) = anonymous_token.filter(|token| !token.is_empty()) {
-            if let Some(row) = store::find_anonymous_by_hash(&transaction, &digest(token)).await? {
-                if row.revoked_at.is_none() {
-                    store::revoke_anonymous(&transaction, row.id, now).await?;
-                }
-            }
-            clear_cookies.push(crate::cookie::clear_named_cookie(
-                &self.config,
-                &self.config.anonymous_cookie_name,
-            ));
-        }
-        let issued = insert_session(
-            &transaction,
-            &self.config.csrf_secret,
-            user.id,
-            now,
-            expires_at,
-        )
-        .await?;
-        transaction.commit().await.map_err(AuthError::database)?;
-        let user = store::find_user_by_id(&self.db, user.id)
+        if crate::account_store::find_totp(self.database(), identity.user_id)
             .await?
-            .ok_or(AuthError::Unauthenticated)?;
-        Ok(IssuedSession {
-            cookie: set_cookie(&self.config, &issued.token, self.config.session_ttl_secs),
-            token: issued.token,
-            csrf_token: issued.csrf_token,
-            clear_cookies,
-            user: public_user(&user),
-        })
+            .is_some_and(|row| row.confirmed_at.is_some())
+        {
+            let challenge = random_token();
+            let expires_at = now.saturating_add(300);
+            crate::account_store::insert_challenge(
+                self.database(),
+                Uuid::new_v4(),
+                identity.user_id,
+                &digest(&challenge),
+                now,
+                expires_at,
+            )
+            .await?;
+            return Err(AuthError::MfaPending(crate::error::PendingLogin {
+                challenge,
+                expires_at,
+            }));
+        }
+        self.issue_login_session(identity.user_id, anonymous_token, now)
+            .await
     }
 
     pub async fn authenticate_token(&self, token: &str) -> Result<AuthUser, AuthError> {
@@ -891,7 +856,7 @@ impl AuthService {
         Ok(false)
     }
 
-    fn limited(&self, key: &str) -> Result<bool, AuthError> {
+    pub(crate) fn limited(&self, key: &str) -> Result<bool, AuthError> {
         let mut guard = self
             .limiter
             .lock()
@@ -902,7 +867,7 @@ impl AuthService {
         Ok(hits.len() as u32 >= self.config.login_max_attempts)
     }
 
-    fn record_failure(&self, key: &str) -> Result<(), AuthError> {
+    pub(crate) fn record_failure(&self, key: &str) -> Result<(), AuthError> {
         let mut guard = self
             .limiter
             .lock()
@@ -911,7 +876,7 @@ impl AuthService {
         Ok(())
     }
 
-    fn clear_failures(&self, key: &str) -> Result<(), AuthError> {
+    pub(crate) fn clear_failures(&self, key: &str) -> Result<(), AuthError> {
         let mut guard = self
             .limiter
             .lock()
@@ -921,12 +886,12 @@ impl AuthService {
     }
 }
 
-struct RawSession {
-    token: String,
-    csrf_token: String,
+pub(crate) struct RawSession {
+    pub(crate) token: String,
+    pub(crate) csrf_token: String,
 }
 
-async fn insert_session(
+pub(crate) async fn insert_session(
     db: &impl sea_orm::ConnectionTrait,
     secret: &[u8; 32],
     user_id: Uuid,
@@ -1006,7 +971,7 @@ fn validate_permission_code(code: &str) -> Result<(), AuthError> {
     Ok(())
 }
 
-fn public_user(user: &UserRow) -> PublicUser {
+pub(crate) fn public_user(user: &UserRow) -> PublicUser {
     PublicUser {
         id: user.id,
         email: user.email.clone(),
@@ -1038,7 +1003,7 @@ pub(crate) fn token_eq(supplied: &str, expected: &str) -> bool {
     constant_eq(&digest(supplied), &digest(expected))
 }
 
-fn constant_eq(left: &str, right: &str) -> bool {
+pub(crate) fn constant_eq(left: &str, right: &str) -> bool {
     let left = left.as_bytes();
     let right = right.as_bytes();
     if left.len() != right.len() {
