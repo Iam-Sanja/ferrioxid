@@ -291,6 +291,10 @@ mod tests {
         let proof = super::reauth_proof(&key, user, user, 1_300);
         assert!(reauth_valid(&key, user, user, &proof, 1_000));
         assert!(!reauth_valid(&key, user, Uuid::new_v4(), &proof, 1_000));
+        let expired = super::reauth_proof(&key, user, user, 1_000);
+        assert!(!reauth_valid(&key, user, user, &expired, 1_000));
+        let too_long = super::reauth_proof(&key, user, user, 1_301);
+        assert!(!reauth_valid(&key, user, user, &too_long, 1_000));
         assert!(!proof.to_string().contains("ferrioxid-dev"));
     }
 }

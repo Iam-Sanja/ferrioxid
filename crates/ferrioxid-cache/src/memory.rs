@@ -189,7 +189,18 @@ fn evict_one(state: &mut MemoryState) -> bool {
     let Some(key) = state
         .entries
         .iter()
-        .min_by_key(|(_, slot)| (slot.expires_at_ms.unwrap_or(i64::MAX), slot.stored_at_ms))
+        .min_by(|(left_key, left), (right_key, right)| {
+            (
+                left.expires_at_ms.unwrap_or(i64::MAX),
+                left.stored_at_ms,
+                left_key,
+            )
+                .cmp(&(
+                    right.expires_at_ms.unwrap_or(i64::MAX),
+                    right.stored_at_ms,
+                    right_key,
+                ))
+        })
         .map(|(key, _)| key.clone())
     else {
         return false;

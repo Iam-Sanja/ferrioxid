@@ -407,7 +407,9 @@ impl Queue {
                         Expr::col(Alias::new("attempts")).add(1),
                     ),
                 ])
-                .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+                .and_where(
+                    Expr::col(Alias::new("id")).eq(id_expr(self.db.get_database_backend(), id)),
+                )
                 .and_where(Expr::expr(due(now)).or(expired(now)));
             if execute_rows(&self.db, &update).await? == 1 {
                 let record = load(&self.db, id).await?.ok_or_else(|| {
@@ -580,7 +582,7 @@ impl Queue {
                 (Alias::new("error_code"), null_text()),
                 (Alias::new("finished_at"), null_number()),
             ])
-            .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+            .and_where(Expr::col(Alias::new("id")).eq(id_expr(self.db.get_database_backend(), id)))
             .and_where(
                 Expr::col(Alias::new("status"))
                     .eq(JobStatus::Failed.as_str())
@@ -610,7 +612,7 @@ impl Queue {
                 (Alias::new("lease_expires_at"), null_number()),
                 (Alias::new("error_code"), text("job.cancelled")),
             ])
-            .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+            .and_where(Expr::col(Alias::new("id")).eq(id_expr(self.db.get_database_backend(), id)))
             .and_where(
                 Expr::col(Alias::new("status"))
                     .eq(JobStatus::Pending.as_str())
@@ -848,7 +850,7 @@ async fn conditional_status(
                 },
             ),
         ])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("id")).eq(id_expr(db.get_database_backend(), id)))
         .and_where(Expr::col(Alias::new("lease_token")).eq(token))
         .and_where(Expr::col(Alias::new("status")).eq(JobStatus::Running.as_str()))
         .and_where(Expr::col(Alias::new("lease_expires_at")).gte(now));
@@ -886,7 +888,7 @@ async fn insert_job(db: &impl ConnectionTrait, job: &NewJob<'_>) -> Result<(), J
             Alias::new("cron_zone"),
         ])
         .values_panic([
-            text(&job.id.to_string()),
+            id_expr(db.get_database_backend(), job.id),
             text(job.handler),
             number(i64::from(job.version)),
             text(job.payload),
@@ -956,7 +958,7 @@ async fn load(db: &impl ConnectionTrait, id: Uuid) -> Result<Option<JobRecord>, 
     query
         .columns(job_columns())
         .from(Alias::new(JOBS))
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(id_expr(db.get_database_backend(), id)));
     one(db, &query)
         .await?
         .map(|row| record_from_row(&row))
@@ -1263,6 +1265,13 @@ fn database(error: impl ToString) -> JobError {
             "job.database",
             "Die Job-Tabelle konnte nicht geändert werden.",
         )
+    }
+}
+
+fn id_expr(backend: DatabaseBackend, id: Uuid) -> sea_orm::sea_query::SimpleExpr {
+    match backend {
+        DatabaseBackend::Postgres => Expr::value(Value::Uuid(Some(Box::new(id)))),
+        DatabaseBackend::Sqlite | DatabaseBackend::MySql => Expr::value(id.to_string()),
     }
 }
 

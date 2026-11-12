@@ -54,7 +54,10 @@ async fn session_count(auth: &AuthService, user_id: Uuid) -> usize {
 
 #[tokio::test]
 async fn password_login_stays_available_without_totp() {
-    let auth = service().await;
+    password_login_stays_available_without_totp_on(&service().await).await;
+}
+
+async fn password_login_stays_available_without_totp_on(auth: &AuthService) {
     let address = email("plain");
     auth.create_user(&address, password(), false, false)
         .await
@@ -70,7 +73,10 @@ async fn password_login_stays_available_without_totp() {
 
 #[tokio::test]
 async fn confirmed_totp_blocks_session_until_the_second_factor() {
-    let auth = service().await;
+    confirmed_totp_blocks_session_until_the_second_factor_on(&service().await).await;
+}
+
+async fn confirmed_totp_blocks_session_until_the_second_factor_on(auth: &AuthService) {
     let address = email("mfa");
     let created = auth
         .create_user(&address, password(), false, false)
@@ -83,25 +89,25 @@ async fn confirmed_totp_blocks_session_until_the_second_factor() {
     let user = auth.authenticate_token(&first.token).await.expect("actor");
     let enrollment = auth.begin_totp(&user, password()).await.expect("enroll");
     assert!(!format!("{enrollment:?}").contains(&enrollment.secret_base32));
-    let (current, next) = codes(&auth, created.id).await;
+    let (current, next) = codes(auth, created.id).await;
     let recovery = auth.confirm_totp(&user, &current).await.expect("confirm");
     assert_eq!(recovery.codes.len(), 8);
     assert!(!format!("{recovery:?}").contains(&recovery.codes[0]));
 
-    let before = session_count(&auth, created.id).await;
+    let before = session_count(auth, created.id).await;
     let pending = auth.login(&address, password(), "peer").await;
     let Err(AuthError::MfaPending(pending)) = pending else {
         panic!("mfa required");
     };
     assert!(!format!("{pending:?}").contains(&pending.challenge));
-    assert_eq!(session_count(&auth, created.id).await, before);
+    assert_eq!(session_count(auth, created.id).await, before);
     assert!(auth.authenticate_token(&pending.challenge).await.is_err());
 
     let rejected = auth
         .complete_mfa_login(&pending.challenge, "000000", "peer", None)
         .await;
     assert!(matches!(rejected, Err(AuthError::InvalidCredentials)));
-    assert_eq!(session_count(&auth, created.id).await, before);
+    assert_eq!(session_count(auth, created.id).await, before);
 
     let issued = auth
         .complete_mfa_login(&pending.challenge, &recovery.codes[0], "peer", None)
@@ -137,7 +143,10 @@ async fn confirmed_totp_blocks_session_until_the_second_factor() {
 
 #[tokio::test]
 async fn session_revoke_reauth_and_close_respect_the_actor() {
-    let auth = service().await;
+    session_revoke_reauth_and_close_respect_the_actor_on(&service().await).await;
+}
+
+async fn session_revoke_reauth_and_close_respect_the_actor_on(auth: &AuthService) {
     let owner_email = email("owner");
     let staff_email = email("staff");
     let root_email = email("root");
@@ -174,6 +183,22 @@ async fn session_revoke_reauth_and_close_respect_the_actor() {
     assert!(!format!("{grant:?}").contains(&grant.proof));
     auth.require_reauth(&owner, &grant.proof).expect("bound");
     assert!(auth.require_reauth(&owner_again, &grant.proof).is_err());
+    let now = crate::service::unix_now().expect("clock");
+    let expired = crate::totp::reauth_proof(
+        &crate::totp::mfa_key(&auth.config().csrf_secret),
+        owner.id,
+        owner.session_id,
+        now,
+    );
+    let too_long = crate::totp::reauth_proof(
+        &crate::totp::mfa_key(&auth.config().csrf_secret),
+        owner.id,
+        owner.session_id,
+        now.saturating_add(301),
+    );
+    assert!(auth.require_reauth(&owner, &expired).is_err());
+    assert!(auth.require_reauth(&owner, &too_long).is_err());
+    assert!(auth.authenticate_token(&owner_issued.token).await.is_ok());
 
     let staff = auth
         .authenticate_token(
@@ -234,7 +259,10 @@ async fn session_revoke_reauth_and_close_respect_the_actor() {
 
 #[tokio::test]
 async fn login_http_returns_the_challenge_without_a_cookie() {
-    let auth = service().await;
+    login_http_returns_the_challenge_without_a_cookie_on(&service().await).await;
+}
+
+async fn login_http_returns_the_challenge_without_a_cookie_on(auth: &AuthService) {
     let address = email("http");
     let created = auth
         .create_user(&address, password(), false, false)
@@ -246,7 +274,7 @@ async fn login_http_returns_the_challenge_without_a_cookie() {
         .expect("login");
     let user = auth.authenticate_token(&issued.token).await.expect("actor");
     auth.begin_totp(&user, password()).await.expect("enroll");
-    let (current, _) = codes(&auth, created.id).await;
+    let (current, _) = codes(auth, created.id).await;
     auth.confirm_totp(&user, &current).await.expect("confirm");
     let app = crate::mount(Router::new()).with_state(crate::AppState {
         db: auth.database().clone(),
@@ -279,16 +307,77 @@ async fn login_http_returns_the_challenge_without_a_cookie() {
     assert!(!body.contains("ferrioxid_session="));
 }
 
+async fn failed_checks_do_not_issue_sessions(auth: &AuthService) {
+    let address = email("guard");
+    let created = auth
+        .create_user(&address, password(), false, false)
+        .await
+        .expect("user");
+    let before = session_count(auth, created.id).await;
+    assert!(matches!(
+        auth.login(&address, "wrong-password-1", "guard").await,
+        Err(AuthError::InvalidCredentials)
+    ));
+    assert_eq!(session_count(auth, created.id).await, before);
+    let issued = auth
+        .login(&address, password(), "guard")
+        .await
+        .expect("login");
+    let user = auth.authenticate_token(&issued.token).await.expect("actor");
+    let open = session_count(auth, created.id).await;
+    assert!(matches!(
+        auth.authorize(&user, Some("notes"), "delete").await,
+        Err(AuthError::Forbidden)
+    ));
+    assert_eq!(session_count(auth, created.id).await, open);
+    let role = format!("role{}", &created.id.simple().to_string()[..8]);
+    auth.grant_permission(&role, "notes.read")
+        .await
+        .expect("grant");
+    assert!(matches!(
+        auth.authorize(&user, Some("notes"), "read").await,
+        Err(AuthError::Forbidden)
+    ));
+    auth.assign_role(&address, &role).await.expect("assign");
+    auth.authorize(&user, Some("notes"), "read")
+        .await
+        .expect("allowed");
+    let mut headers = axum::http::HeaderMap::new();
+    headers.insert(
+        axum::http::header::COOKIE,
+        axum::http::HeaderValue::from_str(&format!("ferrioxid_session={}", issued.token))
+            .expect("cookie"),
+    );
+    assert!(matches!(
+        auth.authenticate_csrf(&headers, &axum::http::Method::POST, "not-the-token")
+            .await,
+        Err(AuthError::CsrfRejected)
+    ));
+    assert!(auth.authenticate_token(&issued.token).await.is_ok());
+    auth.authenticate_csrf(&headers, &axum::http::Method::POST, &issued.csrf_token)
+        .await
+        .expect("csrf");
+}
+
+#[tokio::test]
+async fn failed_permission_and_csrf_checks_keep_the_session() {
+    failed_checks_do_not_issue_sessions(&service().await).await;
+}
+
 #[tokio::test]
 #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
 async fn postgres_account_security_roundtrip() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+    assert!(
+        url.starts_with("postgres"),
+        "the ignored PostgreSQL auth test refuses a non-postgres DATABASE_URL"
+    );
     let db = ferrioxid_db::connect(&url).await.expect("postgres");
     crate::apply_migrations(&db).await.expect("schema");
     let auth = AuthService::new(db, AuthConfig::development());
-    let address = email("pg");
-    auth.create_user(&address, password(), false, false)
-        .await
-        .expect("user");
-    auth.login(&address, password(), "pg").await.expect("login");
+    password_login_stays_available_without_totp_on(&auth).await;
+    confirmed_totp_blocks_session_until_the_second_factor_on(&auth).await;
+    session_revoke_reauth_and_close_respect_the_actor_on(&auth).await;
+    failed_checks_do_not_issue_sessions(&auth).await;
+    login_http_returns_the_challenge_without_a_cookie_on(&auth).await;
 }

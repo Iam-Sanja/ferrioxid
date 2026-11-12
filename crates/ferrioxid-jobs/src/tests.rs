@@ -1128,8 +1128,8 @@ async fn postgres_job_claim_and_rollback() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
     let db = ferrioxid_db::connect(&url).await.expect("postgres");
     apply_migrations(&db).await.expect("jobs");
-    let clock = ManualClock::new(1_700_000_000);
-    let queue = Queue::new(db, std::sync::Arc::new(clock), JobPolicy::default());
+    let clock = std::sync::Arc::new(ManualClock::new(1_700_000_000));
+    let queue = Queue::new(db, clock.clone(), JobPolicy::default());
     let transaction = queue.database().begin().await.expect("begin");
     let staged = queue
         .enqueue_json_on(
@@ -1170,4 +1170,153 @@ async fn postgres_job_claim_and_rollback() {
         .finish_success(kept, &claimed.1, &claimed.0)
         .await
         .expect("finish");
+    assert!(table_ready(queue.database()).await.expect("ready"));
+    let morning = When::cron("pg-morning", "0 9 * * 1-5", "europe/berlin").expect("cron");
+    let scheduled = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "morning".into(),
+            },
+            morning,
+        )
+        .await
+        .expect("cron");
+    let EnqueueOutcome::Created(scheduled) = scheduled else {
+        panic!("cron created");
+    };
+    let row = queue.get(scheduled).await.expect("cron row");
+    assert_eq!(row.cron_zone.as_deref(), Some("europe/berlin"));
+    assert!(row.available_at > clock.unix().expect("now"));
+    assert!(When::cron("pg-morning", "0 9 * * 1-5", "America/New_York").is_err());
+    let again = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "morning".into(),
+            },
+            When::cron("pg-morning", "0 9 * * 1-5", "utc").expect("utc"),
+        )
+        .await
+        .expect("existing schedule");
+    assert!(matches!(again, EnqueueOutcome::Existing(_)));
+    let once = queue
+        .enqueue_json(
+            BoomJob::NAME,
+            1,
+            &Label {
+                label: "boom".into(),
+            },
+            When {
+                max_attempts: Some(1),
+                idempotency_key: Some("pg-boom-once".into()),
+                ..When::now()
+            },
+        )
+        .await
+        .expect("boom");
+    let EnqueueOutcome::Created(once) = once else {
+        panic!("boom created");
+    };
+    let duplicate = queue
+        .enqueue_json(
+            BoomJob::NAME,
+            1,
+            &Label {
+                label: "boom".into(),
+            },
+            When {
+                idempotency_key: Some("pg-boom-once".into()),
+                ..When::now()
+            },
+        )
+        .await
+        .expect("duplicate");
+    assert_eq!(duplicate, EnqueueOutcome::Existing(once));
+    let claimed = queue
+        .claim("pg-boom", &[BoomJob::NAME], 30)
+        .await
+        .expect("claim boom")
+        .expect("boom row");
+    queue
+        .finish_retry(
+            once,
+            &claimed.1,
+            claimed.0.attempts,
+            claimed.0.max_attempts,
+            "notes.boom",
+        )
+        .await
+        .expect("dead letter");
+    let dead = queue.dead_letters(10).await.expect("dead");
+    assert!(dead
+        .iter()
+        .any(|job| job.id == once && job.status == JobStatus::Failed));
+    let waiting = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "retry".into(),
+            },
+            When::now(),
+        )
+        .await
+        .expect("retry job");
+    let EnqueueOutcome::Created(waiting) = waiting else {
+        panic!("retry created");
+    };
+    let claimed = queue
+        .claim("pg-retry", &[CountJob::NAME], 30)
+        .await
+        .expect("claim retry")
+        .expect("retry row");
+    let before = clock.unix().expect("now");
+    queue
+        .finish_retry(
+            waiting,
+            &claimed.1,
+            claimed.0.attempts,
+            claimed.0.max_attempts,
+            "notes.temporary",
+        )
+        .await
+        .expect("backoff");
+    let retried = queue.get(waiting).await.expect("retried");
+    assert_eq!(retried.status, JobStatus::Retry);
+    assert!(retried.available_at > before || retried.next_attempt_at.unwrap_or(0) > before);
+    let parked = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "parked".into(),
+            },
+            When::now(),
+        )
+        .await
+        .expect("parked");
+    let EnqueueOutcome::Created(parked) = parked else {
+        panic!("parked");
+    };
+    let stop = crate::stop_flag();
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut registry = JobRegistry::new();
+    registry
+        .register(CountJob {
+            hits: Arc::new(AtomicU32::new(0)),
+            retries_left: Arc::new(AtomicU32::new(0)),
+            permanent: false,
+        })
+        .expect("register");
+    Worker::new(queue.clone(), registry, 60, 20, 1)
+        .run(stop.as_ref())
+        .await
+        .expect("stopped");
+    assert_eq!(
+        queue.get(parked).await.expect("still pending").status,
+        JobStatus::Pending
+    );
 }
