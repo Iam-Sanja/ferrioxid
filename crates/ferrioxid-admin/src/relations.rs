@@ -412,91 +412,97 @@ mod tests {
         );
     }
 
-    #[tokio::test]
-    async fn many_to_many_replacement_rolls_back_and_one_to_one_stays_unique() {
-        let db = ferrioxid_db::connect("sqlite::memory:").await.unwrap();
-        db.execute(Statement::from_string(
-            DatabaseBackend::Sqlite,
-            String::from("CREATE TABLE note_tags (note_id text NOT NULL, tag_id text NOT NULL, UNIQUE(note_id, tag_id))"),
-        ))
-        .await
-        .unwrap();
-        db.execute(Statement::from_string(
-            DatabaseBackend::Sqlite,
-            String::from(
+    async fn exercise_links(db: &DatabaseConnection) {
+        let backend = db.get_database_backend();
+        let (links, profiles, insert_sql) = match backend {
+            DatabaseBackend::Postgres => (
+                "CREATE TABLE note_tags (note_id uuid NOT NULL, tag_id uuid NOT NULL, UNIQUE(note_id, tag_id))",
                 "CREATE TABLE profiles (id text PRIMARY KEY, owner_id text NOT NULL UNIQUE)",
+                "INSERT INTO note_tags (note_id, tag_id) VALUES ($1, $2)",
             ),
-        ))
-        .await
-        .unwrap();
+            DatabaseBackend::Sqlite => (
+                "CREATE TABLE note_tags (note_id text NOT NULL, tag_id text NOT NULL, UNIQUE(note_id, tag_id))",
+                "CREATE TABLE profiles (id text PRIMARY KEY, owner_id text NOT NULL UNIQUE)",
+                "INSERT INTO note_tags (note_id, tag_id) VALUES (?, ?)",
+            ),
+            DatabaseBackend::MySql => panic!("mysql is not a test backend"),
+        };
+        db.execute(Statement::from_string(backend, String::from(links)))
+            .await
+            .unwrap();
+        db.execute(Statement::from_string(backend, String::from(profiles)))
+            .await
+            .unwrap();
         let parent = Uuid::from_u128(7);
         let children = [Uuid::from_u128(1), Uuid::from_u128(2)];
-        replace_links(
-            &db,
-            ManyToMany {
-                join_table: "note_tags",
-                parent_column: "note_id",
-                child_column: "tag_id",
-            },
-            parent,
-            &children,
-        )
-        .await
-        .unwrap();
-        replace_links(
-            &db,
-            ManyToMany {
-                join_table: "note_tags",
-                parent_column: "note_id",
-                child_column: "tag_id",
-            },
-            parent,
-            &[children[0]],
-        )
-        .await
-        .unwrap();
-        let count = db
-            .query_one(Statement::from_string(
-                DatabaseBackend::Sqlite,
-                String::from("SELECT COUNT(*) AS total FROM note_tags"),
-            ))
+        let link = ManyToMany {
+            join_table: "note_tags",
+            parent_column: "note_id",
+            child_column: "tag_id",
+        };
+        replace_links(db, link, parent, &children).await.unwrap();
+        replace_links(db, link, parent, &[children[0]])
             .await
-            .unwrap()
             .unwrap();
-        assert_eq!(count.try_get::<i64>("", "total").unwrap(), 1);
+        assert_eq!(link_count(db).await, 1);
         let tx = db.begin().await.unwrap();
-        tx.execute(Statement::from_string(
-            DatabaseBackend::Sqlite,
-            format!(
-                "INSERT INTO note_tags (note_id, tag_id) VALUES ('{}', '{}')",
-                parent,
-                Uuid::from_u128(9)
-            ),
+        tx.execute(Statement::from_sql_and_values(
+            backend,
+            insert_sql,
+            [
+                Value::Uuid(Some(Box::new(parent))),
+                Value::Uuid(Some(Box::new(Uuid::from_u128(9)))),
+            ],
         ))
         .await
         .unwrap();
         tx.rollback().await.unwrap();
-        let after = db
-            .query_one(Statement::from_string(
-                DatabaseBackend::Sqlite,
-                String::from("SELECT COUNT(*) AS total FROM note_tags"),
-            ))
-            .await
-            .unwrap()
-            .unwrap();
-        assert_eq!(after.try_get::<i64>("", "total").unwrap(), 1);
+        assert_eq!(link_count(db).await, 1);
         db.execute(Statement::from_string(
-            DatabaseBackend::Sqlite,
+            backend,
             String::from("INSERT INTO profiles (id, owner_id) VALUES ('p1', 'owner')"),
         ))
         .await
         .unwrap();
         let duplicate = db
             .execute(Statement::from_string(
-                DatabaseBackend::Sqlite,
+                backend,
                 String::from("INSERT INTO profiles (id, owner_id) VALUES ('p2', 'owner')"),
             ))
             .await;
         assert!(duplicate.is_err());
+    }
+
+    async fn link_count(db: &DatabaseConnection) -> i64 {
+        let row = db
+            .query_one(Statement::from_string(
+                db.get_database_backend(),
+                String::from("SELECT COUNT(*) AS total FROM note_tags"),
+            ))
+            .await
+            .unwrap()
+            .unwrap();
+        row.try_get("", "total").unwrap()
+    }
+
+    #[tokio::test]
+    async fn many_to_many_replacement_rolls_back_and_one_to_one_stays_unique() {
+        let db = ferrioxid_db::connect("sqlite::memory:").await.unwrap();
+        exercise_links(&db).await;
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
+    async fn postgres_many_to_many_replacement_rolls_back_and_one_to_one_stays_unique() {
+        let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let disposable = ferrioxid_db::DisposablePostgres::create(&admin)
+            .await
+            .expect("isolated postgres");
+        let db = ferrioxid_db::connect(disposable.url())
+            .await
+            .expect("postgres");
+        exercise_links(&db).await;
+        db.close().await.expect("close");
+        disposable.drop_database().await.expect("drop");
     }
 }

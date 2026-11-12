@@ -881,7 +881,7 @@ mod tests {
     use crate::App;
     use axum::routing::get;
     use ferrioxid_db::connect;
-    use sea_orm::ConnectionTrait;
+    use sea_orm::{ConnectionTrait, DatabaseConnection};
     use tower::ServiceExt;
 
     struct Shop;
@@ -945,14 +945,17 @@ mod tests {
         }
     }
 
-    #[tokio::test]
-    async fn the_same_package_installs_in_two_projects_and_refuses_a_downgrade() {
-        let left = App::new(connect("sqlite::memory:").await.unwrap())
+    fn exercise_two_installs(
+        left_db: DatabaseConnection,
+        right_db: DatabaseConnection,
+        early_db: DatabaseConnection,
+    ) {
+        let left = App::new(left_db)
             .install(Shop)
             .unwrap()
             .install(Catalog)
             .unwrap();
-        let right = App::new(connect("sqlite::memory:").await.unwrap())
+        let right = App::new(right_db)
             .install(Shop)
             .unwrap()
             .install(Catalog)
@@ -979,11 +982,34 @@ mod tests {
         assert!(!removal.drops_rows);
         assert!(removal.retained.iter().any(|item| item == "table rows"));
         assert_eq!(left.installed_apps().len(), 2);
-        let early = App::new(connect("sqlite::memory:").await.unwrap()).install(Catalog);
+        let early = App::new(early_db).install(Catalog);
         match early {
             Ok(_) => panic!("catalog installed before its required app"),
             Err(error) => assert_eq!(error.code, "app.dependency.missing"),
         }
+    }
+
+    #[tokio::test]
+    async fn the_same_package_installs_in_two_projects_and_refuses_a_downgrade() {
+        exercise_two_installs(
+            connect("sqlite::memory:").await.unwrap(),
+            connect("sqlite::memory:").await.unwrap(),
+            connect("sqlite::memory:").await.unwrap(),
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
+    async fn postgres_same_package_installs_in_two_projects_and_refuses_a_downgrade() {
+        let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let disposable = ferrioxid_db::DisposablePostgres::create(&admin)
+            .await
+            .expect("isolated postgres");
+        let left = connect(disposable.url()).await.expect("postgres");
+        let right = connect(disposable.url()).await.expect("postgres");
+        let early = connect(disposable.url()).await.expect("postgres");
+        exercise_two_installs(left, right, early);
+        disposable.drop_database().await.expect("drop");
     }
 
     #[tokio::test]

@@ -24,4 +24,8 @@ PRs #97–#100 are not merged into this branch. This change does not copy their 
 
 ## Tests
 
-SQLite covers the lookup sizes, many-to-many rollback, one-to-one uniqueness, flash consume-once, form rejection and two in-memory app installs. PostgreSQL tests for lookup and flash are `#[ignore]` and use `DisposablePostgres` when `DATABASE_URL` is an approved administrator database.
+SQLite covers the lookup sizes, many-to-many rollback, one-to-one uniqueness, flash consume-once, form rejection and two in-memory app installs. The same lookup, many-to-many, flash and app-install checks have ignored PostgreSQL twins. They use `DisposablePostgres` and only run when `DATABASE_URL` names an approved administrator database.
+
+On 2026-11-12 those ignored tests passed against local PostgreSQL 18.6 through `localhost:5432`, using the `postgres` administrator database only to create and drop `ferrioxid_test_<32 hex>`. No disposable database remained afterwards. Form validation and bulk-id checks do not open a database; they passed in the library tests. `bulk_targets` rejects ids outside the visible set without a server.
+
+A local myshop process on `127.0.0.1:8766` used a temporary SQLite file that was deleted afterwards. In the browser, staff login and logout worked, the empty product list showed search and filters, a too-short name returned “The value is too short.”, a valid product was created, search and a status filter changed the result count, and a bulk activate action opened a confirmation for one record. The id was read-only on the edit form. The active flag was a read-only checkbox. myshop has no hidden admin field and no screen reader run was performed. Session flash rows are not rendered by the admin templates; the created-record line is the existing `notice` query parameter.
