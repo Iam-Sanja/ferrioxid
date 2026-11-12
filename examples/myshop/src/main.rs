@@ -164,6 +164,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         router,
         Standard {
             body_limit: 2 * 1024 * 1024,
+            ..Standard::default()
         },
     );
     axum::serve(

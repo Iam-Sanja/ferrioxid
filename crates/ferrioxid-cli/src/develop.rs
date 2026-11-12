@@ -167,11 +167,23 @@ fn migration_notice(project: &ferrioxid_migrations::ProjectConfig) -> String {
                 "migration.database.unavailable: {error}"
             ))
         })?;
-        ferrioxid_migrations::inspect_migrations(
+        let auth_files = ferrioxid_auth::embedded_migrations()
+            .map_err(|error| ferrioxid_migrations::MigrationError::new(error.to_string()))?;
+        let jobs_files = ferrioxid_jobs::embedded_migrations().map_err(|error| {
+            ferrioxid_migrations::MigrationError::new(format!(
+                "{} {}",
+                error.code(),
+                error.detail()
+            ))
+        })?;
+        ferrioxid_migrations::inspect_framework(
             &db,
-            &ferrioxid_auth::migrations_dir(),
+            &auth_files,
+            &jobs_files,
+            ferrioxid_jobs::JOB_HISTORY,
             &project.migrations_dir,
             None,
+            &[],
         )
         .await
     });

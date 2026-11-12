@@ -22,6 +22,8 @@ pub struct ProjectConfig {
     pub database_url: String,
     pub host: String,
     pub port: u16,
+    /// Explicit opt-in for binding `0.0.0.0` or `::`. This does not add that address to allowed origins.
+    pub allow_wildcard_bind: bool,
     pub debug: bool,
     pub admin_enabled: bool,
     pub embedded_assets: bool,
@@ -133,19 +135,30 @@ impl ProjectConfig {
         }
     }
 
-    /// `BIND_ADDRESS` ersetzt Host und Port. `0.0.0.0` bleibt abgelehnt.
+    /// Socket bind address. `BIND_ADDRESS` replaces host and port.
+    ///
+    /// A wildcard interface requires `server.allow_wildcard_bind = true` or
+    /// `FERRIOXID_ALLOW_WILDCARD_BIND=true`. The bind address is not a public origin.
     pub fn bind_address(&self) -> Result<String, MigrationError> {
-        if let Ok(value) = std::env::var("BIND_ADDRESS") {
+        let address = if let Ok(value) = std::env::var("BIND_ADDRESS") {
             if !value.is_empty() {
-                if value.starts_with("0.0.0.0") {
-                    return Err(MigrationError::new(
-                        "BIND_ADDRESS must not be 0.0.0.0.".to_owned(),
-                    ));
-                }
-                return Ok(value);
+                value
+            } else {
+                format!("{}:{}", self.host, self.port)
             }
+        } else {
+            format!("{}:{}", self.host, self.port)
+        };
+        if wildcard_bind(&address) && !self.wildcard_bind_allowed() {
+            return Err(MigrationError::new(
+                "A wildcard bind address requires server.allow_wildcard_bind = true or FERRIOXID_ALLOW_WILDCARD_BIND=true. The bind address is not added to allowed origins.".to_owned(),
+            ));
         }
-        Ok(format!("{}:{}", self.host, self.port))
+        Ok(address)
+    }
+
+    fn wildcard_bind_allowed(&self) -> bool {
+        self.allow_wildcard_bind || env_flag("FERRIOXID_ALLOW_WILDCARD_BIND")
     }
 
     /// Debug mode is forbidden in production. No implicit fallback is applied.
@@ -271,6 +284,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let mut database_url = ferrioxid_db::DEFAULT_SQLITE_URL.to_owned();
     let mut host = "127.0.0.1".to_owned();
     let mut port = 3000_u16;
+    let mut allow_wildcard_bind = false;
     let mut admin_enabled = false;
     let mut embedded_assets = false;
     let mut default_locale = "de".to_owned();
@@ -469,6 +483,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "project.fallback_locale" => fallback_locale = value,
             "database.url" => database_url = value,
             "server.host" => host = value,
+            "server.allow_wildcard_bind" => allow_wildcard_bind = parse_bool(&value)?,
             "server.port" => {
                 port = value.parse().map_err(|_| {
                     MigrationError::new(format!(
@@ -744,9 +759,9 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         });
     }
     apps.sort_by(|left, right| left.name.cmp(&right.name));
-    if host == "0.0.0.0" {
+    if wildcard_host(&host) && !allow_wildcard_bind {
         return Err(MigrationError::new(
-            "server.host must not be 0.0.0.0.".to_owned(),
+            "server.host must not be a wildcard interface unless server.allow_wildcard_bind = true. The bind address is not a public origin.".to_owned(),
         ));
     }
     Ok(ProjectConfig {
@@ -762,6 +777,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         database_url,
         host,
         port,
+        allow_wildcard_bind,
         debug,
         admin_enabled,
         embedded_assets,
@@ -1007,6 +1023,26 @@ fn parse_value(value: &str) -> Option<String> {
     None
 }
 
+fn wildcard_host(host: &str) -> bool {
+    let host = host.trim().trim_matches(['[', ']']);
+    host == "0.0.0.0" || host == "::"
+}
+
+fn wildcard_bind(address: &str) -> bool {
+    let host = address
+        .rsplit_once(':')
+        .map(|(host, _)| host)
+        .unwrap_or(address);
+    wildcard_host(host)
+}
+
+fn env_flag(name: &str) -> bool {
+    matches!(
+        std::env::var(name).ok().as_deref(),
+        Some("1" | "true" | "TRUE")
+    )
+}
+
 fn parse_bool(value: &str) -> Result<bool, MigrationError> {
     match value {
         "true" => Ok(true),
@@ -1088,6 +1124,7 @@ mod tests {
         assert_eq!(config.jobs_poll_ms, 1000);
         assert_eq!(config.jobs_concurrency, 1);
         assert_eq!(config.jobs_max_attempts, 5);
+        assert!(!config.allow_wildcard_bind);
         let jobs = write_manifest(
             "migrations_dir = \"migrations\"\n[jobs]\nenabled = false\npoll_ms = 250\nconcurrency = 2\nlease_secs = 30\nmax_attempts = 3\nretention_hours = 24\njitter = false\n",
         );
@@ -1258,5 +1295,39 @@ primary_color = "#0f172a"
         let _ = fs::remove_dir_all(path.parent().unwrap());
         let _ = fs::remove_dir_all(secret.parent().unwrap());
         let _ = fs::remove_dir_all(denied.parent().unwrap());
+    }
+
+    #[test]
+    fn wildcard_bind_requires_an_explicit_opt_in() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let rejected =
+            write_manifest("migrations_dir = \"migrations\"\n[server]\nhost = \"0.0.0.0\"\n");
+        let error = parse_manifest(&rejected).unwrap_err();
+        assert!(error.0.contains("allow_wildcard_bind"), "{error}");
+        let allowed = write_manifest(
+            "migrations_dir = \"migrations\"\n[server]\nhost = \"0.0.0.0\"\nallow_wildcard_bind = true\n",
+        );
+        let config = parse_manifest(&allowed).expect("opt-in");
+        unsafe {
+            std::env::remove_var("BIND_ADDRESS");
+            std::env::remove_var("FERRIOXID_ALLOW_WILDCARD_BIND");
+        }
+        assert_eq!(config.bind_address().unwrap(), "0.0.0.0:3000");
+        let strict = parse_manifest(&write_manifest("migrations_dir = \"migrations\"\n")).unwrap();
+        unsafe { std::env::set_var("BIND_ADDRESS", "0.0.0.0:3000") };
+        let denied = strict.bind_address().unwrap_err();
+        assert!(
+            denied.0.contains("not added to allowed origins"),
+            "{denied}"
+        );
+        unsafe { std::env::set_var("FERRIOXID_ALLOW_WILDCARD_BIND", "true") };
+        assert_eq!(strict.bind_address().unwrap(), "0.0.0.0:3000");
+        unsafe {
+            std::env::remove_var("BIND_ADDRESS");
+            std::env::remove_var("FERRIOXID_ALLOW_WILDCARD_BIND");
+        }
+        let _ = fs::remove_dir_all(rejected.parent().unwrap());
+        let _ = fs::remove_dir_all(allowed.parent().unwrap());
+        let _ = fs::remove_dir_all(strict.root);
     }
 }

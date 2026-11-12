@@ -24,6 +24,8 @@ pub struct AuthConfig {
     pub idle_timeout_secs: i64,
     pub allowed_origins: Vec<String>,
     pub trust_proxy: bool,
+    /// Immediate peers allowed to supply `X-Forwarded-For`. Empty means no peer is trusted.
+    pub trusted_proxies: Vec<String>,
     pub login_max_attempts: u32,
     pub login_window_secs: i64,
     /// Stabiler HMAC-Schlüssel für sitzungsgebundene CSRF-Tokens. Ein Neustart darf ihn nicht neu würfeln.
@@ -65,6 +67,7 @@ impl AuthConfig {
                 "http://localhost:3000".to_owned(),
             ],
             trust_proxy: false,
+            trusted_proxies: Vec::new(),
             login_max_attempts: 5,
             login_window_secs: 15 * 60,
             csrf_secret: *b"ferrioxid-dev-csrf-key-32-bytes!",
@@ -97,6 +100,14 @@ impl AuthConfig {
             std::env::var("FERRIOXID_TRUST_PROXY").ok().as_deref(),
             Some("1" | "true" | "TRUE")
         );
+        if let Ok(peers) = std::env::var("FERRIOXID_TRUSTED_PROXIES") {
+            config.trusted_proxies = peers
+                .split(',')
+                .map(str::trim)
+                .filter(|peer| !peer.is_empty() && *peer != "*")
+                .map(str::to_owned)
+                .collect();
+        }
         if let Some(hours) = env_range("FERRIOXID_SESSION_HOURS", 1, 168) {
             config.session_ttl_secs = i64::from(hours) * 3600;
         }

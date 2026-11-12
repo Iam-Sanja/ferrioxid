@@ -12,11 +12,11 @@ mod text;
 
 use clap::{Parser, Subcommand};
 use ferrioxid_migrations::{
-    apply_directory, apply_packages, baseline_database, discover_project,
-    inspect_migrations_with_packages, load_schema_from_command, make_migration_with_backfills,
-    readonly_database_url, render_diagnosis, reseal_unapplied, resolve_installed_schemas,
-    runtime_contract_note, write_explicit_migration, BackfillLiteral, ColumnBackfill, InstalledApp,
-    MakeOutcome, MigrationOperation, PackageMigration, SchemaSnapshot,
+    apply_directory, apply_packages, baseline_database, discover_project, inspect_framework,
+    load_schema_from_command, make_migration_with_backfills, readonly_database_url,
+    render_diagnosis, reseal_unapplied, resolve_installed_schemas, runtime_contract_note,
+    write_explicit_migration, BackfillLiteral, ColumnBackfill, InstalledApp, MakeOutcome,
+    MigrationOperation, PackageMigration, SchemaSnapshot,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -798,9 +798,15 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 let db = ferrioxid_db::connect(&readonly)
                     .await
                     .map_err(|error| format!("migration.database.unavailable: {error}"))?;
-                inspect_migrations_with_packages(
+                let auth_files =
+                    ferrioxid_auth::embedded_migrations().map_err(|error| error.to_string())?;
+                let jobs_files = ferrioxid_jobs::embedded_migrations()
+                    .map_err(|error| format!("{} {}", error.code(), error.detail()))?;
+                inspect_framework(
                     &db,
-                    &ferrioxid_auth::migrations_dir(),
+                    &auth_files,
+                    &jobs_files,
+                    ferrioxid_jobs::JOB_HISTORY,
                     &directory,
                     schema.as_ref(),
                     &declared_packages()?,

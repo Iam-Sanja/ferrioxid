@@ -5,8 +5,9 @@
 use crate::error::MigrationError;
 use crate::history::{self, AUTH_HISTORY_TABLE, HISTORY_TABLE};
 use crate::packages::{package_reports, PackageMigration};
-use crate::runner::{migration_status_in, StatusReport};
+use crate::runner::{migration_status_in, status_of_files, StatusReport};
 use crate::snapshot::SchemaSnapshot;
+use crate::store::MigrationFile;
 use std::path::Path;
 
 const AUDIT_TABLE: &str = "_ferrioxid_admin_audit";
@@ -15,6 +16,7 @@ const DRAFTS_TABLE: &str = "_ferrioxid_admin_drafts";
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum MigrationScope {
     Auth,
+    Jobs,
     App,
 }
 
@@ -44,6 +46,7 @@ pub struct PackageStatus {
 pub struct DualReport {
     pub backend: String,
     pub auth: StatusReport,
+    pub jobs: StatusReport,
     pub app: StatusReport,
     pub packages: Vec<PackageStatus>,
     pub diagnostics: Vec<Diagnostic>,
@@ -52,6 +55,10 @@ pub struct DualReport {
 impl DualReport {
     pub fn pending_auth(&self) -> usize {
         pending_lines(&self.auth)
+    }
+
+    pub fn pending_jobs(&self) -> usize {
+        pending_lines(&self.jobs)
     }
 
     pub fn pending_app(&self) -> usize {
@@ -118,20 +125,77 @@ pub async fn inspect_migrations_with_packages(
     current: Option<&SchemaSnapshot>,
     packages: &[PackageMigration],
 ) -> Result<DualReport, MigrationError> {
-    diagnose(db, auth_dir, app_dir, current, packages)
+    let auth = migration_status_in(db, auth_dir, AUTH_HISTORY_TABLE, None).await?;
+    let jobs = unchecked_jobs(&auth.backend);
+    assemble(db, auth, jobs, None, app_dir, current, packages)
         .await
         .map_err(as_unavailable)
 }
 
-async fn diagnose(
+/// Read-only auth, jobs and application status. Embedded framework resources are required.
+///
+/// An absent application directory stays optional. Missing auth or jobs resources are errors.
+/// This function does not apply migrations.
+pub async fn inspect_framework(
     db: &sea_orm::DatabaseConnection,
-    auth_dir: &Path,
+    auth_files: &[MigrationFile],
+    jobs_files: &[MigrationFile],
+    jobs_history_table: &str,
     app_dir: &Path,
     current: Option<&SchemaSnapshot>,
     packages: &[PackageMigration],
 ) -> Result<DualReport, MigrationError> {
-    let auth = migration_status_in(db, auth_dir, AUTH_HISTORY_TABLE, None).await?;
-    let app = migration_status_in(db, app_dir, HISTORY_TABLE, current).await?;
+    if auth_files.is_empty() {
+        return Err(MigrationError::new(
+            "Required framework migration resources for `ferrioxid-auth` are missing. Auth migrations were not reported as successful.".to_owned(),
+        ));
+    }
+    if jobs_files.is_empty() {
+        return Err(MigrationError::new(
+            "Required framework migration resources for `ferrioxid-jobs` are missing. Job migrations were not reported as successful.".to_owned(),
+        ));
+    }
+    let auth = status_of_files(db, auth_files, AUTH_HISTORY_TABLE, None)
+        .await
+        .map_err(as_unavailable)?;
+    let jobs = status_of_files(db, jobs_files, jobs_history_table, None)
+        .await
+        .map_err(as_unavailable)?;
+    assemble(
+        db,
+        auth,
+        jobs,
+        Some(jobs_history_table),
+        app_dir,
+        current,
+        packages,
+    )
+    .await
+    .map_err(as_unavailable)
+}
+
+fn unchecked_jobs(backend: &str) -> StatusReport {
+    StatusReport {
+        backend: backend.to_owned(),
+        lines: Vec::new(),
+        conflicts: Vec::new(),
+        schema_note: "Job migrations were not part of this directory inspection.".to_owned(),
+    }
+}
+
+async fn assemble(
+    db: &sea_orm::DatabaseConnection,
+    auth: StatusReport,
+    jobs: StatusReport,
+    jobs_history_table: Option<&str>,
+    app_dir: &Path,
+    current: Option<&SchemaSnapshot>,
+    packages: &[PackageMigration],
+) -> Result<DualReport, MigrationError> {
+    let mut app = migration_status_in(db, app_dir, HISTORY_TABLE, current).await?;
+    if !app_dir.exists() {
+        app.schema_note = "The application migration directory is absent. That directory is optional and was not treated as a successful framework migration.".to_owned();
+    }
     let mut diagnostics = Vec::new();
     let package_status = package_reports(db, packages).await?;
     let packages = package_status
@@ -139,6 +203,7 @@ async fn diagnose(
         .map(|(name, status)| PackageStatus { name, status })
         .collect::<Vec<_>>();
     diagnostics.extend(line_diagnostics(MigrationScope::Auth, &auth));
+    diagnostics.extend(line_diagnostics(MigrationScope::Jobs, &jobs));
     diagnostics.extend(line_diagnostics(MigrationScope::App, &app));
     for package in &packages {
         diagnostics.extend(line_diagnostics(MigrationScope::App, &package.status));
@@ -153,6 +218,19 @@ async fn diagnose(
             "migration.history.missing",
             "Authentication migration history is missing. The table will not be created.",
         ));
+    }
+    if let Some(jobs_history_table) = jobs_history_table {
+        if !history::history_exists_in(db, jobs_history_table).await?
+            && jobs.lines.iter().any(|line| line.state == "ausstehend")
+        {
+            diagnostics.push(note(
+                MigrationScope::Jobs,
+                "",
+                Level::Warn,
+                "migration.history.missing",
+                "Job migration history is missing. The table will not be created.",
+            ));
+        }
     }
     if !history::history_exists_in(db, HISTORY_TABLE).await?
         && app.lines.iter().any(|line| line.state == "ausstehend")
@@ -178,6 +256,7 @@ async fn diagnose(
     Ok(DualReport {
         backend: app.backend.clone(),
         auth,
+        jobs,
         app,
         packages,
         diagnostics,
@@ -191,6 +270,13 @@ pub fn render_diagnosis(locale: &str, report: &DualReport) -> String {
         "Auth-Migrationen",
         "Auth migrations",
         &report.auth,
+    ));
+    text.push('\n');
+    text.push_str(&section(
+        locale,
+        "Job-Migrationen",
+        "Job migrations",
+        &report.jobs,
     ));
     text.push('\n');
     text.push_str(&section(
@@ -222,7 +308,10 @@ pub fn render_diagnosis(locale: &str, report: &DualReport) -> String {
             text.push_str(&format!("  {} {}\n", item.code, item.description));
         }
     }
-    let pending = report.pending_auth() + report.pending_app() + report.pending_packages();
+    let pending = report.pending_auth()
+        + report.pending_jobs()
+        + report.pending_app()
+        + report.pending_packages();
     text.push_str(&format!(
         "{} {pending}\n",
         phrase(locale, "Ausstehende Migrationen:", "Pending migrations:")
@@ -253,6 +342,7 @@ pub fn dev_notice(locale: &str, report: &Result<DualReport, MigrationError>) -> 
     match report {
         Ok(report)
             if report.pending_auth() == 0
+                && report.pending_jobs() == 0
                 && report.pending_app() == 0
                 && report.pending_packages() == 0
                 && !report.has_error() =>
@@ -349,6 +439,7 @@ fn line_diagnostics(scope: MigrationScope, report: &StatusReport) -> Vec<Diagnos
         if line.state == "ausstehend" {
             let code = match scope {
                 MigrationScope::Auth => "migration.auth.pending",
+                MigrationScope::Jobs => "migration.jobs.pending",
                 MigrationScope::App => "migration.app.pending",
             };
             items.push(note(

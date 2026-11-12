@@ -2,9 +2,9 @@
 
 use crate::error::AuthError;
 use ferrioxid_migrations::{
-    apply_directory_with_history, plan_change, seal, ColumnSnapshot, ForeignKeySnapshot,
-    IndexSnapshot, LogicalType, MigrationFile, OnDelete, SchemaSnapshot, TableSnapshot,
-    UniqueConstraintSnapshot, AUTH_HISTORY_TABLE,
+    plan_change, seal, ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType,
+    MigrationFile, OnDelete, SchemaSnapshot, TableSnapshot, UniqueConstraintSnapshot,
+    AUTH_HISTORY_TABLE,
 };
 use sea_orm::DatabaseConnection;
 use std::path::PathBuf;
@@ -24,6 +24,47 @@ pub const MAIL_OUTBOX: &str = "_ferrioxid_mail_outbox";
 
 pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
+}
+
+const EMBEDDED_MIGRATIONS: &[(&str, &str)] = &[
+    (
+        "0001_auth_schema",
+        include_str!("../migrations/0001_auth_schema.json"),
+    ),
+    (
+        "0002_admin_journal",
+        include_str!("../migrations/0002_admin_journal.json"),
+    ),
+    (
+        "0003_audit_operation",
+        include_str!("../migrations/0003_audit_operation.json"),
+    ),
+    (
+        "0004_password_reset",
+        include_str!("../migrations/0004_password_reset.json"),
+    ),
+    (
+        "0005_anonymous_sessions",
+        include_str!("../migrations/0005_anonymous_sessions.json"),
+    ),
+];
+
+const EXPECTED_MIGRATIONS: &[&str] = &[
+    "0001_auth_schema",
+    "0002_admin_journal",
+    "0003_audit_operation",
+    "0004_password_reset",
+    "0005_anonymous_sessions",
+];
+
+/// Auth migrations compiled into the binary. Runtime does not open `CARGO_MANIFEST_DIR`.
+pub fn embedded_migrations() -> Result<Vec<ferrioxid_migrations::MigrationFile>, AuthError> {
+    ferrioxid_migrations::require_embedded_migrations(
+        "ferrioxid-auth",
+        EXPECTED_MIGRATIONS,
+        EMBEDDED_MIGRATIONS,
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))
 }
 
 pub fn schema() -> Result<SchemaSnapshot, AuthError> {
@@ -270,10 +311,22 @@ fn mail_outbox() -> TableSnapshot {
 }
 
 pub async fn apply_migrations(db: &DatabaseConnection) -> Result<Vec<String>, AuthError> {
-    let report = apply_directory_with_history(db, &migrations_dir(), false, AUTH_HISTORY_TABLE)
-        .await
-        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let files = embedded_migrations()?;
+    let report =
+        ferrioxid_migrations::apply_files_with_history(db, &files, false, AUTH_HISTORY_TABLE)
+            .await
+            .map_err(|error| AuthError::Validation(error.to_string()))?;
     Ok(report.applied)
+}
+
+/// Read-only auth migration status. It does not create tables or apply migrations.
+pub async fn migration_status(
+    db: &DatabaseConnection,
+) -> Result<ferrioxid_migrations::StatusReport, AuthError> {
+    let files = embedded_migrations()?;
+    ferrioxid_migrations::status_of_files(db, &files, AUTH_HISTORY_TABLE, None)
+        .await
+        .map_err(|error| AuthError::Validation(error.to_string()))
 }
 
 #[cfg(test)]
@@ -575,5 +628,27 @@ mod tests {
             .operations
             .iter()
             .any(|operation| format!("{operation:?}").contains("_ferrioxid_anonymous_sessions")));
+    }
+
+    #[tokio::test]
+    async fn embedded_migrations_run_without_the_source_directory() {
+        let files = super::embedded_migrations().expect("embedded auth migrations");
+        assert_eq!(files.len(), 5);
+        let db = ferrioxid_db::connect("sqlite::memory:").await.unwrap();
+        let applied = super::apply_migrations(&db).await.unwrap();
+        assert_eq!(applied.len(), 5);
+        let again = super::apply_migrations(&db).await.unwrap();
+        assert!(again.is_empty());
+        let status = super::migration_status(&db).await.unwrap();
+        assert!(status.conflicts.is_empty());
+        assert!(status.lines.iter().all(|line| line.state == "angewendet"));
+        let auth = crate::AuthService::new(db, crate::AuthConfig::development());
+        let password = "correct-horse-battery";
+        auth.create_user("embedded@example.com", password, false, false)
+            .await
+            .unwrap();
+        auth.login("embedded@example.com", password, "127.0.0.1")
+            .await
+            .unwrap();
     }
 }

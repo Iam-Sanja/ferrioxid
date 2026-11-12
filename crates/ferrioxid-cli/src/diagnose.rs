@@ -340,9 +340,15 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
                 depends_on: app.depends_on.clone(),
             })
             .collect();
-        ferrioxid_migrations::inspect_migrations_with_packages(
+        let auth_files =
+            ferrioxid_auth::embedded_migrations().map_err(|error| error.to_string())?;
+        let jobs_files = ferrioxid_jobs::embedded_migrations()
+            .map_err(|error| format!("{} {}", error.code(), error.detail()))?;
+        ferrioxid_migrations::inspect_framework(
             &db,
-            &ferrioxid_auth::migrations_dir(),
+            &auth_files,
+            &jobs_files,
+            ferrioxid_jobs::JOB_HISTORY,
             &project.migrations_dir,
             schema.as_ref(),
             &packages,

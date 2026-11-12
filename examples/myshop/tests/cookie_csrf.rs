@@ -739,3 +739,193 @@ async fn browser_routes_reject_cookieless_and_bearer_writes() {
         assert_eq!(status, StatusCode::OK, "{method} {body}");
     }
 }
+
+#[tokio::test]
+async fn direct_admin_login_survives_require_browser_writes_from_a_fresh_jar() {
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let mut config = AuthConfig::development();
+    config.allowed_origins = vec![
+        "http://127.0.0.1:3000".to_owned(),
+        "http://localhost:3000".to_owned(),
+        "http://192.168.178.49:3000".to_owned(),
+        "https://shop.example".to_owned(),
+    ];
+    let auth = AuthService::new(db.clone(), config);
+    let password = memory_fixture_password();
+    auth.create_user("ada@example.com", &password, true, false)
+        .await
+        .unwrap();
+    let app = App::new(db)
+        .with_auth(auth)
+        .with_admin(ferrioxid::admin::AdminRegistry::new())
+        .require_browser_writes()
+        .into_router();
+
+    let blocked = post_login(
+        &app,
+        None,
+        None,
+        &encode_form(&[("email", "ada@example.com"), ("password", &password)]),
+    )
+    .await;
+    assert_eq!(blocked, StatusCode::FORBIDDEN);
+
+    let page = exchange(&app, "GET", "/admin/login", None, None, "").await;
+    assert_eq!(page.status, StatusCode::OK, "{}", page.body);
+    let login_cookie = cookie_named(&page.cookies, "ferrioxid_login_csrf").expect("login csrf");
+    let login_pair = cookie_pair(login_cookie);
+    let token = form_token(&page.body);
+    assert_eq!(login_pair.split_once('=').unwrap().1, token);
+
+    let body = encode_form(&[
+        ("csrf_token", &token),
+        ("email", "ada@example.com"),
+        ("password", &password),
+        ("next", "/admin"),
+    ]);
+    let fresh = post_login(
+        &app,
+        Some(&login_pair),
+        Some("http://127.0.0.1:3000"),
+        &body,
+    )
+    .await;
+    assert_eq!(fresh, StatusCode::SEE_OTHER);
+
+    let mismatched = encode_form(&[
+        (
+            "csrf_token",
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+        ),
+        ("email", "ada@example.com"),
+        ("password", &password),
+        ("next", "/admin"),
+    ]);
+    assert_eq!(
+        post_login(
+            &app,
+            Some(&login_pair),
+            Some("http://127.0.0.1:3000"),
+            &mismatched
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    let missing = encode_form(&[
+        ("email", "ada@example.com"),
+        ("password", &password),
+        ("next", "/admin"),
+    ]);
+    assert_eq!(
+        post_login(
+            &app,
+            Some(&login_pair),
+            Some("http://127.0.0.1:3000"),
+            &missing
+        )
+        .await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        post_login(&app, Some(&login_pair), Some("http://evil.example"), &body).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        post_login(&app, Some(&login_pair), Some("null"), &body).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        post_login_fetch(&app, &login_pair, "null", "cross-site", &body).await,
+        StatusCode::FORBIDDEN
+    );
+    assert_eq!(
+        post_login_fetch(&app, &login_pair, "null", "same-origin", &body).await,
+        StatusCode::SEE_OTHER
+    );
+    let lan = post_login(
+        &app,
+        Some(&login_pair),
+        Some("http://192.168.178.49:3000"),
+        &body,
+    )
+    .await;
+    assert_eq!(lan, StatusCode::SEE_OTHER);
+    let invalid_session = format!("ferrioxid_session=not-a-live-session; {login_pair}");
+    assert_eq!(
+        post_login(
+            &app,
+            Some(&invalid_session),
+            Some("http://localhost:3000"),
+            &body
+        )
+        .await,
+        StatusCode::SEE_OTHER
+    );
+
+    let api = post_json(&app, "/auth/login", None, None).await;
+    assert_eq!(api, StatusCode::FORBIDDEN);
+}
+
+async fn post_login(
+    app: &axum::Router,
+    cookie: Option<&str>,
+    origin: Option<&str>,
+    body: &str,
+) -> StatusCode {
+    post_login_fetch(app, cookie.unwrap_or(""), origin.unwrap_or(""), "", body).await
+}
+
+async fn post_login_fetch(
+    app: &axum::Router,
+    cookie: &str,
+    origin: &str,
+    fetch_site: &str,
+    body: &str,
+) -> StatusCode {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri("/admin/login")
+        .header("content-type", "application/x-www-form-urlencoded")
+        .header("host", "127.0.0.1:3000")
+        .header("x-forwarded-host", "https://evil.example")
+        .header("x-forwarded-proto", "https");
+    if !cookie.is_empty() {
+        builder = builder.header("cookie", cookie);
+    }
+    if !origin.is_empty() {
+        builder = builder.header("origin", origin);
+    }
+    if !fetch_site.is_empty() {
+        builder = builder.header("sec-fetch-site", fetch_site);
+    }
+    app.clone()
+        .oneshot(builder.body(Body::from(body.to_owned())).unwrap())
+        .await
+        .unwrap()
+        .status()
+}
+
+async fn post_json(
+    app: &axum::Router,
+    path: &str,
+    cookie: Option<&str>,
+    origin: Option<&str>,
+) -> StatusCode {
+    let mut builder = Request::builder()
+        .method("POST")
+        .uri(path)
+        .header("content-type", "application/json")
+        .header("host", "evil.example");
+    if let Some(cookie) = cookie {
+        builder = builder.header("cookie", cookie);
+    }
+    if let Some(origin) = origin {
+        builder = builder.header("origin", origin);
+    }
+    app.clone()
+        .oneshot(builder.body(Body::from("{}")).unwrap())
+        .await
+        .unwrap()
+        .status()
+}

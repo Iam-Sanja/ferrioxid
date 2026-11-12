@@ -32,7 +32,8 @@ pub use recovery::{
 };
 pub use routes::{mount, AppState, ClientIp};
 pub use schema::{
-    apply_migrations, migration_file, migrations_dir, schema, ADMIN_AUDIT, ADMIN_DRAFTS,
+    apply_migrations, embedded_migrations, migration_file, migration_status, migrations_dir,
+    schema, ADMIN_AUDIT, ADMIN_DRAFTS,
 };
 pub use service::{
     csrf_header_name, normalize_email, AuthService, AuthUser, IssuedSession, PublicUser,
