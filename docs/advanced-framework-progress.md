@@ -1,6 +1,6 @@
 # Fortschritt des erweiterten Frameworks
 
-Stand dieses Branches: `feat/native-admin` bei `e53f976d85ae0258b88554b0d42ac04dffcd5138`.
+Stand dieses Branches: `feat/native-admin`. Implementierung `e53f976d85ae0258b88554b0d42ac04dffcd5138`. Der Workspace-Nachweis steht in `b23b0df4e2e09014c6c6777f0ed78ceaef27ad78`.
 
 Die anderen lokalen Pakete bleiben unangetastet:
 
@@ -10,7 +10,7 @@ Die anderen lokalen Pakete bleiben unangetastet:
 
 Basis ist `main` bei `53a95aa`. Dieser Branch enthält die Änderungen aus Block 2 nicht. `load_one_to_one`, JSON-Spalten, gruppierte Berichte und `migrate plan` bleiben dort.
 
-Kein Push, kein Merge. Die Issues bleiben offen, bis Anforderungen, Tests, GitHub-CI und Merge nach `main` zusammen erfüllt sind.
+Der Branch bleibt von den anderen drei Entwicklungsbranches getrennt. GitHub-CI ist noch nicht gelaufen. Die Issues bleiben offen, bis Anforderungen, Tests, GitHub-CI und Merge nach `main` zusammen erfüllt sind.
 
 ## Block 3
 
