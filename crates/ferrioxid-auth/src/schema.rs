@@ -643,12 +643,18 @@ mod tests {
         assert!(status.conflicts.is_empty());
         assert!(status.lines.iter().all(|line| line.state == "angewendet"));
         let auth = crate::AuthService::new(db, crate::AuthConfig::development());
-        let password = "correct-horse-battery";
-        auth.create_user("embedded@example.com", password, false, false)
+        let password = ephemeral_password();
+        auth.create_user("embedded@example.com", &password, false, false)
             .await
             .unwrap();
-        auth.login("embedded@example.com", password, "127.0.0.1")
+        auth.login("embedded@example.com", &password, "127.0.0.1")
             .await
             .unwrap();
+    }
+
+    fn ephemeral_password() -> String {
+        let mut bytes = [0u8; 16];
+        getrandom::getrandom(&mut bytes).expect("test entropy");
+        bytes.iter().map(|byte| format!("{byte:02x}")).collect()
     }
 }

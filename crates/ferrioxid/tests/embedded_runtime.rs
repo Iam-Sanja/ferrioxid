@@ -79,11 +79,11 @@ async fn exercise(url: &str) -> Result<(), String> {
         ));
     }
     let auth = AuthService::new(db.clone(), AuthConfig::development());
-    let password = "correct-horse-battery";
-    auth.create_user("postgres-embedded@example.com", password, true, false)
+    let password = ephemeral_password();
+    auth.create_user("postgres-embedded@example.com", &password, true, false)
         .await
         .map_err(|error| error.to_string())?;
-    auth.login("postgres-embedded@example.com", password, "127.0.0.1")
+    auth.login("postgres-embedded@example.com", &password, "127.0.0.1")
         .await
         .map_err(|error| error.to_string())?;
     let again = ferrioxid::auth::apply_migrations(&db)
@@ -123,4 +123,8 @@ async fn exercise(url: &str) -> Result<(), String> {
         return Err(format!("loaded job has handler {}", loaded.handler));
     }
     Ok(())
+}
+
+fn ephemeral_password() -> String {
+    uuid::Uuid::new_v4().simple().to_string()
 }
