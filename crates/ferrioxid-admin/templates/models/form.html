@@ -1,6 +1,8 @@
 {% extends "base.html" %}
 {% block content %}
 <nav class="crumbs" aria-label="{{ i18n.breadcrumb }}"><a href="/admin">{{ i18n.dashboard }}</a> / <a href="{{ list_path }}">{{ model_label }}</a></nav>
+<div class="record-layout">
+<div class="record-main">
 <form class="card" method="post" action="{{ action }}" {% if existing %}data-track-dirty="record"{% endif %}>
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 {% if draft %}<input type="hidden" name="_draft" value="{{ draft }}">{% endif %}
@@ -63,4 +65,7 @@
 </div>
 </form>
 {% include "inlines.html" %}
+</div>
+{% include "history_aside.html" %}
+</div>
 {% endblock %}

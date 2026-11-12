@@ -3804,6 +3804,89 @@ async fn admin_v018_drafts_inlines_bulk_and_audit() {
         "{}",
         staff_history.body
     );
+
+    let renamed = call(
+        "POST",
+        format!("/admin/models/html_products/{}/edit", kept.id),
+        Some(form(&[
+            ("csrf_token", &root_csrf),
+            ("name", "Nur-Bleibtprodukt-99"),
+            ("price_cents", "10"),
+            ("category_id", &obst.id.to_string()),
+            ("save", "detail"),
+        ])),
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(renamed.status, 303, "{}", renamed.body);
+    let kept_page = call(
+        "GET",
+        format!("/admin/models/html_products/{}/edit", kept.id),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(kept_page.status, 200, "{}", kept_page.body);
+    assert!(
+        kept_page.body.contains("class=\"record-history\""),
+        "{}",
+        kept_page.body
+    );
+    assert!(
+        kept_page.body.contains("<time datetime=\""),
+        "{}",
+        kept_page.body
+    );
+    assert!(
+        kept_page.body.contains("Nur-Bleibtprodukt-99"),
+        "{}",
+        kept_page.body
+    );
+    assert!(
+        kept_page.body.contains(&kept.id.to_string()),
+        "{}",
+        kept_page.body
+    );
+    assert!(
+        kept_page.body.contains("root@example.com"),
+        "{}",
+        kept_page.body
+    );
+    let staff_kept = call(
+        "GET",
+        format!("/admin/models/html_products/{}/edit", kept.id),
+        None,
+        cookie_header(&staff_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(staff_kept.status, 200, "{}", staff_kept.body);
+    assert!(
+        !staff_kept.body.contains("root@example.com"),
+        "{}",
+        staff_kept.body
+    );
+    let also_page = call(
+        "GET",
+        format!("/admin/models/html_products/{}/edit", also.id),
+        None,
+        cookie_header(&root_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(also_page.status, 200, "{}", also_page.body);
+    assert!(
+        also_page.body.contains(&also.id.to_string()),
+        "{}",
+        also_page.body
+    );
+    assert!(
+        !also_page.body.contains("Nur-Bleibtprodukt-99"),
+        "{}",
+        also_page.body
+    );
 }
 
 #[tokio::test]

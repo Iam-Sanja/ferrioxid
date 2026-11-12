@@ -41,6 +41,12 @@ App::new(db).with_auth(auth).with_admin(admin)
 
 The surface is below `http://127.0.0.1:3000/admin`. The API is under `/admin/api`.
 
+## Typed configuration
+
+`AdminModelMeta` from `#[ferrioxid(admin = true)]` is the model admin declaration. There is no second configuration type. List columns, search, filters, ordering, readonly, hidden and sensitive fields, fieldsets, inlines and the permission stem are attributes on that metadata. Compile-time checks reject a list link without list display, an unknown fieldset, duplicate fieldset names, a visible field without a fieldset when fieldsets exist, and a password, token, secret or sensitive field that is not hidden. Runtime paths still check the session, staff access, `{permission}.read|create|update|delete`, the object query scope and CSRF on writes. Per-action permissions beyond those four stems are not a separate declaration. Relation pickers, inlines and bulk actions use this same metadata. See [admin-list-configuration.md](admin-list-configuration.md), [admin-fieldsets.md](admin-fieldsets.md), [admin-inlines.md](admin-inlines.md) and [admin-relational-widgets.md](admin-relational-widgets.md).
+
+One-to-one batch loading (`load_one_to_one`) is implemented on `feat/orm-migrations-lifecycle` and is not part of this branch. Unique foreign keys can still use the existing picker.
+
 ## Security
 
 Admin model and directory requests require a valid session and `is_staff = true`; public configuration and login routes are exceptions. `allow_anonymous` never grants admin access. Superusers still need staff access. Models with no admin permission are available only to superusers. Bound object policies filter lists through SQL query scopes and check individual records.

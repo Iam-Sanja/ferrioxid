@@ -14,4 +14,5 @@
 {% if can_edit %}<a class="button" href="/admin/directory/users/{{ id }}/edit">{{ i18n.edit }}</a>{% endif %}
 <a class="button ghost" href="/admin/audit?model=_ferrioxid_users&amp;record={{ id }}">{{ i18n.history }}</a>
 </div>
+{% include "history_aside.html" %}
 {% endblock %}
