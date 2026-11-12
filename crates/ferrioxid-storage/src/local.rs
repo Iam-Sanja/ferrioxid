@@ -3,7 +3,10 @@
 use crate::Storage;
 use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
 use std::path::{Path, PathBuf};
+use std::sync::Mutex;
+use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
@@ -13,6 +16,19 @@ pub struct StoredFile {
     pub original_name: String,
     pub content_type: String,
     pub size: u64,
+    #[serde(default)]
+    pub created_at: i64,
+    #[serde(default)]
+    pub expires_at: Option<i64>,
+    #[serde(default)]
+    pub sha256: String,
+}
+
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct CleanupReport {
+    pub removed_partials: u64,
+    pub removed_orphans: u64,
+    pub removed_expired: u64,
 }
 
 #[derive(Debug, thiserror::Error, PartialEq, Eq)]
@@ -28,6 +44,12 @@ pub enum StorageError {
     /// The header is not a bounded PNG or JPEG. This is not a full pixel decode.
     #[error("image was rejected")]
     InvalidImage,
+    #[error("file access was denied")]
+    Forbidden,
+    #[error("storage quota was reached")]
+    QuotaExceeded,
+    #[error("file has expired")]
+    Expired,
 }
 
 #[derive(Clone)]
@@ -36,6 +58,9 @@ pub struct LocalStorage {
     max_bytes: u64,
     allow: Vec<String>,
     check: Option<std::sync::Arc<dyn BeforeSave>>,
+    max_files: u32,
+    max_owner_bytes: u64,
+    gate: std::sync::Arc<Mutex<()>>,
 }
 
 impl LocalStorage {
@@ -55,7 +80,21 @@ impl LocalStorage {
             max_bytes,
             allow: allow.iter().map(|value| (*value).to_owned()).collect(),
             check: None,
+            max_files: 0,
+            max_owner_bytes: 0,
+            gate: std::sync::Arc::new(Mutex::new(())),
         })
+    }
+
+    /// `max_files` oder `max_owner_bytes` mit 0 hebt diese Grenze auf. Die Dateigrenze bleibt.
+    pub fn with_quota(mut self, max_files: u32, max_owner_bytes: u64) -> Self {
+        self.max_files = max_files;
+        self.max_owner_bytes = max_owner_bytes;
+        self
+    }
+
+    pub fn root(&self) -> &Path {
+        &self.root
     }
 
     /// Runs `check` before a file is created. A rejection leaves no file behind.
@@ -77,16 +116,18 @@ impl LocalStorage {
             Err(StorageError::NotFound)
         }
     }
-}
 
-#[async_trait]
-impl Storage for LocalStorage {
-    async fn save(
+    pub async fn save_until(
         &self,
         owner: Uuid,
         original_name: &str,
         bytes: &[u8],
+        expires_at: Option<i64>,
     ) -> Result<StoredFile, StorageError> {
+        let _guard = self
+            .gate
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         if bytes.len() as u64 > self.max_bytes {
             return Err(StorageError::TooLarge);
         }
@@ -99,9 +140,13 @@ impl Storage for LocalStorage {
         if !self.allow.iter().any(|allowed| allowed == content_type) {
             return Err(StorageError::TypeRejected);
         }
-        let id = Uuid::new_v4();
+        if !extension_matches(original_name, content_type) {
+            return Err(StorageError::TypeRejected);
+        }
         let directory = self.owner_dir(owner);
         std::fs::create_dir_all(&directory).map_err(|_| StorageError::Failed)?;
+        self.enforce_quota(&directory, bytes.len() as u64)?;
+        let id = Uuid::new_v4();
         let partial = directory.join(format!("{id}.partial"));
         let target = directory.join(id.to_string());
         let meta_path = directory.join(format!("{id}.json"));
@@ -120,6 +165,9 @@ impl Storage for LocalStorage {
             original_name: sanitize_name(original_name),
             content_type: content_type.to_owned(),
             size: bytes.len() as u64,
+            created_at: unix_now(),
+            expires_at,
+            sha256: hex(Sha256::digest(bytes)),
         };
         let json = serde_json::to_vec(&stored).map_err(|_| StorageError::Failed)?;
         if write_new(&meta_path, &json).is_err() {
@@ -130,8 +178,137 @@ impl Storage for LocalStorage {
         Ok(stored)
     }
 
+    pub fn cleanup_orphans(&self, now: i64) -> Result<CleanupReport, StorageError> {
+        let _guard = self
+            .gate
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let mut report = CleanupReport::default();
+        let root = std::fs::read_dir(&self.root).map_err(|_| StorageError::Failed)?;
+        for owner in root.flatten() {
+            if !owner.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            let directory = owner.path();
+            let entries = std::fs::read_dir(&directory).map_err(|_| StorageError::Failed)?;
+            for entry in entries.flatten() {
+                let name = entry.file_name();
+                let Some(name) = name.to_str() else {
+                    continue;
+                };
+                if !regular_file(&entry.path()) {
+                    continue;
+                }
+                if let Some(id) = name.strip_suffix(".partial") {
+                    if Uuid::parse_str(id).is_ok() {
+                        let _ = std::fs::remove_file(entry.path());
+                        report.removed_partials += 1;
+                    }
+                    continue;
+                }
+                if let Some(id) = name.strip_suffix(".json") {
+                    if Uuid::parse_str(id).is_err() {
+                        continue;
+                    }
+                    let data = directory.join(id);
+                    if !data.is_file() {
+                        let _ = std::fs::remove_file(entry.path());
+                        report.removed_orphans += 1;
+                        continue;
+                    }
+                    if let Ok(meta) = read_meta(&entry.path()) {
+                        if expired(&meta, now) {
+                            let _ = std::fs::remove_file(&data);
+                            let _ = std::fs::remove_file(entry.path());
+                            report.removed_expired += 1;
+                        }
+                    }
+                    continue;
+                }
+                if Uuid::parse_str(name).is_ok()
+                    && !directory.join(format!("{name}.json")).is_file()
+                {
+                    let _ = std::fs::remove_file(entry.path());
+                    report.removed_orphans += 1;
+                }
+            }
+        }
+        Ok(report)
+    }
+
+    pub fn purge_owner(&self, owner: Uuid) -> Result<u64, StorageError> {
+        let _guard = self
+            .gate
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let directory = self.owner_dir(owner);
+        if !directory.exists() {
+            return Ok(0);
+        }
+        let canonical = Self::contained(&self.root, &directory)?;
+        let mut removed = 0u64;
+        let entries = std::fs::read_dir(&canonical).map_err(|_| StorageError::Failed)?;
+        for entry in entries.flatten() {
+            if regular_file(&entry.path()) {
+                std::fs::remove_file(entry.path()).map_err(|_| StorageError::Failed)?;
+                removed += 1;
+            }
+        }
+        let _ = std::fs::remove_dir(&canonical);
+        Ok(removed)
+    }
+
+    fn enforce_quota(&self, directory: &Path, incoming: u64) -> Result<(), StorageError> {
+        if self.max_files == 0 && self.max_owner_bytes == 0 {
+            return Ok(());
+        }
+        let mut files = 0u32;
+        let mut bytes = 0u64;
+        if directory.exists() {
+            for entry in std::fs::read_dir(directory).map_err(|_| StorageError::Failed)? {
+                let entry = entry.map_err(|_| StorageError::Failed)?;
+                let name = entry.file_name();
+                let Some(name) = name.to_str() else {
+                    continue;
+                };
+                let Some(id) = name.strip_suffix(".json") else {
+                    continue;
+                };
+                if Uuid::parse_str(id).is_err() || !directory.join(id).is_file() {
+                    continue;
+                }
+                if let Ok(meta) = read_meta(&entry.path()) {
+                    files += 1;
+                    bytes = bytes.saturating_add(meta.size);
+                }
+            }
+        }
+        if self.max_files > 0 && files >= self.max_files {
+            return Err(StorageError::QuotaExceeded);
+        }
+        if self.max_owner_bytes > 0 && bytes.saturating_add(incoming) > self.max_owner_bytes {
+            return Err(StorageError::QuotaExceeded);
+        }
+        Ok(())
+    }
+}
+
+#[async_trait]
+impl Storage for LocalStorage {
+    async fn save(
+        &self,
+        owner: Uuid,
+        original_name: &str,
+        bytes: &[u8],
+    ) -> Result<StoredFile, StorageError> {
+        self.save_until(owner, original_name, bytes, None).await
+    }
+
     async fn read(&self, owner: Uuid, id: Uuid) -> Result<(StoredFile, Vec<u8>), StorageError> {
         let meta = self.metadata(owner, id).await?;
+        if expired(&meta, unix_now()) {
+            return Err(StorageError::Expired);
+        }
         let path = Self::contained(
             &self.owner_dir(owner),
             &self.owner_dir(owner).join(id.to_string()),
@@ -150,7 +327,12 @@ impl Storage for LocalStorage {
     }
 
     async fn exists(&self, owner: Uuid, id: Uuid) -> Result<bool, StorageError> {
-        Ok(self.metadata(owner, id).await.is_ok())
+        match self.metadata(owner, id).await {
+            Ok(meta) if !expired(&meta, unix_now()) => Ok(true),
+            Ok(_) => Ok(false),
+            Err(StorageError::NotFound) => Ok(false),
+            Err(error) => Err(error),
+        }
     }
 
     async fn metadata(&self, owner: Uuid, id: Uuid) -> Result<StoredFile, StorageError> {
@@ -395,11 +577,60 @@ pub fn sanitize_name(name: &str) -> String {
         .filter(|char| char.is_ascii_alphanumeric() || matches!(char, '.' | '-' | '_'))
         .take(80)
         .collect();
-    if cleaned.is_empty() {
+    if cleaned.is_empty() || cleaned.chars().all(|char| char == '.') {
         "file".to_owned()
     } else {
         cleaned
     }
+}
+
+fn extension_matches(name: &str, content_type: &str) -> bool {
+    let Some(extension) = std::path::Path::new(name)
+        .extension()
+        .and_then(|value| value.to_str())
+    else {
+        return true;
+    };
+    let expected = match extension.to_ascii_lowercase().as_str() {
+        "txt" => "text/plain",
+        "png" => "image/png",
+        "jpg" | "jpeg" => "image/jpeg",
+        "gif" => "image/gif",
+        "webp" => "image/webp",
+        "pdf" => "application/pdf",
+        _ => return false,
+    };
+    expected == content_type
+}
+
+fn expired(file: &StoredFile, now: i64) -> bool {
+    file.expires_at.is_some_and(|expires| expires <= now)
+}
+
+fn unix_now() -> i64 {
+    SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .map(|duration| duration.as_secs() as i64)
+        .unwrap_or(0)
+}
+
+fn hex(bytes: impl AsRef<[u8]>) -> String {
+    bytes
+        .as_ref()
+        .iter()
+        .map(|byte| format!("{byte:02x}"))
+        .collect()
+}
+
+fn regular_file(path: &Path) -> bool {
+    std::fs::symlink_metadata(path)
+        .map(|meta| meta.file_type().is_file())
+        .unwrap_or(false)
+}
+
+fn read_meta(path: &Path) -> Result<StoredFile, StorageError> {
+    let bytes = std::fs::read(path).map_err(|_| StorageError::NotFound)?;
+    serde_json::from_slice(&bytes).map_err(|_| StorageError::Failed)
 }
 
 #[cfg(test)]
@@ -506,6 +737,94 @@ mod tests {
             .save(owner, "ok.png", &png(1, 1, true))
             .await
             .unwrap();
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn lifecycle_quota_names_and_reopen_stay_inside_the_root() {
+        let root = std::env::temp_dir().join(format!("ferrioxid-life-{}", Uuid::new_v4()));
+        let storage = LocalStorage::open(&root, 64, &["text/plain", "image/png", "image/jpeg"])
+            .unwrap()
+            .with_quota(1, 0);
+        let owner = Uuid::new_v4();
+        let other = Uuid::new_v4();
+        let stored = storage
+            .save_until(owner, "..\\notes.txt", b"hello", Some(50))
+            .await
+            .unwrap();
+        assert_eq!(stored.original_name, "notes.txt");
+        assert!(!stored.sha256.is_empty());
+        assert!(storage.save(owner, "second.txt", b"more").await.is_err());
+        assert!(storage
+            .save(owner, "photo.png", &[0xFF, 0xD8, 0xFF, b'x'])
+            .await
+            .is_err());
+        assert_eq!(sanitize_name(".."), "file");
+        assert_eq!(sanitize_name("a\0b.txt"), "ab.txt");
+        assert!(storage.read(owner, stored.id).await.is_err());
+        let outside = root
+            .join("..")
+            .join(format!("ferrioxid-outside-{}", Uuid::new_v4()));
+        std::fs::write(&outside, b"secret").unwrap();
+        assert!(LocalStorage::contained(&root, &outside).is_err());
+        let _ = std::fs::remove_file(&outside);
+        let directory = root.join(owner.to_string());
+        std::fs::write(
+            directory.join(format!("{}.partial", Uuid::new_v4())),
+            b"partial",
+        )
+        .unwrap();
+        std::fs::write(directory.join(format!("{}.json", Uuid::new_v4())), b"{}").unwrap();
+        let report = storage.cleanup_orphans(60).unwrap();
+        assert!(report.removed_partials >= 1);
+        assert!(report.removed_orphans >= 1);
+        assert!(report.removed_expired >= 1);
+        assert!(storage.read(owner, stored.id).await.is_err());
+        let kept = LocalStorage::open(&root, 64, &["text/plain"])
+            .unwrap()
+            .save(owner, "again.txt", b"kept")
+            .await
+            .unwrap();
+        drop(storage);
+        let reopened = LocalStorage::open(&root, 64, &["text/plain"]).unwrap();
+        let (_, bytes) = reopened.read(owner, kept.id).await.unwrap();
+        assert_eq!(bytes, b"kept");
+        assert!(matches!(
+            reopened.read_for(other, owner, kept.id).await,
+            Err(super::StorageError::Forbidden)
+        ));
+        assert!(reopened.purge_owner(owner).unwrap() >= 2);
+        let old = serde_json::from_str::<super::StoredFile>(
+            &format!(
+                "{{\"id\":\"{}\",\"owner\":\"{}\",\"original_name\":\"old.txt\",\"content_type\":\"text/plain\",\"size\":1}}",
+                Uuid::nil(),
+                owner
+            ),
+        )
+        .unwrap();
+        assert_eq!(old.sha256, "");
+        assert!(old.expires_at.is_none());
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn concurrent_uploads_keep_distinct_ids() {
+        let root = std::env::temp_dir().join(format!("ferrioxid-race-{}", Uuid::new_v4()));
+        let storage = std::sync::Arc::new(
+            LocalStorage::open(&root, 64, &["text/plain"])
+                .unwrap()
+                .with_quota(8, 0),
+        );
+        let owner = Uuid::new_v4();
+        let left = storage.clone();
+        let right = storage.clone();
+        let (first, second) = tokio::join!(
+            left.save(owner, "a.txt", b"one"),
+            right.save(owner, "b.txt", b"two"),
+        );
+        let first = first.expect("left");
+        let second = second.expect("right");
+        assert_ne!(first.id, second.id);
         let _ = std::fs::remove_dir_all(root);
     }
 }

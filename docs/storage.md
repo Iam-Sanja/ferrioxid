@@ -1,6 +1,6 @@
 # Storage
 
-**Milestone:** v0.12, Implemented for local storage. S3 is planned and not implemented. The Cargo version remains `0.1.0`.
+**Milestone:** v0.12, implemented for local storage. Remote object storage is a checked configuration, not a client. The Cargo version remains `0.1.0`. See [storage-remote.md](storage-remote.md).
 
 ## Responsibility
 
@@ -35,7 +35,7 @@ max_upload_size_mb = 10
 
 ## Security
 
-Paths are canonicalized and must stay inside the owner’s directory. `create_new` prevents silent overwrites. The original filename is sanitized to ASCII letters, digits, periods, hyphens and underscores. HTML, SVG, scripts, `MZ` and `ELF` are rejected as text uploads. Requests from another owner return 404. Downloads use `Content-Disposition: attachment`, `application/octet-stream` and `nosniff`.
+Paths are canonicalized and must stay inside the owner’s directory. `create_new` prevents silent overwrites. The original filename is sanitized to ASCII letters, digits, periods, hyphens and underscores. A name that is only dots is rejected. When the name has an extension, it must match the detected media type. HTML, SVG, scripts, `MZ` and `ELF` are rejected as text uploads. Requests from another owner return 404. Downloads use `Content-Disposition: attachment`, `application/octet-stream`, `nosniff` and `Content-Security-Policy: sandbox; default-src 'none'`. `save_until` sets an expiry. `cleanup_orphans` removes partial files, mismatched sidecars and expired files without following symlinks. Quotas are per process. Signed URLs and the S3 plan are described in [storage-remote.md](storage-remote.md).
 
 ## Error cases
 
@@ -58,7 +58,7 @@ let (_meta, bytes) = storage.read(user_id, stored.id).await?;
 
 ## Limitations
 
-S3 is not implemented. Malware scanning is missing. Content recognition does not replace a virus scanner. Metadata is Sidecar JSON, not a database table.
+S3 has no network client. See [storage-remote.md](storage-remote.md). Malware scanning is missing. Content recognition does not replace a virus scanner. Header checks do not decode image pixels. Metadata is Sidecar JSON, not a database table. `StoredFile` accepts older sidecars that omit `created_at`, `expires_at` and `sha256`.
 
 ## Extension
 
