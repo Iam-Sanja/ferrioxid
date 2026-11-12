@@ -27,7 +27,7 @@ Kein Push, kein Merge. Die Issues bleiben offen.
 
 Erfüllt auf diesem Branch: neue Projekte bleiben bei `ferrioxid.toml`. Ein altes Projekt mit nur `ferrum.toml` wird geladen. Zwei Projektdateien und widersprüchliche Geheimnis-Aliase werden getestet. Die Cargo-Version bleibt `0.1.0`.
 
-Offen: kein eigener PostgreSQL-Lauf für diese Änderung, weil sie keine Datenbank schreibt. Die Generator- und Admin-Regression des gesamten Workspace ist für diesen Commit noch nicht erneut gelaufen. Linux-CI ist hier nicht ausgeführt.
+Offen: kein eigener PostgreSQL-Lauf für diese Änderung, weil sie keine Datenbank schreibt. Linux-CI ist hier nicht ausgeführt.
 
 ### Issue #86
 
@@ -50,8 +50,8 @@ Nicht in diesem Commit erweitert. `ferrioxid check` meldet einen Alias-Konflikt 
 - `custom_settings_env_and_production_stay_explicit`
 - `conflicting_secret_aliases_fail_closed`
 - `conflicting_smtp_passwords_are_rejected`
-- `cargo clippy` für `ferrioxid-core`, `ferrioxid-migrations`, `ferrioxid-auth`, `ferrioxid-mail` und `ferrioxid-cli` mit `-D warnings` war grün
-- `cargo test --workspace` und `cargo build --workspace` sind für diesen Commit noch nicht erneut gelaufen
+- `cargo clippy --workspace --all-targets -- -D warnings` war grün. Die bestehende `linker_messages`-Warnung von `ferrioxid-macros` bleibt und bricht `-D warnings` nicht ab.
+- `cargo fmt --all -- --check`, `cargo test --workspace` und `cargo build --workspace` waren auf diesem Branch grün. Der Generator-Test `generated_api_and_fullstack_projects_compile` lief dabei mit.
 
 ### Neue APIs
 
