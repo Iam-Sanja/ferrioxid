@@ -966,6 +966,7 @@ async fn model_detail(
             "list_path": list_path,
             "id": id.to_string(),
             "history_href": history_href(model.meta().key, &id.to_string()),
+            "history": record_history(&state, &user, model.meta().key, &id.to_string()).await,
             "fields": fields,
             "can_update": false,
             "can_delete": can_delete,
@@ -1604,6 +1605,11 @@ async fn role_permissions_page(
         &flash(&locale, params.get("notice").map(String::as_str).unwrap_or("")),
         "",
         json!({ "roles": roles, "record_role": record_id.is_some(),
+            "history": if record_id.is_some() {
+                record_history(&state, &user, "_ferrioxid_users", roles.first().and_then(|role| role["name"].as_str()).unwrap_or("")).await
+            } else {
+                Vec::<Value>::new()
+            },
             "history_href": roles.first().and_then(|role| role["name"].as_str()).map(|name| history_href("_ferrioxid_users", name)).unwrap_or_default() }),
     )
     .await
@@ -2221,7 +2227,11 @@ async fn form_page(
             } else {
                 None
             },
-            "history_href": id.map(|value| history_href(model_key, &value.to_string())).unwrap_or_default(),
+            "history_href": id.map(|value| history_href(model.meta().key, &value.to_string())).unwrap_or_default(),
+            "history": match id {
+                Some(record_id) => record_history(state, &user, model.meta().key, &record_id.to_string()).await,
+                None => Vec::new(),
+            },
             "model_label": model.meta().label,
             "list_path": list_path,
             "action": action,
@@ -3781,7 +3791,9 @@ async fn user_detail(
             "is_superuser": target.is_superuser,
             "roles": roles,
             "permissions": permissions,
-            "can_edit": !target.is_superuser
+            "can_edit": !target.is_superuser,
+            "history_href": history_href("_ferrioxid_users", &id.to_string()),
+            "history": record_history(&state, &actor, "_ferrioxid_users", &id.to_string()).await
         }),
     )
     .await
@@ -4268,6 +4280,14 @@ async fn user_form(
         .map(|item| item.password_error.clone())
         .unwrap_or_default();
     let csrf = session_csrf(auth, headers).await;
+    let history = if let Some(record_id) = id {
+        record_history(state, &actor, "_ferrioxid_users", &record_id.to_string()).await
+    } else {
+        Vec::new()
+    };
+    let record_history_href = id
+        .map(|record_id| history_href("_ferrioxid_users", &record_id.to_string()))
+        .unwrap_or_default();
     let action = match id {
         Some(id) => format!("/admin/directory/users/{id}"),
         None => "/admin/directory/users/new".to_owned(),
@@ -4302,7 +4322,9 @@ async fn user_form(
             "roles": known_roles,
             "role_checks": role_checks,
             "assigned": assigned,
-            "permissions": if let Some(id) = id { auth.list_user_permissions(id).await.unwrap_or_default() } else { Vec::new() }
+            "permissions": if let Some(id) = id { auth.list_user_permissions(id).await.unwrap_or_default() } else { Vec::new() },
+            "history_href": record_history_href,
+            "history": history
         }),
     )
     .await;
@@ -6817,6 +6839,45 @@ fn channel_lin(channel: u8) -> f64 {
     } else {
         ((value + 0.055) / 1.055).powf(2.4)
     }
+}
+
+const RECORD_HISTORY_LIMIT: usize = 8;
+
+async fn record_history(
+    state: &AppState,
+    user: &AuthUser,
+    model_key: &str,
+    record_id: &str,
+) -> Vec<Value> {
+    if model_key.is_empty() || record_id.is_empty() {
+        return Vec::new();
+    }
+    let actor = (!user.is_superuser).then_some(user.id);
+    let Ok((events, _)) =
+        audit::matching(&state.db, actor, Some(model_key), Some(record_id), 0).await
+    else {
+        return Vec::new();
+    };
+    events
+        .into_iter()
+        .take(RECORD_HISTORY_LIMIT)
+        .map(|event| {
+            let actor_label = if event.actor_id == user.id {
+                user.email.clone()
+            } else {
+                event.actor_id.to_string()
+            };
+            let formatted = audit::format_unix_utc(event.created_at);
+            json!({
+                "when": formatted.as_ref().map(|(label, _)| label.clone()).unwrap_or_default(),
+                "when_iso": formatted.as_ref().map(|(_, iso)| iso.clone()).unwrap_or_default(),
+                "actor": actor_label,
+                "action": event.action,
+                "outcome": event.outcome,
+                "summary": event.summary,
+            })
+        })
+        .collect()
 }
 
 fn history_href(model: &str, record: &str) -> String {

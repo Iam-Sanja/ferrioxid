@@ -51,6 +51,10 @@ const TEMPLATES: &[(&str, &str)] = &[
         "inlines.html",
         include_str!("../templates/partials/inlines.html"),
     ),
+    (
+        "history_aside.html",
+        include_str!("../templates/partials/history_aside.html"),
+    ),
     ("login.html", include_str!("../templates/login.html")),
     (
         "dashboard.html",
