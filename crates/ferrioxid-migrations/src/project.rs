@@ -937,7 +937,7 @@ fn valid_static_prefix(value: &str) -> bool {
     {
         return false;
     }
-    let reserved = ["/admin", "/api", "/auth", "/healthz", "/uploads"];
+    let reserved = ["/admin", "/api", "/auth", "/healthz", "/readyz", "/uploads"];
     !reserved
         .iter()
         .any(|prefix| value == *prefix || value.starts_with(&format!("{prefix}/")))

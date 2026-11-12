@@ -337,6 +337,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let mut precision: Option<u8> = None;
         let mut scale: Option<u8> = None;
         let mut choice = false;
+        let mut write_only = false;
+        let mut api_read_set: Option<bool> = None;
         for attr in &field.attrs {
             if !attr.path().is_ident("field") {
                 continue;
@@ -380,8 +382,14 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     scale = Some(meta.value()?.parse::<LitInt>()?.base10_parse()?);
                 } else if meta.path.is_ident("choice") {
                     choice = true;
+                } else if meta.path.is_ident("write_only") {
+                    write_only = true;
+                } else if meta.path.is_ident("api_read") {
+                    api_read_set = Some(meta.value()?.parse::<LitBool>()?.value());
                 } else {
-                    return Err(meta.error("unsupported field attribute"));
+                    return Err(meta.error(
+                        "unsupported field attribute; expected primary_key, auto, required, readonly, write_only, api_read, min_length, max_length, min, max, default, unique, index, foreign_key, on_delete, belongs_to, managed, format, precision, scale or choice",
+                    ));
                 }
                 Ok(())
             })?;
@@ -822,6 +830,31 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 choices: #choices_expr,
             }
         });
+        if write_only && (primary || readonly || managed_kind.is_some()) {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "write_only applies to a client-supplied field, not a primary key, readonly field, or managed timestamp",
+            ));
+        }
+        if write_only && api_read_set == Some(true) {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "write_only cannot be combined with api_read = true",
+            ));
+        }
+        if primary && api_read_set == Some(false) {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "the primary key stays in the read serializer",
+            ));
+        }
+        let api_read = if write_only {
+            false
+        } else if let Some(value) = api_read_set {
+            value
+        } else {
+            !sensitive_admin_name(&field_name)
+        };
         let in_create = !primary && managed_kind.is_none();
         let in_update = in_create && !readonly;
         let create_required = in_create && (required || (!nullable && default_bool.is_none()));
@@ -856,6 +889,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 min_length: #min_length_token,
                 max_length: #max_length_token,
                 format: #format_token,
+                api_read: #api_read,
             }
         });
         if primary {

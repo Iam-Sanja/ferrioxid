@@ -68,7 +68,7 @@ SeaQuery binds values using PostgreSQL `$1`, `$2` or SQLite `?` placeholders. Id
 
 ### Delete, Get and List
 
-`DELETE` filters by the bound UUID. Zero affected rows produce `Missing`; `get` returns `Ok(None)` when no row exists. `list` orders by `"id"` and reads 101 rows, returning at most 100 objects and setting `truncated` if more exist. UUID ordering does not represent creation time. The generated REST `list` response is still not a page API. Bounded pages are `Model::query()`, described below.
+`DELETE` filters by the bound UUID. Zero affected rows produce `Missing`; `get` returns `Ok(None)` when no row exists. Repository `list` orders by `"id"` and reads 101 rows, returning at most 100 objects and setting `truncated` if more exist. UUID ordering does not represent creation time. The generated REST list is a cursor page (`data`, `limit`, `next`, `has_more`) on the same keyset engine as `Model::query()`. `truncated` stays on the repository `ListPage` and is not an HTTP field.
 
 ## Setup
 

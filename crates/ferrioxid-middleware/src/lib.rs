@@ -40,7 +40,7 @@ where
 }
 
 async fn request_id(mut request: Request, next: Next) -> Response {
-    let id = Uuid::new_v4().simple().to_string();
+    let id = incoming_request_id(&request).unwrap_or_else(|| Uuid::new_v4().simple().to_string());
     request.extensions_mut().insert(RequestId(id.clone()));
     note(&mut request, "request_id");
     let mut response = next.run(request).await;
@@ -102,6 +102,46 @@ pub fn logged_path(uri: &axum::http::Uri) -> String {
     uri.path().to_owned()
 }
 
+/// Accepts a caller-supplied request id when it is a short token.
+///
+/// Anything else is ignored so a proxy cannot put newlines or secrets into the log field.
+pub fn incoming_request_id(request: &Request) -> Option<String> {
+    let value = request.headers().get("x-request-id")?.to_str().ok()?;
+    if (8..=64).contains(&value.len())
+        && value
+            .chars()
+            .all(|char| char.is_ascii_alphanumeric() || char == '-')
+    {
+        Some(value.to_owned())
+    } else {
+        None
+    }
+}
+
+/// JSON lines when `FERRIOXID_LOG_FORMAT=json`. The default remains the text subscriber.
+///
+/// `RUST_LOG` selects the filter. The default filter is `info`. This does not install OpenTelemetry.
+pub fn init_tracing() {
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    if structured_logs_requested() {
+        tracing_subscriber::fmt()
+            .with_env_filter(filter)
+            .json()
+            .with_current_span(false)
+            .with_span_list(false)
+            .init();
+    } else {
+        tracing_subscriber::fmt().with_env_filter(filter).init();
+    }
+}
+
+pub fn structured_logs_requested() -> bool {
+    std::env::var("FERRIOXID_LOG_FORMAT")
+        .ok()
+        .is_some_and(|value| value.eq_ignore_ascii_case("json"))
+}
+
 #[derive(Clone, Default)]
 struct LayerOrder(Vec<String>);
 
@@ -120,7 +160,8 @@ fn note(request: &mut Request, name: &str) {
 
 #[cfg(test)]
 mod tests {
-    use super::{apply, logged_path, Standard};
+    use super::{apply, incoming_request_id, logged_path, Standard};
+    use axum::extract::Request;
     use axum::routing::get;
     use axum::Router;
     use std::io::{Read, Write};
@@ -130,6 +171,23 @@ mod tests {
     fn query_secrets_stay_out_of_the_log_path() {
         let uri = "/login?password=secret&token=abc".parse().unwrap();
         assert_eq!(logged_path(&uri), "/login");
+    }
+
+    #[test]
+    fn request_id_keeps_a_safe_inbound_token() {
+        let mut request = Request::new(axum::body::Body::empty());
+        request
+            .headers_mut()
+            .insert("x-request-id", "abc-1234".parse().unwrap());
+        assert_eq!(incoming_request_id(&request).as_deref(), Some("abc-1234"));
+        request
+            .headers_mut()
+            .insert("x-request-id", "short".parse().unwrap());
+        assert!(incoming_request_id(&request).is_none());
+        request
+            .headers_mut()
+            .insert("x-request-id", "has space".parse().unwrap());
+        assert!(incoming_request_id(&request).is_none());
     }
 
     #[test]

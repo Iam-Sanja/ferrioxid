@@ -141,6 +141,7 @@ pub(crate) fn specification(app: &App) -> Value {
     let mut schemas: BTreeMap<String, Value> = BTreeMap::new();
     schemas.insert("Problem".to_owned(), problem_schema());
     insert_path(&mut paths, "/healthz", "get", health_operation());
+    insert_path(&mut paths, "/readyz", "get", ready_operation());
     for path in AUTH_PATHS {
         for (method, operation) in auth_operations(path) {
             insert_path(&mut paths, path, method, operation);
@@ -168,7 +169,8 @@ pub(crate) fn specification(app: &App) -> Value {
         "openapi": "3.1.0",
         "info": {
             "title": app.openapi.title,
-            "version": "experimental"
+            "version": "1",
+            "description": "HTTP contract version 1. Each model declares its own path; new projects use /api/v1. POST is not idempotent. PATCH is last-write-wins and does not return 409. Removed operations disappear from this document. Sunset and Deprecation headers are not sent. The crate version stays experimental 0.1.0 until a separate release."
         },
         "paths": path_value(paths),
         "components": {
@@ -243,7 +245,7 @@ fn add_model(
                 paths,
                 collection,
                 "get",
-                read_operation(app, &tag, access, "get", Some(&page), 200, false),
+                list_operation(app, model, &tag, access, &page),
             );
             insert_path(
                 paths,
@@ -302,7 +304,7 @@ fn object_schema(model: &DocumentedModel, role: SchemaRole) -> Value {
     for column in model.columns {
         let contract = contract_for(model, column.name);
         let include = match role {
-            SchemaRole::Response => true,
+            SchemaRole::Response => contract.map(|item| item.api_read).unwrap_or(true),
             SchemaRole::Create => contract
                 .map(|item| item.in_create)
                 .unwrap_or(!column.primary_key),
@@ -375,6 +377,9 @@ fn column_schema(
         }
     };
     if let Some(contract) = contract {
+        if !contract.api_read {
+            schema["writeOnly"] = json!(true);
+        }
         if let Some(min_length) = contract.min_length {
             schema["minLength"] = json!(min_length);
         }
@@ -421,9 +426,6 @@ fn column_schema(
     if let Some(field) = admin_field(model, column.name) {
         if field.filterable {
             schema["x-ferrioxid-filterable"] = json!(true);
-            schema["description"] = json!(
-                "Filterable in the admin metadata. The generated list route does not accept this name as a query parameter."
-            );
         }
         if field.sortable {
             schema["x-ferrioxid-sortable"] = json!(true);
@@ -444,17 +446,83 @@ fn page_schema(item_ref: &str) -> Value {
     json!({
         "type": "object",
         "additionalProperties": false,
-        "required": ["data", "limit", "truncated"],
+        "required": ["data", "limit", "next", "has_more"],
         "properties": {
             "data": {
                 "type": "array",
                 "items": { "$ref": format!("#/components/schemas/{item_ref}") }
             },
-            "limit": { "type": "integer", "const": PAGE_LIMIT },
-            "truncated": { "type": "boolean" }
+            "limit": { "type": "integer", "minimum": 1, "maximum": PAGE_LIMIT },
+            "next": { "type": ["string", "null"] },
+            "has_more": { "type": "boolean" }
         },
-        "description": "The generated list keeps at most 100 rows. It does not accept offset, cursor, filter, or sort query parameters."
+        "description": "Keyset page. Follow next only when has_more is true. The default order is id ascending, and id is always the tie-break. Offset is not accepted. limit defaults to 100 and cannot exceed 100."
     })
+}
+
+fn list_operation(
+    app: &App,
+    model: &DocumentedModel,
+    tag: &str,
+    access: ModelAccess,
+    schema_name: &str,
+) -> Value {
+    let mut operation = read_operation(app, tag, access, "get", Some(schema_name), 200, false);
+    operation["parameters"] = list_parameters(model);
+    operation
+}
+
+fn list_parameters(model: &DocumentedModel) -> Value {
+    let mut sorts = vec!["id".to_owned(), "-id".to_owned()];
+    if let Some(admin) = model.admin {
+        for field in admin.fields {
+            if field.sortable && !field.hidden && field.name != "id" && readable(model, field.name)
+            {
+                sorts.push(field.name.to_owned());
+                sorts.push(format!("-{}", field.name));
+            }
+        }
+    }
+    json!([
+        {
+            "name": "limit",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "integer", "minimum": 1, "maximum": PAGE_LIMIT, "default": PAGE_LIMIT }
+        },
+        {
+            "name": "cursor",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string" },
+            "description": "Opaque keyset token returned as next. A token from another sort is rejected."
+        },
+        {
+            "name": "sort",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "string", "enum": sorts },
+            "description": "One allow-listed field. A leading - sorts descending. id is appended when it is not the sort field. Nullable and boolean fields are rejected."
+        },
+        {
+            "name": "filter",
+            "in": "query",
+            "required": false,
+            "schema": { "type": "array", "items": { "type": "string" }, "maxItems": 8 },
+            "style": "form",
+            "explode": true,
+            "description": "Repeat for AND. Forms: field:eq:value, field:ne:value, field:gt:value, field:gte:value, field:lt:value, field:lte:value, field:contains:value, field:isnull, field:notnull. Only readable admin filterable fields. contains is text only."
+        }
+    ])
+}
+
+fn readable(model: &DocumentedModel, name: &str) -> bool {
+    model
+        .contracts
+        .iter()
+        .find(|contract| contract.column == name)
+        .map(|contract| contract.api_read)
+        .unwrap_or(true)
 }
 
 fn problem_schema() -> Value {
@@ -669,6 +737,30 @@ fn health_operation() -> Value {
                     }
                 }
             }
+        }
+    })
+}
+
+fn ready_operation() -> Value {
+    json!({
+        "operationId": "get_readyz",
+        "tags": ["health"],
+        "summary": "Database accepts SELECT 1. This does not migrate and it does not read migration files.",
+        "responses": {
+            "200": {
+                "description": "Database answered.",
+                "content": {
+                    "application/json": {
+                        "schema": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": ["status"],
+                            "properties": { "status": { "const": "ready" } }
+                        }
+                    }
+                }
+            },
+            "503": problem_response()
         }
     })
 }
@@ -942,6 +1034,7 @@ fn validate_operation(
     }
     let known = app.paths.contains(&operation.path)
         || operation.path == "/healthz"
+        || operation.path == "/readyz"
         || AUTH_PATHS.contains(&operation.path.as_str());
     if !known {
         return Err(format!(
