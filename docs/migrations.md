@@ -165,7 +165,7 @@ Table `_ferrioxid_migrations`:
 
 The row is written in the same transaction as the schema change. If the migration fails, there is neither the schema change nor the history entry. There is no stored error status. An applied ID is not executed again. A missing file or a different checksum stops `migrate up`.
 
-A history entry does not guarantee that no one has changed the schema from the outside afterwards. Ferrioxid compares the history with the files, but does not read back the complete live schema.
+A history entry does not guarantee that no one has changed the schema from the outside afterwards. `ferrioxid migrate status` compares the history with the files and the model snapshot. `ferrioxid migrate plan` additionally reads the live SQLite or PostgreSQL catalog and compares it with the last applied migration target. The plan opens a read-only URL when the CLI can make one, and the library function itself does not create or alter objects.
 
 ## 7. CLI
 
@@ -175,6 +175,7 @@ From the workspace root:
 cargo run -p ferrioxid-cli -- migrate make add_note
 cargo run -p ferrioxid-cli -- migrate up
 cargo run -p ferrioxid-cli -- migrate status
+cargo run -p ferrioxid-cli -- migrate plan
 cargo run -p ferrioxid-cli -- migrate rename-column --table products --from name --to title
 cargo run -p ferrioxid-cli -- migrate rename-table --from products --to items
 cargo run -p ferrioxid-cli -- migrate reseal pfad\zur\datei.json
@@ -280,4 +281,4 @@ On Windows, a running test binary or an open SQLite pool keeps the database file
 
 ## 13. Not implemented
 
-PostgreSQL baseline, per-row substitute values for `NULL`, advisory lock, automatic migration at server startup and MySQL. `migrate down` and `migrate down --app` revert one applied file when its snapshot matches. An `ON DELETE` change is a reversible foreign-key replacement. A new required column without a default needs an explicit backfill; remaining NULL rows abort the transaction. Dropping a table or column still needs `--allow-destructive` and does not restore those rows. Many-to-many loads are described in [relations.md](relations.md). Type changes other than `string` ↔ `i64` and other than nullity or bool default of the same type are rejected.
+PostgreSQL baseline, per-row substitute values for `NULL`, advisory lock, automatic migration at server startup and MySQL. `migrate plan` is read-only: history checksum and order conflicts are errors, live differences from the last applied target are drift, and a model that differs while migrations are still pending is a warning. Pending files are not applied and are not treated as the live target. A changed checksum skips the live comparison so a damaged file is not reported as schema drift. JSON columns are not an automatic type change. `migrate down` and `migrate down --app` revert one applied file when its snapshot matches. An `ON DELETE` change is a reversible foreign-key replacement. A new required column without a default needs an explicit backfill; remaining NULL rows abort the transaction. Dropping a table or column still needs `--allow-destructive` and does not restore those rows. Many-to-many loads are described in [relations.md](relations.md). Type changes other than `string` ↔ `i64` and other than nullity or bool default of the same type are rejected.

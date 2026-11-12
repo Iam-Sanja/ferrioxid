@@ -1,6 +1,6 @@
 # Typed model relationships
 
-[Overview](index.md) · **Implemented** for Belongs-To, Has-Many, explicit batch loading and `load_many_to_many`. Automatic eager loading is not implemented. Call `Select::annotate` or `load_children` when the handler needs the related rows. Keyset pages use `Select::keyset` and stay within 100 rows.
+[Overview](index.md) · **Implemented** for Belongs-To, Has-Many, explicit batch loading, `load_many_to_many` and `load_one_to_one`. Automatic eager loading is not implemented. Call `Select::annotate`, `load_children` or `load_one_to_one` when the handler needs the related rows. Keyset pages use `Select::keyset` and stay within 100 rows.
 
 A relationship does not only exist in Rust. The field carries a foreign key, and the database checks it. The methods load typed models. You do not return a `serde_json::Value`.
 
@@ -89,7 +89,9 @@ let lines_for_carts = load_children::<CartLine>(&db, "cart_id", &cart_ids, &scop
 
 The returned child set is not limited to 100 rows. A parent with a very large collection should be read with `CartLine::query().filter(...).page(&db)` instead.
 
-Calling `product.category(&db)` inside a loop does not become a batch. There is no many-to-many loader and no join API.
+Calling `product.category(&db)` inside a loop does not become a batch. `load_many_to_many` is the explicit join-table load. There is no automatic join API.
+
+`load_one_to_one` loads one child per parent through a unique UUID foreign key. The column must declare `foreign_table` and `unique`. Parents are read in batches of at most 100 identifiers. `QueryScope::None` returns no rows. A second stored row for one parent is `Validation` and is not returned as a list. A column that is not a unique foreign key is rejected before a statement is sent. The example `crates/ferrioxid-db/examples/grouped_report` uses this loader and a grouped report on SQLite and on a disposable PostgreSQL database.
 
 The repository methods `list`, `get`, `create`, `update` and `delete` remain unchanged. The relationship methods are separate methods on the model, not new repository methods.
 
@@ -107,7 +109,6 @@ Existing product lines remain valid because the new column is nullable and does 
 
 ## Not implemented
 
-- Many-to-many and join tables
 - Automatic eager loading when a lazy relation method is called in a loop
 - Automatic detection of the opposite direction
 - Nested HTTP routes

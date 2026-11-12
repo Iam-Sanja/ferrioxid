@@ -33,9 +33,9 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | Security | Implemented and planned | [security.md](security.md) | Access defaults, threats, safeguards and open risks |
 | Validation | Implemented and planned | [validation.md](validation.md) | Field rules and error semantics |
 | Tests and CI | Implemented and planned | [testing.md](testing.md) | Workspace checks, SQLite tests and separate PostgreSQL tests |
-| Migrations | Implemented with stated limits | [migrations.md](migrations.md) | Snapshots, diffs, explicit renames, checked rebuilds and baseline |
+| Migrations | Implemented with stated limits | [migrations.md](migrations.md), [advanced-framework-progress.md](advanced-framework-progress.md) | Snapshots, diffs, explicit renames, checked rebuilds, baseline and read-only drift plan |
 | Constraints | Implemented | [constraints.md](constraints.md) | Unique constraints, indexes, foreign keys and error codes |
-| Relations | Implemented, lazy and explicit batch loading | [relations.md](relations.md) | Belongs-to, has-many, batch loads and N+1 limits |
+| Relations | Implemented, lazy and explicit batch loading | [relations.md](relations.md) | Belongs-to, has-many, many-to-many, one-to-one and N+1 limits |
 | Auth and permissions | Implemented | [auth.md](auth.md), [password-reset.md](password-reset.md), [sessions.md](sessions.md), [permissions.md](permissions.md), [policies.md](policies.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md) | Users, sessions, reset, role permissions, object policies and query scopes |
 | Email | Implemented, v0.23 | [mail.md](mail.md), [mail-smtp.md](mail-smtp.md), [notifications.md](notifications.md), [mail-security.md](mail-security.md) | Transports, templates, typed notices and delivery limits |
 | Forms | Implemented, v0.12 | [forms.md](forms.md), [forms-validation.md](forms-validation.md) | Typed fields, Tera HTML and shared validation rules |
