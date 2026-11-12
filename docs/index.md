@@ -10,7 +10,7 @@ The main flow is: Rust model → `FerrioxidModel` metadata and repository method
 
 ## Django capability comparison
 
-The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferrioxid's documented behavior with Django's major developer benefits, tracks missing/partial capabilities and their issues, and defines the **documentation-and-test gate** required before a feature can be called complete. Broad topic labels in the table below indicate existing implementation, **not** full Django parity; consult the matrix for the sub-capability status.
+The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferrioxid's documented behavior with Django's major developer benefits. The [framework comparison](framework-comparison.md) records Ferrioxid, Runique, Cot and Loco from published pages, without runtime numbers. [Release readiness](release-readiness.md) is the pre-release note. No crate was published.
 
 ## Documentation by topic
 
@@ -45,7 +45,7 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | Admin | Implemented through v0.28 | [admin.md](admin.md), [admin-native.md](admin-native.md), [admin-navigation.md](admin-navigation.md), [admin-components.md](admin-components.md), [admin-extension-api.md](admin-extension-api.md), [transactions.md](transactions.md), [admin-directory-audit.md](admin-directory-audit.md), [admin-transactional-inlines.md](admin-transactional-inlines.md), [admin-form-drafts.md](admin-form-drafts.md), [admin-inlines.md](admin-inlines.md), [admin-bulk-actions.md](admin-bulk-actions.md), [admin-audit-log.md](admin-audit-log.md), [admin-custom-actions.md](admin-custom-actions.md), [admin-django-parity.md](admin-django-parity.md) | Native HTML, JSON API, permissions, navigation, forms, transactions, actions, history and extensions |
 | OpenAPI | In PR on this branch | [openapi.md](openapi.md) | OpenAPI 3.1 from model metadata, plus an optional explorer |
 | General plugin hooks | Planned only | [extensions.md](extensions.md) | Extension points beyond the implemented admin API |
-| Deployment | Local SQLite and optional Docker PostgreSQL implemented; app container planned | [deployment.md](deployment.md) | Local startup, proxy boundaries and production requirements |
+| Deployment | Local SQLite and optional Docker PostgreSQL implemented; disposable app image in `deploy/` | [deployment.md](deployment.md) | Local startup, proxy boundaries and production requirements |
 | Implementation process | Implemented and planned | [implementation-guide.md](implementation-guide.md) | Change scope, acceptance checks and architecture decisions |
 | Roadmap | Planning | [roadmap.md](roadmap.md) | Milestones and remaining work |
 
