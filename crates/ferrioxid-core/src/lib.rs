@@ -301,6 +301,34 @@ impl FerrioxidError {
     }
 }
 
+/// Reads `FERRIOXID_<NAME>` and the legacy `FERRUM_<NAME>` alias.
+///
+/// One set variable is used. Equal values are used. Different values are an
+/// error and neither value is returned. `DATABASE_URL` and `BIND_ADDRESS` are
+/// not aliases, so a second name cannot select another database or address.
+pub fn aliased_env(name: &str) -> Result<Option<String>, String> {
+    let Some(rest) = name.strip_prefix("FERRIOXID_") else {
+        return Err(format!(
+            "{name} is not a FERRIOXID_ setting. DATABASE_URL and BIND_ADDRESS have no legacy alias."
+        ));
+    };
+    if rest.is_empty()
+        || !rest
+            .chars()
+            .all(|char| char.is_ascii_uppercase() || char.is_ascii_digit() || char == '_')
+    {
+        return Err(format!("{name} is not a FERRIOXID_ setting."));
+    }
+    let legacy = format!("FERRUM_{rest}");
+    match (std::env::var(name), std::env::var(&legacy)) {
+        (Ok(current), Ok(previous)) if current != previous => Err(format!(
+            "{name} and {legacy} are both set to different values. Ferrioxid refuses to choose either value."
+        )),
+        (Ok(value), _) | (Err(_), Ok(value)) => Ok(Some(value)),
+        (Err(_), Err(_)) => Ok(None),
+    }
+}
+
 /// Joins `Display` and `source` for server logs.
 ///
 /// The result can contain SQL text from a database driver. Do not write it to
@@ -459,5 +487,45 @@ mod json_tests {
         assert_eq!(canonical_json_text("null").unwrap(), "null");
         assert!(canonical_json_text("").is_err());
         assert!(canonical_json_text("{").is_err());
+    }
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::aliased_env;
+
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn conflicting_aliases_fail_without_returning_either_value() {
+        let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        unsafe {
+            std::env::set_var("FERRIOXID_ALIAS_TEST", "one");
+            std::env::set_var("FERRUM_ALIAS_TEST", "two");
+        }
+        let error = aliased_env("FERRIOXID_ALIAS_TEST").unwrap_err();
+        assert!(error.contains("FERRIOXID_ALIAS_TEST"));
+        assert!(error.contains("FERRUM_ALIAS_TEST"));
+        assert!(!error.contains("one"));
+        assert!(!error.contains("two"));
+        unsafe {
+            std::env::set_var("FERRUM_ALIAS_TEST", "one");
+        }
+        assert_eq!(
+            aliased_env("FERRIOXID_ALIAS_TEST").unwrap().as_deref(),
+            Some("one")
+        );
+        unsafe {
+            std::env::remove_var("FERRIOXID_ALIAS_TEST");
+        }
+        assert_eq!(
+            aliased_env("FERRIOXID_ALIAS_TEST").unwrap().as_deref(),
+            Some("one")
+        );
+        unsafe {
+            std::env::remove_var("FERRUM_ALIAS_TEST");
+        }
+        assert_eq!(aliased_env("FERRIOXID_ALIAS_TEST").unwrap(), None);
+        assert!(aliased_env("DATABASE_URL").is_err());
     }
 }

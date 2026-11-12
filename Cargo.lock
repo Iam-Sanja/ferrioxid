@@ -800,6 +800,7 @@ dependencies = [
  "clap",
  "ctrlc",
  "ferrioxid-auth",
+ "ferrioxid-core",
  "ferrioxid-db",
  "ferrioxid-jobs",
  "ferrioxid-mail",
@@ -883,6 +884,7 @@ name = "ferrioxid-mail"
 version = "0.1.0"
 dependencies = [
  "async-trait",
+ "ferrioxid-core",
  "lettre",
  "tera",
  "thiserror",

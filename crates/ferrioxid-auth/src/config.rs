@@ -75,17 +75,23 @@ impl AuthConfig {
     }
 
     pub fn from_env() -> Self {
-        let environment = match std::env::var("FERRIOXID_ENV").ok().as_deref() {
+        Self::try_from_env().unwrap_or_else(|error| panic!("{error}"))
+    }
+
+    /// Same values as `from_env`. Conflicting `FERRIOXID_*` and `FERRUM_*` aliases
+    /// return an error that does not contain either value.
+    pub fn try_from_env() -> Result<Self, String> {
+        let environment = match ferrioxid_core::aliased_env("FERRIOXID_ENV")?.as_deref() {
             Some("production") => Environment::Production,
             _ => Environment::Development,
         };
         let mut config = Self::development();
         config.environment = environment;
-        config.cookie_secure = match std::env::var("FERRIOXID_COOKIE_SECURE") {
-            Ok(value) => matches!(value.as_str(), "1" | "true" | "TRUE"),
-            Err(_) => environment == Environment::Production,
+        config.cookie_secure = match ferrioxid_core::aliased_env("FERRIOXID_COOKIE_SECURE")? {
+            Some(value) => matches!(value.as_str(), "1" | "true" | "TRUE"),
+            None => environment == Environment::Production,
         };
-        if let Ok(origins) = std::env::var("FERRIOXID_ALLOWED_ORIGINS") {
+        if let Some(origins) = ferrioxid_core::aliased_env("FERRIOXID_ALLOWED_ORIGINS")? {
             config.allowed_origins = origins
                 .split(',')
                 .map(str::trim)
@@ -95,12 +101,12 @@ impl AuthConfig {
         } else if environment == Environment::Production {
             config.allowed_origins.clear();
         }
-        config.csrf_secret = load_csrf_secret();
+        config.csrf_secret = load_csrf_secret()?;
         config.trust_proxy = matches!(
-            std::env::var("FERRIOXID_TRUST_PROXY").ok().as_deref(),
+            ferrioxid_core::aliased_env("FERRIOXID_TRUST_PROXY")?.as_deref(),
             Some("1" | "true" | "TRUE")
         );
-        if let Ok(peers) = std::env::var("FERRIOXID_TRUSTED_PROXIES") {
+        if let Some(peers) = ferrioxid_core::aliased_env("FERRIOXID_TRUSTED_PROXIES")? {
             config.trusted_proxies = peers
                 .split(',')
                 .map(str::trim)
@@ -108,10 +114,10 @@ impl AuthConfig {
                 .map(str::to_owned)
                 .collect();
         }
-        if let Some(hours) = env_range("FERRIOXID_SESSION_HOURS", 1, 168) {
+        if let Some(hours) = env_range("FERRIOXID_SESSION_HOURS", 1, 168)? {
             config.session_ttl_secs = i64::from(hours) * 3600;
         }
-        if let Some(minutes) = env_range("FERRIOXID_IDLE_MINUTES", 1, 1440) {
+        if let Some(minutes) = env_range("FERRIOXID_IDLE_MINUTES", 1, 1440)? {
             config.idle_timeout_secs = i64::from(minutes) * 60;
         }
         if environment == Environment::Production && !config.cookie_secure {
@@ -119,15 +125,15 @@ impl AuthConfig {
                 "FERRIOXID_COOKIE_SECURE ist in Produktion aus. Session-Cookies werden ohne Secure gesendet."
             );
         }
-        config
+        Ok(config)
     }
 
     /// Dateiwerte gelten nur, wenn die Umgebung sie nicht bereits gesetzt hat.
     pub fn apply_project_session(&mut self, session_hours: u32, idle_minutes: u32) {
-        if std::env::var("FERRIOXID_SESSION_HOURS").is_err() {
+        if !alias_present("FERRIOXID_SESSION_HOURS") {
             self.session_ttl_secs = i64::from(session_hours) * 3600;
         }
-        if std::env::var("FERRIOXID_IDLE_MINUTES").is_err() {
+        if !alias_present("FERRIOXID_IDLE_MINUTES") {
             self.idle_timeout_secs = i64::from(idle_minutes) * 60;
         }
     }
@@ -135,7 +141,7 @@ impl AuthConfig {
     /// Ersetzt die Entwicklungsliste durch die Loopback-Origins der Prozessadresse.
     /// `FERRIOXID_ALLOWED_ORIGINS` bleibt unverändert. Der Host-Header einer Anfrage wird nicht gelesen.
     pub fn apply_bound_address(&mut self, address: &str) {
-        if std::env::var_os("FERRIOXID_ALLOWED_ORIGINS").is_some() {
+        if alias_present("FERRIOXID_ALLOWED_ORIGINS") {
             return;
         }
         let _ = self.with_loopback_address(address);
@@ -198,30 +204,36 @@ fn is_loopback_host(host: &str) -> bool {
     host.eq_ignore_ascii_case("localhost") || host == "127.0.0.1" || host == "::1"
 }
 
-fn env_range(name: &str, min: u32, max: u32) -> Option<u32> {
-    let value = std::env::var(name).ok()?;
+fn alias_present(name: &str) -> bool {
+    !matches!(ferrioxid_core::aliased_env(name), Ok(None))
+}
+
+fn env_range(name: &str, min: u32, max: u32) -> Result<Option<u32>, String> {
+    let Some(value) = ferrioxid_core::aliased_env(name)? else {
+        return Ok(None);
+    };
     match value.parse::<u32>() {
-        Ok(number) if (min..=max).contains(&number) => Some(number),
+        Ok(number) if (min..=max).contains(&number) => Ok(Some(number)),
         _ => {
             tracing::warn!("{name} liegt außerhalb von {min} bis {max} und wird ignoriert.");
-            None
+            Ok(None)
         }
     }
 }
 
-fn load_csrf_secret() -> [u8; 32] {
-    if let Ok(value) = std::env::var("FERRIOXID_CSRF_SECRET") {
+fn load_csrf_secret() -> Result<[u8; 32], String> {
+    if let Some(value) = ferrioxid_core::aliased_env("FERRIOXID_CSRF_SECRET")? {
         if let Some(secret) = decode_hex_32(&value) {
-            return secret;
+            return Ok(secret);
         }
-        tracing::warn!("FERRIOXID_CSRF_SECRET muss 64 Hex-Zeichen sein. Ferrioxid verwendet die gespeicherte Schlüsseldatei.");
+        tracing::warn!("FERRIOXID_CSRF_SECRET oder FERRUM_CSRF_SECRET muss 64 Hex-Zeichen sein. Ferrioxid verwendet die gespeicherte Schlüsseldatei.");
     }
     let path = std::path::PathBuf::from(".ferrioxid/csrf.key");
     if let Ok(bytes) = std::fs::read(&path) {
         if bytes.len() == 32 {
             let mut secret = [0u8; 32];
             secret.copy_from_slice(&bytes);
-            return secret;
+            return Ok(secret);
         }
     }
     let mut secret = [0u8; 32];
@@ -232,7 +244,7 @@ fn load_csrf_secret() -> [u8; 32] {
     if std::fs::write(&path, secret).is_err() {
         tracing::warn!("CSRF-Schlüsseldatei konnte nicht geschrieben werden. Der Prozessschlüssel gilt nur bis zum Neustart.");
     }
-    secret
+    Ok(secret)
 }
 
 fn decode_hex_32(value: &str) -> Option<[u8; 32]> {
@@ -298,5 +310,30 @@ mod tests {
             .allowed_origins
             .iter()
             .any(|origin| origin == "http://127.0.0.1:3000"));
+    }
+
+    #[test]
+    fn conflicting_secret_aliases_fail_closed() {
+        let previous_current = std::env::var("FERRIOXID_CSRF_SECRET").ok();
+        let previous_legacy = std::env::var("FERRUM_CSRF_SECRET").ok();
+        unsafe {
+            std::env::set_var("FERRIOXID_CSRF_SECRET", "aa");
+            std::env::set_var("FERRUM_CSRF_SECRET", "bb");
+        }
+        let error = AuthConfig::try_from_env().unwrap_err();
+        assert!(error.contains("FERRIOXID_CSRF_SECRET"));
+        assert!(error.contains("FERRUM_CSRF_SECRET"));
+        assert!(!error.contains("aa"));
+        assert!(!error.contains("bb"));
+        unsafe {
+            match previous_current {
+                Some(value) => std::env::set_var("FERRIOXID_CSRF_SECRET", value),
+                None => std::env::remove_var("FERRIOXID_CSRF_SECRET"),
+            }
+            match previous_legacy {
+                Some(value) => std::env::set_var("FERRUM_CSRF_SECRET", value),
+                None => std::env::remove_var("FERRUM_CSRF_SECRET"),
+            }
+        }
     }
 }
