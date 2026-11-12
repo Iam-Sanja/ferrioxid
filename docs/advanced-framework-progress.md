@@ -2,10 +2,10 @@
 
 Stand dieses Branches: `feat/native-admin`. Implementierung `e53f976d85ae0258b88554b0d42ac04dffcd5138`. Der Workspace-Nachweis steht in `b23b0df4e2e09014c6c6777f0ed78ceaef27ad78`.
 
-Die anderen lokalen Pakete bleiben unangetastet:
+Die anderen Pakete bleiben eigene Branches. Ihre Implementierungen sind:
 
-- Block 1, `fix/runtime-security-docker`: `ad487023d79d9faebd0a711258cdc848e1bb9fa2`
-- Block 2, `feat/orm-migrations-lifecycle`: `3bb51b951f904a7bb092c1910c7af8c7dc3332ed`
+- Block 1, `fix/runtime-security-docker`: `d556bcc3bbfa5b624c5d27ef13d2682ee06b5652`
+- Block 2, `feat/orm-migrations-lifecycle`: `f3a663243b030eb3f391032c17a69314ff78abc3`
 - Vorbereitung, `prep/native-admin`: `09172fdaf828e05a6988aff07c378ec97e98245d`
 
 Basis ist `main` bei `53a95aa`. Dieser Branch enthält die Änderungen aus Block 2 nicht. `load_one_to_one`, JSON-Spalten, gruppierte Berichte und `migrate plan` bleiben dort.
