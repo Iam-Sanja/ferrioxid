@@ -29,8 +29,10 @@ Local, not GitHub CI, and not merged:
 
 ## Local commits
 
-`d556bcc3bbfa5b624c5d27ef13d2682ee06b5652` on `fix/runtime-security-docker`. Not pushed. No pull request.
+Implementation: `d556bcc3bbfa5b624c5d27ef13d2682ee06b5652`.
+The earlier progress note is `ad487023d79d9faebd0a711258cdc848e1bb9fa2`.
+GitHub CI has not run. This branch is not merged.
 
 ## Later blocks
 
-Blocks 2–8 are not started in this pass. Their issues stay open.
+Blocks 2, 3 and 4 exist on `feat/orm-migrations-lifecycle`, `feat/native-admin` and `feat/developer-apps`. They are not contained in this branch. Their issues stay open.
