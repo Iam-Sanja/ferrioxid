@@ -370,7 +370,7 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool) -> Counts {
                 warnings += 1;
                 report(
                     "WARN",
-                    "job.migration.pending 0001_jobs The job migration has not been applied. Run ferrioxid migrate up. This check is read-only.",
+                    "job.migration.pending The job migrations are not fully applied. Run ferrioxid migrate up. This check is read-only.",
                 );
             }
             for item in &report_value.diagnostics {
