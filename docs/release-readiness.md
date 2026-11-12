@@ -67,3 +67,59 @@ There is no previous crates.io release and no git tag that represents a publishe
 | 100 | `feat/developer-apps` | One project file and conflicting env aliases | Not included. `ferrioxid.toml` behavior stays as on main. |
 
 Do not merge those branches into this one to make the checks pass. The integration order is documented on the runtime branch, not here.
+
+## PostgreSQL 18.6
+
+The local binary install answered on `127.0.0.1:5432`. `psql` reported version 18.6. `pg_dump` and `pg_restore` are the same 18.6 build. No password was printed or stored.
+
+The run created only databases named `ferrioxid_test_` plus 32 hexadecimal digits. `ferrioxid` stayed at 15 public tables. `ferrioxid_migrations_down_test` stayed at 1 public table. After the run, no `ferrioxid_test_*` database remained.
+
+These ignored tests passed against that disposable catalog:
+
+- `fresh_postgres_initializes_auth_jobs_and_application`
+- `postgres_http_roundtrip`
+- `postgres_migration_roundtrip`
+- `postgres_enforces_cross_app_foreign_keys`
+- `postgres_anonymous_session_roundtrip`
+- `postgres_decimal_and_choice_roundtrip`
+- `postgres_fixture_roundtrip`
+- `postgres_reverts_backfill_and_foreign_key` (isolated databases, not `ferrioxid_migrations_down_test`)
+- `postgres_filters_and_pages_runtime`
+- `postgres_transaction_query_and_rollback_runtime`
+- `postgres_keyset_annotations_and_many_to_many`
+- `postgres_text_search_relations_count_and_pages`
+- `postgres_admin_search_runtime`
+- `postgres_temporal_filters_and_keyset`
+- `postgres_temporal_fixture_roundtrip`
+- `postgres_isolated_databases_do_not_share_rows`
+- `postgres_shop_cases`
+- `postgres_write_security`
+- `postgres_cursor_filters_and_openapi_describe_the_same_list`
+- `postgres_dump_and_restore_roundtrip`
+- `postgres_same_operations`
+
+`postgres_dump_and_restore_roundtrip` wrote a custom-format dump and restored it with `pg_restore --no-owner` into a second disposable database. The test passed.
+
+`/readyz` returned 200 and `"status":"ready"` while a disposable database was present. After that database was dropped, the same process returned 503.
+
+Docker Compose was not started. Docker is not installed. Playwright was not launched on this Windows machine. The Ubuntu browser job remains the run for that spec. Nothing was published to crates.io.
+
+## Pull request 101
+
+Draft pull request 101 (`work/integration`) already combines pull requests 97–100. This branch does not contain those commits. `git merge-tree` against `origin/work/integration` reports content conflicts in:
+
+- `.github/workflows/ci.yml`
+- `CHANGELOG.md`
+- `crates/ferrioxid-macros/src/lib.rs`
+- `docs/index.md`
+- `docs/testing.md`
+
+Git can auto-merge other overlapping files, and those still need a semantic pass before anyone treats the result as correct:
+
+- `crates/ferrioxid-cli/src/diagnose.rs` still fails `check --deploy` when `FERRIOXID_TRUST_PROXY=1` and still says the peer list is unmerged. On pull request 101 the flag does nothing unless `FERRIOXID_TRUSTED_PROXIES` names the immediate peer.
+- `crates/ferrioxid-cli/src/main.rs` carries both `check --deploy` and the integration CLI commands.
+- `crates/ferrioxid-api/src/lib.rs` and `openapi.rs` carry the cursor contract and the smaller integration edits. OpenAPI has to be checked again after that merge.
+- `crates/ferrioxid-middleware/src/lib.rs`, `crates/ferrioxid-migrations/src/project.rs`, `crates/ferrioxid/tests/openapi_client.rs`, `examples/myshop/src/main.rs`, `Cargo.lock`, and the shared docs (`database.md`, `django-capability-matrix.md`) auto-merge today.
+- `deploy/` and `examples/deploy/` are different paths. A merge would keep both stacks.
+
+Resolve those conflicts on the integration branch. Do not copy pull request 101 into this branch to clear them.

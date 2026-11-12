@@ -27,7 +27,7 @@ A four-framework application with the same models, files and admin was not built
 | Admin | Native HTML admin in the binary, session login, tested in this repo. | Generated admin, described by the project as beta or preview. | Not claimed as a Django admin in the crates.io summary. | Not a built-in Django-style admin in the crates.io feature list. |
 | Forms | `FerrioxidForm`, model binding, uploads through storage. | `#[form]` in the project README. | Form stack is part of the framework docs, not re-tested here. | Controllers and validation on Axum. Not re-tested here. |
 | Auth | Sessions, roles, CSRF, anonymous cookie, Argon2. | Argon2, CSRF and database sessions in the project README. | Auth is not the default feature set on the crates.io feature list checked here. | `auth` feature with session cookies. |
-| Tests | Workspace tests on Windows and Linux. PostgreSQL job. Playwright login on Ubuntu in CI. | `runique test` in the installation page. CI shape was not re-run. | `test` feature. CI shape was not re-run. | `testing` feature and axum-test. CI shape was not re-run. |
+| Tests | Workspace tests on Windows and Linux. Ignored PostgreSQL tests were run locally on PostgreSQL 18.6 against disposable databases. Playwright login is an Ubuntu CI job and was not launched on Windows. | `runique test` in the installation page. CI shape was not re-run. | `test` feature. CI shape was not re-run. | `testing` feature and axum-test. CI shape was not re-run. |
 | API | Generated CRUD, OpenAPI 3.1, cursor list, problem JSON. | Not described as a generated OpenAPI CRUD in the pages checked. | `openapi` and `swagger-ui` features. | Controllers on Axum. OpenAPI is not a default feature in the crates.io list checked here. |
 | Docker | Root Compose starts PostgreSQL on localhost. `deploy/` adds an app image, Caddy and an unpublished database. That stack was not booted here. | Not part of the pages checked. | Not part of the pages checked. | Not part of the pages checked. |
 | Documentation | English manual in `docs/`, including limits. Cargo docs are not published. | English and French on runique.io. | docs.rs and the project changelog. | loco.rs and docs.rs. |
@@ -38,5 +38,6 @@ A four-framework application with the same models, files and admin was not built
 - The crate is experimental `0.1.0` and is not on crates.io.
 - Public list filters exist only for admin-filterable fields that the read serializer still returns.
 - `FERRIOXID_TRUST_PROXY=1` is unsafe on this branch. Pull request 97 is not merged.
-- Playwright covers the login page with a fresh profile. It does not submit a password or walk an authenticated form.
-- Docker was not started while these files were written.
+- Playwright covers the login page with a fresh profile. It does not submit a password or walk an authenticated form. That spec was not launched on this Windows machine.
+- Docker was not started. Docker is not installed here.
+- A local PostgreSQL 18.6 run of the ignored tests, including `pg_dump` and `pg_restore`, passed on disposable `ferrioxid_test_*` databases. That is not a performance measurement.
