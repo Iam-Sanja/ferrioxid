@@ -26,7 +26,6 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | CLI | Implemented | [cli.md](cli.md), [fixtures.md](fixtures.md), [management-commands.md](management-commands.md), [migration-diagnostics.md](migration-diagnostics.md), [project-upgrade.md](project-upgrade.md), [project-generator.md](project-generator.md), [development-server.md](development-server.md), [cli-doctor.md](cli-doctor.md), [project-templates.md](project-templates.md) | Generation, diagnostics, fixtures, project commands, upgrades, builds and development server |
 | Example | Implemented | [example-myshop.md](example-myshop.md) | The myshop integration example |
 | Settings | Implemented, v0.24 | [settings.md](settings.md), [custom-settings.md](custom-settings.md), [configuration.md](configuration.md) | `ferrioxid.toml`, environment overrides and custom sections |
-| Deployment | Partial | [deploy-docker.md](deploy-docker.md), [advanced-framework-progress.md](advanced-framework-progress.md) | Bind address, public origin, trusted proxies, and embedded framework migrations |
 | URLs and views | Implemented, v0.24 | [urls.md](urls.md), [routing.md](routing.md), [views.md](views.md), [templates.md](templates.md), [project-structure.md](project-structure.md) | Named Axum routes, responses, templates and project layout |
 | Jobs | Implemented, v0.27.1 | [jobs.md](jobs.md), [workers.md](workers.md), [job-retries.md](job-retries.md), [job-security.md](job-security.md), [job-mail-integration.md](job-mail-integration.md) | Persistent queue, application workers, hidden payloads and mail without reset tokens |
 | Apps | Implemented, v0.26 | [apps.md](apps.md), [app-registry.md](app-registry.md), [app-migrations.md](app-migrations.md), [app-lifecycle.md](app-lifecycle.md), [reusable-apps.md](reusable-apps.md), [create-app.md](create-app.md) | Typed registration, startup checks and app migrations |
@@ -34,9 +33,9 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | Security | Implemented and planned | [security.md](security.md) | Access defaults, threats, safeguards and open risks |
 | Validation | Implemented and planned | [validation.md](validation.md) | Field rules and error semantics |
 | Tests and CI | Implemented and planned | [testing.md](testing.md) | Workspace checks, SQLite tests and separate PostgreSQL tests |
-| Migrations | Implemented with stated limits | [migrations.md](migrations.md) | Snapshots, diffs, explicit renames, checked rebuilds and baseline |
+| Migrations | Implemented with stated limits | [migrations.md](migrations.md), [advanced-framework-progress.md](advanced-framework-progress.md) | Snapshots, diffs, explicit renames, checked rebuilds, baseline and read-only drift plan |
 | Constraints | Implemented | [constraints.md](constraints.md) | Unique constraints, indexes, foreign keys and error codes |
-| Relations | Implemented, lazy and explicit batch loading | [relations.md](relations.md) | Belongs-to, has-many, batch loads and N+1 limits |
+| Relations | Implemented, lazy and explicit batch loading | [relations.md](relations.md) | Belongs-to, has-many, many-to-many, one-to-one and N+1 limits |
 | Auth and permissions | Implemented | [auth.md](auth.md), [password-reset.md](password-reset.md), [sessions.md](sessions.md), [permissions.md](permissions.md), [policies.md](policies.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md) | Users, sessions, reset, role permissions, object policies and query scopes |
 | Email | Implemented, v0.23 | [mail.md](mail.md), [mail-smtp.md](mail-smtp.md), [notifications.md](notifications.md), [mail-security.md](mail-security.md) | Transports, templates, typed notices and delivery limits |
 | Forms | Implemented, v0.12 | [forms.md](forms.md), [forms-validation.md](forms-validation.md) | Typed fields, Tera HTML and shared validation rules |
@@ -46,7 +45,7 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Ferriox
 | Admin | Implemented through v0.28 | [admin.md](admin.md), [admin-native.md](admin-native.md), [admin-navigation.md](admin-navigation.md), [admin-components.md](admin-components.md), [admin-extension-api.md](admin-extension-api.md), [transactions.md](transactions.md), [admin-directory-audit.md](admin-directory-audit.md), [admin-transactional-inlines.md](admin-transactional-inlines.md), [admin-form-drafts.md](admin-form-drafts.md), [admin-inlines.md](admin-inlines.md), [admin-bulk-actions.md](admin-bulk-actions.md), [admin-audit-log.md](admin-audit-log.md), [admin-custom-actions.md](admin-custom-actions.md), [admin-django-parity.md](admin-django-parity.md) | Native HTML, JSON API, permissions, navigation, forms, transactions, actions, history and extensions |
 | OpenAPI | In PR on this branch | [openapi.md](openapi.md) | OpenAPI 3.1 from model metadata, plus an optional explorer |
 | General plugin hooks | Planned only | [extensions.md](extensions.md) | Extension points beyond the implemented admin API |
-| Deployment | Local SQLite and optional Docker PostgreSQL implemented; app container planned | [deployment.md](deployment.md) | Local startup, proxy boundaries and production requirements |
+| Deployment | Local SQLite and optional Docker PostgreSQL implemented; app container planned | [deployment.md](deployment.md), [deploy-docker.md](deploy-docker.md) | Local startup, proxy boundaries, trusted proxies and embedded framework migrations |
 | Implementation process | Implemented and planned | [implementation-guide.md](implementation-guide.md) | Change scope, acceptance checks and architecture decisions |
 | Roadmap | Planning | [roadmap.md](roadmap.md) | Milestones and remaining work |
 

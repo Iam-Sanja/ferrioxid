@@ -47,6 +47,8 @@ pub fn message_text(locale: &str, code: &str) -> &'static str {
         (false, "validation.date") => "The date is invalid.",
         (true, "validation.time") => "Die Uhrzeit ist ungültig.",
         (false, "validation.time") => "The time is invalid.",
+        (true, "validation.json") => "Der Wert ist kein JSON-Dokument.",
+        (false, "validation.json") => "The value is not a JSON document.",
         (true, "validation.datetime") => "Der Zeitpunkt ist ungültig.",
         (false, "validation.datetime") => "The timestamp is invalid.",
         (true, "validation.datetime_offset") => "Der Zeitpunkt braucht ein Offset.",
@@ -116,6 +118,7 @@ fn known_code(message: &str) -> Option<&'static str> {
         "validation.unknown_field" => "validation.unknown_field",
         "validation.date" => "validation.date",
         "validation.time" => "validation.time",
+        "validation.json" => "validation.json",
         "validation.datetime" => "validation.datetime",
         "validation.datetime_offset" => "validation.datetime_offset",
         _ if message.contains("must not be blank") || message.contains("cannot be null") => {
@@ -234,6 +237,7 @@ mod tests {
             "validation.min_value",
             "validation.max_value",
             "validation.choice",
+            "validation.json",
             "validation.postal",
         ] {
             assert_ne!(message_text("de", code), message_text("en", code));

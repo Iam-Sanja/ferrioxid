@@ -13,7 +13,7 @@ mod text;
 use clap::{Parser, Subcommand};
 use ferrioxid_migrations::{
     apply_directory, apply_packages, baseline_database, discover_project, inspect_framework,
-    load_schema_from_command, make_migration_with_backfills, readonly_database_url,
+    load_schema_from_command, make_migration_with_backfills, plan_database, readonly_database_url,
     render_diagnosis, reseal_unapplied, resolve_installed_schemas, runtime_contract_note,
     write_explicit_migration, BackfillLiteral, ColumnBackfill, InstalledApp, MakeOutcome,
     MigrationOperation, PackageMigration, SchemaSnapshot,
@@ -327,6 +327,15 @@ enum MigrateCommand {
         /// Prints the inverse plan without changing the database.
         #[arg(long)]
         dry_run: bool,
+    },
+    /// Compares migration files, history, and the live schema without writing.
+    Plan {
+        #[arg(long)]
+        database_url: Option<String>,
+        #[arg(long)]
+        migrations_dir: Option<PathBuf>,
+        #[arg(long)]
+        schema_file: Option<PathBuf>,
     },
     /// Shows database backend, files, history, conflicts, and schema drift.
     Status {
@@ -783,6 +792,39 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 println!(
                     "This revert drops a table or column. Data in those objects is not restored."
                 );
+            }
+        }
+        MigrateCommand::Plan {
+            database_url,
+            migrations_dir,
+            schema_file,
+        } => {
+            let directory = resolve_directory(migrations_dir)?;
+            let schema = load_optional_schema(schema_file)?;
+            let url = resolve_database_url(database_url)?;
+            let readonly = readonly_database_url(&url).map_err(|error| error.0)?;
+            let report = runtime.block_on(async {
+                let db = ferrioxid_db::connect(&readonly)
+                    .await
+                    .map_err(|error| format!("migration.database.unavailable: {error}"))?;
+                plan_database(&db, &directory, schema.as_ref())
+                    .await
+                    .map_err(|error| error.0)
+            })?;
+            println!("Migration plan is read-only.");
+            println!("backend: {}", report.backend);
+            if report.pending.is_empty() {
+                println!("pending: none");
+            } else {
+                for id in &report.pending {
+                    println!("pending: {id}");
+                }
+            }
+            for finding in &report.findings {
+                println!("{}: {}", finding.level, finding.message);
+            }
+            if report.has_error() || report.has_drift() {
+                return Err("Migration plan found conflicts or live schema drift.".to_owned());
             }
         }
         MigrateCommand::Status {

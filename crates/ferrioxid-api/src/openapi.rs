@@ -360,6 +360,14 @@ fn column_schema(
             });
             schema
         }
+        ColumnKind::Json => {
+            let mut schema = typed("string", nullable, None);
+            schema["contentMediaType"] = json!("application/json");
+            schema["description"] = json!(
+                "Canonical JSON text. PostgreSQL stores jsonb and SQLite stores text. JSON path operators are not part of this schema."
+            );
+            schema
+        }
         ColumnKind::Choice => {
             let mut values: Vec<Value> = column
                 .choices

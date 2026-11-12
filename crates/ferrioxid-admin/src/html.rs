@@ -2784,9 +2784,11 @@ async fn input_fields(
                 ColumnKind::Date => "date",
                 ColumnKind::Time => "time",
                 ColumnKind::DateTime => "datetime-local",
-                ColumnKind::Uuid | ColumnKind::Text | ColumnKind::Boolean | ColumnKind::Choice => {
-                    "text"
-                }
+                ColumnKind::Uuid
+                | ColumnKind::Text
+                | ColumnKind::Boolean
+                | ColumnKind::Choice
+                | ColumnKind::Json => "text",
                 ColumnKind::Decimal => "text",
             });
             if column.kind == ColumnKind::DateTime {
@@ -7079,6 +7081,8 @@ fn normalize_temporal(
             ColumnKind::DateTime => ferrioxid_core::parse_datetime_local(text)
                 .or_else(|_| ferrioxid_core::parse_datetime_utc(text))
                 .map(ferrioxid_core::temporal::format_datetime)
+                .map_err(|code| (column.name.to_owned(), code))?,
+            ColumnKind::Json => ferrioxid_core::canonical_json_text(text)
                 .map_err(|code| (column.name.to_owned(), code))?,
             _ => continue,
         };

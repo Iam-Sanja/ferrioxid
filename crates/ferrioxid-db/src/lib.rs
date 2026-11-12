@@ -1,16 +1,20 @@
 //! Typed SeaORM-backed repository contract implemented by the model derive.
 
 mod query;
+mod report;
 mod sql;
 mod testing;
 mod unit;
 mod write;
 
 pub use query::{
-    all_of, any_of, col, group_by_parent, load_by_ids, load_children, load_many_to_many, not,
-    read_model, Aggregate, AggregateFn, Annotated, Bound, Column, Compare, Direction, KeysetPage,
-    ManyToMany, ModelQuery, Predicate, QueryCounter, QueryPage, Related, Select, IN_LIMIT,
-    OFFSET_LIMIT, PAGE_LIMIT, TEXT_MATCH_LIMIT,
+    all_of, any_of, col, group_by_parent, load_by_ids, load_children, load_many_to_many,
+    load_one_to_one, not, read_model, Aggregate, AggregateFn, Annotated, Bound, Column, Compare,
+    Direction, KeysetPage, ManyToMany, ModelQuery, NamedFilter, Predicate, QueryCounter, QueryPage,
+    Related, Select, IN_LIMIT, OFFSET_LIMIT, PAGE_LIMIT, TEXT_MATCH_LIMIT,
+};
+pub use report::{
+    AverageValue, GroupKey, GroupRow, Having, HavingCompare, Measure, MeasureValue, Report,
 };
 
 pub use testing::DisposablePostgres;

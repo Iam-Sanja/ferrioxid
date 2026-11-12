@@ -22,7 +22,11 @@ pub struct Product {
 }
 ```
 
-`id` remains `Uuid` with `#[field(primary_key, auto)]`. Supported field types are `Uuid`, `String`, `i64`, `bool`, `Decimal`, `NaiveDate`, `NaiveTime`, `DateTime<Utc>`, `Option` of those except `id`, and an enum with `#[field(choice)]`.
+`id` remains `Uuid` with `#[field(primary_key, auto)]`. Supported field types are `Uuid`, `String`, `i64`, `bool`, `Decimal`, `NaiveDate`, `NaiveTime`, `DateTime<Utc>`, `Option` of those except `id`, an enum with `#[field(choice)]`, and `String` with `#[field(json)]`.
+
+## JSON documents
+
+`#[field(json)]` is only valid on `String`. It cannot be combined with `choice`, precision, scale or a bool default. The stored value is canonical compact JSON from `canonical_json_text`. Object keys are sorted because the workspace `serde_json` map is a `BTreeMap`. A JSON `null` is a document. SQL `NULL` is the absence of a document and requires `Option<String>`. PostgreSQL stores `jsonb`. SQLite stores `text` and adds `CHECK (column IS NULL OR json_valid(column))`. Filters, `character_length_eq`, grouping and keyset continuation reject a JSON column. Forms, admin text and fixtures use the same canonical text. OpenAPI describes the field as a string with content type `application/json`. Changing a column to or from JSON is not an automatic migration.
 
 ## Decimal and choices
 

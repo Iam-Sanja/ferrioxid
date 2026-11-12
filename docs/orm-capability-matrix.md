@@ -1,6 +1,6 @@
 # ORM-Fähigkeiten
 
-Stand: 11.11.2026, Branch `fix/postgres-portability-v2`.
+Stand: 12.11.2026, Branch `feat/orm-migrations-lifecycle` auf `main` `53a95aa`.
 
 Die Tabelle beschreibt die öffentliche Ferrioxid-API für gewöhnliche Modelloperationen. SeaQuery bleibt im Framework. Anwendungs- und Geschäftslogik für die genannten Standardfälle braucht keine selbst geschriebenen SQL-Texte. Die Angaben sind an den Tests dieses Branch festgemacht, nicht an einer Produktionsfreigabe.
 
@@ -11,7 +11,10 @@ Die Tabelle beschreibt die öffentliche Ferrioxid-API für gewöhnliche Modellop
 | Anlegen einer Zeile über `ModelRepository::create` | Vollständig. Feldregeln gelten. Der Primärschlüssel wird erzeugt. | Ja | Ja, über vorhandene Laufzeittests und `examples/desk` |
 | Lesen, Filtern, Sortieren | Vollständig über `Select` | Ja | Ja |
 | Seite und Keyset | Vollständig. Eine Seite hat höchstens 100 Zeilen. Offset-Seiten sind kein stabiler Snapshot. | Ja | Ja |
-| `COUNT` und `SUM` über `annotate` | Teilweise. Eine Aggregation pro Aufruf, kein allgemeines `GROUP BY` | Ja | Ja |
+| `COUNT` und `SUM` über `annotate` | Teilweise. Eine verwandte Aggregation pro Aufruf | Ja | Ja |
+| Gruppierter Bericht `Select::aggregate` | Teilweise. `GROUP BY` nur auf Text, Choice, BigInt, Uuid, Datum, Zeit und Zeitpunkt. Maße `count`, `count_column`, `sum`, `min`, `max` und ein exakter Durchschnitt aus Summe und Anzahl. `HAVING` nur auf ganzzahlige Maße. Höchstens 100 Gruppen. Kein SQL-`AVG` | Ja, `sqlite_grouped_report_scope_json_and_one_to_one` | Ja, derselbe Test ignoriert und lokal auf PostgreSQL 18.6 ausgeführt |
+| One-to-one `load_one_to_one` | Teilweise. Eindeutiger UUID-Fremdschlüssel, gebündelt, `QueryScope` gilt. Eine zweite Zeile je Elternteil ist ein Fehler | Ja, im selben Test | Ja, im selben Test |
+| JSON-Dokument `#[field(json)]` | Teilweise. Kanonischer Text, PostgreSQL `jsonb`, SQLite `text` mit `json_valid`. Kein Pfadoperator und kein Filter | Ja, im selben Test | Ja, im selben Test |
 | Relationen `where_related`, `where_has`, `where_linked` | Vollständig für die vorhandenen Beziehungstypen | Ja | Ja |
 | Textsuche `contains_ignore_case` | Teilweise. SQLite faltet nur ASCII. PostgreSQL faltet nach der Locale von `LOWER`. | Ja, `München` entspricht nicht `MÜNCHEN` | Ja, auf diesem UTF-8-Cluster entspricht es. Eine `C`-Locale tut das nicht. |
 | Sortierung | Teilweise. SQLite vergleicht `BINARY`. PostgreSQL verwendet die Datenbank-Collation. | Ja, `Muenchen` vor `München` | Ja, die Reihenfolge wird nicht als identisch behauptet |

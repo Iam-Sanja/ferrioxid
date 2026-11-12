@@ -1055,6 +1055,9 @@ fn bind_one(
         ColumnKind::Time => parse_time(raw).map(|_| BoundValue::Text(raw.to_owned())),
         ColumnKind::DateTime => parse_datetime_utc(raw).map(|_| BoundValue::Text(raw.to_owned())),
         ColumnKind::Text => Ok(BoundValue::Text(raw.to_owned())),
+        ColumnKind::Json => ferrioxid_core::canonical_json_text(raw)
+            .map(BoundValue::Text)
+            .map_err(|_| "validation.json"),
         ColumnKind::Decimal => {
             let value = parse_decimal(raw, field.precision, field.scale)
                 .map_err(|_| "validation.decimal")?;
@@ -1272,7 +1275,7 @@ mod tests {
         apply_bounds, bind_formset, bind_model, escape, model_fields, render_fields,
         require_confirmation, required_choice, required_i64, required_postal, required_uuid,
         store_upload, BoundValue, ContactForm, FerrioxidForm, Field, FormErrors, FormValues,
-        SubmitMode, Widget,
+        ModelField, SubmitMode, Widget,
     };
     use ferrioxid_core::{AdminFieldMeta, ColumnKind, ColumnSpec, NumericBound};
     use ferrioxid_storage::Storage;
@@ -1447,6 +1450,31 @@ mod tests {
         let mut invalid = FormValues::default();
         invalid.insert("title", "Stift");
         invalid.insert("stock", "nope");
+        let mut json_values = FormValues::default();
+        json_values.insert("body", " { \"b\": 1 } ");
+        let json_fields = [ModelField {
+            name: "body",
+            kind: ColumnKind::Json,
+            required: true,
+            precision: 0,
+            scale: 0,
+            choices: &[],
+            min: None,
+            max: None,
+        }];
+        let json_bound = bind_model(SubmitMode::Create, &json_fields, &json_values, &[]).unwrap();
+        assert_eq!(
+            json_bound[0].value,
+            BoundValue::Text("{\"b\":1}".to_owned())
+        );
+        let mut broken_json = FormValues::default();
+        broken_json.insert("body", "{");
+        assert_eq!(
+            bind_model(SubmitMode::Create, &json_fields, &broken_json, &[])
+                .unwrap_err()
+                .for_field("body"),
+            Some("validation.json")
+        );
         assert_eq!(
             bind_model(SubmitMode::Replace, &fields, &invalid, &[])
                 .unwrap_err()

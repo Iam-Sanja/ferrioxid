@@ -1,4 +1,4 @@
-//! Reads an existing SQLite schema. Ferrioxid logical types are used for comparisons.
+//! Reads a live SQLite or PostgreSQL schema. Ferrioxid logical types are used for comparisons.
 
 use crate::error::MigrationError;
 use crate::snapshot::{LogicalType, OnDelete, SchemaSnapshot};
@@ -217,6 +217,200 @@ fn read_i64(row: &sea_orm::QueryResult, column: &str) -> Result<i64, MigrationEr
         })
 }
 
+pub async fn introspect_live(db: &impl ConnectionTrait) -> Result<Vec<LiveTable>, MigrationError> {
+    match db.get_database_backend() {
+        DatabaseBackend::Sqlite => introspect_sqlite(db).await,
+        DatabaseBackend::Postgres => introspect_postgres(db).await,
+        DatabaseBackend::MySql => Err(MigrationError::new("MySQL is not supported.".to_owned())),
+    }
+}
+
+async fn introspect_postgres(db: &impl ConnectionTrait) -> Result<Vec<LiveTable>, MigrationError> {
+    let columns = db
+        .query_all(Statement::from_string(
+            DatabaseBackend::Postgres,
+            "SELECT c.table_name, c.column_name, c.data_type, c.udt_name, c.is_nullable, c.column_default
+             FROM information_schema.columns c
+             JOIN information_schema.tables t
+               ON t.table_schema = c.table_schema AND t.table_name = c.table_name
+             WHERE c.table_schema = 'public' AND t.table_type = 'BASE TABLE'
+             ORDER BY c.table_name, c.ordinal_position",
+        ))
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not read PostgreSQL columns: {error}")))?;
+    let mut tables: Vec<LiveTable> = Vec::new();
+    for row in columns {
+        let table_name: String = text(&row, "table_name")?;
+        if table_name.starts_with("_ferrioxid_") {
+            continue;
+        }
+        let column_name: String = text(&row, "column_name")?;
+        let data_type: String = text(&row, "data_type")?;
+        let udt_name: String = text(&row, "udt_name")?;
+        let nullable: String = text(&row, "is_nullable")?;
+        let default_sql: Option<String> = row.try_get("", "column_default").unwrap_or(None);
+        let type_name = if data_type.eq_ignore_ascii_case("USER-DEFINED") {
+            udt_name
+        } else {
+            data_type
+        };
+        let column = LiveColumn {
+            name: column_name,
+            type_name,
+            nullable: nullable.eq_ignore_ascii_case("YES"),
+            primary_key: false,
+            default_sql,
+        };
+        if let Some(table) = tables.iter_mut().find(|table| table.name == table_name) {
+            table.columns.push(column);
+        } else {
+            tables.push(LiveTable {
+                name: table_name,
+                columns: vec![column],
+                indexes: Vec::new(),
+                foreign_keys: Vec::new(),
+            });
+        }
+    }
+    let keys = db
+        .query_all(Statement::from_string(
+            DatabaseBackend::Postgres,
+            "SELECT kcu.table_name, kcu.column_name
+             FROM information_schema.table_constraints tc
+             JOIN information_schema.key_column_usage kcu
+               ON tc.constraint_schema = kcu.constraint_schema
+              AND tc.constraint_name = kcu.constraint_name
+              AND tc.table_name = kcu.table_name
+             WHERE tc.table_schema = 'public' AND tc.constraint_type = 'PRIMARY KEY'",
+        ))
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not read PostgreSQL keys: {error}")))?;
+    for row in keys {
+        let table_name: String = text(&row, "table_name")?;
+        let column_name: String = text(&row, "column_name")?;
+        if let Some(column) = tables
+            .iter_mut()
+            .find(|table| table.name == table_name)
+            .and_then(|table| {
+                table
+                    .columns
+                    .iter_mut()
+                    .find(|column| column.name == column_name)
+            })
+        {
+            column.primary_key = true;
+        }
+    }
+    let indexes = db
+        .query_all(Statement::from_string(
+            DatabaseBackend::Postgres,
+            "SELECT t.relname AS table_name, ic.relname AS index_name, ix.indisunique AS is_unique,
+                    a.attname AS column_name, array_position(ix.indkey::smallint[], a.attnum) AS position
+             FROM pg_index ix
+             JOIN pg_class t ON t.oid = ix.indrelid
+             JOIN pg_class ic ON ic.oid = ix.indexrelid
+             JOIN pg_namespace n ON n.oid = t.relnamespace
+             JOIN pg_attribute a ON a.attrelid = t.oid AND a.attnum = ANY (ix.indkey)
+             WHERE n.nspname = 'public' AND NOT ix.indisprimary AND t.relkind = 'r'
+             ORDER BY t.relname, ic.relname, position",
+        ))
+        .await
+        .map_err(|error| MigrationError::new(format!("Could not read PostgreSQL indexes: {error}")))?;
+    for row in indexes {
+        let table_name: String = text(&row, "table_name")?;
+        let index_name: String = text(&row, "index_name")?;
+        let column_name: String = text(&row, "column_name")?;
+        let unique = read_bool(&row, "is_unique")?;
+        let Some(table) = tables.iter_mut().find(|table| table.name == table_name) else {
+            continue;
+        };
+        if let Some(index) = table
+            .indexes
+            .iter_mut()
+            .find(|index| index.name == index_name)
+        {
+            index.columns.push(column_name);
+        } else {
+            table.indexes.push(LiveIndex {
+                name: index_name,
+                columns: vec![column_name],
+                unique,
+            });
+        }
+    }
+    let foreign_keys = db
+        .query_all(Statement::from_string(
+            DatabaseBackend::Postgres,
+            "SELECT rc.constraint_name, kcu.table_name, kcu.column_name,
+                    ccu.table_name AS referenced_table, ccu.column_name AS referenced_column,
+                    rc.delete_rule AS on_delete, rc.update_rule AS on_update
+             FROM information_schema.referential_constraints rc
+             JOIN information_schema.key_column_usage kcu
+               ON kcu.constraint_schema = rc.constraint_schema
+              AND kcu.constraint_name = rc.constraint_name
+             JOIN information_schema.constraint_column_usage ccu
+               ON ccu.constraint_schema = rc.unique_constraint_schema
+              AND ccu.constraint_name = rc.unique_constraint_name
+             WHERE rc.constraint_schema = 'public'
+             ORDER BY kcu.table_name, rc.constraint_name, kcu.ordinal_position",
+        ))
+        .await
+        .map_err(|error| {
+            MigrationError::new(format!("Could not read PostgreSQL foreign keys: {error}"))
+        })?;
+    let mut foreign_key_groups: Vec<(String, String, LiveForeignKey)> = Vec::new();
+    for row in foreign_keys {
+        let table_name: String = text(&row, "table_name")?;
+        let constraint_name: String = text(&row, "constraint_name")?;
+        let column_name: String = text(&row, "column_name")?;
+        let referenced_table: String = text(&row, "referenced_table")?;
+        let referenced_column: String = text(&row, "referenced_column")?;
+        let on_delete: String = text(&row, "on_delete")?;
+        let on_update: String = text(&row, "on_update")?;
+        if let Some(existing) = foreign_key_groups
+            .iter_mut()
+            .find(|item| item.0 == table_name && item.1 == constraint_name)
+        {
+            existing.2.columns.push(column_name);
+            existing.2.referenced_columns.push(referenced_column);
+        } else {
+            foreign_key_groups.push((
+                table_name,
+                constraint_name,
+                LiveForeignKey {
+                    columns: vec![column_name],
+                    referenced_table,
+                    referenced_columns: vec![referenced_column],
+                    on_delete: on_delete.to_ascii_uppercase(),
+                    on_update: on_update.to_ascii_uppercase(),
+                },
+            ));
+        }
+    }
+    for (table_name, _, foreign_key) in foreign_key_groups {
+        if let Some(table) = tables.iter_mut().find(|table| table.name == table_name) {
+            table.foreign_keys.push(foreign_key);
+        }
+    }
+    tables.sort_by(|left, right| left.name.cmp(&right.name));
+    Ok(tables)
+}
+
+fn text(row: &sea_orm::QueryResult, column: &str) -> Result<String, MigrationError> {
+    row.try_get("", column).map_err(|error| {
+        MigrationError::new(format!(
+            "Could not read PostgreSQL column `{column}`: {error}"
+        ))
+    })
+}
+
+fn read_bool(row: &sea_orm::QueryResult, column: &str) -> Result<bool, MigrationError> {
+    if let Ok(value) = row.try_get::<bool>("", column) {
+        return Ok(value);
+    }
+    Ok(read_i64(row, column)? != 0)
+}
+
 pub fn compare_snapshot(expected: &SchemaSnapshot, live: &[LiveTable]) -> Vec<String> {
     let mut differences = Vec::new();
     for table in &expected.tables {
@@ -365,7 +559,10 @@ fn type_compatible(logical: LogicalType, sql_type: &str) -> bool {
     let integer = matches!(normalized.as_str(), "integer" | "int" | "bigint" | "int8");
     let text = matches!(normalized.as_str(), "text" | "clob" | "varchar" | "char");
     match logical {
-        LogicalType::Uuid | LogicalType::String => text,
+        LogicalType::Uuid => text || normalized == "uuid",
+        LogicalType::String => {
+            text || normalized == "character varying" || normalized == "character"
+        }
         LogicalType::I64 => integer,
         LogicalType::Bool => integer || normalized == "boolean" || normalized == "bool",
         LogicalType::Date => text || normalized == "date",
@@ -374,9 +571,12 @@ fn type_compatible(logical: LogicalType, sql_type: &str) -> bool {
             text || normalized.contains("timestamp") || normalized == "datetime"
         }
         LogicalType::Decimal => {
-            matches!(normalized.as_str(), "blob" | "bytea") || normalized.contains("blob")
+            matches!(normalized.as_str(), "blob" | "bytea")
+                || normalized.contains("blob")
+                || normalized == "bytea"
         }
         LogicalType::Choice => text,
+        LogicalType::Json => text || normalized == "jsonb" || normalized == "json",
     }
 }
 
