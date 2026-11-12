@@ -1,5 +1,12 @@
 # Changelog
 
+## Unreleased — Integration of pull requests #97 to #100
+
+- Embedded auth and job migrations, trusted proxy peers, `inspect_framework`, `migrate plan`, JSON documents, one-to-one loads, grouped reports, the admin audit timeline, `aliased_env` and a single legacy project file are on one branch. See [the integration record](docs/advanced-framework-integration.md).
+- `FERRIOXID_TRUST_PROXY` no longer trusts every peer. Set `FERRIOXID_TRUSTED_PROXIES` or the `FERRUM_` alias. Conflicting alias values are a startup error and are not printed.
+- `#[field(json)]` is a new column kind. Existing text columns are not converted. `migrate plan` is read-only.
+- The Cargo package version remains `0.1.0`.
+
 ## Unreleased — Ferrioxid names only (breaking)
 
 - Configuration discovery and generation use `ferrioxid.toml`; metadata and runtime CSRF keys use `.ferrioxid/`. Environment settings use `FERRIOXID_*`, and the default session cookie is `ferrioxid_session`. No old-name aliases are read or generated.

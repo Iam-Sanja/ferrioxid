@@ -15,7 +15,8 @@
 | `FERRIOXID_ENV` | `AuthConfig::from_env` | `development` |`production` sets `Secure` as default and empties permitted origins if no list is set|
 | `FERRIOXID_COOKIE_SECURE` | `AuthConfig::from_env` |Only true in production|`1` or `true` enforces `Secure`. Not derived from `BIND_ADDRESS`|
 | `FERRIOXID_ALLOWED_ORIGINS` | `AuthConfig::from_env` |Loopback of the bind address|comma separated origins. If the variable is set, it replaces the list completely. Otherwise, `apply_bound_address` puts `http://127.0.0.1:{port}` and `http://localhost:{port}` from `BIND_ADDRESS` or `ferrioxid.toml`. The host header is not taken over.|
-| `FERRIOXID_TRUST_PROXY` | `AuthConfig::from_env` | false |only then applies the first `X-Forwarded-For` hop|
+| `FERRIOXID_TRUST_PROXY` | `AuthConfig::try_from_env` | false |only together with a listed peer applies the first `X-Forwarded-For` hop. `FERRUM_TRUST_PROXY` is the legacy alias|
+| `FERRIOXID_TRUSTED_PROXIES` | `AuthConfig::try_from_env` | empty |comma-separated immediate peers. `FERRUM_TRUSTED_PROXIES` is the legacy alias. A `*` entry is ignored|
 
 `.env.example` is not automatically loaded. Values must be set in the shell. A set `DATABASE_URL` replaces SQLite:
 

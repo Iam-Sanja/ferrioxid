@@ -65,6 +65,7 @@ Implementation evidence comes from `crates/*/src/*`, `examples/myshop/src/*`, `e
 
 ## Maintainer records
 
+- [Integration of pull requests #97 to #100](advanced-framework-integration.md)
 - [Breaking configuration and schema naming change](ferrum-legacy-removal.md)
 
 - [GitHub maintenance](github-maintenance.md)

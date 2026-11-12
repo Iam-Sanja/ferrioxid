@@ -71,7 +71,7 @@ ferrioxid
 ├─ generate model <name>       Kompilierbare Modelldatei erstellen
 ├─ check [--strict]            IST, Projekt und Migrationen, ohne Schreiben
 ├─ upgrade --check|--dry-run|--yes   IST, nur ein fehlendes Legacy-Manifest
-├─ migrate make|up|down|status IST, siehe migrations.md
+├─ migrate make|up|down|plan|status IST, siehe migrations.md
 ├─ dumpdata / loaddata         IST, siehe fixtures.md
 ├─ manage <command>            IST, siehe management-commands.md
 ├─ migrate rename-column       IST, explizite Spaltenumbenennung

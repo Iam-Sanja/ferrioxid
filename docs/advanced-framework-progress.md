@@ -168,3 +168,15 @@ Nicht in diesem Commit erweitert. `ferrioxid check` meldet einen Alias-Konflikt 
 ### Verhalten
 
 `AuthConfig::from_env` und `MailService::open` bleiben die bisherigen Aufrufe. Sie brechen ab, wenn ein Alias-Paar widersprüchlich ist. Vorher wurden `FERRUM_*` an diesen Stellen ignoriert.
+
+## Integration branch
+
+`work/integration` contains #97, #98, #99 and #100 in that order. The execution record is [advanced-framework-integration.md](advanced-framework-integration.md).
+
+Local evidence on 12 November 2026:
+
+- `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and `cargo build --workspace` passed.
+- Ignored PostgreSQL tests `postgres_embedded_auth_and_jobs`, `postgres_grouped_report_scope_json_and_one_to_one`, `postgres_plan_detects_live_drift_on_a_disposable_database`, `postgres_matching_uses_the_record_id_not_a_similar_name` and `postgres_inspect_framework_and_plan_stay_read_only` passed against disposable `ferrioxid_test_*` databases created from the local `postgres` admin database.
+- After those runs, `ferrioxid` still had 15 public tables and `ferrioxid_migrations_down_test` still had 1. No `ferrioxid_test_*` database remained.
+- `cargo audit --ignore RUSTSEC-2023-0071` passed. The unfiltered audit still reports only that lockfile-only RSA advisory.
+- GitHub CI has not run for this combined branch. The four source PR branches were not rewritten.

@@ -10,7 +10,7 @@ Three settings are independent.
 
 A wildcard bind is an explicit opt-in. Set `server.allow_wildcard_bind = true` in `ferrioxid.toml`, or set `FERRIOXID_ALLOW_WILDCARD_BIND=true` when `BIND_ADDRESS` is `0.0.0.0:port` or `[::]:port`. The bind address is not added to the origin allowlist. `Host`, `X-Forwarded-Host` and `X-Forwarded-Proto` are not public origins.
 
-`FERRIOXID_TRUST_PROXY=true` alone does not trust forwarded headers. The immediate peer address must also be listed in `FERRIOXID_TRUSTED_PROXIES`. A `*` entry is ignored. `Origin: null` is rejected unless the browser also sends `Sec-Fetch-Site: same-origin`.
+`FERRIOXID_TRUST_PROXY=true` alone does not trust forwarded headers. The immediate peer address must also be listed in `FERRIOXID_TRUSTED_PROXIES`. `FERRUM_TRUST_PROXY` and `FERRUM_TRUSTED_PROXIES` are aliases; different values are rejected and are not printed. A `*` entry is ignored. `Origin: null` is rejected unless the browser also sends `Sec-Fetch-Site: same-origin`.
 
 The example in `examples/deploy` is a multi-stage image. The runtime stage copies only `embedded-migrate`. Auth and job migration JSON is compiled into that binary, so the image does not need the Rust source tree or those JSON files. PostgreSQL has no published host port. Caddy publishes HTTPS on `127.0.0.1:443` only.
 

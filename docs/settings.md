@@ -50,6 +50,8 @@ Existing sections remain `project`, `server`, `database`, `admin`, `auth`, `temp
 | `FERRIOXID_IDLE_MINUTES` | Replaces the file when set. `FERRUM_IDLE_MINUTES` is the legacy alias |
 | `FERRIOXID_COOKIE_SECURE` | `1` or `true` sets `Secure` on `ferrioxid_session` and `ferrioxid_anonymous`. `FERRUM_COOKIE_SECURE` is the legacy alias. In production this is the default |
 | `FERRIOXID_ALLOWED_ORIGINS` | Comma-separated origins. `FERRUM_ALLOWED_ORIGINS` is the legacy alias. In production without this variable, the list is empty until `apply_bound_address` sets loopback |
+| `FERRIOXID_TRUST_PROXY` | `1` or `true` allows reading `X-Forwarded-For`. `FERRUM_TRUST_PROXY` is the legacy alias. Alone it trusts no peer |
+| `FERRIOXID_TRUSTED_PROXIES` | Comma-separated immediate peer addresses allowed to supply `X-Forwarded-For`. `FERRUM_TRUSTED_PROXIES` is the legacy alias. Empty means no peer is trusted. A `*` entry is ignored |
 
 A missing optional variable retains the file or default value. `DATABASE_URL` and `BIND_ADDRESS` have no `FERRUM_` alias. For every other `FERRIOXID_` variable listed above, the matching `FERRUM_` variable is accepted. If both are set to different values, Ferrioxid stops and does not print either value. A missing mandatory production specification remains an error: `FERRIOXID_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FERRIOXID_ENV=production`. Ferrioxid does not switch debug silently to `false` in this case.
 
