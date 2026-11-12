@@ -1210,6 +1210,24 @@ mod tests {
 
         let ready = connect("sqlite::memory:").await.unwrap();
         ferrioxid_auth::apply_migrations(&ready).await.unwrap();
+        let jobs_pending = App::new(ready.clone())
+            .strict_migrations()
+            .try_into_router_strict()
+            .await;
+        let Err(jobs_pending) = jobs_pending else {
+            panic!("pending job migrations were accepted");
+        };
+        assert!(
+            jobs_pending.detail.contains("0001_jobs"),
+            "{}",
+            jobs_pending.detail
+        );
+        assert!(
+            !ferrioxid_migrations::table_exists(&ready, ferrioxid_jobs::JOB_HISTORY)
+                .await
+                .unwrap()
+        );
+        ferrioxid_jobs::apply_migrations(&ready).await.unwrap();
         let before = ready
             .query_one(sea_orm::Statement::from_string(
                 ready.get_database_backend(),

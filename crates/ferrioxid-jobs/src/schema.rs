@@ -16,6 +16,19 @@ pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
 }
 
+const EMBEDDED_MIGRATIONS: &[(&str, &str)] =
+    &[("0001_jobs", include_str!("../migrations/0001_jobs.json"))];
+
+/// Job migrations compiled into the binary. Runtime does not open `CARGO_MANIFEST_DIR`.
+pub fn embedded_migrations() -> Result<Vec<ferrioxid_migrations::MigrationFile>, JobError> {
+    ferrioxid_migrations::require_embedded_migrations(
+        "ferrioxid-jobs",
+        &["0001_jobs"],
+        EMBEDDED_MIGRATIONS,
+    )
+    .map_err(|error| JobError::message("job.migration", error.to_string()))
+}
+
 #[cfg(test)]
 pub fn migration_file() -> Result<MigrationFile, JobError> {
     let snapshot = schema()?;
@@ -35,24 +48,24 @@ pub fn migration_file() -> Result<MigrationFile, JobError> {
 }
 
 pub async fn apply_migrations(db: &DatabaseConnection) -> Result<Vec<String>, JobError> {
-    #[cfg(test)]
-    ensure_test_migration();
-    let report = ferrioxid_migrations::apply_directory_with_history(
-        db,
-        &migrations_dir(),
-        false,
-        JOB_HISTORY,
-    )
-    .await
-    .map_err(|error| JobError::message("job.migration", error.to_string()))?;
+    let files = embedded_migrations()?;
+    let report = ferrioxid_migrations::apply_files_with_history(db, &files, false, JOB_HISTORY)
+        .await
+        .map_err(|error| JobError::message("job.migration", error.to_string()))?;
     Ok(report.applied)
 }
 
+pub async fn migration_status(
+    db: &DatabaseConnection,
+) -> Result<ferrioxid_migrations::StatusReport, JobError> {
+    let files = embedded_migrations()?;
+    ferrioxid_migrations::status_of_files(db, &files, JOB_HISTORY, None)
+        .await
+        .map_err(|error| JobError::message("job.migration", error.to_string()))
+}
+
 pub async fn render_migration_status(db: &DatabaseConnection) -> Result<(String, bool), JobError> {
-    let report =
-        ferrioxid_migrations::migration_status_in(db, &migrations_dir(), JOB_HISTORY, None)
-            .await
-            .map_err(|error| JobError::message("job.migration", error.to_string()))?;
+    let report = migration_status(db).await?;
     let current =
         report.conflicts.is_empty() && report.lines.iter().all(|line| line.state == "angewendet");
     Ok((format!("Job-Migrationen:\n{}", report.render()), current))

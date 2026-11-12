@@ -213,6 +213,47 @@ pub async fn apply_directory_with_history(
     apply_scoped(db, directory, allow_destructive, history_table, None).await
 }
 
+/// Applies an already validated migration set. This does not read a source directory.
+pub async fn apply_files_with_history(
+    db: &DatabaseConnection,
+    files: &[MigrationFile],
+    allow_destructive: bool,
+    history_table: &str,
+) -> Result<ApplyReport, MigrationError> {
+    if files.is_empty() {
+        return Err(MigrationError::new(
+            "Required framework migrations are missing, so nothing was applied.".to_owned(),
+        ));
+    }
+    history::ensure_history_in(db, history_table).await?;
+    let applied = scoped_history(&history::read_history_in(db, history_table).await?, None)?;
+    let pending = pending_files(files, &applied)?;
+    let mut done = Vec::new();
+    for file in pending {
+        reject_blocked(file, allow_destructive)?;
+        let history_id = history_key(None, &file.id);
+        apply_one(db, file, history_table, &history_id, true).await?;
+        done.push(history_id);
+    }
+    Ok(ApplyReport { applied: done })
+}
+
+/// Read-only status for a validated migration set. It does not create history or apply files.
+pub async fn status_of_files(
+    db: &DatabaseConnection,
+    files: &[MigrationFile],
+    history_table: &str,
+    current: Option<&SchemaSnapshot>,
+) -> Result<StatusReport, MigrationError> {
+    if files.is_empty() {
+        return Err(MigrationError::new(
+            "Required framework migrations are missing. Status was not reported as successful."
+                .to_owned(),
+        ));
+    }
+    report_files(db, files, Vec::new(), history_table, current).await
+}
+
 /// Applies migrations in an app directory. History IDs use `app:file`.
 ///
 /// The file checksum remains unchanged. Existing legacy `0001_initial` history is not remapped.
@@ -289,6 +330,16 @@ pub async fn migration_status_in(
     current: Option<&SchemaSnapshot>,
 ) -> Result<StatusReport, MigrationError> {
     let state = inspect_directory(directory);
+    report_files(db, &state.files, state.conflicts, history_table, current).await
+}
+
+async fn report_files(
+    db: &DatabaseConnection,
+    files: &[MigrationFile],
+    mut conflicts: Vec<String>,
+    history_table: &str,
+    current: Option<&SchemaSnapshot>,
+) -> Result<StatusReport, MigrationError> {
     let backend = kind_of(db.get_database_backend())
         .map_err(|error| MigrationError::new(error.to_string()))?;
     let applied = if history::history_exists_in(db, history_table).await? {
@@ -296,9 +347,8 @@ pub async fn migration_status_in(
     } else {
         Vec::new()
     };
-    let mut conflicts = state.conflicts;
     let mut lines = Vec::new();
-    for file in &state.files {
+    for file in files {
         if let Some(entry) = applied.iter().find(|entry| entry.id == file.id) {
             if entry.checksum != file.checksum {
                 conflicts.push(format!(
@@ -320,17 +370,17 @@ pub async fn migration_status_in(
         }
     }
     for entry in &applied {
-        if !state.files.iter().any(|file| file.id == entry.id) {
+        if !files.iter().any(|file| file.id == entry.id) {
             conflicts.push(format!(
                 "Applied migration {} no longer has a file in the migrations directory.",
                 entry.id
             ));
         }
     }
-    if let Err(error) = pending_files(&state.files, &applied) {
+    if let Err(error) = pending_files(files, &applied) {
         conflicts.push(error.0);
     }
-    let schema_note = schema_note(current, &state.files, &applied);
+    let schema_note = schema_note(current, files, &applied);
     Ok(StatusReport {
         backend: history::backend_name(backend).to_owned(),
         lines,

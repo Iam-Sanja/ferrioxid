@@ -188,12 +188,10 @@ impl<'a> TestRequest<'a> {
         let request = builder
             .body(Body::from(body))
             .map_err(|error| error.to_string())?;
-        let response = client
-            .router
-            .clone()
-            .oneshot(request)
-            .await
-            .map_err(|error| error.to_string())?;
+        let response = match client.router.clone().oneshot(request).await {
+            Ok(response) => response,
+            Err(error) => match error {},
+        };
         let status = response.status();
         let response_headers = response.headers().clone();
         store_cookies(&mut client.cookies, &response_headers);

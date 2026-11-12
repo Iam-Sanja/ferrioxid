@@ -25,7 +25,8 @@ pub use queue::{
 };
 pub use registry::{JobContext, JobHandler, JobRegistry};
 pub use schema::{
-    apply_migrations, migrations_dir, render_migration_status, table_ready, JOBS, JOB_HISTORY,
+    apply_migrations, embedded_migrations, migration_status, migrations_dir,
+    render_migration_status, table_ready, JOBS, JOB_HISTORY,
 };
 pub use worker::{stop_flag, Worker};
 

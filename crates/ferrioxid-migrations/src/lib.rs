@@ -34,8 +34,9 @@ pub use fixtures::{
 };
 pub use history::{history_exists, table_exists, AUTH_HISTORY_TABLE};
 pub use inspect::{
-    dev_notice, inspect_migrations, inspect_migrations_with_packages, readonly_database_url,
-    render_diagnosis, Diagnostic, DualReport, Level, MigrationScope, PackageStatus,
+    dev_notice, inspect_framework, inspect_migrations, inspect_migrations_with_packages,
+    readonly_database_url, render_diagnosis, Diagnostic, DualReport, Level, MigrationScope,
+    PackageStatus,
 };
 pub use management::{
     is_command_name, ArgSpec, CommandError, CommandSpec, Invocation, ManagementCommand, Registry,
@@ -53,9 +54,10 @@ pub use project::{
     Settings,
 };
 pub use runner::{
-    apply_directory, apply_directory_with_history, apply_namespaced_directory, migration_status,
-    migration_status_in, namespaced_status, reseal_unapplied, revert_latest, revert_namespaced,
-    ApplyReport, RevertPlan, StatusReport,
+    apply_directory, apply_directory_with_history, apply_files_with_history,
+    apply_namespaced_directory, migration_status, migration_status_in, namespaced_status,
+    reseal_unapplied, revert_latest, revert_namespaced, status_of_files, ApplyReport, RevertPlan,
+    StatusReport,
 };
 pub use snapshot::{
     is_identifier, ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, IndexSnapshot,
@@ -64,8 +66,9 @@ pub use snapshot::{
 };
 pub use store::sha256_hex;
 pub use store::{
-    inspect_directory, load_migration, make_migration, make_migration_with_backfills,
-    reseal_migration, save_migration, seal, write_explicit_migration, MakeOutcome, MigrationFile,
+    inspect_directory, load_migration, load_migration_text, make_migration,
+    make_migration_with_backfills, require_embedded_migrations, reseal_migration, save_migration,
+    seal, write_explicit_migration, MakeOutcome, MigrationFile,
 };
 pub use upgrade::{
     apply_upgrade, contained_target, ferrioxid_dependency, plan_upgrade, render_plan,

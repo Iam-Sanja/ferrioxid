@@ -383,6 +383,7 @@ mod tests {
             database_url: url.into(),
             host: "127.0.0.1".into(),
             port: 3000,
+            allow_wildcard_bind: false,
             debug: true,
             admin_enabled: false,
             embedded_assets: false,

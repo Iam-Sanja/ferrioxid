@@ -1,0 +1,48 @@
+# Minimal deployment contract.
+# PostgreSQL is only on the internal network. The public origin is the proxy name,
+# not the container bind address and not a forwarded host header.
+services:
+  postgres:
+    image: postgres:16
+    environment:
+      POSTGRES_USER: ferrioxid
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD outside the compose file}
+      POSTGRES_DB: ferrioxid
+    volumes:
+      - ferrioxid-postgres:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ferrioxid -d ferrioxid"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  app:
+    build:
+      context: ../..
+      dockerfile: examples/deploy/Dockerfile
+    environment:
+      DATABASE_URL: postgres://ferrioxid:${POSTGRES_PASSWORD}@postgres:5432/ferrioxid
+      BIND_ADDRESS: 0.0.0.0:3000
+      FERRIOXID_ALLOW_WILDCARD_BIND: "true"
+      FERRIOXID_ALLOWED_ORIGINS: https://shop.example
+      FERRIOXID_TRUST_PROXY: "true"
+      # Set this to the proxy container's address on this network. A name or * is not trusted.
+      FERRIOXID_TRUSTED_PROXIES: ${FERRIOXID_TRUSTED_PROXIES:-}
+      FERRIOXID_COOKIE_SECURE: "true"
+    depends_on:
+      postgres:
+        condition: service_healthy
+    expose:
+      - "3000"
+
+  proxy:
+    image: caddy:2
+    ports:
+      - "127.0.0.1:443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+    depends_on:
+      - app
+
+volumes:
+  ferrioxid-postgres:

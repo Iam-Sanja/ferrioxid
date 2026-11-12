@@ -51,6 +51,28 @@ jobs:
       - name: Build the workspace
         run: cargo build --workspace
 
+      - name: Relocated embedded migrations
+        shell: bash
+        run: |
+          set -eu
+          cargo build -p ferrioxid-cli --bin embedded-migrate
+          dest=$(mktemp -d)
+          work=$(mktemp -d)
+          if [ -f target/debug/embedded-migrate.exe ]; then
+            cp target/debug/embedded-migrate.exe "$dest/embedded-migrate.exe"
+            bin="$dest/embedded-migrate.exe"
+          else
+            cp target/debug/embedded-migrate "$dest/embedded-migrate"
+            bin="$dest/embedded-migrate"
+            chmod +x "$bin"
+          fi
+          db="$work/app.sqlite"
+          if command -v cygpath >/dev/null 2>&1; then
+            db=$(cygpath -m "$db")
+          fi
+          DATABASE_URL="sqlite://$db?mode=rwc" "$bin"
+          test -s "$work/app.sqlite"
+
   postgres:
     name: PostgreSQL
     runs-on: ubuntu-latest
@@ -96,6 +118,8 @@ jobs:
         env:
           DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid
           FERRIOXID_MIGRATIONS_DOWN_DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid_migrations_down_test
+          PGPASSWORD: ferrioxid_dev_only
+          POSTGRES_PASSWORD: ferrioxid_dev_only
         run: |
           cargo test -p myshop --test framework_names -- --ignored fresh_postgres_initializes_auth_jobs_and_application
           cargo test -p myshop --test postgres_api -- --ignored postgres_http_roundtrip
@@ -116,3 +140,11 @@ jobs:
           cargo test -p ferrioxid-db --lib write::tests::postgres_shop_cases -- --ignored
           cargo test -p ferrioxid-db --lib write::tests::postgres_write_security -- --ignored
           cargo test -p desk --test flow -- --ignored postgres_same_operations
+          cargo build -p ferrioxid-cli --bin embedded-migrate
+          psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS ferrioxid_test_relocated WITH (FORCE);' \
+            -c 'CREATE DATABASE ferrioxid_test_relocated;'
+          DATABASE_URL="postgres://ferrioxid:${POSTGRES_PASSWORD}@127.0.0.1:5432/ferrioxid_test_relocated" \
+            ./target/debug/embedded-migrate
+          psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS ferrioxid_test_relocated WITH (FORCE);'

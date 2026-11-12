@@ -351,9 +351,19 @@ impl App {
             .as_ref()
             .map(|settings| settings.migrations_dir.clone())
             .unwrap_or_else(|| std::path::PathBuf::from("ferrioxid-no-app-migrations"));
-        let report = ferrioxid_migrations::inspect_migrations_with_packages(
+        let auth_files = ferrioxid_auth::embedded_migrations()
+            .map_err(|error| crate::apps::AppError::new("migration.strict", error.to_string()))?;
+        let jobs_files = ferrioxid_jobs::embedded_migrations().map_err(|error| {
+            crate::apps::AppError::new(
+                "migration.strict",
+                format!("{} {}", error.code(), error.detail()),
+            )
+        })?;
+        let report = ferrioxid_migrations::inspect_framework(
             &self.db,
-            &ferrioxid_auth::migrations_dir(),
+            &auth_files,
+            &jobs_files,
+            ferrioxid_jobs::JOB_HISTORY,
             &app_dir,
             None,
             &self.migrations,
@@ -362,6 +372,7 @@ impl App {
         .map_err(|error| crate::apps::AppError::new("migration.strict", error.0))?;
         let mut problems = Vec::new();
         collect_migration_problems("auth", &report.auth, &mut problems);
+        collect_migration_problems("jobs", &report.jobs, &mut problems);
         collect_migration_problems("app", &report.app, &mut problems);
         for package in &report.packages {
             collect_migration_problems(&package.name, &package.status, &mut problems);

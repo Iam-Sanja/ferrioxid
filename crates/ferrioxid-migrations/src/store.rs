@@ -187,11 +187,17 @@ pub fn load_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
             path.display()
         ))
     })?;
-    let file: MigrationFile = serde_json::from_str(&text).map_err(|error| {
-        MigrationError::new(format!(
-            "Migration {} is not valid JSON: {error}",
-            path.display()
-        ))
+    let stem = path
+        .file_stem()
+        .and_then(|stem| stem.to_str())
+        .unwrap_or("");
+    load_migration_text(stem, &text)
+}
+
+/// Validates one migration document. `id` is the resource name and must equal the document ID.
+pub fn load_migration_text(id: &str, text: &str) -> Result<MigrationFile, MigrationError> {
+    let file: MigrationFile = serde_json::from_str(text).map_err(|error| {
+        MigrationError::new(format!("Migration {id} is not valid JSON: {error}"))
     })?;
     if file.format_version != crate::snapshot::FORMAT_VERSION {
         return Err(MigrationError::new(format!(
@@ -199,13 +205,9 @@ pub fn load_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
             file.id, file.format_version
         )));
     }
-    let stem = path
-        .file_stem()
-        .and_then(|stem| stem.to_str())
-        .unwrap_or("");
-    if stem != file.id {
+    if id != file.id {
         return Err(MigrationError::new(format!(
-            "Filename `{stem}` does not match migration ID `{}`.",
+            "Resource `{id}` does not match migration ID `{}`.",
             file.id
         )));
     }
@@ -243,6 +245,47 @@ pub fn load_migration(path: &Path) -> Result<MigrationFile, MigrationError> {
         )));
     }
     Ok(file)
+}
+
+/// Loads a required framework package. An empty or incomplete package is an error.
+///
+/// Optional application directories stay on [`inspect_directory`], which still treats a
+/// missing directory as an empty optional set.
+pub fn require_embedded_migrations(
+    component: &str,
+    expected_ids: &[&str],
+    sources: &[(&str, &str)],
+) -> Result<Vec<MigrationFile>, MigrationError> {
+    if sources.is_empty() || expected_ids.is_empty() {
+        return Err(MigrationError::new(format!(
+            "Required framework migration resources for `{component}` are missing. The embedded package is empty, so those migrations were not applied."
+        )));
+    }
+    let mut files = Vec::with_capacity(sources.len());
+    for (id, text) in sources {
+        let file = load_migration_text(id, text).map_err(|error| {
+            MigrationError::new(format!(
+                "Required framework migration `{id}` for `{component}` is incomplete or corrupted: {}",
+                error.0
+            ))
+        })?;
+        files.push(file);
+    }
+    files.sort_by_key(|file| migration_number(&file.id).unwrap_or(0));
+    for expected in expected_ids {
+        if !files.iter().any(|file| file.id == *expected) {
+            return Err(MigrationError::new(format!(
+                "Required framework migration `{expected}` for `{component}` is missing from the embedded package. Those migrations were not applied."
+            )));
+        }
+    }
+    validate_chain(&files).map_err(|error| {
+        MigrationError::new(format!(
+            "Required framework migrations for `{component}` are not a valid sequence: {}",
+            error.0
+        ))
+    })?;
+    Ok(files)
 }
 
 pub fn make_migration(
@@ -567,5 +610,32 @@ mod tests {
         assert!(alpha_path.is_file());
         assert!(beta_path.is_file());
         let _ = std::fs::remove_dir_all(directory);
+    }
+
+    #[test]
+    fn required_framework_package_rejects_empty_and_corrupt_resources() {
+        let missing =
+            super::require_embedded_migrations("ferrioxid-auth", &["0001_auth_schema"], &[]);
+        let error = missing.unwrap_err().0;
+        assert!(error.contains("ferrioxid-auth"), "{error}");
+        assert!(error.contains("missing"), "{error}");
+        let corrupt = super::require_embedded_migrations(
+            "ferrioxid-jobs",
+            &["0001_jobs"],
+            &[("0001_jobs", "{not json")],
+        );
+        let error = corrupt.unwrap_err().0;
+        assert!(error.contains("ferrioxid-jobs"), "{error}");
+        assert!(error.contains("corrupted"), "{error}");
+        let absent = std::env::temp_dir().join(format!("ferrioxid-absent-{}", std::process::id()));
+        let state = inspect_directory(&absent);
+        assert!(state.files.is_empty());
+        assert!(state.conflicts.is_empty());
+        let empty = std::env::temp_dir().join(format!("ferrioxid-empty-{}", std::process::id()));
+        std::fs::create_dir_all(&empty).unwrap();
+        let state = inspect_directory(&empty);
+        assert!(state.files.is_empty());
+        assert!(state.conflicts.is_empty());
+        let _ = std::fs::remove_dir_all(empty);
     }
 }

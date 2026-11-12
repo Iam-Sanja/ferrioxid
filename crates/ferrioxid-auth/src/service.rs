@@ -484,7 +484,7 @@ impl AuthService {
     }
 
     pub fn client_key(&self, headers: &HeaderMap, peer: &str) -> String {
-        if self.config.trust_proxy {
+        if self.config.trust_proxy && trusted_peer(&self.config.trusted_proxies, peer) {
             if let Some(value) = headers
                 .get("x-forwarded-for")
                 .and_then(|value| value.to_str().ok())
@@ -1068,6 +1068,11 @@ fn base64url(bytes: &[u8]) -> String {
         }
     }
     output
+}
+
+fn trusted_peer(trusted: &[String], peer: &str) -> bool {
+    let peer = peer.trim();
+    !peer.is_empty() && trusted.iter().any(|item| item == peer)
 }
 
 fn presented_origin(headers: &HeaderMap) -> Option<String> {
