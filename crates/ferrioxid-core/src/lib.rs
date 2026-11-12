@@ -527,5 +527,9 @@ mod alias_tests {
         }
         assert_eq!(aliased_env("FERRIOXID_ALIAS_TEST").unwrap(), None);
         assert!(aliased_env("DATABASE_URL").is_err());
+        assert_eq!(
+            super::canonical_json_text(" { \"b\": 1, \"a\": null } ").unwrap(),
+            "{\"a\":null,\"b\":1}"
+        );
     }
 }

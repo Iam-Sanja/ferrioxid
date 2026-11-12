@@ -166,6 +166,58 @@ async fn document_describes_models_and_hides_unregistered_routes() {
     drop(counter);
 }
 
+#[derive(
+    Debug, ferrioxid::FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize,
+)]
+#[ferrioxid(table = "openapi_notes", api = "/api/v1/notes", allow_anonymous = true)]
+struct Note {
+    #[field(primary_key, auto)]
+    id: Uuid,
+    #[field(json)]
+    body: String,
+}
+
+#[tokio::test]
+async fn openapi_describes_canonical_json_documents() {
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    let app = ferrioxid::App::new(db).register::<Note>();
+    app.bootstrap_schema().await.unwrap();
+    let router = app.into_router();
+    let mut client = TestClient::new(router);
+    let document = client
+        .get("/openapi.json")
+        .await
+        .unwrap()
+        .assert_status(StatusCode::OK)
+        .unwrap()
+        .json()
+        .unwrap();
+    let body = &document["components"]["schemas"]["Note"]["properties"]["body"];
+    assert_eq!(body["type"], "string");
+    assert_eq!(body["contentMediaType"], "application/json");
+    assert!(body["description"]
+        .as_str()
+        .unwrap()
+        .contains("Canonical JSON text"));
+    let created = client
+        .post_json(
+            "/api/v1/notes",
+            &serde_json::json!({ "body": " { \"b\": 1, \"a\": null } " }),
+        )
+        .await
+        .unwrap()
+        .assert_status(StatusCode::CREATED)
+        .unwrap()
+        .json()
+        .unwrap();
+    assert_eq!(created["body"], "{\"a\":null,\"b\":1}");
+    let rejected = client
+        .post_json("/api/v1/notes", &serde_json::json!({ "body": "{" }))
+        .await
+        .unwrap();
+    assert_eq!(rejected.status(), StatusCode::UNPROCESSABLE_ENTITY);
+}
+
 #[tokio::test]
 async fn unregistered_openapi_paths_are_rejected() {
     let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();

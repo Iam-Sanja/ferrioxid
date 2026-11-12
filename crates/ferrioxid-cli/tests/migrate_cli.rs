@@ -45,7 +45,7 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
     let database = directory.join("cli.sqlite3");
     std::fs::write(
         &schema,
-        r#"{"format_version":1,"tables":[{"name":"products","columns":[{"name":"id","type":"uuid","primary_key":true,"nullable":false},{"name":"name","type":"string","primary_key":false,"nullable":false},{"name":"active","type":"bool","primary_key":false,"nullable":false,"default":true}]}]}"#,
+        r#"{"format_version":1,"tables":[{"name":"products","columns":[{"name":"id","type":"uuid","primary_key":true,"nullable":false},{"name":"name","type":"string","primary_key":false,"nullable":false},{"name":"active","type":"bool","primary_key":false,"nullable":false,"default":true},{"name":"payload","type":"json","primary_key":false,"nullable":true}]}]}"#,
     )
     .unwrap();
     let schema_arg = schema.to_string_lossy().to_string();
@@ -92,6 +92,22 @@ fn migrate_make_up_and_status_use_a_temporary_sqlite_database() {
     assert!(!status_text.contains("pending"));
     assert!(status_text.contains("Conflicts: none"));
     assert!(status_text.contains("matches the last applied migration target"));
+
+    let plan = run(&[
+        "migrate",
+        "plan",
+        "--database-url",
+        &url,
+        "--migrations-dir",
+        &migrations_arg,
+        "--schema-file",
+        &schema_arg,
+    ]);
+    let plan_text = String::from_utf8_lossy(&plan.stdout);
+    assert!(plan_text.contains("Migration plan is read-only."));
+    assert!(plan_text.contains("pending: none"));
+    assert!(!plan_text.contains("error:"));
+    assert!(!plan_text.contains("drift:"));
 
     let second = run(&[
         "migrate",

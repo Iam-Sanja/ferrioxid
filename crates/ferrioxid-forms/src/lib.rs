@@ -1475,6 +1475,21 @@ mod tests {
                 .for_field("body"),
             Some("validation.json")
         );
+        let mut with_csrf = FormValues::default();
+        with_csrf.insert("csrf_token", "session-bound-token");
+        with_csrf.insert("body", " { \"b\": 1, \"a\": null } ");
+        let csrf_bound = bind_model(SubmitMode::Create, &json_fields, &with_csrf, &[]).unwrap();
+        assert_eq!(
+            csrf_bound[0].value,
+            BoundValue::Text("{\"a\":null,\"b\":1}".to_owned())
+        );
+        with_csrf.insert("extra", "nope");
+        assert_eq!(
+            bind_model(SubmitMode::Create, &json_fields, &with_csrf, &[])
+                .unwrap_err()
+                .for_field("extra"),
+            Some("validation.unknown_field")
+        );
         assert_eq!(
             bind_model(SubmitMode::Replace, &fields, &invalid, &[])
                 .unwrap_err()

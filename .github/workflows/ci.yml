@@ -140,6 +140,11 @@ jobs:
           cargo test -p ferrioxid-db --lib write::tests::postgres_shop_cases -- --ignored
           cargo test -p ferrioxid-db --lib write::tests::postgres_write_security -- --ignored
           cargo test -p desk --test flow -- --ignored postgres_same_operations
+          cargo test -p ferrioxid --test embedded_runtime -- --ignored postgres_embedded_auth_and_jobs
+          cargo test -p ferrioxid-db --test grouped_report -- --ignored postgres_grouped_report_scope_json_and_one_to_one
+          cargo test -p ferrioxid-migrations --lib plan::tests::postgres_plan_detects_live_drift_on_a_disposable_database -- --ignored
+          cargo test -p ferrioxid-admin --lib -- --ignored postgres_matching_uses_the_record_id_not_a_similar_name
+          cargo test -p ferrioxid --test integration_regression -- --ignored postgres_inspect_framework_and_plan_stay_read_only
           cargo build -p ferrioxid-cli --bin embedded-migrate
           psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
             -c 'DROP DATABASE IF EXISTS ferrioxid_test_relocated WITH (FORCE);' \

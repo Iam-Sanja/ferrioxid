@@ -45,6 +45,7 @@ impl std::fmt::Debug for AuthConfig {
             .field("idle_timeout_secs", &self.idle_timeout_secs)
             .field("allowed_origins", &self.allowed_origins)
             .field("trust_proxy", &self.trust_proxy)
+            .field("trusted_proxies", &self.trusted_proxies)
             .field("login_max_attempts", &self.login_max_attempts)
             .field("login_window_secs", &self.login_window_secs)
             .field("csrf_secret", &"[redacted]")
@@ -312,8 +313,22 @@ mod tests {
             .any(|origin| origin == "http://127.0.0.1:3000"));
     }
 
+    static ENV_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    fn restore_var(name: &str, previous: Option<String>) {
+        unsafe {
+            match previous {
+                Some(value) => std::env::set_var(name, value),
+                None => std::env::remove_var(name),
+            }
+        }
+    }
+
     #[test]
     fn conflicting_secret_aliases_fail_closed() {
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
         let previous_current = std::env::var("FERRIOXID_CSRF_SECRET").ok();
         let previous_legacy = std::env::var("FERRUM_CSRF_SECRET").ok();
         unsafe {
@@ -325,15 +340,39 @@ mod tests {
         assert!(error.contains("FERRUM_CSRF_SECRET"));
         assert!(!error.contains("aa"));
         assert!(!error.contains("bb"));
+        restore_var("FERRIOXID_CSRF_SECRET", previous_current);
+        restore_var("FERRUM_CSRF_SECRET", previous_legacy);
+    }
+
+    #[test]
+    fn trusted_proxies_use_try_from_env_and_reject_conflicting_aliases() {
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous_current = std::env::var("FERRIOXID_TRUSTED_PROXIES").ok();
+        let previous_legacy = std::env::var("FERRUM_TRUSTED_PROXIES").ok();
         unsafe {
-            match previous_current {
-                Some(value) => std::env::set_var("FERRIOXID_CSRF_SECRET", value),
-                None => std::env::remove_var("FERRIOXID_CSRF_SECRET"),
-            }
-            match previous_legacy {
-                Some(value) => std::env::set_var("FERRUM_CSRF_SECRET", value),
-                None => std::env::remove_var("FERRUM_CSRF_SECRET"),
-            }
+            std::env::remove_var("FERRIOXID_TRUSTED_PROXIES");
+            std::env::set_var("FERRUM_TRUSTED_PROXIES", "10.0.0.8");
         }
+        let from_legacy = AuthConfig::try_from_env().unwrap();
+        assert_eq!(from_legacy.trusted_proxies, vec!["10.0.0.8".to_owned()]);
+        unsafe {
+            std::env::set_var("FERRIOXID_TRUSTED_PROXIES", "10.0.0.1, *");
+            std::env::remove_var("FERRUM_TRUSTED_PROXIES");
+        }
+        let from_current = AuthConfig::try_from_env().unwrap();
+        assert_eq!(from_current.trusted_proxies, vec!["10.0.0.1".to_owned()]);
+        unsafe {
+            std::env::set_var("FERRIOXID_TRUSTED_PROXIES", "10.0.0.1");
+            std::env::set_var("FERRUM_TRUSTED_PROXIES", "10.0.0.2");
+        }
+        let error = AuthConfig::try_from_env().unwrap_err();
+        assert!(error.contains("FERRIOXID_TRUSTED_PROXIES"));
+        assert!(error.contains("FERRUM_TRUSTED_PROXIES"));
+        assert!(!error.contains("10.0.0.1"));
+        assert!(!error.contains("10.0.0.2"));
+        restore_var("FERRIOXID_TRUSTED_PROXIES", previous_current);
+        restore_var("FERRUM_TRUSTED_PROXIES", previous_legacy);
     }
 }
