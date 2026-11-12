@@ -68,7 +68,19 @@ GitHub Actions auf dem ersten Push von `work/integration` (`f479808`):
 | Cargo audit | bestanden, mit der bestehenden RSA-Ausnahme |
 | CodeQL Rust, Actions, JavaScript, Python | bestanden |
 
-Der PostgreSQL-Job scheiterte nur an `postgres_matching_uses_the_record_id_not_a_similar_name`. Der Test öffnete fest `postgresql://postgres@127.0.0.1:5432/postgres`. In GitHub Actions gibt es die Rolle `postgres` nicht. Die Admin-URL ist jetzt `FERRIOXID_POSTGRES_ADMIN`, sonst `DATABASE_URL`. `DisposablePostgres` legt weiterhin nur `ferrioxid_test_*` an und löscht nur diese Datenbank. Lokal gegen `postgresql://postgres@127.0.0.1:5432/postgres` war der Test danach grün. `ferrioxid` blieb bei 15 öffentlichen Tabellen, `ferrioxid_migrations_down_test` bei 1.
+GitHub Actions auf `b953360` nach der Audit-Korrektur:
+
+| Check | Ergebnis |
+|---|---|
+| Rust (ubuntu-latest) | bestanden, 8m 27s, Lauf `43321495810` |
+| Rust (windows-latest) | bestanden, 18m 57s, Lauf `43321495810` |
+| PostgreSQL | bestanden, 4m 26s, Lauf `43321495810` |
+| Cargo audit | bestanden, 21s, Lauf `43321495884`, mit der bestehenden RSA-Ausnahme |
+| CodeQL Rust, Actions, JavaScript, Python | bestanden, Lauf `43321486733` |
+
+Im PostgreSQL-Job dieses Laufs waren `postgres_keyset_annotations_and_many_to_many` und `postgres_matching_uses_the_record_id_not_a_similar_name` grün. Der Server-Log enthielt erneut `unsupported jsonb version number 110`. Der Job blieb grün. Die Meldung bleibt eine Folgeprüfung.
+
+Der PostgreSQL-Job des ersten Laufs scheiterte nur an `postgres_matching_uses_the_record_id_not_a_similar_name`. Der Test öffnete fest `postgresql://postgres@127.0.0.1:5432/postgres`. In GitHub Actions gibt es die Rolle `postgres` nicht. Die Admin-URL ist jetzt `FERRIOXID_POSTGRES_ADMIN`, sonst `DATABASE_URL`. `DisposablePostgres` legt weiterhin nur `ferrioxid_test_*` an und löscht nur diese Datenbank. Lokal gegen `postgresql://postgres@127.0.0.1:5432/postgres` war der Test danach grün. `ferrioxid` blieb bei 15 öffentlichen Tabellen, `ferrioxid_migrations_down_test` bei 1.
 
 `postgres_keyset_annotations_and_many_to_many` lief lokal gegen eine neu angelegte Datenbank `ferrioxid_test_013b7cba8b9478b7b66a12455f3a8ea9` und wurde danach gelöscht. Der Test löscht nur `ferrioxid_query_membership`, `ferrioxid_query_tags` und `ferrioxid_query_items`. Dieselben Zähler der beiden bestehenden Kataloge blieben unverändert. Der GitHub-PostgreSQL-Job führt denselben Test jetzt in seinem frischen Container aus. Lokal darf `DATABASE_URL` dafür nicht auf `ferrioxid` oder `ferrioxid_migrations_down_test` zeigen.
 
@@ -145,14 +157,14 @@ Vorher und nachher: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_
 
 ## Risiken
 
-- Der erste GitHub-Lauf auf `f479808` war auf Ubuntu, Windows, Cargo audit und CodeQL grün und auf PostgreSQL rot, weil der Audit-Test die Rolle `postgres` verlangte. Der Folgecommit liest `DATABASE_URL`. Der neue Lauf ist erst nach dem Push belegt.
+- Der erste GitHub-Lauf auf `f479808` war auf Ubuntu, Windows, Cargo audit und CodeQL grün und auf PostgreSQL rot, weil der Audit-Test die Rolle `postgres` verlangte. `e451da9` liest `DATABASE_URL`. Der Lauf auf `b953360` war danach auf Ubuntu, Windows, PostgreSQL, Cargo audit und CodeQL grün.
 - Docker ist auf dieser Maschine nicht installiert. `examples/deploy/compose.yaml` wurde nicht gebootet.
 - Eine Desktop-Browserabnahme fehlt. Die HTTP-Verträge liefen über den Axum-Router.
 - `load_one_to_one` lädt nicht automatisch in Admin-Listen. Die vorhandene Inline-Liste bleibt bei höchstens 25 Zeilen.
 - Issue #8 bleibt offen, bis SQLx `rsa >= 0.10` zieht. Die Ausnahme wird nicht erweitert.
 - Ein Rollback von #98 nach einer bereits angelegten JSON-Spalte braucht eine eigene Schemaentscheidung.
 - Alias-Konflikte, die vor #100 still auf `FERRIOXID_*` fielen, sind jetzt Startfehler.
-- Der PostgreSQL-16-Log des ersten Laufs enthielt `unsupported jsonb version number 110` während `postgres_grouped_report_scope_json_and_one_to_one`. Der Test selbst war grün. Das ist keine stille Freigabe und bleibt eine Folgeprüfung, kein Schemaumbau in diesem Commit.
+- Der PostgreSQL-16-Log enthielt auf `f479808` und erneut auf `b953360` die Meldung `unsupported jsonb version number 110`. Die betroffenen Tests und der Job waren grün. Das ist keine stille Freigabe und bleibt eine Folgeprüfung, kein Schemaumbau in diesem Branch.
 
 ## Rollback
 
