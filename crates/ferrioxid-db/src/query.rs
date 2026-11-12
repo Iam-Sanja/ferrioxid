@@ -110,6 +110,8 @@ pub enum Compare {
         value: String,
         case_insensitive: bool,
     },
+    /// Character length of a text or choice column. The length is a bound integer.
+    CharacterLengthEq(i64),
 }
 
 /// A boolean expression over whitelisted columns.
@@ -221,6 +223,17 @@ impl Column {
         self.text_match(TextPosition::EndsWith, true, value.into())
     }
 
+    /// Compares the character length of a text or choice column.
+    ///
+    /// PostgreSQL uses `char_length`. SQLite uses `length`, which counts
+    /// characters for text. This is not a byte length and not a JSON path.
+    pub fn character_length_eq(self, length: i64) -> Predicate {
+        Predicate::Cmp {
+            column: self.name,
+            compare: Compare::CharacterLengthEq(length),
+        }
+    }
+
     fn text_match(
         self,
         position: TextPosition,
@@ -262,6 +275,39 @@ pub fn any_of(parts: impl IntoIterator<Item = Predicate>) -> Predicate {
 
 pub fn not(predicate: Predicate) -> Predicate {
     Predicate::Not(Box::new(predicate))
+}
+
+/// A named predicate that can be stored and combined without rewriting SQL.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NamedFilter {
+    name: &'static str,
+    predicate: Predicate,
+}
+
+impl NamedFilter {
+    pub fn new(name: &'static str, predicate: Predicate) -> Result<Self, FerrioxidError> {
+        if !is_safe_ident(name) {
+            return Err(FerrioxidError::Validation(
+                "filter name is not available".into(),
+            ));
+        }
+        Ok(Self { name, predicate })
+    }
+
+    pub fn name(&self) -> &'static str {
+        self.name
+    }
+
+    pub fn predicate(&self) -> &Predicate {
+        &self.predicate
+    }
+
+    pub fn and(self, other: NamedFilter) -> Self {
+        Self {
+            name: self.name,
+            predicate: all_of([self.predicate, other.predicate]),
+        }
+    }
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -480,6 +526,16 @@ impl<M> Select<M> {
             scope: QueryScope::All,
             _model: PhantomData,
         }
+    }
+
+    pub fn filter_named(self, filter: &NamedFilter) -> Self {
+        self.filter(filter.predicate.clone())
+    }
+
+    /// Starts a grouped report. Filters, relation predicates and the scope
+    /// stay in the `WHERE` clause. The page window of this select is not used.
+    pub fn aggregate(self) -> crate::report::Report<M> {
+        crate::report::Report::from_select(self)
     }
 
     pub fn filter(mut self, predicate: Predicate) -> Self {
@@ -962,6 +1018,22 @@ impl<M> Select<M> {
         if !orders.iter().any(|(name, _)| *name == "id") {
             orders.push(("id", Direction::Asc));
         }
+        Ok(Plan {
+            filter: self.filter_expr(backend)?,
+            orders,
+            limit: self.limit,
+            offset: self.offset,
+        })
+    }
+
+    pub(crate) fn filter_expr(
+        &self,
+        backend: DatabaseBackend,
+    ) -> Result<Option<SimpleExpr>, FerrioxidError>
+    where
+        M: FerrioxidModel,
+    {
+        let columns = M::columns();
         let mut filter = predicate_expr(columns, &self.predicate, backend, None)?;
         for (index, relation) in self.relations.iter().enumerate() {
             let exists = relation_expr::<M>(relation, index, backend)?;
@@ -976,12 +1048,7 @@ impl<M> Select<M> {
                 None => scope,
             });
         }
-        Ok(Plan {
-            filter,
-            orders,
-            limit: self.limit,
-            offset: self.offset,
-        })
+        Ok(filter)
     }
 }
 
@@ -1093,7 +1160,7 @@ fn compare_expr(
             }
             values.clone()
         }
-        Compare::IsNull | Compare::IsNotNull => Vec::new(),
+        Compare::IsNull | Compare::IsNotNull | Compare::CharacterLengthEq(_) => Vec::new(),
         Compare::Contains { .. } | Compare::StartsWith { .. } | Compare::EndsWith { .. } => {
             Vec::new()
         }
@@ -1133,6 +1200,32 @@ fn compare_expr(
                 "column {} does not accept this comparison",
                 column.name
             )));
+        }
+        Compare::CharacterLengthEq(length) => {
+            if !matches!(column.kind, ColumnKind::Text | ColumnKind::Choice) {
+                return Err(FerrioxidError::Validation(format!(
+                    "column {} does not accept a character length",
+                    column.name
+                )));
+            }
+            if *length < 0 || *length > TEXT_MATCH_LIMIT as i64 {
+                return Err(FerrioxidError::Validation(
+                    "character length is outside the supported range".into(),
+                ));
+            }
+            let function = match backend {
+                DatabaseBackend::Postgres => "char_length($1)",
+                DatabaseBackend::Sqlite => "length(?)",
+                DatabaseBackend::MySql => {
+                    return Err(FerrioxidError::database(std::io::Error::new(
+                        std::io::ErrorKind::Unsupported,
+                        "MySQL is not a Ferrioxid database",
+                    )))
+                }
+            };
+            return Ok(
+                Expr::cust_with_expr(function, qualified_col(qualifier, column.name)).eq(*length),
+            );
         }
     })
 }
@@ -1649,6 +1742,10 @@ fn cursor_value(column: &ColumnSpec, value: &Json) -> Result<CursorValue, Ferrio
             .as_str()
             .map(|text| CursorValue::Text(text.to_owned()))
             .ok_or_else(|| invalid_cursor(column.name)),
+        ColumnKind::Json => Err(FerrioxidError::Validation(format!(
+            "keyset column {} is not stable",
+            column.name
+        ))),
     }
 }
 
@@ -1775,6 +1872,65 @@ where
         )));
     }
     load_where::<M>(db, column, parent_ids, scope).await
+}
+
+/// Loads at most one child per parent through a unique foreign key.
+///
+/// The column must be a UUID, declare `foreign_table`, and be `unique`.
+/// One statement reads at most [`IN_LIMIT`] parents. A second stored row for
+/// the same parent is an error and is not returned as a list. [`QueryScope`]
+/// is applied. This is the explicit one-to-one load; it does not query once
+/// per parent.
+pub async fn load_one_to_one<Child>(
+    db: &impl ConnectionTrait,
+    column: &str,
+    parent_ids: &[Uuid],
+    scope: &QueryScope,
+) -> Result<Vec<(Uuid, Child)>, FerrioxidError>
+where
+    Child: FerrioxidModel + DeserializeOwned,
+{
+    let spec = lookup(Child::columns(), column)?;
+    if spec.kind != ColumnKind::Uuid || spec.foreign_table.is_none() || !spec.unique {
+        return Err(FerrioxidError::Validation(format!(
+            "column {column} is not a unique foreign key"
+        )));
+    }
+    if parent_ids.is_empty() || matches!(scope, QueryScope::None) {
+        return Ok(Vec::new());
+    }
+    let columns = Child::columns();
+    let mut unique = parent_ids.to_vec();
+    unique.sort();
+    unique.dedup();
+    let mut found = Vec::new();
+    for chunk in unique.chunks(IN_LIMIT) {
+        let mut query = select_body::<Child>(None);
+        query.and_where(Expr::col(Alias::new(column)).is_in(chunk.iter().copied()));
+        if let Some(condition) = scope_condition(columns, scope)? {
+            query.and_where(condition);
+        }
+        query.order_by(Alias::new("id"), Order::Asc);
+        found.extend(fetch_json::<Child, _>(db, &query).await?);
+    }
+    let mut pairs = Vec::new();
+    let mut seen = BTreeMap::new();
+    for json in found {
+        let parent_text = json
+            .get(column)
+            .and_then(|value| value.as_str())
+            .ok_or_else(|| FerrioxidError::Validation(format!("column {column} is not a uuid")))?;
+        let parent = Uuid::parse_str(parent_text)
+            .map_err(|_| FerrioxidError::Validation(format!("column {column} is not a uuid")))?;
+        if seen.insert(parent, ()).is_some() {
+            return Err(FerrioxidError::Validation(format!(
+                "column {column} returned more than one row for one parent"
+            )));
+        }
+        let child = serde_json::from_value(json).map_err(FerrioxidError::database)?;
+        pairs.push((parent, child));
+    }
+    Ok(pairs)
 }
 
 /// Groups child rows by parent without a further query.

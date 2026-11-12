@@ -967,6 +967,7 @@ pub(crate) fn filters_from(
 fn filter_value(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
     match column.kind {
         ColumnKind::Text => Ok(DbValue::from(value.to_owned())),
+        ColumnKind::Json => Err("json columns have no portable filter".into()),
         ColumnKind::BigInt => value
             .parse::<i64>()
             .map(DbValue::from)
@@ -1073,6 +1074,7 @@ fn column_type(column: &ColumnSpec) -> &'static str {
         ColumnKind::DateTime => "datetime",
         ColumnKind::Decimal => "decimal",
         ColumnKind::Choice => "choice",
+        ColumnKind::Json => "json",
     }
 }
 

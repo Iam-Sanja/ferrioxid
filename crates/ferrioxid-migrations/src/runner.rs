@@ -373,7 +373,7 @@ fn schema_note(
     }
 }
 
-fn pending_files<'a>(
+pub(crate) fn pending_files<'a>(
     files: &'a [MigrationFile],
     applied: &[HistoryEntry],
 ) -> Result<Vec<&'a MigrationFile>, MigrationError> {

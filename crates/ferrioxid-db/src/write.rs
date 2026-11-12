@@ -547,6 +547,7 @@ fn null_value(kind: ColumnKind, backend: DatabaseBackend) -> Value {
         (_, ColumnKind::BigInt) => Value::BigInt(None),
         (_, ColumnKind::Boolean) => Value::Bool(None),
         (_, ColumnKind::Decimal) => Value::Bytes(None),
+        (_, ColumnKind::Json) => Value::Json(None),
         (DatabaseBackend::Postgres, ColumnKind::Date) => Value::ChronoDate(None),
         (DatabaseBackend::Postgres, ColumnKind::Time) => Value::ChronoTime(None),
         (DatabaseBackend::Postgres, ColumnKind::DateTime) => Value::ChronoDateTimeUtc(None),

@@ -38,6 +38,7 @@ fn classify(detail: &str) -> (&'static str, Option<String>, String) {
         "validation.date" => "validation.date",
         "validation.time" => "validation.time",
         "validation.datetime_offset" => "validation.datetime_offset",
+        "validation.json" => "validation.json",
         "validation.datetime" => "validation.datetime",
         _ => legacy_code(message, field.is_some()),
     };

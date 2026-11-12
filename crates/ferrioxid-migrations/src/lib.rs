@@ -14,6 +14,7 @@ mod introspection;
 mod management;
 mod manifest;
 mod packages;
+mod plan;
 mod project;
 mod rebuild;
 mod runner;
@@ -48,6 +49,7 @@ pub use packages::{
     runtime_contract_note, same_migration_contract, validate_package_graph, InstalledApp,
     PackageMigration,
 };
+pub use plan::{plan_database, plan_database_in, PlanFinding, PlanLevel, PlanReport};
 pub use project::{
     discover_project, load_schema_from_command, redact_database_url, DeclaredApp, ProjectConfig,
     Settings,

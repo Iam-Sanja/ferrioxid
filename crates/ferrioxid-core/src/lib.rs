@@ -145,6 +145,9 @@ pub enum ColumnKind {
     Decimal,
     /// Enum-Wert mit festem Speichertext. Zulässige Werte stehen in `ColumnSpec::choices`.
     Choice,
+    /// JSON-Dokument. PostgreSQL speichert `jsonb`, SQLite kanonischen Text.
+    /// Pfadoperatoren sind kein portabler Vertrag.
+    Json,
 }
 
 /// Aktion für `ON DELETE`. `ON UPDATE` bleibt `NO ACTION`.
@@ -256,6 +259,15 @@ pub fn foreign_key_name(
     referenced_column: &str,
 ) -> String {
     format!("fk_{table}_{column}_{referenced_table}_{referenced_column}")
+}
+
+/// Kompaktes JSON. Objektschlüssel folgen der `serde_json`-Map, hier alphabetisch, weil `preserve_order` nicht aktiv ist.
+///
+/// Ein JSON-`null` ist ein Dokument, kein SQL-`NULL`. Leerer Text und ungültiges JSON
+/// werden abgelehnt. PostgreSQL-`jsonb`-Operatoren werden nicht erzeugt.
+pub fn canonical_json_text(text: &str) -> Result<String, &'static str> {
+    let value: serde_json::Value = serde_json::from_str(text).map_err(|_| "validation.json")?;
+    serde_json::to_string(&value).map_err(|_| "validation.json")
 }
 
 fn object_name(prefix: &str, table: &str, columns: &[&str]) -> String {
@@ -431,5 +443,21 @@ mod diagnostic_tests {
         assert!(chain.contains("csrf_token=[redacted]"));
         assert!(!chain.contains("hunter2"));
         assert!(!chain.contains("abc123"));
+    }
+}
+
+#[cfg(test)]
+mod json_tests {
+    use super::canonical_json_text;
+
+    #[test]
+    fn canonical_json_keeps_documents_distinct_from_empty_text() {
+        assert_eq!(
+            canonical_json_text(" { \"b\": 1, \"a\": null } ").unwrap(),
+            "{\"a\":null,\"b\":1}"
+        );
+        assert_eq!(canonical_json_text("null").unwrap(), "null");
+        assert!(canonical_json_text("").is_err());
+        assert!(canonical_json_text("{").is_err());
     }
 }

@@ -48,7 +48,21 @@ impl<'a> From<&'a ColumnSpec> for PhysicalColumn<'a> {
 
 pub fn render_schema(kind: DatabaseKind, table: &str, columns: &[ColumnSpec]) -> String {
     let physical: Vec<PhysicalColumn<'_>> = columns.iter().map(PhysicalColumn::from).collect();
-    inject_choice_checks(render_create_table(kind, table, &physical, true), columns)
+    let sql = inject_choice_checks(render_create_table(kind, table, &physical, true), columns);
+    if kind != DatabaseKind::Sqlite {
+        return sql;
+    }
+    let checks: Vec<String> = columns
+        .iter()
+        .filter(|column| column.kind == ColumnKind::Json)
+        .map(|column| {
+            format!(
+                "CHECK (\"{}\" IS NULL OR json_valid(\"{}\"))",
+                column.name, column.name
+            )
+        })
+        .collect();
+    with_checks(sql, &checks)
 }
 
 pub fn render_create_table(
@@ -248,6 +262,12 @@ fn column_definition(kind: DatabaseKind, column: &PhysicalColumn<'_>) -> ColumnD
             definition.blob();
         }
         (_, ColumnKind::Choice) => {
+            definition.text();
+        }
+        (DatabaseKind::Postgres, ColumnKind::Json) => {
+            definition.json_binary();
+        }
+        (DatabaseKind::Sqlite, ColumnKind::Json) => {
             definition.text();
         }
     }
@@ -946,10 +966,33 @@ pub(crate) fn row_to_json(
             }
             ColumnKind::Choice => json_text(row, column)?,
             ColumnKind::Decimal => json_decimal(row, column)?,
+            ColumnKind::Json => json_document(row, column)?,
         };
         object.insert(column.name.to_owned(), value);
     }
     Ok(Json::Object(object))
+}
+
+fn json_document(row: &QueryResult, column: &ColumnSpec) -> Result<Json, FerrioxidError> {
+    if let Ok(value) = row.try_get::<Option<Json>>("", column.name) {
+        return match value {
+            Some(document) => Ok(Json::String(
+                ferrioxid_core::canonical_json_text(&document.to_string())
+                    .map_err(|code| FerrioxidError::Validation(code.into()))?,
+            )),
+            None => Ok(Json::Null),
+        };
+    }
+    let text = row
+        .try_get::<Option<String>>("", column.name)
+        .map_err(FerrioxidError::database)?;
+    Ok(match text {
+        Some(text) => Json::String(
+            ferrioxid_core::canonical_json_text(&text)
+                .map_err(|code| FerrioxidError::Validation(code.into()))?,
+        ),
+        None => Json::Null,
+    })
 }
 
 fn inject_choice_checks(sql: String, columns: &[ColumnSpec]) -> String {

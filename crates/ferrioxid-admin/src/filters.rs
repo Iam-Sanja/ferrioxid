@@ -218,6 +218,7 @@ fn typed(column: &ColumnSpec, value: &str) -> Result<DbValue, String> {
             .map_err(|_| format!("filter {} must be a utc datetime", column.name)),
         ColumnKind::Decimal => decimal_filter(column, value),
         ColumnKind::Choice => choice_filter(column, value),
+        ColumnKind::Json => Err("json columns have no portable filter".into()),
     }
 }
 
