@@ -50,8 +50,7 @@ Offen: keine neue Prüfung, die HTML- und JSON-Validierungstexte Feld für Feld 
 - SQLite: `matching_uses_the_record_id_not_a_similar_name`, `admin_v018_drafts_inlines_bulk_and_audit`
 - PostgreSQL: `postgres_matching_uses_the_record_id_not_a_similar_name` auf einer Datenbank `ferrioxid_test_<32 hex>`, danach gelöscht
 - Danach: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_down_test` 1 öffentliche Tabelle, keine übrige `ferrioxid_test_*`-Datenbank
-- `cargo fmt --all` und `cargo clippy -p ferrioxid-admin --all-targets -- -D warnings` waren grün
-- `cargo test --workspace`, `cargo clippy --workspace --all-targets -- -D warnings` und `cargo build --workspace` sind für diesen Commit noch nicht erneut gelaufen
+- `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` und `cargo build --workspace` waren auf diesem Branch grün. Die bestehende `linker_messages`-Warnung von `ferrioxid-macros` bleibt.
 
 ### Browser
 
