@@ -74,6 +74,20 @@ pub fn doctor() -> ExitCode {
                     "OK",
                     &format!("Server is bound to {}:{}", project.host, project.port),
                 );
+                if port_available(&project.host, project.port) {
+                    report(
+                        "OK",
+                        "The configured port accepted a trial bind and was released.",
+                    );
+                } else {
+                    report(
+                        "WARN",
+                        &format!(
+                            "Port {} on {} is already in use. Change server.port or stop the other process.",
+                            project.port, project.host
+                        ),
+                    );
+                }
             }
             if project.templates_enabled {
                 if project.templates_directory().is_dir() {
@@ -266,6 +280,14 @@ fn tool(program: &str) -> Command {
 
 fn report(level: &str, message: &str) {
     println!("[{level}] {message}");
+}
+
+/// Bindet den Port nur zur Prüfung und gibt ihn sofort wieder frei.
+pub fn port_available(host: &str, port: u16) -> bool {
+    if !matches!(host, "127.0.0.1" | "localhost" | "::1") {
+        return true;
+    }
+    std::net::TcpListener::bind((host, port)).is_ok()
 }
 
 fn command_version(program: &str) -> Option<String> {
@@ -540,6 +562,26 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
         );
         warnings += 1;
     }
+    for app in &project.apps {
+        if app.migrations.is_dir() {
+            report(
+                "OK",
+                &format!(
+                    "app.registration `{}` is declared. Rust still registers it with App::install. This command does not load the crate.",
+                    app.name
+                ),
+            );
+        } else {
+            report(
+                "ERROR",
+                &format!(
+                    "app.registration `{}` declares a missing migrations directory. No database file was created.",
+                    app.name
+                ),
+            );
+            errors += 1;
+        }
+    }
     match plan_upgrade(&project.root) {
         Ok(plan) => {
             for action in &plan.actions {
@@ -566,4 +608,19 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
         }
     }
     ProjectCounts { errors, warnings }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::port_available;
+
+    #[test]
+    fn a_bound_port_is_reported_as_busy_and_released() {
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let port = listener.local_addr().unwrap().port();
+        assert!(!port_available("127.0.0.1", port));
+        drop(listener);
+        assert!(port_available("127.0.0.1", port));
+        assert!(port_available("10.0.0.8", port));
+    }
 }

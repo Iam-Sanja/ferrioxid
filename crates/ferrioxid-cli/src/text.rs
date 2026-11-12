@@ -31,6 +31,18 @@ fn line_for(locale: &str, key: &str) -> &'static str {
         ("en", "dev_stop_hint") => "Stop with Ctrl+C.",
         ("en", "dev_stopped") => "Development server stopped.",
         ("en", "dev_test_stopped") => "Development server stopped after the test limit.",
+        ("de", "dev_no_migrate") => {
+            "ferrioxid dev wendet keine Migrationen an und schreibt das Schema nicht."
+        }
+        ("en", "dev_no_migrate") => {
+            "ferrioxid dev does not apply migrations and does not write the schema."
+        }
+        ("de", "port_busy") => {
+            "Der Port ist belegt. Beenden Sie den anderen Prozess oder ändern Sie server.port. Es wird nichts migriert."
+        }
+        ("en", "port_busy") => {
+            "The port is already in use. Stop the other process or change server.port. Nothing is migrated."
+        }
         ("en", "admin_assets_missing") => "The admin ships inside the Rust binary.",
         ("en", "user_created") => "Created user:",
         ("en", "flag_active") => "Active: yes. An inactive account cannot sign in.",
