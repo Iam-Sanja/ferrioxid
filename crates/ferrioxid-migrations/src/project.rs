@@ -115,17 +115,19 @@ impl ProjectConfig {
     }
 
     pub fn is_production(&self) -> bool {
-        std::env::var("FERRIOXID_ENV")
-            .ok()
-            .is_some_and(|value| value.eq_ignore_ascii_case("production"))
+        matches!(
+            ferrioxid_core::aliased_env("FERRIOXID_ENV"),
+            Ok(Some(value)) if value.eq_ignore_ascii_case("production")
+        )
     }
 
     /// `FERRIOXID_DEBUG` overrides `server.debug`. Invalid values remain errors.
+    /// `FERRUM_DEBUG` is the legacy alias. Different values are rejected.
     pub fn resolved_debug(&self) -> Result<bool, MigrationError> {
-        match std::env::var("FERRIOXID_DEBUG") {
-            Ok(value) if !value.is_empty() => parse_bool(&value).map_err(|_| {
+        match ferrioxid_core::aliased_env("FERRIOXID_DEBUG").map_err(MigrationError::new)? {
+            Some(value) if !value.is_empty() => parse_bool(&value).map_err(|_| {
                 MigrationError::new(
-                    "FERRIOXID_DEBUG accepts true or false. The invalid value is not silently replaced."
+                    "FERRIOXID_DEBUG or FERRUM_DEBUG accepts true or false. The invalid value is not silently replaced."
                         .to_owned(),
                 )
             }),
@@ -150,6 +152,7 @@ impl ProjectConfig {
 
     /// Debug mode is forbidden in production. No implicit fallback is applied.
     pub fn enforce_runtime(&self) -> Result<(), MigrationError> {
+        ferrioxid_core::aliased_env("FERRIOXID_ENV").map_err(MigrationError::new)?;
         if self.is_production() && self.resolved_debug()? {
             return Err(MigrationError::new(
                 "server.debug is not permitted in production.".to_owned(),
@@ -225,13 +228,23 @@ pub fn discover_project(start: &Path) -> Result<ProjectConfig, MigrationError> {
     };
     while let Some(directory) = current {
         let manifest = directory.join("ferrioxid.toml");
-        if manifest.is_file() {
-            return parse_manifest(&manifest);
+        let legacy = directory.join("ferrum.toml");
+        match (manifest.is_file(), legacy.is_file()) {
+            (true, true) => {
+                return Err(MigrationError::new(format!(
+                    "Both {} and {} exist. Remove one file. Ferrioxid does not choose a database URL from two project files.",
+                    manifest.display(),
+                    legacy.display()
+                )));
+            }
+            (true, false) => return parse_manifest(&manifest),
+            (false, true) => return parse_manifest(&legacy),
+            (false, false) => {}
         }
         current = directory.parent();
     }
     Err(MigrationError::new(
-        "No ferrioxid.toml found. The CLI does not infer models from source code. Create ferrioxid.toml with migrations_dir and schema_command, or supply --schema-file and --migrations-dir.",
+        "No ferrioxid.toml found. ferrum.toml is accepted when it is the only project file in that directory. The CLI does not infer models from source code. Create ferrioxid.toml with migrations_dir and schema_command, or supply --schema-file and --migrations-dir.",
     ))
 }
 
@@ -1058,13 +1071,17 @@ mod tests {
     }
 
     #[test]
-    fn discovery_requires_the_current_configuration_name() {
+    fn discovery_reads_one_project_file_and_rejects_both() {
         let path = write_manifest("migrations_dir = \"migrations\"\n");
         let root = path.parent().unwrap();
         let old = root.join("ferrum.toml");
         fs::rename(&path, &old).unwrap();
-        assert!(super::discover_project(root).is_err());
-        fs::rename(old, &path).unwrap();
+        assert_eq!(super::discover_project(root).unwrap().root, root);
+        fs::copy(&old, &path).unwrap();
+        let error = super::discover_project(root).unwrap_err();
+        assert!(error.0.contains("ferrioxid.toml"));
+        assert!(error.0.contains("ferrum.toml"));
+        fs::remove_file(&old).unwrap();
         let nested = root.join("nested");
         fs::create_dir(&nested).unwrap();
         assert_eq!(super::discover_project(&nested).unwrap().root, root);
@@ -1233,6 +1250,7 @@ primary_color = "#0f172a"
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let previous_env = std::env::var("FERRIOXID_ENV").ok();
         let previous_debug = std::env::var("FERRIOXID_DEBUG").ok();
+        let previous_legacy_debug = std::env::var("FERRUM_DEBUG").ok();
         unsafe {
             std::env::set_var("FERRIOXID_ENV", "production");
             std::env::set_var("FERRIOXID_DEBUG", "true");
@@ -1245,7 +1263,16 @@ primary_color = "#0f172a"
         }
         assert!(config.resolved_debug().is_err());
         unsafe {
+            std::env::set_var("FERRIOXID_DEBUG", "false");
+            std::env::set_var("FERRUM_DEBUG", "true");
+        }
+        let conflict = config.resolved_debug().unwrap_err();
+        assert!(conflict.0.contains("FERRIOXID_DEBUG"));
+        assert!(conflict.0.contains("FERRUM_DEBUG"));
+        assert!(!conflict.0.contains("true"));
+        unsafe {
             std::env::remove_var("FERRIOXID_DEBUG");
+            std::env::remove_var("FERRUM_DEBUG");
             std::env::remove_var("FERRIOXID_ENV");
         }
         if let Some(value) = previous_env {
@@ -1253,6 +1280,9 @@ primary_color = "#0f172a"
         }
         if let Some(value) = previous_debug {
             unsafe { std::env::set_var("FERRIOXID_DEBUG", value) };
+        }
+        if let Some(value) = previous_legacy_debug {
+            unsafe { std::env::set_var("FERRUM_DEBUG", value) };
         }
         drop(guard);
         let _ = fs::remove_dir_all(path.parent().unwrap());

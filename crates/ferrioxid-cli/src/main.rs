@@ -1054,21 +1054,23 @@ fn run_admin(action: AdminCommand) -> Result<(), String> {
                 Some(email) => email,
                 None => prompt_line("Email: ")?,
             };
-            let password = if let Ok(value) = std::env::var("FERRIOXID_PASSWORD") {
-                if value.len() < 12 {
+            let password = match ferrioxid_core::aliased_env("FERRIOXID_PASSWORD") {
+                Err(error) => return Err(error),
+                Ok(Some(value)) if value.len() < 12 => {
                     return Err(
-                        "FERRIOXID_PASSWORD must contain at least 12 characters. There is no default password."
+                        "FERRIOXID_PASSWORD or FERRUM_PASSWORD must contain at least 12 characters. There is no default password."
                             .to_owned(),
                     );
                 }
-                value
-            } else {
-                let password = prompt_secret("Password: ")?;
-                let confirm = prompt_secret("Confirm password: ")?;
-                if password != confirm {
-                    return Err("Passwords do not match.".to_owned());
+                Ok(Some(value)) => value,
+                Ok(None) => {
+                    let password = prompt_secret("Password: ")?;
+                    let confirm = prompt_secret("Confirm password: ")?;
+                    if password != confirm {
+                        return Err("Passwords do not match.".to_owned());
+                    }
+                    password
                 }
-                password
             };
             let url = resolve_database_url(database_url)?;
             let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;

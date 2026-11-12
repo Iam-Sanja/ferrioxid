@@ -144,13 +144,22 @@ pub fn check(strict: bool) -> ExitCode {
             return ExitCode::from(1);
         }
     };
-    if let Ok(value) = std::env::var("FERRIOXID_CSRF_SECRET") {
-        let valid =
-            value.trim().len() == 64 && value.trim().chars().all(|char| char.is_ascii_hexdigit());
-        if !valid {
-            eprintln!("FERRIOXID_CSRF_SECRET must contain 64 hexadecimal characters.");
+    match ferrioxid_core::aliased_env("FERRIOXID_CSRF_SECRET") {
+        Err(error) => {
+            eprintln!("{error}");
             return ExitCode::from(1);
         }
+        Ok(Some(value)) => {
+            let valid = value.trim().len() == 64
+                && value.trim().chars().all(|char| char.is_ascii_hexdigit());
+            if !valid {
+                eprintln!(
+                    "FERRIOXID_CSRF_SECRET or FERRUM_CSRF_SECRET must contain 64 hexadecimal characters."
+                );
+                return ExitCode::from(1);
+            }
+        }
+        Ok(None) => {}
     }
     if let Ok(value) = std::env::var("DATABASE_URL") {
         if value.is_empty() {
@@ -511,16 +520,19 @@ fn project_lines(project: &ProjectConfig) -> ProjectCounts {
                 "OK",
                 "mail.smtp The configuration is valid. ferrioxid check does not connect to the server.",
             );
-            if std::env::var("FERRIOXID_SMTP_PASSWORD")
-                .ok()
-                .filter(|value| !value.is_empty())
-                .is_none()
-            {
-                report(
-                    "WARN",
-                    "mail.credentials FERRIOXID_SMTP_PASSWORD is missing. Its value is never displayed.",
-                );
-                warnings += 1;
+            match ferrioxid_core::aliased_env("FERRIOXID_SMTP_PASSWORD") {
+                Err(error) => {
+                    report("ERROR", &format!("mail.smtp {error}"));
+                    errors += 1;
+                }
+                Ok(Some(value)) if !value.is_empty() => {}
+                Ok(_) => {
+                    report(
+                        "WARN",
+                        "mail.credentials FERRIOXID_SMTP_PASSWORD or FERRUM_SMTP_PASSWORD is missing. Its value is never displayed.",
+                    );
+                    warnings += 1;
+                }
             }
         }
         _ => {

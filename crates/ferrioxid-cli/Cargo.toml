@@ -12,6 +12,7 @@ path = "src/main.rs"
 clap.workspace = true
 serde_json.workspace = true
 ctrlc = "3.4"
+ferrioxid-core = { path = "../ferrioxid-core" }
 ferrioxid-auth = { path = "../ferrioxid-auth" }
 ferrioxid-db = { path = "../ferrioxid-db" }
 ferrioxid-jobs = { path = "../ferrioxid-jobs" }

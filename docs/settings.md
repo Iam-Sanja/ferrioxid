@@ -4,7 +4,7 @@
 
 ## Purpose
 
-`ferrioxid.toml` remains the only project file. `Settings` reads it, checks the runtime and returns `ProjectConfig`. There is no global singleton. Secrets are in environment variables, not in the file and not in `Debug`.
+`ferrioxid.toml` is the project file written for new projects. A directory that contains only `ferrum.toml` is still loaded. A directory that contains both files is an error, and Ferrioxid does not choose either database URL. `.ferrum/project.json` remains the on-disk project marker. Database tables keep their existing `_ferrum_*` names and migration IDs.
 
 ## Priority
 
@@ -39,19 +39,19 @@ Existing sections remain `project`, `server`, `database`, `admin`, `auth`, `temp
 | Variable | Effect |
 |---|---|
 | `DATABASE_URL` |Replaces the file URL if it is not empty. The value does not appear in `Debug`|
-| `FERRIOXID_ENV=production` |Turn on the production mode. Any other or missing value remains development|
-| `FERRIOXID_DEBUG` |Only `true` or `false`. Another value is an error and is not replaced by the file|
+| `FERRIOXID_ENV=production` | Turn on the production mode. `FERRUM_ENV` is the legacy alias. Different values are an error. Any other or missing value remains development |
+| `FERRIOXID_DEBUG` | Only `true` or `false`. `FERRUM_DEBUG` is the legacy alias. Different values are an error and are not replaced by the file |
+| `FERRIOXID_SMTP_PASSWORD` | SMTP password. `FERRUM_SMTP_PASSWORD` is the legacy alias. It is not in `ferrioxid.toml` or `ferrum.toml` |
+| `FERRIOXID_CSRF_SECRET` | 64 hex characters in production. `FERRUM_CSRF_SECRET` is the legacy alias. The value is not logged |
 | `BIND_ADDRESS` |Replaces `host:port`. A value starting with `0.0.0.0` is rejected|
 | `FERRIOXID_PUBLIC_ORIGIN` |Replaces `mail.public_origin` only when opening the mail service|
-| `FERRIOXID_SMTP_USERNAME` |SMTP users. If it is missing, the field remains empty|
-| `FERRIOXID_SMTP_PASSWORD` |SMTP password. It is not in `ferrioxid.toml`|
-| `FERRIOXID_SESSION_HOURS` |Replaces the file when set. Otherwise, `auth.session_hours` applies over `apply_project_session`|
-| `FERRIOXID_IDLE_MINUTES` |Replaces the file when set. Otherwise `auth.idle_minutes` applies|
-| `FERRIOXID_COOKIE_SECURE` |`1` or `true` sets `Secure` on `ferrioxid_session` and `ferrioxid_anonymous`. In production this is the default|
-| `FERRIOXID_CSRF_SECRET` |64 Hex marks in production. The value is not logged|
-| `FERRIOXID_ALLOWED_ORIGINS` |Comma-separated origins. In production without this variable, the list is empty until `apply_bound_address` sets loopback|
+| `FERRIOXID_SMTP_USERNAME` | SMTP user. `FERRUM_SMTP_USERNAME` is the legacy alias. If both are missing, the field remains empty |
+| `FERRIOXID_SESSION_HOURS` | Replaces the file when set. `FERRUM_SESSION_HOURS` is the legacy alias |
+| `FERRIOXID_IDLE_MINUTES` | Replaces the file when set. `FERRUM_IDLE_MINUTES` is the legacy alias |
+| `FERRIOXID_COOKIE_SECURE` | `1` or `true` sets `Secure` on `ferrioxid_session` and `ferrioxid_anonymous`. `FERRUM_COOKIE_SECURE` is the legacy alias. In production this is the default |
+| `FERRIOXID_ALLOWED_ORIGINS` | Comma-separated origins. `FERRUM_ALLOWED_ORIGINS` is the legacy alias. In production without this variable, the list is empty until `apply_bound_address` sets loopback |
 
-A missing optional variable retains the file or default value. A missing mandatory production specification remains an error: `FERRIOXID_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FERRIOXID_ENV=production`. Ferrioxid does not switch debug silently to `false` in this case.
+A missing optional variable retains the file or default value. `DATABASE_URL` and `BIND_ADDRESS` have no `FERRUM_` alias. For every other `FERRIOXID_` variable listed above, the matching `FERRUM_` variable is accepted. If both are set to different values, Ferrioxid stops and does not print either value. A missing mandatory production specification remains an error: `FERRIOXID_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FERRIOXID_ENV=production`. Ferrioxid does not switch debug silently to `false` in this case.
 
 ## Development and production
 
