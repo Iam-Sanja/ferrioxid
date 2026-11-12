@@ -4,9 +4,9 @@ Local evidence only. Nothing in this file is a merged release, a GitHub Actions 
 
 ## Block 2 — ORM and migrations
 
-Branch: `feat/orm-migrations-lifecycle`, created from `main` at `53a95aa`. Implementation commit: `f3a663243b030eb3f391032c17a69314ff78abc3`.
+Branch: `feat/orm-migrations-lifecycle`, created from `main` at `53a95aa`. Implementation commit: `f3a663243b030eb3f391032c17a69314ff78abc3`. Progress note: `3bb51b951f904a7bb092c1910c7af8c7dc3332ed`.
 
-Block 1 is not on this branch. Its local commits `d556bcc3` and `ad487023` remain on `fix/runtime-security-docker`. This branch does not relocate migration files or change the runtime-security work.
+Block 1 is not on this branch. Its implementation `d556bcc3bbfa5b624c5d27ef13d2682ee06b5652` remains on `fix/runtime-security-docker`. This branch does not relocate migration files or change the runtime-security work. Blocks 3 and 4 are also separate branches from `main`.
 
 | Issue | Local implementation | Local tests | GitHub CI | Merge |
 |---|---|---|---|---|
@@ -40,6 +40,6 @@ The shared application code is `crates/ferrioxid-db/examples/grouped_report`. `s
 - There is no automatic eager loading, no JSON path query, no decimal average and no offset inside a grouped report.
 - Multi-column foreign-key order on PostgreSQL is taken from the catalog join. The plan test covers a table without a foreign key. A schema with secondary indexes and foreign keys still uses the same name and column comparison as the SQLite baseline.
 
-## Block 3
+## Other blocks
 
-Block 3 is not part of this branch. Its preparation is a separate branch from `main` and is not mixed into these commits.
+Blocks 3 and 4 are not part of this branch. `feat/native-admin` contains the record audit timeline. `feat/developer-apps` contains the project-file and environment aliases. Neither is mixed into these commits. GitHub CI has not run for this branch.
