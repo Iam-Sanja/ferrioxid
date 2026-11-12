@@ -29,7 +29,7 @@ Local, not GitHub CI, and not merged:
 
 ## Local commits
 
-The hash is added after the implementation commit exists.
+`d556bcc3bbfa5b624c5d27ef13d2682ee06b5652` on `fix/runtime-security-docker`. Not pushed. No pull request.
 
 ## Later blocks
 
