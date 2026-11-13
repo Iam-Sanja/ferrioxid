@@ -3,6 +3,12 @@ name = "ferrioxid-cache"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description = "Process-local cache for the Ferrioxid framework"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [dependencies]
 async-trait.workspace = true

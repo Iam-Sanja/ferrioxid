@@ -19,6 +19,9 @@ version = "0.1.0"
 description = "Experimental model-first web framework"
 repository = "https://github.com/Iam-Sanja/ferrioxid"
 homepage = "https://github.com/Iam-Sanja/ferrioxid"
+keywords = ["web", "framework", "orm", "admin"]
+categories = ["web-programming"]
+readme = "README.md"
 
 [workspace.dependencies]
 # Keep every consumer on patched bundled SQLite, even if its Cargo root omits the driver patch.
@@ -40,6 +43,24 @@ tera = "1"
 sha2 = "0.10"
 argon2 = "0.5"
 rpassword = "7"
+
+# Path keeps workspace builds. The version is what cargo package writes into a published manifest.
+ferrioxid = { path = "crates/ferrioxid", version = "0.1.0" }
+ferrioxid-admin = { path = "crates/ferrioxid-admin", version = "0.1.0" }
+ferrioxid-api = { path = "crates/ferrioxid-api", version = "0.1.0" }
+ferrioxid-auth = { path = "crates/ferrioxid-auth", version = "0.1.0" }
+ferrioxid-cache = { path = "crates/ferrioxid-cache", version = "0.1.0" }
+ferrioxid-cli = { path = "crates/ferrioxid-cli", version = "0.1.0" }
+ferrioxid-core = { path = "crates/ferrioxid-core", version = "0.1.0" }
+ferrioxid-db = { path = "crates/ferrioxid-db", version = "0.1.0" }
+ferrioxid-forms = { path = "crates/ferrioxid-forms", version = "0.1.0" }
+ferrioxid-jobs = { path = "crates/ferrioxid-jobs", version = "0.1.0" }
+ferrioxid-macros = { path = "crates/ferrioxid-macros", version = "0.1.0" }
+ferrioxid-mail = { path = "crates/ferrioxid-mail", version = "0.1.0" }
+ferrioxid-middleware = { path = "crates/ferrioxid-middleware", version = "0.1.0" }
+ferrioxid-migrations = { path = "crates/ferrioxid-migrations", version = "0.1.0" }
+ferrioxid-static = { path = "crates/ferrioxid-static", version = "0.1.0" }
+ferrioxid-storage = { path = "crates/ferrioxid-storage", version = "0.1.0" }
 
 # Backport the upstream SQLite bound fix without replacing SeaORM/SQLx APIs.
 [patch.crates-io]

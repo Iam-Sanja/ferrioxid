@@ -3,9 +3,12 @@ name = "ferrioxid-macros"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Derive macros for Ferrioxid models"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [lib]
 proc-macro = true

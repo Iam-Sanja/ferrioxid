@@ -3,15 +3,18 @@ name = "ferrioxid-storage"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "File storage for the Ferrioxid framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [dependencies]
 async-trait.workspace = true
 axum.workspace = true
-ferrioxid-auth = { path = "../ferrioxid-auth" }
-ferrioxid-core = { path = "../ferrioxid-core" }
+ferrioxid-auth.workspace = true
+ferrioxid-core.workspace = true
 hmac = "0.12"
 serde.workspace = true
 serde_json.workspace = true
@@ -21,5 +24,5 @@ tokio.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-ferrioxid-db = { path = "../ferrioxid-db" }
+ferrioxid-db.workspace = true
 tower = { version = "0.5", features = ["util"] }

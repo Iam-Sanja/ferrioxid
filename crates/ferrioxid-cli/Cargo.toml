@@ -3,9 +3,12 @@ name = "ferrioxid-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Command line for the Ferrioxid framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories = ["command-line-utilities", "web-programming"]
 
 [[bin]]
 name = "ferrioxid"
@@ -19,12 +22,12 @@ path = "src/bin/embedded_migrate.rs"
 clap.workspace = true
 serde_json.workspace = true
 ctrlc = "3.4"
-ferrioxid-core = { path = "../ferrioxid-core" }
-ferrioxid-auth = { path = "../ferrioxid-auth" }
-ferrioxid-db = { path = "../ferrioxid-db" }
-ferrioxid-jobs = { path = "../ferrioxid-jobs" }
-ferrioxid-mail = { path = "../ferrioxid-mail" }
-ferrioxid-migrations = { path = "../ferrioxid-migrations" }
+ferrioxid-core.workspace = true
+ferrioxid-auth.workspace = true
+ferrioxid-db.workspace = true
+ferrioxid-jobs.workspace = true
+ferrioxid-mail.workspace = true
+ferrioxid-migrations.workspace = true
 notify = "8"
 rpassword.workspace = true
 tokio.workspace = true
