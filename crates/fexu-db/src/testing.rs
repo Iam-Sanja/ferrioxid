@@ -5,7 +5,7 @@
 //! `drop_database` drops that name only. It does not remove tables from the
 //! administrator database and it does not accept an arbitrary catalog.
 
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
+use crate::driver::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
 
 use crate::connect;
 
@@ -71,7 +71,7 @@ impl DisposablePostgres {
             .execute(Statement::from_sql_and_values(
                 DatabaseBackend::Postgres,
                 "SELECT pg_terminate_backend(pid) FROM pg_stat_activity WHERE datname = $1 AND pid <> pg_backend_pid()",
-                [sea_orm::Value::String(Some(Box::new(self.db_name.clone())))],
+                [crate::driver::Value::String(Some(Box::new(self.db_name.clone())))],
             ))
             .await;
         admin

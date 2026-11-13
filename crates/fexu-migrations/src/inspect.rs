@@ -110,7 +110,7 @@ pub fn readonly_database_url(url: &str) -> Result<String, MigrationError> {
 }
 
 pub async fn inspect_migrations(
-    db: &sea_orm::DatabaseConnection,
+    db: &fexu_db::driver::DatabaseConnection,
     auth_dir: &Path,
     app_dir: &Path,
     current: Option<&SchemaSnapshot>,
@@ -119,7 +119,7 @@ pub async fn inspect_migrations(
 }
 
 pub async fn inspect_migrations_with_packages(
-    db: &sea_orm::DatabaseConnection,
+    db: &fexu_db::driver::DatabaseConnection,
     auth_dir: &Path,
     app_dir: &Path,
     current: Option<&SchemaSnapshot>,
@@ -137,7 +137,7 @@ pub async fn inspect_migrations_with_packages(
 /// An absent application directory stays optional. Missing auth or jobs resources are errors.
 /// This function does not apply migrations.
 pub async fn inspect_framework(
-    db: &sea_orm::DatabaseConnection,
+    db: &fexu_db::driver::DatabaseConnection,
     auth_files: &[MigrationFile],
     jobs_files: &[MigrationFile],
     jobs_history_table: &str,
@@ -184,7 +184,7 @@ fn unchecked_jobs(backend: &str) -> StatusReport {
 }
 
 async fn assemble(
-    db: &sea_orm::DatabaseConnection,
+    db: &fexu_db::driver::DatabaseConnection,
     auth: StatusReport,
     jobs: StatusReport,
     jobs_history_table: Option<&str>,
@@ -388,7 +388,7 @@ pub fn dev_notice(locale: &str, report: &Result<DualReport, MigrationError>) -> 
 }
 
 async fn diagnose_auth_tables(
-    db: &sea_orm::DatabaseConnection,
+    db: &fexu_db::driver::DatabaseConnection,
     auth: &StatusReport,
     diagnostics: &mut Vec<Diagnostic>,
 ) -> Result<(), MigrationError> {
@@ -551,7 +551,7 @@ mod tests {
     use super::*;
     use crate::snapshot::{ColumnSnapshot, LogicalType, TableSnapshot};
     use crate::store::make_migration;
-    use sea_orm::ConnectionTrait;
+    use fexu_db::driver::ConnectionTrait;
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn products() -> SchemaSnapshot {
@@ -664,8 +664,8 @@ mod tests {
         crate::apply_directory(&db, &app, false).await.unwrap();
         drop(db);
         let db = fexu_db::connect(&write_url).await.unwrap();
-        db.execute(sea_orm::Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
+        db.execute(fexu_db::driver::Statement::from_string(
+            fexu_db::driver::DatabaseBackend::Sqlite,
             "UPDATE _fexu_migrations SET checksum = '00' WHERE id LIKE '0001%'",
         ))
         .await
@@ -687,8 +687,8 @@ mod tests {
             .any(|item| item.code == "migration.checksum_mismatch"));
         assert_eq!(std::fs::read(&file).unwrap(), before);
         let db = fexu_db::connect(&write_url).await.unwrap();
-        db.execute(sea_orm::Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
+        db.execute(fexu_db::driver::Statement::from_string(
+            fexu_db::driver::DatabaseBackend::Sqlite,
             "INSERT INTO _fexu_migrations (id, name, checksum, applied_at_unix) VALUES ('9999_foreign', 'foreign', 'abc', 1)",
         ))
         .await

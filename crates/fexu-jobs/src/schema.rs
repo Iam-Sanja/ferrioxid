@@ -1,12 +1,12 @@
 //! Job-Tabelle. Die Migration hängt an der eigenen Historie `_fexu_job_migrations`.
 
 use crate::error::JobError;
+use fexu_db::driver::{ConnectionTrait, DatabaseConnection};
 #[cfg(test)]
 use fexu_migrations::{
     plan_change, seal, ColumnSnapshot, IndexSnapshot, LogicalType, MigrationFile, SchemaSnapshot,
     TableSnapshot, UniqueConstraintSnapshot,
 };
-use sea_orm::{ConnectionTrait, DatabaseConnection};
 use std::path::PathBuf;
 
 pub const JOBS: &str = "_fexu_jobs";

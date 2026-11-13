@@ -6,9 +6,9 @@
 //! rules. A unique violation stays an error unless the insert explicitly
 //! ignores that conflict. Overwriting on conflict is not offered.
 
+use crate::driver::sea_query::{Alias, Expr, LockType, OnConflict, Query, SimpleExpr, Value};
+use crate::driver::{ConnectionTrait, DatabaseBackend, DatabaseTransaction, Statement};
 use fexu_core::{ColumnKind, ColumnSpec, FexuError, FexuModel, NumericBound};
-use sea_orm::sea_query::{Alias, Expr, LockType, OnConflict, Query, SimpleExpr, Value};
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseTransaction, Statement};
 use std::marker::PhantomData;
 
 use crate::query::{bind_for_column, Bound, Select};
@@ -365,7 +365,7 @@ impl Assignment {
 }
 
 fn apply_assignment<M: FexuModel>(
-    query: &mut sea_orm::sea_query::UpdateStatement,
+    query: &mut crate::driver::sea_query::UpdateStatement,
     columns: &[ColumnSpec],
     assignment: &Assignment,
     backend: DatabaseBackend,
@@ -606,12 +606,12 @@ async fn wait_for_sqlite(db: &impl ConnectionTrait) -> Result<(), FexuError> {
 mod tests {
     use std::sync::OnceLock;
 
+    use crate::driver::{
+        ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait, Value,
+    };
     use fexu_core::{
         ColumnKind, ColumnSpec, DatabaseKind, FexuModel, FieldContract, ModelDescriptor,
         NumericBound, QueryScope, ReferentialAction, ScopeValue, TableConstraints,
-    };
-    use sea_orm::{
-        ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait, Value,
     };
     use serde::Deserialize;
     use uuid::Uuid;

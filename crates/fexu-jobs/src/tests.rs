@@ -1,7 +1,7 @@
 use super::*;
 use async_trait::async_trait;
+use fexu_db::driver::{ConnectionTrait, TransactionTrait};
 use fexu_mail::{MailService, Notice};
-use sea_orm::{ConnectionTrait, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -568,7 +568,7 @@ async fn existing_reset_outbox_is_not_sent() {
     let db = fexu_db::connect(&url).await.expect("db");
     fexu_auth::apply_migrations(&db).await.expect("auth");
     apply_migrations(&db).await.expect("jobs");
-    db.execute(sea_orm::Statement::from_string(
+    db.execute(fexu_db::driver::Statement::from_string(
         db.get_database_backend(),
         "INSERT INTO _fexu_mail_outbox (id, kind, recipient, reset_id, created_at, sent_at, failed_at, attempts, error_code) VALUES ('11111111-1111-1111-1111-111111111111', 'password_reset', 'person@example.com', NULL, 10, NULL, NULL, 0, NULL)",
     ))
@@ -590,7 +590,7 @@ async fn existing_reset_outbox_is_not_sent() {
         .expect("idle"));
     assert!(inbox.messages().is_empty());
     let row = db
-        .query_one(sea_orm::Statement::from_string(
+        .query_one(fexu_db::driver::Statement::from_string(
             db.get_database_backend(),
             "SELECT error_code FROM _fexu_mail_outbox",
         ))

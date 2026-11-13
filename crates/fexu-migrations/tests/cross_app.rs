@@ -1,13 +1,13 @@
 //! Cross-app foreign keys. SQLite runs in this suite. PostgreSQL is ignored unless DATABASE_URL is set.
 
 use fexu_core::{ColumnKind, DatabaseKind, ReferentialAction};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
 use fexu_db::{render_table_bundle, ForeignKeyClause, PhysicalColumn};
 use fexu_migrations::{
     apply_packages, make_migration, resolve_installed_schemas, ColumnSnapshot, ForeignKeySnapshot,
     InstalledApp, LogicalType, MakeOutcome, OnDelete, PackageMigration, SchemaSnapshot,
     TableSnapshot,
 };
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -125,7 +125,7 @@ fn package(name: &str, root: &Path, depends_on: &[&str]) -> PackageMigration {
     }
 }
 
-async fn execute(db: &DatabaseConnection, sql: &str) -> Result<(), sea_orm::DbErr> {
+async fn execute(db: &DatabaseConnection, sql: &str) -> Result<(), fexu_db::driver::DbErr> {
     db.execute(Statement::from_string(db.get_database_backend(), sql))
         .await
         .map(|_| ())
@@ -388,7 +388,7 @@ async fn table_sql(db: &DatabaseConnection, table: &str) -> String {
         .query_one(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
             "SELECT sql AS value FROM sqlite_master WHERE name = ?",
-            [sea_orm::Value::from(table)],
+            [fexu_db::driver::Value::from(table)],
         ))
         .await
         .unwrap()

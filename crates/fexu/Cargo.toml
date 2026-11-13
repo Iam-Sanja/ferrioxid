@@ -25,7 +25,6 @@ fexu-storage.workspace = true
 fexu-middleware.workspace = true
 fexu-mail.workspace = true
 fexu-jobs.workspace = true
-sea-orm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 uuid.workspace = true

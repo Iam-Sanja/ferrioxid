@@ -7,8 +7,8 @@ use crate::introspection::{compare_snapshot, introspect_live};
 use crate::runner::pending_files;
 use crate::snapshot::SchemaSnapshot;
 use crate::store::{inspect_directory, MigrationFile};
+use fexu_db::driver::{ConnectionTrait, DatabaseConnection};
 use fexu_db::kind_of;
-use sea_orm::{ConnectionTrait, DatabaseConnection};
 use std::fmt::{Display, Formatter};
 use std::path::Path;
 
@@ -206,7 +206,7 @@ mod tests {
     use super::*;
     use crate::snapshot::{ColumnSnapshot, LogicalType, TableSnapshot};
     use crate::store::make_migration;
-    use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+    use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement};
     use std::time::{SystemTime, UNIX_EPOCH};
 
     fn products() -> SchemaSnapshot {

@@ -10,7 +10,7 @@ use fexu_core::{
     decode_decimal, encode_decimal, format_decimal, parse_date, parse_datetime_utc, parse_decimal,
     parse_time, ColumnKind,
 };
-use sea_orm::{
+use fexu_db::driver::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, DbErr, Statement, TransactionTrait, Value,
 };
 use serde::{Deserialize, Serialize};
@@ -722,7 +722,7 @@ pub async fn dump_fixture(
     })
 }
 
-fn read_pk(row: &sea_orm::QueryResult) -> Result<String, MigrationError> {
+fn read_pk(row: &fexu_db::driver::QueryResult) -> Result<String, MigrationError> {
     if let Ok(value) = row.try_get::<String>("", "id") {
         return Ok(value);
     }
@@ -735,7 +735,7 @@ fn read_pk(row: &sea_orm::QueryResult) -> Result<String, MigrationError> {
 }
 
 fn read_cell(
-    row: &sea_orm::QueryResult,
+    row: &fexu_db::driver::QueryResult,
     column: &crate::snapshot::ColumnSnapshot,
 ) -> Result<Json, MigrationError> {
     match ColumnKind::from(column.logical_type) {
@@ -850,14 +850,14 @@ fn read_cell(
 }
 
 fn read_temporal<T, U>(
-    row: &sea_orm::QueryResult,
+    row: &fexu_db::driver::QueryResult,
     column: &crate::snapshot::ColumnSnapshot,
     format_native: impl FnOnce(T) -> String,
     parse: fn(&str) -> Result<U, &'static str>,
     format_parsed: impl FnOnce(U) -> String,
 ) -> Result<Json, MigrationError>
 where
-    T: sea_orm::TryGetable,
+    T: fexu_db::driver::TryGetable,
 {
     if let Ok(value) = row.try_get::<Option<T>>("", &column.name) {
         return Ok(match value {
@@ -947,7 +947,7 @@ mod tests {
         ColumnSnapshot, ExternalTableSnapshot, ForeignKeySnapshot, LogicalType, OnDelete,
         SchemaSnapshot, StoredChoice, TableSnapshot,
     };
-    use sea_orm::{ConnectionTrait, Database, DatabaseConnection, Statement};
+    use fexu_db::driver::{ConnectionTrait, Database, DatabaseConnection, Statement};
 
     fn column(name: &str, logical_type: LogicalType, nullable: bool) -> ColumnSnapshot {
         ColumnSnapshot {
@@ -1017,19 +1017,19 @@ mod tests {
     async fn database() -> DatabaseConnection {
         let db = Database::connect("sqlite::memory:").await.expect("sqlite");
         db.execute(Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
+            fexu_db::driver::DatabaseBackend::Sqlite,
             "PRAGMA foreign_keys = ON",
         ))
         .await
         .expect("foreign keys");
         db.execute(Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
+            fexu_db::driver::DatabaseBackend::Sqlite,
             "CREATE TABLE categories (id TEXT PRIMARY KEY, name TEXT NOT NULL)",
         ))
         .await
         .expect("categories");
         db.execute(Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
+            fexu_db::driver::DatabaseBackend::Sqlite,
             "CREATE TABLE products (id TEXT PRIMARY KEY, name TEXT NOT NULL, price BLOB NOT NULL, status TEXT NOT NULL, category_id TEXT NOT NULL REFERENCES categories(id))",
         ))
         .await
@@ -1062,7 +1062,7 @@ mod tests {
 
     async fn count(db: &DatabaseConnection, table: &str) -> usize {
         db.query_all(Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
+            fexu_db::driver::DatabaseBackend::Sqlite,
             format!("SELECT id FROM {table}"),
         ))
         .await
@@ -1260,7 +1260,7 @@ mod tests {
         assert!(error.0.contains("cycle"));
 
         db.execute(Statement::from_string(
-            sea_orm::DatabaseBackend::Sqlite,
+            fexu_db::driver::DatabaseBackend::Sqlite,
             "INSERT INTO categories (id, name) VALUES ('22222222-2222-4222-8222-222222222222', 'Hardware')",
         ))
         .await
@@ -1298,7 +1298,7 @@ mod tests {
     async fn postgres_fixture_roundtrip() {
         let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
         let db = Database::connect(&url).await.expect("postgres");
-        let backend = sea_orm::DatabaseBackend::Postgres;
+        let backend = fexu_db::driver::DatabaseBackend::Postgres;
         for statement in [
             "DROP TABLE IF EXISTS fixture_products",
             "DROP TABLE IF EXISTS fixture_categories",
@@ -1464,7 +1464,7 @@ mod tests {
 
     async fn create_temporal_tables(db: &DatabaseConnection) {
         let statements: &[&str] = match db.get_database_backend() {
-            sea_orm::DatabaseBackend::Sqlite => &[
+            fexu_db::driver::DatabaseBackend::Sqlite => &[
                 "CREATE TABLE fx_owners (id TEXT PRIMARY KEY, name TEXT NOT NULL)",
                 "CREATE TABLE fx_events (
                     id TEXT PRIMARY KEY,
@@ -1478,7 +1478,7 @@ mod tests {
                     amount BLOB NOT NULL
                 )",
             ],
-            sea_orm::DatabaseBackend::Postgres => &[
+            fexu_db::driver::DatabaseBackend::Postgres => &[
                 "CREATE TABLE fx_owners (id UUID PRIMARY KEY, name TEXT NOT NULL)",
                 "CREATE TABLE fx_events (
                     id UUID PRIMARY KEY,
@@ -1492,7 +1492,7 @@ mod tests {
                     amount BYTEA NOT NULL
                 )",
             ],
-            sea_orm::DatabaseBackend::MySql => panic!("mysql is not a test backend"),
+            fexu_db::driver::DatabaseBackend::MySql => panic!("mysql is not a test backend"),
         };
         for statement in statements {
             db.execute(Statement::from_string(

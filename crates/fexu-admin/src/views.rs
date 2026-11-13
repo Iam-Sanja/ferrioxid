@@ -2,7 +2,7 @@
 
 use crate::registry::AdminRegistry;
 use fexu_auth::AuthUser;
-use sea_orm::DatabaseConnection;
+use fexu_db::driver::DatabaseConnection;
 use serde_json::{Map, Value};
 use std::collections::HashMap;
 use std::sync::Arc;

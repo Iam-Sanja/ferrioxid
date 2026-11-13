@@ -2,7 +2,7 @@
 
 use crate::error::MigrationError;
 use crate::snapshot::{LogicalType, OnDelete, SchemaSnapshot};
-use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LiveColumn {
@@ -209,7 +209,7 @@ async fn foreign_key_info(
     Ok(grouped.into_iter().map(|item| item.2).collect())
 }
 
-fn read_i64(row: &sea_orm::QueryResult, column: &str) -> Result<i64, MigrationError> {
+fn read_i64(row: &fexu_db::driver::QueryResult, column: &str) -> Result<i64, MigrationError> {
     row.try_get::<i64>("", column)
         .or_else(|_| row.try_get::<i32>("", column).map(i64::from))
         .map_err(|error| {
@@ -396,7 +396,7 @@ async fn introspect_postgres(db: &impl ConnectionTrait) -> Result<Vec<LiveTable>
     Ok(tables)
 }
 
-fn text(row: &sea_orm::QueryResult, column: &str) -> Result<String, MigrationError> {
+fn text(row: &fexu_db::driver::QueryResult, column: &str) -> Result<String, MigrationError> {
     row.try_get("", column).map_err(|error| {
         MigrationError::new(format!(
             "Could not read PostgreSQL column `{column}`: {error}"
@@ -404,7 +404,7 @@ fn text(row: &sea_orm::QueryResult, column: &str) -> Result<String, MigrationErr
     })
 }
 
-fn read_bool(row: &sea_orm::QueryResult, column: &str) -> Result<bool, MigrationError> {
+fn read_bool(row: &fexu_db::driver::QueryResult, column: &str) -> Result<bool, MigrationError> {
     if let Ok(value) = row.try_get::<bool>("", column) {
         return Ok(value);
     }

@@ -2,8 +2,8 @@
 
 use fexu_auth::ADMIN_DRAFTS;
 use fexu_core::FexuError;
-use sea_orm::sea_query::{Alias, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder};
-use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value as DbValue};
+use fexu_db::driver::sea_query::{Alias, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement, Value as DbValue};
 use serde_json::{Map, Value};
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -189,7 +189,10 @@ async fn purge(db: &impl ConnectionTrait, session_id: Uuid) -> Result<(), FexuEr
         .column(Alias::new("id"))
         .from(Alias::new(ADMIN_DRAFTS))
         .and_where(Expr::col(Alias::new("session_id")).eq(session_id.to_string()))
-        .order_by(Alias::new("created_at"), sea_orm::sea_query::Order::Asc)
+        .order_by(
+            Alias::new("created_at"),
+            fexu_db::driver::sea_query::Order::Asc,
+        )
         .limit((total - MAX_PER_SESSION + 1) as u64);
     let (sql, values) = build(backend, &oldest)?;
     let rows = db
@@ -215,7 +218,7 @@ fn unix_now() -> i64 {
         .unwrap_or(0)
 }
 
-fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FexuError> {
+fn read_uuid(row: &fexu_db::driver::QueryResult, column: &str) -> Result<Uuid, FexuError> {
     if let Ok(value) = row.try_get::<Uuid>("", column) {
         return Ok(value);
     }
@@ -228,7 +231,7 @@ fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FexuError
 async fn execute(
     db: &impl ConnectionTrait,
     backend: DatabaseBackend,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<(), FexuError> {
     let (sql, values) = build(backend, query)?;
     db.execute(Statement::from_sql_and_values(backend, sql, values))
@@ -239,7 +242,7 @@ async fn execute(
 
 fn build(
     backend: DatabaseBackend,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<(String, Vec<DbValue>), FexuError> {
     let (sql, values) = match backend {
         DatabaseBackend::Postgres => query.build(PostgresQueryBuilder),

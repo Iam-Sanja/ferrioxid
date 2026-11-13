@@ -5,8 +5,10 @@ use crate::drafts;
 use crate::registry::ManagedModel;
 use fexu_auth::{AuthService, AuthUser};
 use fexu_core::{temporal, AdminInline, ColumnKind, ColumnSpec, FexuError};
+use fexu_db::driver::{
+    DatabaseConnection, DatabaseTransaction, TransactionTrait, Value as DbValue,
+};
 use fexu_db::{query_admin_page, AdminPageRequest, DeleteOutcome};
-use sea_orm::{DatabaseConnection, DatabaseTransaction, TransactionTrait, Value as DbValue};
 use serde_json::{Map, Number, Value};
 use std::collections::{hash_map::DefaultHasher, HashMap, HashSet};
 use std::hash::{Hash, Hasher};
@@ -563,7 +565,7 @@ async fn load_children(
 }
 
 async fn load_children_tx(
-    db: &impl sea_orm::ConnectionTrait,
+    db: &impl fexu_db::driver::ConnectionTrait,
     child: &dyn ManagedModel,
     spec: &AdminInline,
     parent_id: Uuid,

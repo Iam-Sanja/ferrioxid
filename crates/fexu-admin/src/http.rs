@@ -10,8 +10,8 @@ use fexu_auth::{AppState, AuthError, AuthService, AuthUser};
 use fexu_core::{
     problem_json, AdminFieldMeta, AdminModelMeta, ColumnKind, ColumnSpec, FexuError, QueryScope,
 };
+use fexu_db::driver::Value as DbValue;
 use fexu_db::DeleteOutcome;
-use sea_orm::Value as DbValue;
 use serde::Deserialize;
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;

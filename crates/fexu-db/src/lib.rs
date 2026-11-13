@@ -1,11 +1,29 @@
-//! Typed SeaORM-backed repository contract implemented by the model derive.
+//! Repository contract implemented by the model derive.
+//!
+//! SQL comes from SeaQuery. PostgreSQL runs through `sqlx-postgres` and
+//! `sqlx-core`. SQLite runs through rusqlite on a dedicated thread.
 
+mod database;
+mod error;
+mod postgres;
 mod query;
 mod report;
+mod rows;
 mod sql;
+mod sqlite;
 mod testing;
 mod unit;
 mod write;
+
+pub mod driver {
+    pub use crate::database::{
+        ConnectOptions, ConnectionTrait, Database, DatabaseBackend, DatabaseConnection,
+        DatabaseTransaction, DbBackend, ExecResult, PinnedSqlite, QueryResult, SqlitePragmaBuilder,
+        Statement, TransactionTrait, TryGetable,
+    };
+    pub use crate::error::{ConstraintKind, DbErr, RuntimeErr};
+    pub use sea_query::{self, Value};
+}
 
 pub use query::{
     all_of, any_of, col, group_by_parent, load_by_ids, load_children, load_many_to_many,
@@ -21,8 +39,8 @@ pub use testing::DisposablePostgres;
 pub use unit::conclude;
 pub use write::{ColumnUpdate, FilteredDelete, LockResult, RowInsert, WriteResult};
 
+use driver::{DatabaseConnection, DatabaseTransaction, DbErr};
 use fexu_core::{FexuError, FexuModel};
-use sea_orm::{DatabaseConnection, DatabaseTransaction};
 use serde::{de::DeserializeOwned, Deserialize, Serialize};
 pub use sql::{
     date_buckets, delete_record, find_by_column, get_record, insert_record, kind_of, list_records,
@@ -174,20 +192,21 @@ pub trait ModelRepository: FexuModel + Serialize + DeserializeOwned {
 /// SQLite file in the process working directory. Created on first connect.
 pub const DEFAULT_SQLITE_URL: &str = "sqlite://db.sqlite3?mode=rwc";
 
-pub async fn connect(url: &str) -> Result<DatabaseConnection, sea_orm::DbErr> {
-    let mut options = sea_orm::ConnectOptions::new(url.to_owned());
+pub async fn connect(url: &str) -> Result<DatabaseConnection, DbErr> {
+    let mut options = driver::ConnectOptions::new(url.to_owned());
     if url.starts_with("sqlite:") {
         // One connection keeps in-memory databases and file locks predictable.
         options.max_connections(1);
         // Writers wait instead of failing immediately when another connection
-        // holds the SQLite lock. This is not a row lock.
+        // holds the SQLite lock. This is not a row lock. The session sets
+        // foreign keys and a 5 second busy timeout itself.
         options.map_sqlx_sqlite_opts(|sqlite| {
             sqlite
                 .pragma("foreign_keys", "ON")
                 .pragma("busy_timeout", "5000")
         });
     }
-    sea_orm::Database::connect(options).await
+    driver::Database::connect(options).await
 }
 
 #[cfg(test)]

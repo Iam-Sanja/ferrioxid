@@ -1,6 +1,8 @@
 //! Exercise the SQLite engine actually loaded through SeaORM and SQLx.
 use fexu_db::connect;
-use sea_orm::{ConnectionTrait, DatabaseConnection, DbBackend, Statement, TransactionTrait};
+use fexu_db::driver::{
+    ConnectionTrait, DatabaseConnection, DbBackend, Statement, TransactionTrait,
+};
 
 async fn execute(db: &DatabaseConnection, sql: &str) {
     db.execute(Statement::from_string(DbBackend::Sqlite, sql.to_owned()))

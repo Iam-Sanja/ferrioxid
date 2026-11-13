@@ -1,12 +1,12 @@
 //! Auth-Tabellen als Fexu-Snapshot. Die Historie liegt getrennt von der Anwendung.
 
 use crate::error::AuthError;
+use fexu_db::driver::DatabaseConnection;
 use fexu_migrations::{
     plan_change, seal, ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType,
     MigrationFile, OnDelete, SchemaSnapshot, TableSnapshot, UniqueConstraintSnapshot,
     AUTH_HISTORY_TABLE,
 };
-use sea_orm::DatabaseConnection;
 use std::path::PathBuf;
 
 pub const USERS: &str = "_fexu_users";

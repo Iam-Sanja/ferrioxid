@@ -4,8 +4,8 @@
 //! und übergibt den `QueryScope` der Policy. Ein Query-String kann keinen Scope bauen.
 
 use fexu_core::{ColumnSpec, FexuError, QueryScope};
+use fexu_db::driver::ConnectionTrait;
 use fexu_db::{get_record, query_admin_page, AdminPage, AdminPageRequest};
-use sea_orm::ConnectionTrait;
 use serde_json::Value;
 use uuid::Uuid;
 

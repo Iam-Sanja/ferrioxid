@@ -16,9 +16,9 @@ use axum::{
 use fexu_admin::AdminRegistry;
 use fexu_auth::{mount, AppState, AuthError, AuthService, AuthUser, ClientIp, ObjectPolicy};
 use fexu_core::{problem_json, ColumnSpec, FexuError, QueryScope};
+use fexu_db::driver::{ConnectionTrait, DatabaseConnection, Statement};
 use fexu_db::{kind_of, render_schema, DeleteOutcome, ModelRepository};
 use fexu_migrations::{history_exists, ProjectConfig};
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::json;
 
 mod cookie_guard;

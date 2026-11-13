@@ -16,13 +16,6 @@ pub fn new_project(
     }
     let template = parse_template(template)?;
     let fexu = resolve_fexu_path(fexu_path)?;
-    // Cargo only honors patches in the consuming project/workspace root.
-    let sqlite_driver = fexu
-        .join("../../vendor/sqlx-sqlite")
-        .canonicalize()
-        .map_err(|error| format!("The Fexu SQLite security patch is missing: {error}"))?;
-    let sqlite_driver =
-        serde_json::to_string(&cargo_path(&sqlite_driver)).map_err(|error| error.to_string())?;
     let destination = std::env::current_dir()
         .map_err(|error| error.to_string())?
         .join(name);
@@ -54,7 +47,7 @@ pub fn new_project(
     };
     write(
         &destination.join("Cargo.toml"),
-        &cargo_toml(&package, &dependency, features, &sqlite_driver),
+        &cargo_toml(&package, &dependency, features),
     )?;
     write(
         &destination.join("fexu.toml"),
@@ -308,7 +301,7 @@ pub(crate) fn write(path: &Path, contents: &str) -> Result<(), String> {
         .map_err(|error| error.to_string())
 }
 
-fn cargo_toml(name: &str, fexu: &str, features: &str, sqlite_driver: &str) -> String {
+fn cargo_toml(name: &str, fexu: &str, features: &str) -> String {
     format!(
         r#"[package]
 name = "{name}"
@@ -323,10 +316,6 @@ serde = {{ version = "1", features = ["derive"] }}
 tokio = {{ version = "1", features = ["macros", "rt-multi-thread"] }}
 tracing = "0.1"
 tracing-subscriber = {{ version = "0.3", features = ["env-filter"] }}
-
-# Keep the framework's SQLite security backport in this Cargo root.
-[patch.crates-io]
-sqlx-sqlite = {{ path = {sqlite_driver} }}
 "#
     )
 }

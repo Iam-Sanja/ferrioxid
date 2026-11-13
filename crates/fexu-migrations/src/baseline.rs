@@ -6,8 +6,8 @@ use crate::history::{self, insert_history};
 use crate::introspection::{compare_snapshot, introspect_sqlite};
 use crate::store::{inspect_directory, MigrationFile};
 use fexu_core::DatabaseKind;
+use fexu_db::driver::{ConnectionTrait, DatabaseConnection, TransactionTrait};
 use fexu_db::kind_of;
-use sea_orm::{ConnectionTrait, DatabaseConnection, TransactionTrait};
 use std::path::Path;
 use std::time::{SystemTime, UNIX_EPOCH};
 

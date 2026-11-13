@@ -1,11 +1,13 @@
 //! A rebuild must suspend and restore foreign keys on one pooled SQLite connection.
 
+use fexu_db::driver::{
+    ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait,
+};
 use fexu_migrations::{
     apply_directory, make_migration, make_migration_with_backfills, BackfillLiteral,
     ColumnBackfill, ColumnSnapshot, ForeignKeySnapshot, LogicalType, OnDelete, SchemaSnapshot,
     TableSnapshot,
 };
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -94,12 +96,12 @@ async fn open_pool(path: &Path) -> DatabaseConnection {
         "sqlite://{}?mode=rwc",
         path.to_string_lossy().replace('\\', "/")
     );
-    let mut options = sea_orm::ConnectOptions::new(url);
+    let mut options = fexu_db::driver::ConnectOptions::new(url);
     options
         .max_connections(POOL_SIZE)
         .min_connections(POOL_SIZE);
     options.map_sqlx_sqlite_opts(|sqlite| sqlite.pragma("foreign_keys", "ON"));
-    sea_orm::Database::connect(options).await.unwrap()
+    fexu_db::driver::Database::connect(options).await.unwrap()
 }
 
 async fn execute(db: &impl ConnectionTrait, sql: &str) {

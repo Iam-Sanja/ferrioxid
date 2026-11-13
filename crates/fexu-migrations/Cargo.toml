@@ -14,8 +14,6 @@ categories.workspace = true
 fexu-core.workspace = true
 fexu-db.workspace = true
 chrono.workspace = true
-sea-orm.workspace = true
-sea-query-binder = { version = "0.7.0", default-features = false, features = ["sqlx-sqlite"] }
 serde.workspace = true
 serde_json.workspace = true
 sha2.workspace = true
@@ -23,6 +21,3 @@ thiserror.workspace = true
 tokio.workspace = true
 async-trait.workspace = true
 uuid.workspace = true
-
-[dev-dependencies]
-sea-orm.workspace = true

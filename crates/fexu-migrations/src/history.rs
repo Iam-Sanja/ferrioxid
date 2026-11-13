@@ -2,11 +2,11 @@
 
 use crate::error::MigrationError;
 use fexu_core::{ColumnKind, DatabaseKind};
-use fexu_db::{kind_of, render_create_table, PhysicalColumn};
-use sea_orm::sea_query::{
+use fexu_db::driver::sea_query::{
     Alias, Expr, Order, PostgresQueryBuilder, Query, SimpleExpr, SqliteQueryBuilder,
 };
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
+use fexu_db::{kind_of, render_create_table, PhysicalColumn};
 
 pub const HISTORY_TABLE: &str = "_fexu_migrations";
 pub const AUTH_HISTORY_TABLE: &str = "_fexu_auth_migrations";
@@ -271,7 +271,7 @@ pub fn backend_name(kind: DatabaseKind) -> &'static str {
     }
 }
 
-fn db_error(error: sea_orm::DbErr) -> MigrationError {
+fn db_error(error: fexu_db::driver::DbErr) -> MigrationError {
     MigrationError::new(format!(
         "Migration history contains an unreadable row: {error}"
     ))

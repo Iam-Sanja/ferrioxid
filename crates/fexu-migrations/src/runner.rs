@@ -6,18 +6,15 @@ use crate::history::{self, HistoryEntry};
 use crate::snapshot::{ColumnSnapshot, SchemaSnapshot};
 use crate::store::{inspect_directory, MigrationFile};
 use fexu_core::{secondary_index_name, unique_index_name, DatabaseKind, ReferentialAction};
+use fexu_db::driver::{
+    ConnectionTrait, DatabaseBackend, DatabaseConnection, PinnedSqlite, Statement, TransactionTrait,
+};
 use fexu_db::{
     kind_of, render_add_column_referencing, render_create_index, render_drop_column,
     render_drop_index, render_drop_table, render_rename_column, render_rename_table,
     render_table_bundle, with_checks, ForeignKeyClause, PhysicalColumn,
 };
-use sea_orm::{
-    ConnectionTrait, DatabaseBackend, DatabaseConnection, DbErr, ExecResult, QueryResult,
-    RuntimeErr, Statement, TransactionTrait,
-};
-use sea_query_binder::SqlxValues;
 use std::path::Path;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
 
 #[derive(Debug)]
@@ -626,16 +623,11 @@ async fn apply_sqlite_on_one_connection(
     history_id: &str,
     record: bool,
 ) -> Result<(), MigrationError> {
-    let connection = db
-        .get_sqlite_connection_pool()
-        .acquire()
-        .await
-        .map_err(|error| {
-            MigrationError::new(format!(
-                "Could not acquire a SQLite connection for the rebuild: {error}"
-            ))
-        })?;
-    let pinned = PinnedSqlite::new(connection);
+    let pinned = db.pin_sqlite().await.map_err(|error| {
+        MigrationError::new(format!(
+            "Could not acquire a SQLite connection for the rebuild: {error}"
+        ))
+    })?;
     pinned
         .execute(Statement::from_string(
             DatabaseBackend::Sqlite,
@@ -647,7 +639,6 @@ async fn apply_sqlite_on_one_connection(
                 "Could not suspend foreign keys before rebuilding: {error}"
             ))
         })?;
-    pinned.enforcement_suspended();
     let outcome = async {
         pinned
             .execute(Statement::from_string(DatabaseBackend::Sqlite, "BEGIN"))
@@ -730,7 +721,6 @@ async fn restore_sqlite_enforcement(connection: &PinnedSqlite) -> Result<(), Mig
             "Could not restore foreign key enforcement after rebuilding.".to_owned(),
         ));
     }
-    connection.enforcement_restored();
     Ok(())
 }
 
@@ -1134,129 +1124,6 @@ fn physical_column(column: &ColumnSnapshot) -> Result<PhysicalColumn<'_>, Migrat
         primary_key: column.primary_key,
         default_bool: column.default,
     })
-}
-
-struct PinnedSqlite {
-    connection:
-        tokio::sync::Mutex<Option<sea_orm::sqlx::pool::PoolConnection<sea_orm::sqlx::Sqlite>>>,
-    enforcement_intact: AtomicBool,
-}
-
-impl PinnedSqlite {
-    fn new(connection: sea_orm::sqlx::pool::PoolConnection<sea_orm::sqlx::Sqlite>) -> Self {
-        Self {
-            connection: tokio::sync::Mutex::new(Some(connection)),
-            enforcement_intact: AtomicBool::new(true),
-        }
-    }
-
-    fn enforcement_suspended(&self) {
-        self.enforcement_intact.store(false, Ordering::SeqCst);
-    }
-
-    fn enforcement_restored(&self) {
-        self.enforcement_intact.store(true, Ordering::SeqCst);
-    }
-
-    async fn live(
-        &self,
-    ) -> Result<
-        tokio::sync::MutexGuard<
-            '_,
-            Option<sea_orm::sqlx::pool::PoolConnection<sea_orm::sqlx::Sqlite>>,
-        >,
-        DbErr,
-    > {
-        Ok(self.connection.lock().await)
-    }
-}
-
-impl Drop for PinnedSqlite {
-    fn drop(&mut self) {
-        let connection = self.connection.get_mut().take();
-        if let Some(connection) = connection {
-            if self.enforcement_intact.load(Ordering::SeqCst) {
-                drop(connection);
-            } else {
-                drop(connection.detach());
-            }
-        }
-    }
-}
-
-fn statement_query(
-    statement: &Statement,
-) -> sea_orm::sqlx::query::Query<'_, sea_orm::sqlx::Sqlite, SqlxValues> {
-    let values = statement
-        .values
-        .clone()
-        .unwrap_or_else(|| sea_orm::sea_query::Values(Vec::new()));
-    sea_orm::sqlx::query_with(&statement.sql, SqlxValues(values))
-}
-
-#[async_trait::async_trait]
-impl ConnectionTrait for PinnedSqlite {
-    fn get_database_backend(&self) -> DatabaseBackend {
-        DatabaseBackend::Sqlite
-    }
-
-    async fn execute(&self, statement: Statement) -> Result<ExecResult, DbErr> {
-        let mut guard = self.live().await?;
-        let Some(connection) = guard.as_mut() else {
-            return Err(DbErr::Conn(RuntimeErr::Internal(
-                "SQLite connection is closed".to_owned(),
-            )));
-        };
-        statement_query(&statement)
-            .execute(&mut **connection)
-            .await
-            .map(ExecResult::from)
-            .map_err(|error| DbErr::Exec(RuntimeErr::SqlxError(error)))
-    }
-
-    async fn execute_unprepared(&self, sql: &str) -> Result<ExecResult, DbErr> {
-        let mut guard = self.live().await?;
-        let Some(connection) = guard.as_mut() else {
-            return Err(DbErr::Conn(RuntimeErr::Internal(
-                "SQLite connection is closed".to_owned(),
-            )));
-        };
-        sea_orm::sqlx::Executor::execute(&mut **connection, sql)
-            .await
-            .map(ExecResult::from)
-            .map_err(|error| DbErr::Exec(RuntimeErr::SqlxError(error)))
-    }
-
-    async fn query_one(&self, statement: Statement) -> Result<Option<QueryResult>, DbErr> {
-        let mut guard = self.live().await?;
-        let Some(connection) = guard.as_mut() else {
-            return Err(DbErr::Conn(RuntimeErr::Internal(
-                "SQLite connection is closed".to_owned(),
-            )));
-        };
-        match statement_query(&statement)
-            .fetch_optional(&mut **connection)
-            .await
-        {
-            Ok(Some(row)) => Ok(Some(QueryResult::from(row))),
-            Ok(None) => Ok(None),
-            Err(error) => Err(DbErr::Query(RuntimeErr::SqlxError(error))),
-        }
-    }
-
-    async fn query_all(&self, statement: Statement) -> Result<Vec<QueryResult>, DbErr> {
-        let mut guard = self.live().await?;
-        let Some(connection) = guard.as_mut() else {
-            return Err(DbErr::Conn(RuntimeErr::Internal(
-                "SQLite connection is closed".to_owned(),
-            )));
-        };
-        statement_query(&statement)
-            .fetch_all(&mut **connection)
-            .await
-            .map(|rows| rows.into_iter().map(QueryResult::from).collect())
-            .map_err(|error| DbErr::Query(RuntimeErr::SqlxError(error)))
-    }
 }
 
 fn map_execute_error(id: &str, operation: &MigrationOperation, detail: &str) -> MigrationError {

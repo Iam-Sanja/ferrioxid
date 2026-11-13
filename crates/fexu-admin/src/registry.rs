@@ -7,8 +7,8 @@ use crate::views::{self, AdminView, ExtensionError};
 use crate::widgets::{self, AdminWidget};
 use fexu_auth::{AuthUser, ObjectPolicy};
 use fexu_core::{AdminModelMeta, ColumnSpec, FexuError, ModelDescriptor, QueryScope};
+use fexu_db::driver::{DatabaseConnection, DatabaseTransaction, TransactionTrait};
 use fexu_db::{query_admin_page, AdminPageRequest, DeleteOutcome, ModelRepository};
-use sea_orm::{DatabaseConnection, DatabaseTransaction, TransactionTrait};
 use serde_json::{Map, Value};
 use std::sync::Arc;
 
@@ -28,8 +28,8 @@ pub trait ManagedModel: Send + Sync {
         search: Option<&str>,
         sort_column: &str,
         descending: bool,
-        filters: &[(&str, sea_orm::Value)],
-        bounds: &[(&str, bool, sea_orm::Value)],
+        filters: &[(&str, fexu_db::driver::Value)],
+        bounds: &[(&str, bool, fexu_db::driver::Value)],
         offset: u64,
         limit: u64,
         scope: &QueryScope,
@@ -749,8 +749,8 @@ where
         search: Option<&str>,
         sort_column: &str,
         descending: bool,
-        filters: &[(&str, sea_orm::Value)],
-        bounds: &[(&str, bool, sea_orm::Value)],
+        filters: &[(&str, fexu_db::driver::Value)],
+        bounds: &[(&str, bool, fexu_db::driver::Value)],
         offset: u64,
         limit: u64,
         scope: &QueryScope,
@@ -892,8 +892,8 @@ where
         search: Option<&str>,
         sort_column: &str,
         descending: bool,
-        filters: &[(&str, sea_orm::Value)],
-        bounds: &[(&str, bool, sea_orm::Value)],
+        filters: &[(&str, fexu_db::driver::Value)],
+        bounds: &[(&str, bool, fexu_db::driver::Value)],
         offset: u64,
         limit: u64,
         scope: &QueryScope,
@@ -1032,8 +1032,8 @@ async fn load_page<M: ModelRepository>(
     search: Option<&str>,
     sort_column: &str,
     descending: bool,
-    filters: &[(&str, sea_orm::Value)],
-    bounds: &[(&str, bool, sea_orm::Value)],
+    filters: &[(&str, fexu_db::driver::Value)],
+    bounds: &[(&str, bool, fexu_db::driver::Value)],
     offset: u64,
     limit: u64,
     scope: &QueryScope,
@@ -1126,7 +1126,7 @@ where
 }
 
 async fn write_audit<M: ModelRepository>(
-    db: &impl sea_orm::ConnectionTrait,
+    db: &impl fexu_db::driver::ConnectionTrait,
     user: &AuthUser,
     action: &str,
     outcome: &str,

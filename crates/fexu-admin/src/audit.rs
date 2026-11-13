@@ -2,8 +2,8 @@
 
 use fexu_auth::ADMIN_AUDIT;
 use fexu_core::{AdminFieldMeta, AdminModelMeta, FexuError};
-use sea_orm::sea_query::{Alias, PostgresQueryBuilder, Query, SqliteQueryBuilder};
-use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value as DbValue};
+use fexu_db::driver::sea_query::{Alias, PostgresQueryBuilder, Query, SqliteQueryBuilder};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement, Value as DbValue};
 use serde_json::Value;
 use std::time::{SystemTime, UNIX_EPOCH};
 use uuid::Uuid;
@@ -105,20 +105,28 @@ pub async fn matching(
             Alias::new("operation_id"),
         ])
         .from(Alias::new(ADMIN_AUDIT))
-        .order_by(Alias::new("created_at"), sea_orm::sea_query::Order::Desc)
-        .order_by(Alias::new("id"), sea_orm::sea_query::Order::Desc)
+        .order_by(
+            Alias::new("created_at"),
+            fexu_db::driver::sea_query::Order::Desc,
+        )
+        .order_by(Alias::new("id"), fexu_db::driver::sea_query::Order::Desc)
         .limit(PAGE_SIZE + 1)
         .offset(offset);
     if let Some(actor) = actor {
         query.and_where(
-            sea_orm::sea_query::Expr::col(Alias::new("actor_id")).eq(stored_uuid(backend, actor)),
+            fexu_db::driver::sea_query::Expr::col(Alias::new("actor_id"))
+                .eq(stored_uuid(backend, actor)),
         );
     }
     if let Some(model_key) = model_key {
-        query.and_where(sea_orm::sea_query::Expr::col(Alias::new("model_key")).eq(model_key));
+        query.and_where(
+            fexu_db::driver::sea_query::Expr::col(Alias::new("model_key")).eq(model_key),
+        );
     }
     if let Some(record_id) = record_id {
-        query.and_where(sea_orm::sea_query::Expr::col(Alias::new("record_id")).eq(record_id));
+        query.and_where(
+            fexu_db::driver::sea_query::Expr::col(Alias::new("record_id")).eq(record_id),
+        );
     }
     let (sql, values) = build(backend, &query)?;
     let rows = db
@@ -233,7 +241,10 @@ fn unix_now() -> i64 {
         .unwrap_or(0)
 }
 
-fn optional_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Option<Uuid>, FexuError> {
+fn optional_uuid(
+    row: &fexu_db::driver::QueryResult,
+    column: &str,
+) -> Result<Option<Uuid>, FexuError> {
     if let Ok(value) = row.try_get::<Option<String>>("", column) {
         return match value {
             Some(text) if !text.is_empty() => Uuid::parse_str(&text)
@@ -270,7 +281,7 @@ fn stored_uuid_null(backend: DatabaseBackend) -> DbValue {
     }
 }
 
-fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FexuError> {
+fn read_uuid(row: &fexu_db::driver::QueryResult, column: &str) -> Result<Uuid, FexuError> {
     if let Ok(value) = row.try_get::<Uuid>("", column) {
         return Ok(value);
     }
@@ -283,7 +294,7 @@ fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FexuError
 async fn execute(
     db: &impl ConnectionTrait,
     backend: DatabaseBackend,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<(), FexuError> {
     let (sql, values) = build(backend, query)?;
     db.execute(Statement::from_sql_and_values(backend, sql, values))
@@ -294,7 +305,7 @@ async fn execute(
 
 fn build(
     backend: DatabaseBackend,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<(String, Vec<DbValue>), FexuError> {
     let (sql, values) = match backend {
         DatabaseBackend::Postgres => query.build(PostgresQueryBuilder),
@@ -423,7 +434,7 @@ mod tests {
         matched.expect("record id match on the disposable database");
     }
 
-    async fn record_id_match(db: &sea_orm::DatabaseConnection) -> Result<(), String> {
+    async fn record_id_match(db: &fexu_db::driver::DatabaseConnection) -> Result<(), String> {
         let actor = uuid::Uuid::nil();
         let apple = "11111111-1111-1111-1111-111111111111";
         let other = "22222222-2222-2222-2222-222222222222";

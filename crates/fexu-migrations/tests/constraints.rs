@@ -1,12 +1,12 @@
 //! SQLite-Prüfungen für Unique Constraints, Indizes und Fremdschlüssel. Kein Docker.
 
 use fexu_db::connect;
+use fexu_db::driver::{ConnectionTrait, DatabaseConnection, Statement};
 use fexu_migrations::{
     apply_directory, baseline_database, make_migration, plan_change, write_explicit_migration,
     ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType, MakeOutcome,
     MigrationOperation, OnDelete, SchemaSnapshot, TableSnapshot, UniqueConstraintSnapshot,
 };
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -184,7 +184,7 @@ async fn open_db(path: &Path) -> DatabaseConnection {
     connect(&sqlite_url(path)).await.unwrap()
 }
 
-async fn execute(db: &DatabaseConnection, sql: &str) -> Result<(), sea_orm::DbErr> {
+async fn execute(db: &DatabaseConnection, sql: &str) -> Result<(), fexu_db::driver::DbErr> {
     db.execute(Statement::from_string(db.get_database_backend(), sql))
         .await
         .map(|_| ())

@@ -11,12 +11,12 @@ use std::path::{Path, PathBuf};
 use axum::body::Body;
 use axum::http::{header, HeaderMap, HeaderName, HeaderValue, Method, Request, StatusCode};
 use axum::Router;
+use fexu_db::driver::{ConnectionTrait, DatabaseConnection, Statement};
 use fexu_db::{DisposablePostgres, QueryCounter};
 use fexu_migrations::{
     load_fixture, FixtureFile, LoadReport, LoadRequest, MigrationError, SchemaSnapshot,
 };
 use http_body_util::BodyExt;
-use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::Value;
 use tower::ServiceExt;
 
@@ -924,21 +924,21 @@ mod tests {
         let right_db = right.connect().await.expect("right connection");
         left_db
             .execute(Statement::from_string(
-                sea_orm::DatabaseBackend::Postgres,
+                fexu_db::driver::DatabaseBackend::Postgres,
                 "CREATE TABLE fexu_isolation_probe (id integer PRIMARY KEY)".to_owned(),
             ))
             .await
             .expect("create probe");
         left_db
             .execute(Statement::from_string(
-                sea_orm::DatabaseBackend::Postgres,
+                fexu_db::driver::DatabaseBackend::Postgres,
                 "INSERT INTO fexu_isolation_probe (id) VALUES (1)".to_owned(),
             ))
             .await
             .expect("insert probe");
         let missing = right_db
             .execute(Statement::from_string(
-                sea_orm::DatabaseBackend::Postgres,
+                fexu_db::driver::DatabaseBackend::Postgres,
                 "SELECT id FROM fexu_isolation_probe".to_owned(),
             ))
             .await;

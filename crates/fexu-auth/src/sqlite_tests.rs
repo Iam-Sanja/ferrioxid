@@ -1,6 +1,6 @@
 use crate::password::ephemeral_password;
 use crate::{AuthConfig, AuthError, AuthService, Environment};
-use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement};
 
 fn memory() -> &'static str {
     "sqlite::memory:"
@@ -309,7 +309,7 @@ async fn login_rate_limit_and_proxy_header() {
     assert!(trusting.presented_origin_allowed(&headers).is_err());
 }
 
-async fn expiries_for(db: &sea_orm::DatabaseConnection, user_id: &str) -> Vec<i64> {
+async fn expiries_for(db: &fexu_db::driver::DatabaseConnection, user_id: &str) -> Vec<i64> {
     let rows = db
         .query_all(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,

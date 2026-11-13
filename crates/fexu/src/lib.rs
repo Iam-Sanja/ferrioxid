@@ -44,9 +44,9 @@ pub mod management {
         Registry,
     };
 }
+pub use fexu_db::driver as sea_orm;
 pub use fexu_static as static_files;
 pub use fexu_storage as storage;
-pub use sea_orm;
 pub use serde;
 pub use serde_json;
 pub use uuid;

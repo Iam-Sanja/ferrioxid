@@ -111,7 +111,7 @@ mod tests {
         FORMAT_VERSION,
     };
     use crate::store::{save_migration, seal};
-    use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+    use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement};
 
     fn column(name: &str, logical_type: LogicalType, primary_key: bool) -> ColumnSnapshot {
         ColumnSnapshot {
@@ -179,7 +179,7 @@ mod tests {
     }
 
     mod postgres_isolation {
-        use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
+        use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement};
 
         pub struct IsolatedPostgres {
             pub url: String,
@@ -187,7 +187,9 @@ mod tests {
             admin_url: String,
         }
 
-        async fn admin_connection(prefix: &str) -> Result<sea_orm::DatabaseConnection, String> {
+        async fn admin_connection(
+            prefix: &str,
+        ) -> Result<fexu_db::driver::DatabaseConnection, String> {
             for db in ["template1", "postgres", "fexu"] {
                 let url = format!("{prefix}/{db}");
                 if let Ok(connection) = fexu_db::connect(&url).await {
@@ -402,8 +404,8 @@ mod tests {
         let bound = values
             .iter()
             .map(|value| match backend {
-                DatabaseBackend::Postgres => sea_orm::Value::Uuid(Some(Box::new(*value))),
-                _ => sea_orm::Value::String(Some(Box::new(value.to_string()))),
+                DatabaseBackend::Postgres => fexu_db::driver::Value::Uuid(Some(Box::new(*value))),
+                _ => fexu_db::driver::Value::String(Some(Box::new(value.to_string()))),
             })
             .collect::<Vec<_>>();
         db.execute(Statement::from_sql_and_values(

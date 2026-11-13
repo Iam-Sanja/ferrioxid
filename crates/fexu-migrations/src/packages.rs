@@ -306,7 +306,7 @@ pub fn validate_package_graph(packages: &[PackageMigration]) -> Result<(), Migra
 }
 
 pub async fn apply_packages(
-    db: &sea_orm::DatabaseConnection,
+    db: &fexu_db::driver::DatabaseConnection,
     packages: &[PackageMigration],
     allow_destructive: bool,
 ) -> Result<Vec<String>, MigrationError> {
@@ -324,7 +324,7 @@ pub async fn apply_packages(
 }
 
 pub async fn package_reports(
-    db: &sea_orm::DatabaseConnection,
+    db: &fexu_db::driver::DatabaseConnection,
     packages: &[PackageMigration],
 ) -> Result<Vec<(String, crate::runner::StatusReport)>, MigrationError> {
     validate_package_graph(packages)?;
@@ -383,7 +383,7 @@ mod tests {
         Ok(())
     }
     use crate::runner::{apply_directory, migration_status};
-    use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
+    use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement, Value};
 
     fn node(name: &str, directory: &std::path::Path, depends_on: &[&str]) -> PackageMigration {
         PackageMigration {
@@ -496,7 +496,7 @@ mod tests {
     }
 
     async fn namespaced_conflict(
-        db: &sea_orm::DatabaseConnection,
+        db: &fexu_db::driver::DatabaseConnection,
         directory: &std::path::Path,
     ) -> bool {
         crate::runner::namespaced_status(db, directory, "shop")
