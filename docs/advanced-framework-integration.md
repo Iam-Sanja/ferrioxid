@@ -153,7 +153,12 @@ Vorher und nachher: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_
 4. `ad6bb8b` merge(pr-100): integrate developer apps aliases and project files
 5. `63a648f` test(integration): cover the combined pull requests 97-100
 6. `f479808` docs: record the local integration of pull requests 97-100
-7. `e451da9` fix(test): read the audit database from DATABASE_URL. Der Audit-Test liest `FERRIOXID_POSTGRES_ADMIN` oder `DATABASE_URL`, der PostgreSQL-Job führt `postgres_keyset_annotations_and_many_to_many` aus, und [security-rsa.md](security-rsa.md) beschreibt den Abbau von `RUSTSEC-2023-0071`.
+7. `e451da9` fix(test): read the audit database from DATABASE_URL
+8. `b953360` docs: record the audit-database commit on the integration branch
+9. `b27b2b0` docs: record the green GitHub run after the audit-database fix
+10. `3a59dc3` merge(pr-103): integrate admin configuration and shared forms
+11. `3985172` merge(pr-102): integrate the API contract and deploy checks
+12. `7371dba` merge(pr-104): integrate MFA, scheduled jobs, cache and storage
 
 ## Risiken
 
@@ -164,7 +169,38 @@ Vorher und nachher: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_
 - Issue #8 bleibt offen, bis SQLx `rsa >= 0.10` zieht. Die Ausnahme wird nicht erweitert.
 - Ein Rollback von #98 nach einer bereits angelegten JSON-Spalte braucht eine eigene Schemaentscheidung.
 - Alias-Konflikte, die vor #100 still auf `FERRIOXID_*` fielen, sind jetzt Startfehler.
-- Der PostgreSQL-16-Log enthielt auf `f479808` und erneut auf `b953360` die Meldung `unsupported jsonb version number 110`. Die betroffenen Tests und der Job waren grün. Das ist keine stille Freigabe und bleibt eine Folgeprüfung, kein Schemaumbau in diesem Branch.
+- Der PostgreSQL-16-Log enthielt auf `f479808` und erneut auf `b953360` bei `INSERT INTO "ferrioxid_report_notes" ("id", "body")` die Meldung `unsupported jsonb version number 110`. Parameter `$2` ist die JSONB-Spalte. Byte 110 ist `n` aus dem absichtlich abgelehnten Text `not-json`. `Value::Json` trägt die JSONB-Version 1 und wurde gespeichert. Seit `7371dba` wird Text für eine JSON-Spalte vor dem Binden geprüft und nur als `Value::Json` gesendet. Ungültiger Text ist `validation.json`.
+
+## Integration von #103, #102 und #104
+
+Reihenfolge nach Abhängigkeit: #103, dann #102, dann #104. #102 ersetzt die Proxy-Prüfung und #104 die eingebetteten Migrationen. Deshalb liegt #104 zuletzt.
+
+| Merge | Commit | Konflikte und Entscheidung |
+|---|---|---|
+| #103 `work/admin-devex` @ `1db4671` | `3a59dc3` | `ModelAdmin` verengt `AdminModelMeta`. HTML- und JSON-Formulare teilen die Textprüfung. `ColumnKind::Json` bleibt kanonisch. Audit-Timeline und One-to-one bleiben. |
+| #102 `work/api-quality` @ `9fd1fc2` | `3985172` | OpenAPI 3.1, Keyset, `problem+json`, `/readyz`, `check --deploy`, Dump/Restore und der Playwright-Job bleiben. `#[field(json)]` und `write_only` bleiben beide. Ein aktiver Proxy vertraut nur `FERRIOXID_TRUSTED_PROXIES`. `*` zählt nicht. Widersprüchliche Aliase sind ein Fehler und werden nicht ausgegeben. |
+| #104 `work/framework-services` @ `f2293b4` | `7371dba` | Sechs Auth-Migrationen `0001`–`0006` und zwei Job-Migrationen `0001`–`0002` sind eingebettet. `apply_migrations` liest die eingebetteten Dateien, nicht das Quellverzeichnis. In `queue.rs` bleibt ein `id_expr`: PostgreSQL bindet die Id als UUID, SQLite als Text. |
+
+`cargo fmt --all`, `cargo clippy --workspace --all-targets -- -D warnings` und `cargo test --workspace` waren nach jedem dieser Merges grün. Ignorierte PostgreSQL-Tests dieses Workspace-Laufs waren übersprungen, weil `DATABASE_URL` nicht gesetzt war.
+
+PostgreSQL 18.6 auf `127.0.0.1` danach, nur über Wegwerfdatenbanken `ferrioxid_test_<32 hex>`:
+
+| Test | Ergebnis |
+|---|---|
+| `postgres_grouped_report_scope_json_and_one_to_one` | ok. Ungültiges JSON endet als `validation.json`. |
+| `postgres_embedded_auth_and_jobs` | ok. Sechs Auth- und zwei Job-Migrationen. |
+| `postgres_dump_and_restore_roundtrip` | ok, `pg_dump` 18.6 |
+| `postgres_matching_uses_the_record_id_not_a_similar_name` | ok |
+| `postgres_cursor_filters_and_openapi_describe_the_same_list` | ok |
+
+`ferrioxid` blieb bei 15 öffentlichen Tabellen, `ferrioxid_migrations_down_test` bei 1. Die vier älteren Datenbanken `ferrioxid_test_services_anon_20261112233529`, `ferrioxid_test_services_auth_20261112233529`, `ferrioxid_test_services_jobs_20261112233529` und `ferrioxid_test_services_names_20261112233529` wurden nicht gelöscht. Keine neue `ferrioxid_test_*`-Datenbank blieb zurück.
+
+## Release-Blocker
+
+- TOTP und Recovery-Codes hängen am CSRF-Geheimnis. Details und der Folgeplan stehen in [auth-threat-model.md](auth-threat-model.md).
+- Issue #8 bleibt offen. `rsa 0.9.10` ist nur über `sqlx-mysql` im Lockfile. Der Abbau steht in [security-rsa.md](security-rsa.md). Die Ausnahme wird nicht erweitert.
+- Docker ist auf dieser Maschine nicht installiert. `deploy/compose.yaml` und `examples/deploy/compose.yaml` wurden nicht gestartet.
+- Playwright lief lokal nicht. Der Ubuntu-Job `Browser` ist der Nachweis, sobald GitHub ihn auf diesem Head ausführt.
 
 ## Rollback
 

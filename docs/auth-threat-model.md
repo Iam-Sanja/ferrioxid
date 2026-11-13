@@ -29,6 +29,8 @@ The login rate limit and the MFA attempt limit live in process memory. A restart
 
 The reauthentication proof can be replayed on the same session until it expires. Password change still revokes sessions.
 
+TOTP ciphertext and recovery-code hashes are derived from `AuthConfig.csrf_secret` by HMAC-SHA256 with the label `ferrioxid-mfa-v1`. That is not a separate MFA key. Rotating `FERRIOXID_CSRF_SECRET` or `.ferrioxid/csrf.key` makes enrolled authenticators and unused recovery codes unreadable. This is a release blocker for any deployment that already has confirmed TOTP. The follow-up is a 32-byte `FERRIOXID_MFA_KEY`, used for new seals, with open and recovery checks trying that key and then the legacy derived key, and a re-seal after a successful legacy open. Do not rotate the CSRF secret until that migration exists. Do not add another advisory ignore for this.
+
 Account close does not remove files. An application that skips `purge_owner` leaves the owner's bytes on disk.
 
 Header checks on uploads are not a malware scanner. See [storage-remote.md](storage-remote.md).

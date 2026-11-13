@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased — Integration of pull requests #103, #102 and #104
+
+- `ModelAdmin` narrows `AdminModelMeta`. HTML and JSON forms share validation. The audit timeline, fieldsets, JSON documents and one-to-one loads remain.
+- Generated lists use keyset pages. OpenAPI 3.1, problem JSON, `/readyz` and read-only `ferrioxid check --deploy` are on the same branch. An enabled proxy trusts only the peer allow-list.
+- Embedded auth migrations are `0001` through `0006_account_security`. Embedded job migrations are `0001_jobs` and `0002_job_schedule`. TOTP, recovery codes, scheduled jobs, a process-local cache and signed storage downloads are included.
+- A text value written to a JSON column is canonicalized before insert. Invalid JSON is `validation.json` and is not sent to PostgreSQL as binary jsonb.
+- TOTP encryption is still derived from the CSRF secret. That coupling is a release blocker. See [the threat model](docs/auth-threat-model.md).
+- The Cargo package version remains `0.1.0`. Nothing was published.
+
 ## Unreleased — Integration of pull requests #97 to #100
 
 - Embedded auth and job migrations, trusted proxy peers, `inspect_framework`, `migrate plan`, JSON documents, one-to-one loads, grouped reports, the admin audit timeline, `aliased_env` and a single legacy project file are on one branch. See [the integration record](docs/advanced-framework-integration.md).
