@@ -400,13 +400,14 @@ mod tests {
         let next = next_after("30 2 * * *", "europe/berlin", before_gap).unwrap();
         let gap_day = utc(2026, 3, 29, 0, 30);
         assert_ne!(next, gap_day);
+        assert_eq!(next, utc(2026, 3, 30, 0, 30));
         let morning = next_after("0 3 * * *", "europe/berlin", before_gap).unwrap();
         assert_eq!(morning, utc(2026, 3, 29, 1, 0));
         let before_fold = utc(2026, 10, 24, 22, 0);
         let folded = next_after("30 2 * * *", "europe/berlin", before_fold).unwrap();
         assert_eq!(folded, utc(2026, 10, 25, 0, 30));
         let again = next_after("30 2 * * *", "europe/berlin", folded).unwrap();
-        assert!(again > utc(2026, 10, 25, 2, 0));
+        assert_eq!(again, utc(2026, 10, 26, 1, 30));
     }
 
     #[test]
