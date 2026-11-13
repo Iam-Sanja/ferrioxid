@@ -7,7 +7,7 @@
 {% elif field.kind == "boolean" %}
 <input type="hidden" name="{{ field.name }}" value="false">
 <label class="check">
-<input id="{{ field.name }}" name="{{ field.name }}" type="checkbox" value="true" {% if field.checked %}checked{% endif %} {% if field.invalid %}aria-invalid="true"{% endif %} {% if field.error %}aria-describedby="{{ field.name }}-error"{% endif %}>
+<input id="{{ field.name }}" name="{{ field.name }}" type="checkbox" value="true" {% if field.checked %}checked{% endif %} {% if field.invalid %}aria-invalid="true"{% endif %} {% if field.hint and field.error %}aria-describedby="{{ field.name }}-hint {{ field.name }}-error"{% elif field.error %}aria-describedby="{{ field.name }}-error"{% elif field.hint %}aria-describedby="{{ field.name }}-hint"{% endif %}>
 <span>{{ field.label }} {% if field.required %}<span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %}<span class="hint">{{ i18n.optional }}</span>{% endif %}</span>
 </label>
 {% if field.hint %}<p class="hint" id="{{ field.name }}-hint">{{ field.hint }}</p>{% endif %}

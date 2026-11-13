@@ -25,11 +25,12 @@ pub use actions::{ActionContext, ActionError, ActionHandler, ActionOperation, Ad
 #[doc(hidden)]
 pub use audit::fail_next_insert;
 pub use compose::{groups as inline_form_groups, save as save_with_children, SaveResult};
-pub use configure::{CheckedModelAdmin, ConfigError, ModelAdmin};
+pub use configure::{CheckedModelAdmin, ConfigError, ManyLink, ModelAdmin};
 pub use filters::{AdminFilter, FilterKind, FilterOption};
 pub use registry::{AdminBranding, AdminRegistry};
 pub use relations::{
-    bulk_targets, lookup_page, replace_links, shape_of, LookupPage, RelationShape,
+    bulk_targets, current_members, lookup_page, posted_members, replace_links, scoped_membership,
+    shape_of, LookupPage, RelationShape,
 };
 pub use views::{AdminView, ExtensionError, UploadedFile, ViewHandler, ViewPage, ViewRequest};
 pub use widgets::{AdminWidget, WidgetKind};
