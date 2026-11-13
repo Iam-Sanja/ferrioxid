@@ -560,6 +560,18 @@ impl AdminRegistry {
         meta.per_page
     }
 
+    pub(crate) fn links_of(
+        &self,
+        meta: &ferrioxid_core::AdminModelMeta,
+    ) -> &[crate::configure::ManyLink] {
+        if self.sealed {
+            if let Some(item) = self.configured.iter().find(|item| item.key() == meta.key) {
+                return item.links();
+            }
+        }
+        &[]
+    }
+
     pub(crate) fn action_permission(&self, key: &str, action: &str) -> Option<&'static str> {
         if !self.sealed {
             return None;
@@ -595,6 +607,18 @@ impl AdminRegistry {
                     "admin.relation",
                     "A foreign key target is not registered in this admin registry.",
                 ));
+            }
+            for link in item.links() {
+                if !self
+                    .models
+                    .iter()
+                    .any(|candidate| candidate.meta().key == link.child_key)
+                {
+                    return Err(ExtensionError::new(
+                        "admin.relation",
+                        "The many-to-many child model is not registered.",
+                    ));
+                }
             }
         }
         Ok(())

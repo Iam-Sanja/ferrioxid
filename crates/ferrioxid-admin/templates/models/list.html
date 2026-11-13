@@ -6,35 +6,35 @@
 {% if sort %}<input type="hidden" name="sort" value="{{ sort }}">{% endif %}
 {% if dir %}<input type="hidden" name="dir" value="{{ dir }}">{% endif %}
 <div class="filter-fields">
-<label>{{ i18n.search }} <input name="q" value="{{ query }}"></label>
+<label for="admin-search">{{ i18n.search }} <input id="admin-search" name="q" type="search" value="{{ query }}"></label>
 {% for filter in filters %}
-<label>{{ filter.label }}
+<label for="filter-{{ filter.name }}">{{ filter.label }}
 {% if filter.kind == "boolean" %}
-<select name="filter.{{ filter.name }}">
+<select id="filter-{{ filter.name }}" name="filter.{{ filter.name }}">
 <option value="">{{ i18n.all }}</option>
 <option value="true" {% if filter.value == "true" %}selected{% endif %}>{{ filter.yes }}</option>
 <option value="false" {% if filter.value == "false" %}selected{% endif %}>{{ filter.no }}</option>
 </select>
 {% elif filter.kind == "uuid" %}
-<select name="filter.{{ filter.name }}">
+<select id="filter-{{ filter.name }}" name="filter.{{ filter.name }}">
 <option value="">{{ i18n.all }}</option>
 {% for option in filter.options %}
 <option value="{{ option.id }}" {% if option.id == filter.value %}selected{% endif %}>{{ option.label }}</option>
 {% endfor %}
 </select>
 {% elif filter.kind == "choice" %}
-<select name="filter.{{ filter.name }}">
+<select id="filter-{{ filter.name }}" name="filter.{{ filter.name }}">
 <option value="">{{ i18n.all }}</option>
 {% for option in filter.options %}
 <option value="{{ option.id }}" {% if option.id == filter.value %}selected{% endif %}>{{ option.label }}</option>
 {% endfor %}
 </select>
 {% elif filter.kind == "number" %}
-<input name="filter.{{ filter.name }}" type="number" inputmode="numeric" value="{{ filter.value }}">
+<input id="filter-{{ filter.name }}" name="filter.{{ filter.name }}" type="number" inputmode="numeric" value="{{ filter.value }}">
 {% elif filter.kind == "date" or filter.kind == "time" or filter.kind == "datetime" %}
-<input name="filter.{{ filter.name }}" type="{% if filter.kind == "date" %}date{% elif filter.kind == "time" %}time{% else %}datetime-local{% endif %}" value="{{ filter.value }}">
+<input id="filter-{{ filter.name }}" name="filter.{{ filter.name }}" type="{% if filter.kind == "date" %}date{% elif filter.kind == "time" %}time{% else %}datetime-local{% endif %}" value="{{ filter.value }}">
 {% else %}
-<input name="filter.{{ filter.name }}" value="{{ filter.value }}">
+<input id="filter-{{ filter.name }}" name="filter.{{ filter.name }}" value="{{ filter.value }}">
 {% endif %}
 </label>
 {% endfor %}
@@ -69,7 +69,7 @@
 </div>
 {% else %}
 {% if actions %}
-<form method="post" action="{{ list_path }}/bulk">
+<form method="post" action="{{ list_path }}/bulk" aria-label="{{ i18n.bulk_action }}">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="page" value="{{ page }}">
 {% if query %}<input type="hidden" name="q" value="{{ query }}">{% endif %}
@@ -78,8 +78,8 @@
 {% for filter in filters %}{% if filter.value %}<input type="hidden" name="filter.{{ filter.name }}" value="{{ filter.value }}">{% endif %}{% endfor %}
 <div class="bulk-bar">
 <label class="check"><input type="checkbox" name="scope" value="page"><span>{{ i18n.bulk_page }}</span></label>
-<label>{{ i18n.bulk_action }}
-<select name="action" required>
+<label for="bulk-action">{{ i18n.bulk_action }}
+<select id="bulk-action" name="action" required>
 <option value="">{{ i18n.choose }}</option>
 {% for action in actions %}
 <option value="{{ action.name }}">{{ action.label }}</option>
@@ -107,7 +107,7 @@
 <tbody>
 {% for row in rows %}
 <tr data-record-href="{{ list_path }}/{{ row.id }}">
-{% if actions %}<td><label class="check"><input type="checkbox" name="ids" value="{{ row.id }}"><span class="sr-only">{{ i18n.select }}</span></label></td>{% endif %}
+{% if actions %}<td><label class="check"><input type="checkbox" name="ids" value="{{ row.id }}"><span class="sr-only">{{ i18n.select }} {% if row.cells %}{{ row.cells.0.text }}{% else %}{{ row.id }}{% endif %}</span></label></td>{% endif %}
 {% for cell in row.cells %}
 <td class="{% if cell.lead %}is-lead{% endif %}{% if cell.uuid %} is-uuid{% endif %}">{% if cell.relation %}{% if cell.href %}<a href="{{ cell.href }}">{{ cell.text }}</a>{% elif cell.link %}<a href="{{ list_path }}/{{ row.id }}">{{ cell.text }}</a>{% else %}{{ cell.text }}{% endif %} <span class="uuid" title="{{ cell.ref }}">{{ cell.short }}</span>{% elif cell.link %}<a href="{{ list_path }}/{{ row.id }}">{% if cell.uuid %}<span class="uuid" title="{{ cell.text }}">{{ cell.short }}</span>{% else %}{{ cell.text }}{% endif %}</a>{% elif cell.uuid %}<span class="uuid" title="{{ cell.text }}">{{ cell.short }}</span>{% else %}{{ cell.text }}{% endif %}</td>
 {% endfor %}

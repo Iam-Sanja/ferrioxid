@@ -100,6 +100,96 @@ pub async fn lookup_page(
     })
 }
 
+/// Prüft wiederholte Formularwerte. Leer ist eine gültige Auswahl.
+pub fn posted_members(values: &[String]) -> Result<Vec<Uuid>, &'static str> {
+    if values.len() > 1000 {
+        return Err("admin.relation.size");
+    }
+    let mut ids = Vec::with_capacity(values.len());
+    for raw in values {
+        let id = Uuid::parse_str(raw.trim()).map_err(|_| "admin.relation")?;
+        if ids.contains(&id) {
+            return Err("admin.relation");
+        }
+        ids.push(id);
+    }
+    Ok(ids)
+}
+
+/// Behält unsichtbare Verbindungen und übernimmt nur angeforderte Ids aus `visible`.
+///
+/// Eine leere Anfrage entfernt die sichtbaren Verbindungen. Ids außerhalb von
+/// `visible` werden abgelehnt und nicht geschrieben.
+pub fn scoped_membership(
+    current: &[Uuid],
+    visible: &[Uuid],
+    requested: &[Uuid],
+) -> Result<Vec<Uuid>, &'static str> {
+    let chosen = bulk_targets(visible, requested).map_err(|code| {
+        if code == "admin.bulk.size" {
+            "admin.relation.size"
+        } else {
+            "admin.relation"
+        }
+    })?;
+    let mut next = Vec::new();
+    for id in current {
+        if !visible.contains(id) && !next.contains(id) {
+            next.push(*id);
+        }
+    }
+    for id in chosen {
+        if !next.contains(&id) {
+            next.push(id);
+        }
+    }
+    if next.len() > 1000 {
+        return Err("admin.relation.size");
+    }
+    Ok(next)
+}
+
+/// Liest die Kind-Ids einer Verbindungstabelle. Die Abfrage ist gebunden.
+pub async fn current_members(
+    db: &impl ConnectionTrait,
+    link: ManyToMany,
+    parent: Uuid,
+) -> Result<Vec<Uuid>, FerrioxidError> {
+    if !safe_ident(link.join_table)
+        || !safe_ident(link.parent_column)
+        || !safe_ident(link.child_column)
+    {
+        return Err(FerrioxidError::Validation(
+            "many-to-many link is not available".into(),
+        ));
+    }
+    let mut query = Query::select();
+    query
+        .column(Alias::new(link.child_column))
+        .from(Alias::new(link.join_table))
+        .and_where(
+            Expr::col(Alias::new(link.parent_column)).eq(Value::Uuid(Some(Box::new(parent)))),
+        )
+        .limit(1001);
+    let rows = db
+        .query_all(statement(db, &query)?)
+        .await
+        .map_err(FerrioxidError::database)?;
+    if rows.len() > 1000 {
+        return Err(FerrioxidError::Validation("admin.relation.size".into()));
+    }
+    let mut ids = Vec::with_capacity(rows.len());
+    for row in rows {
+        let id = row
+            .try_get("", link.child_column)
+            .map_err(FerrioxidError::database)?;
+        if !ids.contains(&id) {
+            ids.push(id);
+        }
+    }
+    Ok(ids)
+}
+
 /// Lehnt eine Sammelauswahl ab, sobald eine Id außerhalb der sichtbaren Menge liegt.
 pub fn bulk_targets(visible: &[Uuid], requested: &[Uuid]) -> Result<Vec<Uuid>, &'static str> {
     if requested.len() > 1000 {
@@ -193,7 +283,10 @@ fn safe_ident(value: &str) -> bool {
 
 #[cfg(test)]
 mod tests {
-    use super::{bulk_targets, lookup_page, replace_links, shape_of, RelationShape};
+    use super::{
+        bulk_targets, current_members, lookup_page, posted_members, replace_links,
+        scoped_membership, shape_of, RelationShape,
+    };
     use ferrioxid_core::{ColumnKind, ColumnSpec, QueryScope, ReferentialAction, ScopeValue};
     use ferrioxid_db::{insert_record, ManyToMany};
     use sea_orm::{
@@ -410,6 +503,28 @@ mod tests {
             bulk_targets(&visible, &[visible[0], visible[0]]).unwrap_err(),
             "admin.bulk.scope"
         );
+        assert!(posted_members(&[]).unwrap().is_empty());
+        assert_eq!(
+            posted_members(&["not-a-uuid".into()]).unwrap_err(),
+            "admin.relation"
+        );
+        assert_eq!(
+            posted_members(&[visible[0].to_string(), visible[0].to_string()]).unwrap_err(),
+            "admin.relation"
+        );
+        let hidden = Uuid::from_u128(9);
+        assert_eq!(
+            scoped_membership(&[visible[0], hidden], &visible, &[]).unwrap(),
+            vec![hidden]
+        );
+        assert_eq!(
+            scoped_membership(&[visible[0], hidden], &visible, &[visible[1]]).unwrap(),
+            vec![hidden, visible[1]]
+        );
+        assert_eq!(
+            scoped_membership(&[], &visible, &[hidden]).unwrap_err(),
+            "admin.relation"
+        );
     }
 
     async fn exercise_links(db: &DatabaseConnection) {
@@ -458,6 +573,12 @@ mod tests {
         .unwrap();
         tx.rollback().await.unwrap();
         assert_eq!(link_count(db).await, 1);
+        let members = current_members(db, link, parent).await.unwrap();
+        assert_eq!(members, vec![children[0]]);
+        assert!(scoped_membership(&members, &members, &[Uuid::from_u128(99)]).is_err());
+        assert_eq!(current_members(db, link, parent).await.unwrap(), members);
+        replace_links(db, link, parent, &[]).await.unwrap();
+        assert!(current_members(db, link, parent).await.unwrap().is_empty());
         db.execute(Statement::from_string(
             backend,
             String::from("INSERT INTO profiles (id, owner_id) VALUES ('p1', 'owner')"),

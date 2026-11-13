@@ -2,12 +2,16 @@
 
 use crate::actions::ActionOperation;
 use crate::audit::{self, Event};
+use crate::configure::ManyLink;
 use crate::drafts;
 use crate::http::{
     access_scope, display_column, filters_from, gate, list_blocked, permit, reject_locked,
 };
 use crate::localization::{bulk_notice, catalog, normalize, notice, validation_text};
 use crate::registry::{redact, sensitive, AdminRegistry, ManagedModel};
+use crate::relations::{
+    current_members, lookup_page, posted_members, replace_links, scoped_membership,
+};
 use crate::rendering::render;
 use axum::body::Bytes;
 use axum::extract::{Extension, Path, Query, RawQuery, State};
@@ -2108,6 +2112,306 @@ async fn pick_page(
     .await
 }
 
+fn validation_field(fields: &[ferrioxid_core::AdminFieldMeta], message: &str) -> String {
+    let tokens = message
+        .split(|char: char| !char.is_ascii_alphanumeric() && char != '_')
+        .filter(|token| !token.is_empty());
+    let mut matched = String::new();
+    for token in tokens {
+        if fields.iter().any(|field| field.name == token) && matched.is_empty() {
+            matched = token.to_owned();
+        }
+    }
+    matched
+}
+
+fn posted_link_values(body: &Bytes) -> Map<String, Value> {
+    let mut posted = Map::new();
+    for name in repeated(body, "m2m_present") {
+        if posted.contains_key(&name) {
+            continue;
+        }
+        posted.insert(name.clone(), json!(repeated(body, &format!("m2m.{name}"))));
+    }
+    posted
+}
+
+struct PlannedLink {
+    name: String,
+    link: ferrioxid_db::ManyToMany,
+    next: Vec<Uuid>,
+    changed: bool,
+}
+
+async fn plan_memberships(
+    state: &AppState,
+    registry: &AdminRegistry,
+    user: &AuthUser,
+    model: &dyn ManagedModel,
+    parent: Option<Uuid>,
+    body: &Bytes,
+) -> Result<Vec<PlannedLink>, (String, &'static str)> {
+    let links = registry.links_of(model.meta());
+    if links.is_empty() {
+        return Ok(Vec::new());
+    }
+    let present = repeated(body, "m2m_present");
+    let mut planned = Vec::new();
+    for link in links {
+        if !present.iter().any(|name| name == link.name) {
+            continue;
+        }
+        let requested = posted_members(&repeated(body, &format!("m2m.{}", link.name)))
+            .map_err(|code| (link.name.to_owned(), code))?;
+        let current = match parent {
+            Some(parent) => current_members(&state.db, link.relation(), parent)
+                .await
+                .map_err(|_| (link.name.to_owned(), "admin.relation"))?,
+            None => Vec::new(),
+        };
+        let Some(child) = registry.find(link.child_key) else {
+            return Err((link.name.to_owned(), "admin.relation"));
+        };
+        let mut candidates = current.clone();
+        for id in &requested {
+            if !candidates.contains(id) {
+                candidates.push(*id);
+            }
+        }
+        let visible = visible_member_ids(state, user, child.as_ref(), &candidates).await;
+        let next = scoped_membership(&current, &visible, &requested)
+            .map_err(|code| (link.name.to_owned(), code))?;
+        let changed = !same_ids(&current, &next);
+        planned.push(PlannedLink {
+            name: link.name.to_owned(),
+            link: link.relation(),
+            next,
+            changed,
+        });
+    }
+    Ok(planned)
+}
+
+fn same_ids(left: &[Uuid], right: &[Uuid]) -> bool {
+    let mut left = left.to_vec();
+    let mut right = right.to_vec();
+    left.sort();
+    right.sort();
+    left == right
+}
+
+async fn visible_member_ids(
+    state: &AppState,
+    user: &AuthUser,
+    child: &dyn ManagedModel,
+    ids: &[Uuid],
+) -> Vec<Uuid> {
+    let Some(auth) = state.auth.as_ref() else {
+        return Vec::new();
+    };
+    if list_blocked(child) || permit(auth, user, child.meta(), "read").await.is_err() {
+        return Vec::new();
+    }
+    let mut visible = Vec::new();
+    for id in ids {
+        if read_visible(state, user, child, *id, "read")
+            .await
+            .is_some()
+        {
+            visible.push(*id);
+        }
+    }
+    visible
+}
+
+async fn commit_memberships(
+    state: &AppState,
+    planned: &[PlannedLink],
+    parent: Uuid,
+) -> Result<(), (String, &'static str)> {
+    for item in planned {
+        if !item.changed {
+            continue;
+        }
+        replace_links(&state.db, item.link, parent, &item.next)
+            .await
+            .map_err(|_| (item.name.clone(), "admin.relation"))?;
+    }
+    Ok(())
+}
+
+#[allow(clippy::too_many_arguments)]
+async fn membership_widgets(
+    state: &AppState,
+    registry: &AdminRegistry,
+    user: &AuthUser,
+    model: &dyn ManagedModel,
+    parent: Option<Uuid>,
+    posted: Option<&Value>,
+    errors: Option<&Value>,
+    locale: &str,
+) -> Vec<Value> {
+    let hint = catalog(locale)
+        .get("m2m_hint")
+        .and_then(Value::as_str)
+        .unwrap_or("")
+        .to_owned();
+    let mut widgets = Vec::new();
+    for link in registry.links_of(model.meta()) {
+        let error = errors
+            .and_then(|value| value.get(link.name))
+            .and_then(Value::as_str)
+            .unwrap_or("")
+            .to_owned();
+        let Some(child) = registry.find(link.child_key) else {
+            widgets.push(empty_membership(link, &hint, &error, false, true));
+            continue;
+        };
+        let readable = match state.auth.as_ref() {
+            Some(auth) => {
+                !list_blocked(child.as_ref())
+                    && permit(auth, user, child.meta(), "read").await.is_ok()
+            }
+            None => false,
+        };
+        if !readable {
+            widgets.push(empty_membership(link, &hint, &error, true, true));
+            continue;
+        }
+        let chosen =
+            match chosen_member_ids(state, user, child.as_ref(), link, parent, posted).await {
+                Ok(chosen) => chosen,
+                Err(()) => {
+                    let failure = if error.is_empty() {
+                        catalog(locale)
+                            .get("m2m_invalid")
+                            .and_then(Value::as_str)
+                            .unwrap_or("")
+                            .to_owned()
+                    } else {
+                        error
+                    };
+                    widgets.push(empty_membership(link, &hint, &failure, false, false));
+                    continue;
+                }
+            };
+        let mut options = Vec::new();
+        let mut truncated = false;
+        if let Some(label) = display_column(registry.field_slice(child.meta()), child.columns()) {
+            let scope = access_scope(child.as_ref(), user, false);
+            if let Ok(page) = lookup_page(
+                &state.db,
+                child.descriptor().table,
+                child.columns(),
+                label,
+                None,
+                1,
+                100,
+                &scope,
+            )
+            .await
+            {
+                truncated = page.total > i64::try_from(page.rows.len()).unwrap_or(i64::MAX);
+                for row in &page.rows {
+                    if let Some(option) = member_option(row, label, &chosen) {
+                        options.push(option);
+                    }
+                }
+            }
+            for id in &chosen {
+                let shown = options.iter().any(|option| {
+                    option
+                        .get("id")
+                        .and_then(Value::as_str)
+                        .and_then(|text| Uuid::parse_str(text).ok())
+                        == Some(*id)
+                });
+                if shown {
+                    continue;
+                }
+                let Some(record) = read_visible(state, user, child.as_ref(), *id, "read").await
+                else {
+                    continue;
+                };
+                if let Some(option) = member_option(&record, label, &chosen) {
+                    options.push(option);
+                }
+            }
+        }
+        widgets.push(json!({
+            "name": link.name,
+            "label": link.label,
+            "hint": hint,
+            "ready": true,
+            "blocked": false,
+            "truncated": truncated,
+            "invalid": !error.is_empty(),
+            "error": error,
+            "options": options,
+        }));
+    }
+    widgets
+}
+
+fn empty_membership(link: &ManyLink, hint: &str, error: &str, ready: bool, blocked: bool) -> Value {
+    json!({
+        "name": link.name,
+        "label": link.label,
+        "hint": hint,
+        "ready": ready,
+        "blocked": blocked,
+        "truncated": false,
+        "invalid": !error.is_empty(),
+        "error": error,
+        "options": [],
+    })
+}
+
+async fn chosen_member_ids(
+    state: &AppState,
+    user: &AuthUser,
+    child: &dyn ManagedModel,
+    link: &ManyLink,
+    parent: Option<Uuid>,
+    posted: Option<&Value>,
+) -> Result<Vec<Uuid>, ()> {
+    let ids = if let Some(values) = posted
+        .and_then(|value| value.get(link.name))
+        .and_then(Value::as_array)
+    {
+        let mut parsed = Vec::new();
+        for value in values {
+            let Some(text) = value.as_str() else {
+                continue;
+            };
+            let Ok(id) = Uuid::parse_str(text.trim()) else {
+                continue;
+            };
+            if !parsed.contains(&id) {
+                parsed.push(id);
+            }
+        }
+        parsed
+    } else if let Some(parent) = parent {
+        current_members(&state.db, link.relation(), parent)
+            .await
+            .map_err(|_| ())?
+    } else {
+        Vec::new()
+    };
+    Ok(visible_member_ids(state, user, child, &ids).await)
+}
+
+fn member_option(row: &Value, label: &str, selected: &[Uuid]) -> Option<Value> {
+    let id = Uuid::parse_str(row.get("id")?.as_str()?).ok()?;
+    let text = row.get(label)?.as_str()?;
+    Some(json!({
+        "id": id.to_string(),
+        "label": text,
+        "selected": selected.contains(&id),
+    }))
+}
+
 struct FormFeedback<'a> {
     notice: &'a str,
     alert: &'a str,
@@ -2180,6 +2484,8 @@ async fn form_page(
         .remove("_inline_query")
         .and_then(|value| serde_json::from_value(value).ok())
         .unwrap_or_default();
+    let posted_membership = values.remove("_m2m");
+    let membership_errors = values.remove("_m2m_error");
     let draft_id = take_draft(state, &user, model_key, id, &mut values).await;
     if let Some(id) = id {
         values
@@ -2193,6 +2499,40 @@ async fn form_page(
     let csrf = session_csrf(state.auth.as_ref().unwrap(), headers).await;
     let fields = input_fields(&locale, registry, state, &user, model.as_ref(), &values).await;
     let sections = form_sections(registry.fieldsets_of(model.meta()), &fields);
+    let memberships = membership_widgets(
+        state,
+        registry,
+        &user,
+        model.as_ref(),
+        id,
+        posted_membership.as_ref(),
+        membership_errors.as_ref(),
+        &locale,
+    )
+    .await;
+    let mut error_fields = Vec::new();
+    for field in &fields {
+        let error = field.get("error").and_then(Value::as_str).unwrap_or("");
+        if error.is_empty() {
+            continue;
+        }
+        error_fields.push(json!({
+            "name": field.get("name").and_then(Value::as_str).unwrap_or(""),
+            "label": field.get("label").and_then(Value::as_str).unwrap_or(""),
+            "error": error,
+        }));
+    }
+    for group in &memberships {
+        let error = group.get("error").and_then(Value::as_str).unwrap_or("");
+        if error.is_empty() {
+            continue;
+        }
+        error_fields.push(json!({
+            "name": format!("m2m-{}", group.get("name").and_then(Value::as_str).unwrap_or("")),
+            "label": group.get("label").and_then(Value::as_str).unwrap_or(""),
+            "error": error,
+        }));
+    }
     let (inline_groups, basis) = if model.meta().inlines.iter().any(|item| item.form) {
         crate::compose::groups(
             &state.db,
@@ -2258,6 +2598,8 @@ async fn form_page(
             "draft": draft_id,
             "sections": sections,
             "inline_groups": inline_groups,
+            "memberships": memberships,
+            "error_fields": error_fields,
             "basis": basis
         }),
     )
@@ -2329,6 +2671,10 @@ async fn save_form(
     }
     let form = parse_form(body);
     let (mut object, mut raw) = payload(model.meta(), model.columns(), &form);
+    let posted_links = posted_link_values(body);
+    if !posted_links.is_empty() {
+        raw.insert("_m2m".into(), Value::Object(posted_links));
+    }
     if let Err((field, code)) = normalize_temporal(model.columns(), &mut object) {
         let text = validation_text(&locale, code);
         raw.insert("__error".into(), json!({ "field": field, "text": text }));
@@ -2425,6 +2771,26 @@ async fn save_form(
         )
         .await;
     }
+    let planned = match plan_memberships(state, registry, &user, model.as_ref(), id, body).await {
+        Ok(planned) => planned,
+        Err((name, code)) => {
+            let text = validation_text(&locale, code);
+            raw.insert("_m2m_error".into(), json!({ name: text }));
+            return form_page(
+                state,
+                headers,
+                registry,
+                model_key,
+                id,
+                raw,
+                FormFeedback {
+                    notice: "",
+                    alert: &text,
+                },
+            )
+            .await;
+        }
+    };
     if formed {
         return match crate::compose::save(
             &state.db,
@@ -2439,6 +2805,23 @@ async fn save_form(
         .await
         {
             crate::compose::SaveResult::Saved(saved) => {
+                if let Err((name, code)) = commit_memberships(state, &planned, saved).await {
+                    let text = validation_text(&locale, code);
+                    raw.insert("_m2m_error".into(), json!({ name: text }));
+                    return form_page(
+                        state,
+                        headers,
+                        registry,
+                        model_key,
+                        Some(saved),
+                        raw,
+                        FormFeedback {
+                            notice: "",
+                            alert: &text,
+                        },
+                    )
+                    .await;
+                }
                 if let Some(token) = form
                     .get("_draft")
                     .and_then(|value| Uuid::parse_str(value).ok())
@@ -2556,6 +2939,40 @@ async fn save_form(
     };
     match result {
         Ok(created) => {
+            let Some(saved) = created
+                .get("id")
+                .and_then(Value::as_str)
+                .and_then(|value| Uuid::parse_str(value).ok())
+            else {
+                return error_page(
+                    state,
+                    headers,
+                    registry,
+                    &locale,
+                    StatusCode::UNPROCESSABLE_ENTITY,
+                    "forbidden",
+                    true,
+                    &user.email,
+                )
+                .await;
+            };
+            if let Err((name, code)) = commit_memberships(state, &planned, saved).await {
+                let text = validation_text(&locale, code);
+                raw.insert("_m2m_error".into(), json!({ name: text }));
+                return form_page(
+                    state,
+                    headers,
+                    registry,
+                    model_key,
+                    Some(saved),
+                    raw,
+                    FormFeedback {
+                        notice: "",
+                        alert: &text,
+                    },
+                )
+                .await;
+            }
             if let Some(token) = form
                 .get("_draft")
                 .and_then(|value| Uuid::parse_str(value).ok())
@@ -2576,7 +2993,7 @@ async fn save_form(
             redirect(&target)
         }
         Err(FerrioxidError::Validation(message)) => {
-            let field = message.split_whitespace().next().unwrap_or("").to_owned();
+            let field = validation_field(registry.field_slice(model.meta()), &message);
             raw.insert(
                 "__error".into(),
                 json!({ "field": field, "text": validation_text(&locale, &message) }),
@@ -3027,6 +3444,9 @@ fn payload(
             || key == "_use_draft"
             || key == "_picks"
         {
+            continue;
+        }
+        if key == "m2m_present" || key.starts_with("m2m.") {
             continue;
         }
         if key == "_draft" {

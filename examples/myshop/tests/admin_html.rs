@@ -1,8 +1,8 @@
 //! HTML-Admin ohne JavaScript: Formulare, Links und Sitzungen über echtes HTTP.
 
-use ferrioxid::admin::{ActionOperation, AdminAction, AdminRegistry};
+use ferrioxid::admin::{ActionOperation, AdminAction, AdminRegistry, ModelAdmin};
 use ferrioxid::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
-use ferrioxid::core::{QueryScope, ScopeValue};
+use ferrioxid::core::{FerrioxidModel, QueryScope, ScopeValue};
 use ferrioxid::db::ModelRepository;
 use ferrioxid::prelude::*;
 use ferrioxid::sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
@@ -1095,6 +1095,11 @@ async fn html_admin_works_without_javascript() {
     assert_eq!(wrong.status, 401);
     assert!(unknown.body.contains("E-Mail oder Passwort ist ungültig."));
     assert!(wrong.body.contains("E-Mail oder Passwort ist ungültig."));
+    assert!(wrong.body.contains("id=\"admin-alert\""));
+    assert!(wrong.body.contains("aria-invalid=\"true\""));
+    assert!(wrong.body.contains("aria-describedby=\"admin-alert\""));
+    assert!(wrong.body.contains("for=\"email\""));
+    assert!(wrong.body.contains("for=\"password\""));
     let missing_login_csrf = call(
         "POST",
         "/admin/login".into(),
@@ -1337,6 +1342,12 @@ async fn html_admin_works_without_javascript() {
     assert!(list.body.contains("sort=name"));
     assert!(list.body.contains("page=2"));
     assert!(list.body.contains("Stapel 00"));
+    assert!(list.body.contains("id=\"admin-search\""));
+    assert!(list.body.contains("for=\"admin-search\""));
+    assert!(list.body.contains("type=\"search\""));
+    assert!(list.body.contains("<caption"));
+    assert!(list.body.contains("id=\"bulk-action\""));
+    assert!(list.body.contains("aria-label="));
     let invalid_sort = call(
         "GET",
         "/admin/models/html_products?sort=owner".into(),
@@ -4070,6 +4081,382 @@ fn http_on(
         headers: headers.to_owned(),
         body: String::from_utf8_lossy(&decode(headers, raw_body.as_bytes())).into_owned(),
     }
+}
+
+#[tokio::test]
+async fn html_many_to_many_respects_scope_and_keyboard_markup() {
+    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let auth = AuthService::new(db.clone(), AuthConfig::development());
+    auth.create_user("staff@example.com", "correct-horse-battery", true, false)
+        .await
+        .unwrap();
+    auth.create_user("narrow@example.com", "correct-horse-battery", true, false)
+        .await
+        .unwrap();
+    for (role, codes) in [
+        (
+            "catalog",
+            [
+                "products.read",
+                "products.create",
+                "products.update",
+                "products.delete",
+                "categories.read",
+            ]
+            .as_slice(),
+        ),
+        (
+            "products_only",
+            ["products.read", "products.create", "products.update"].as_slice(),
+        ),
+    ] {
+        auth.ensure_role(role).await.unwrap();
+        for code in codes {
+            auth.ensure_permission(code).await.unwrap();
+            auth.grant_permission(role, code).await.unwrap();
+        }
+    }
+    auth.assign_role("staff@example.com", "catalog")
+        .await
+        .unwrap();
+    auth.assign_role("narrow@example.com", "products_only")
+        .await
+        .unwrap();
+    let products = ModelAdmin::new("html_products")
+        .many_to_many(
+            "categories",
+            "Kategorien",
+            "html_product_tags",
+            "product_id",
+            "category_id",
+            "html_categories",
+        )
+        .check(HtmlProduct::admin_meta().unwrap(), HtmlProduct::columns())
+        .unwrap();
+    let registry = AdminRegistry::new()
+        .add::<HtmlCategory>()
+        .add::<HtmlProduct>()
+        .configure(products)
+        .unwrap()
+        .seal()
+        .unwrap();
+    let app = ferrioxid::App::new(db.clone())
+        .with_auth(auth.clone())
+        .with_admin(registry)
+        .register::<HtmlCategory>()
+        .register::<HtmlProduct>();
+    app.bootstrap_schema().await.unwrap();
+    db.execute(Statement::from_string(
+        DatabaseBackend::Sqlite,
+        String::from(
+            "CREATE TABLE html_product_tags (product_id text NOT NULL, category_id text NOT NULL, UNIQUE(product_id, category_id))",
+        ),
+    ))
+    .await
+    .unwrap();
+    let alpha = HtmlCategory::create(
+        &db,
+        HtmlCategoryCreate {
+            name: "Alpha".into(),
+        },
+    )
+    .await
+    .unwrap();
+    let beta = HtmlCategory::create(
+        &db,
+        HtmlCategoryCreate {
+            name: "Beta".into(),
+        },
+    )
+    .await
+    .unwrap();
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let port = listener.local_addr().unwrap().port();
+    let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
+    let call = |method: &'static str, path: String, body: Option<String>, extra: String| {
+        tokio::task::spawn_blocking(move || http(port, method, &path, body.as_deref(), &extra))
+    };
+    let login = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    assert!(login.body.contains("href=\"#content\""));
+    assert!(login.body.contains("<main id=\"content\">"));
+    let login_csrf = cookie_value(&login.headers, "ferrioxid_login_csrf");
+    let signed = call(
+        "POST",
+        "/admin/login".into(),
+        Some(form(&[
+            ("csrf_token", &login_csrf),
+            ("email", "staff@example.com"),
+            ("password", "correct-horse-battery"),
+            ("next", "/admin"),
+        ])),
+        format!("Cookie: ferrioxid_login_csrf={login_csrf}\r\n"),
+    )
+    .await
+    .unwrap();
+    assert_eq!(signed.status, 303, "{}", signed.body);
+    let session = cookie_value(&signed.headers, "ferrioxid_session");
+    let home = call("GET", "/admin".into(), None, cookie_header(&session))
+        .await
+        .unwrap();
+    assert!(home.body.contains("<ul"));
+    assert!(home.body.contains("aria-current=\"page\"") || home.body.contains("nav-child"));
+    let csrf = field_value(&home.body, "csrf_token");
+    let form_page = call(
+        "GET",
+        "/admin/models/html_products/new".into(),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(form_page.status, 200, "{}", form_page.body);
+    assert!(form_page.body.contains("<legend>Kategorien</legend>"));
+    assert!(form_page
+        .body
+        .contains("name=\"m2m_present\" value=\"categories\""));
+    assert!(form_page
+        .body
+        .contains(&format!("for=\"m2m-categories-{}\"", alpha.id)));
+    assert!(form_page.body.contains("Alpha"));
+    assert!(form_page.body.contains("Beta"));
+    let rejected = call(
+        "POST",
+        "/admin/models/html_products/new".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("name", "Fremd"),
+            ("price_cents", "4"),
+            ("m2m_present", "categories"),
+            ("m2m.categories", "not-a-uuid"),
+            ("save", "list"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(rejected.status, 422, "{}", rejected.body);
+    assert!(
+        rejected.body.contains("id=\"m2m-categories\""),
+        "{}",
+        rejected.body
+    );
+    assert!(
+        rejected.body.contains("aria-invalid=\"true\""),
+        "{}",
+        rejected.body
+    );
+    assert!(rejected.body.contains("ungültigen oder nicht sichtbaren"));
+    assert!(!rejected.body.contains("value=\"Fremd\"") || rejected.body.contains("Fremd"));
+    let kept = call(
+        "POST",
+        "/admin/models/html_products/new".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("name", ""),
+            ("price_cents", "4"),
+            ("m2m_present", "categories"),
+            ("m2m.categories", &alpha.id.to_string()),
+            ("save", "list"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(kept.status, 422, "{}", kept.body);
+    assert!(
+        kept.body
+            .contains(&format!("value=\"{}\" checked", alpha.id))
+            || kept.body.contains("checked")
+    );
+    assert!(
+        kept.body.contains("id=\"form-errors\"") || kept.body.contains("aria-invalid=\"true\"")
+    );
+    let created = call(
+        "POST",
+        "/admin/models/html_products/new".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("name", "Verbunden"),
+            ("price_cents", "4"),
+            ("m2m_present", "categories"),
+            ("m2m.categories", &alpha.id.to_string()),
+            ("m2m.categories", &beta.id.to_string()),
+            ("save", "edit"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(created.status, 303, "{}", created.body);
+    let edit = call(
+        "GET",
+        location(&created.headers),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(edit.status, 200, "{}", edit.body);
+    assert!(edit
+        .body
+        .contains(&format!("value=\"{}\" checked", alpha.id)));
+    assert!(edit
+        .body
+        .contains(&format!("value=\"{}\" checked", beta.id)));
+    let edit_csrf = field_value(&edit.body, "csrf_token");
+    let cleared = call(
+        "POST",
+        location(&created.headers)
+            .split('?')
+            .next()
+            .unwrap()
+            .to_owned(),
+        Some(form(&[
+            ("csrf_token", &edit_csrf),
+            ("name", "Verbunden"),
+            ("price_cents", "4"),
+            ("m2m_present", "categories"),
+            ("save", "edit"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(cleared.status, 303, "{}", cleared.body);
+    let empty = call(
+        "GET",
+        location(&cleared.headers),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(empty.status, 200, "{}", empty.body);
+    assert!(!empty
+        .body
+        .contains(&format!("value=\"{}\" checked", alpha.id)));
+    assert!(!empty
+        .body
+        .contains(&format!("value=\"{}\" checked", beta.id)));
+    let hidden = call(
+        "POST",
+        location(&cleared.headers)
+            .split('?')
+            .next()
+            .unwrap()
+            .to_owned(),
+        Some(form(&[
+            ("csrf_token", &field_value(&empty.body, "csrf_token")),
+            ("name", "Verbunden"),
+            ("price_cents", "4"),
+            ("m2m_present", "categories"),
+            ("m2m.categories", "00000000-0000-0000-0000-000000000099"),
+            ("save", "edit"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(hidden.status, 422, "{}", hidden.body);
+    assert!(hidden.body.contains("ungültigen oder nicht sichtbaren"));
+
+    let narrow_login = call("GET", "/admin/login".into(), None, String::new())
+        .await
+        .unwrap();
+    let narrow_csrf = cookie_value(&narrow_login.headers, "ferrioxid_login_csrf");
+    let narrow_in = call(
+        "POST",
+        "/admin/login".into(),
+        Some(form(&[
+            ("csrf_token", &narrow_csrf),
+            ("email", "narrow@example.com"),
+            ("password", "correct-horse-battery"),
+            ("next", "/admin"),
+        ])),
+        format!("Cookie: ferrioxid_login_csrf={narrow_csrf}\r\n"),
+    )
+    .await
+    .unwrap();
+    let narrow_session = cookie_value(&narrow_in.headers, "ferrioxid_session");
+    let narrow_home = call("GET", "/admin".into(), None, cookie_header(&narrow_session))
+        .await
+        .unwrap();
+    let narrow_token = field_value(&narrow_home.body, "csrf_token");
+    let denied = call(
+        "POST",
+        "/admin/models/html_products/new".into(),
+        Some(form(&[
+            ("csrf_token", &narrow_token),
+            ("name", "Verboten"),
+            ("price_cents", "8"),
+            ("m2m_present", "categories"),
+            ("m2m.categories", &alpha.id.to_string()),
+            ("save", "list"),
+        ])),
+        cookie_header(&narrow_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(denied.status, 422, "{}", denied.body);
+    assert!(denied.body.contains("nicht gelesen") || denied.body.contains("ungültigen"));
+    let open = call(
+        "POST",
+        "/admin/models/html_products/new".into(),
+        Some(form(&[
+            ("csrf_token", &narrow_token),
+            ("name", "OhneLink"),
+            ("price_cents", "8"),
+            ("m2m_present", "categories"),
+            ("save", "list"),
+        ])),
+        cookie_header(&narrow_session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(open.status, 303, "{}", open.body);
+    let listed = call(
+        "GET",
+        "/admin/models/html_products".into(),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert!(listed.body.contains("Verbunden"));
+    assert!(listed.body.contains("OhneLink"));
+    assert!(!listed.body.contains("Fremd"));
+    assert!(!listed.body.contains("Verboten"));
+    let confirm = call(
+        "POST",
+        "/admin/models/html_products/bulk".into(),
+        Some(form(&[
+            ("csrf_token", &csrf),
+            ("action", "delete"),
+            ("scope", "page"),
+        ])),
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(confirm.status, 303, "{}", confirm.body);
+    let confirm_page = call(
+        "GET",
+        location(&confirm.headers),
+        None,
+        cookie_header(&session),
+    )
+    .await
+    .unwrap();
+    assert_eq!(confirm_page.status, 200, "{}", confirm_page.body);
+    assert!(confirm_page.body.contains("id=\"bulk-heading\""));
+    assert!(confirm_page
+        .body
+        .contains("aria-describedby=\"bulk-detail\""));
+    server.abort();
 }
 
 fn complete(bytes: &[u8]) -> bool {
