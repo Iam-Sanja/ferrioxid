@@ -38,7 +38,7 @@ curl.exe -i -X POST http://127.0.0.1:3000/api/v1/products -H "Content-Type: appl
 curl.exe -i http://127.0.0.1:3000/api/v1/products
 ```
 
-POST answers 201 with UUID and `active: true`. GET answers 200 with `data`, `limit: 100` and `truncated: false` as long as there are at most 100 lines. `PATCH /api/v1/products/{id}` with `{"name":"Notebook"}` answers 200 and keeps price and `active`. `DELETE` answers 204 without a body. `sqlite_http_roundtrip` checks the same answers in `cargo test --workspace`. The PostgreSQL test remains separate and ignored.
+POST answers 201 with UUID and `active: true`. GET answers 200 with `data`, `limit`, `next` and `has_more`. With at most 100 lines and no cursor, `has_more` is false and `next` is null. `PATCH /api/v1/products/{id}` with `{"name":"Notebook"}` answers 200 and keeps price and `active`. `DELETE` answers 204 without a body. `sqlite_http_roundtrip` checks the same answers in `cargo test --workspace`. The PostgreSQL test remains separate and ignored.
 
 ## Limitations
 

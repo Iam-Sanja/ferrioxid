@@ -547,6 +547,7 @@ fn null_value(kind: ColumnKind, backend: DatabaseBackend) -> Value {
         (_, ColumnKind::BigInt) => Value::BigInt(None),
         (_, ColumnKind::Boolean) => Value::Bool(None),
         (_, ColumnKind::Decimal) => Value::Bytes(None),
+        (_, ColumnKind::Json) => Value::Json(None),
         (DatabaseBackend::Postgres, ColumnKind::Date) => Value::ChronoDate(None),
         (DatabaseBackend::Postgres, ColumnKind::Time) => Value::ChronoTime(None),
         (DatabaseBackend::Postgres, ColumnKind::DateTime) => Value::ChronoDateTimeUtc(None),
@@ -1388,6 +1389,7 @@ mod tests {
                     min_length: Some(5),
                     max_length: Some(40),
                     format: None,
+                    api_read: true,
                 },
                 FieldContract {
                     column: "sealed",
@@ -1397,6 +1399,7 @@ mod tests {
                     min_length: None,
                     max_length: None,
                     format: None,
+                    api_read: true,
                 },
             ];
             VALUE

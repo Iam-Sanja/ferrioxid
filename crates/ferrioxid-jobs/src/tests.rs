@@ -1,7 +1,7 @@
 use super::*;
 use async_trait::async_trait;
 use ferrioxid_mail::{MailService, Notice};
-use sea_orm::ConnectionTrait;
+use sea_orm::{ConnectionTrait, TransactionTrait};
 use serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -915,6 +915,8 @@ fn describe_job_hides_payload_and_lease_token() {
         idempotency_key: None,
         interval_secs: None,
         schedule_key: None,
+        cron_expression: None,
+        cron_zone: None,
     };
     let hidden = describe_job(&job, false);
     assert!(hidden.contains("status retry"));
@@ -948,4 +950,373 @@ async fn created(queue: &Queue, payload: &Label, when: When) -> uuid::Uuid {
     {
         EnqueueOutcome::Created(id) | EnqueueOutcome::Existing(id) => id,
     }
+}
+
+#[tokio::test]
+async fn crash_retry_and_two_workers_do_not_claim_the_same_job() {
+    let (queue, clock, path) = started().await;
+    let id = created(
+        &queue,
+        &Label {
+            label: "once".into(),
+        },
+        When::now(),
+    )
+    .await;
+    let first = queue
+        .claim("worker-a", &[CountJob::NAME], 30)
+        .await
+        .expect("claim");
+    let second = queue
+        .claim("worker-b", &[CountJob::NAME], 30)
+        .await
+        .expect("busy");
+    assert!(first.is_some());
+    assert!(second.is_none());
+    let (record, token) = first.expect("lease");
+    clock.advance(31);
+    let recovered = queue
+        .claim("worker-c", &[CountJob::NAME], 30)
+        .await
+        .expect("recover")
+        .expect("expired lease");
+    assert_eq!(recovered.0.attempts, 2);
+    assert_ne!(recovered.1, token);
+    assert_eq!(
+        queue
+            .finish_success(id, &token, &record)
+            .await
+            .expect("stale"),
+        Finish::LostLease
+    );
+    assert_eq!(
+        queue
+            .finish_success(id, &recovered.1, &recovered.0)
+            .await
+            .expect("owner"),
+        Finish::Stored
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn stop_flag_leaves_the_following_job_pending() {
+    let (queue, _clock, path) = started().await;
+    let _first = created(
+        &queue,
+        &Label {
+            label: "stop".into(),
+        },
+        When::now(),
+    )
+    .await;
+    let second = created(
+        &queue,
+        &Label {
+            label: "later".into(),
+        },
+        When::now(),
+    )
+    .await;
+    let stop = crate::stop_flag();
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut registry = JobRegistry::new();
+    registry
+        .register(CountJob {
+            hits: Arc::new(AtomicU32::new(0)),
+            retries_left: Arc::new(AtomicU32::new(0)),
+            permanent: false,
+        })
+        .expect("register");
+    let worker = Worker::new(queue.clone(), registry, 60, 20, 1);
+    worker.run(stop.as_ref()).await.expect("drain");
+    assert_eq!(
+        queue.get(second).await.expect("pending").status,
+        JobStatus::Pending
+    );
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn rollback_removes_the_job_and_failure_is_inspectable() {
+    let (queue, clock, path) = started().await;
+    let transaction = queue.database().begin().await.expect("begin");
+    let created = queue
+        .enqueue_json_on(
+            &transaction,
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "rolled".into(),
+            },
+            When::now(),
+        )
+        .await
+        .expect("staged");
+    let EnqueueOutcome::Created(id) = created else {
+        panic!("created");
+    };
+    transaction.rollback().await.expect("rollback");
+    assert_eq!(
+        queue.get(id).await.expect_err("gone").code(),
+        "job.not_found"
+    );
+    let failed = queue
+        .enqueue_json(
+            BoomJob::NAME,
+            1,
+            &Label {
+                label: "boom".into(),
+            },
+            When {
+                max_attempts: Some(1),
+                ..When::now()
+            },
+        )
+        .await
+        .expect("boom");
+    let EnqueueOutcome::Created(failed) = failed else {
+        panic!("boom");
+    };
+    clock.advance(1);
+    let mut registry = JobRegistry::new();
+    registry.register(BoomJob).expect("boom");
+    let worker = Worker::new(queue.clone(), registry, 60, 20, 1);
+    assert!(worker.run_once().await.expect("fail"));
+    let dead = queue.dead_letters(10).await.expect("dead");
+    assert!(dead
+        .iter()
+        .any(|job| job.id == failed && job.error_code.as_deref() == Some("notes.boom")));
+    assert_eq!(crate::DELIVERY, "at-least-once");
+    let when = When::cron("weekday-morning", "0 9 * * 1-5", "utc").expect("cron");
+    let scheduled = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "morning".into(),
+            },
+            when,
+        )
+        .await
+        .expect("schedule");
+    let EnqueueOutcome::Created(scheduled) = scheduled else {
+        panic!("schedule");
+    };
+    let job = queue.get(scheduled).await.expect("cron job");
+    assert!(job.available_at > clock.unix().expect("now"));
+    assert_eq!(job.cron_zone.as_deref(), Some("utc"));
+    let _ = std::fs::remove_file(path);
+}
+
+struct BoomJob;
+
+#[async_trait]
+impl JobHandler for BoomJob {
+    const NAME: &'static str = "notes_boom";
+    const VERSION: u32 = 1;
+    type Payload = Label;
+
+    async fn run(&self, _payload: Self::Payload, _ctx: &JobContext) -> Result<(), JobError> {
+        Err(JobError::permanent("notes.boom"))
+    }
+}
+
+#[tokio::test]
+#[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
+async fn postgres_job_claim_and_rollback() {
+    let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+    let db = ferrioxid_db::connect(&url).await.expect("postgres");
+    apply_migrations(&db).await.expect("jobs");
+    let clock = std::sync::Arc::new(ManualClock::new(1_700_000_000));
+    let queue = Queue::new(db, clock.clone(), JobPolicy::default());
+    let transaction = queue.database().begin().await.expect("begin");
+    let staged = queue
+        .enqueue_json_on(
+            &transaction,
+            CountJob::NAME,
+            1,
+            &Label { label: "pg".into() },
+            When::now(),
+        )
+        .await
+        .expect("stage");
+    let EnqueueOutcome::Created(id) = staged else {
+        panic!("created");
+    };
+    transaction.rollback().await.expect("rollback");
+    assert!(queue.get(id).await.is_err());
+    let kept = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "kept".into(),
+            },
+            When::now(),
+        )
+        .await
+        .expect("keep");
+    let EnqueueOutcome::Created(kept) = kept else {
+        panic!("kept");
+    };
+    let claimed = queue
+        .claim("pg-worker", &[CountJob::NAME], 30)
+        .await
+        .expect("claim")
+        .expect("row");
+    assert!(queue.cancel(kept).await.is_err());
+    queue
+        .finish_success(kept, &claimed.1, &claimed.0)
+        .await
+        .expect("finish");
+    assert!(table_ready(queue.database()).await.expect("ready"));
+    let morning = When::cron("pg-morning", "0 9 * * 1-5", "europe/berlin").expect("cron");
+    let scheduled = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "morning".into(),
+            },
+            morning,
+        )
+        .await
+        .expect("cron");
+    let EnqueueOutcome::Created(scheduled) = scheduled else {
+        panic!("cron created");
+    };
+    let row = queue.get(scheduled).await.expect("cron row");
+    assert_eq!(row.cron_zone.as_deref(), Some("europe/berlin"));
+    assert!(row.available_at > clock.unix().expect("now"));
+    assert!(When::cron("pg-morning", "0 9 * * 1-5", "America/New_York").is_err());
+    let again = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "morning".into(),
+            },
+            When::cron("pg-morning", "0 9 * * 1-5", "utc").expect("utc"),
+        )
+        .await
+        .expect("existing schedule");
+    assert!(matches!(again, EnqueueOutcome::Existing(_)));
+    let once = queue
+        .enqueue_json(
+            BoomJob::NAME,
+            1,
+            &Label {
+                label: "boom".into(),
+            },
+            When {
+                max_attempts: Some(1),
+                idempotency_key: Some("pg-boom-once".into()),
+                ..When::now()
+            },
+        )
+        .await
+        .expect("boom");
+    let EnqueueOutcome::Created(once) = once else {
+        panic!("boom created");
+    };
+    let duplicate = queue
+        .enqueue_json(
+            BoomJob::NAME,
+            1,
+            &Label {
+                label: "boom".into(),
+            },
+            When {
+                idempotency_key: Some("pg-boom-once".into()),
+                ..When::now()
+            },
+        )
+        .await
+        .expect("duplicate");
+    assert_eq!(duplicate, EnqueueOutcome::Existing(once));
+    let claimed = queue
+        .claim("pg-boom", &[BoomJob::NAME], 30)
+        .await
+        .expect("claim boom")
+        .expect("boom row");
+    queue
+        .finish_retry(
+            once,
+            &claimed.1,
+            claimed.0.attempts,
+            claimed.0.max_attempts,
+            "notes.boom",
+        )
+        .await
+        .expect("dead letter");
+    let dead = queue.dead_letters(10).await.expect("dead");
+    assert!(dead
+        .iter()
+        .any(|job| job.id == once && job.status == JobStatus::Failed));
+    let waiting = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "retry".into(),
+            },
+            When::now(),
+        )
+        .await
+        .expect("retry job");
+    let EnqueueOutcome::Created(waiting) = waiting else {
+        panic!("retry created");
+    };
+    let claimed = queue
+        .claim("pg-retry", &[CountJob::NAME], 30)
+        .await
+        .expect("claim retry")
+        .expect("retry row");
+    let before = clock.unix().expect("now");
+    queue
+        .finish_retry(
+            waiting,
+            &claimed.1,
+            claimed.0.attempts,
+            claimed.0.max_attempts,
+            "notes.temporary",
+        )
+        .await
+        .expect("backoff");
+    let retried = queue.get(waiting).await.expect("retried");
+    assert_eq!(retried.status, JobStatus::Retry);
+    assert!(retried.available_at > before || retried.next_attempt_at.unwrap_or(0) > before);
+    let parked = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "parked".into(),
+            },
+            When::now(),
+        )
+        .await
+        .expect("parked");
+    let EnqueueOutcome::Created(parked) = parked else {
+        panic!("parked");
+    };
+    let stop = crate::stop_flag();
+    stop.store(true, std::sync::atomic::Ordering::SeqCst);
+    let mut registry = JobRegistry::new();
+    registry
+        .register(CountJob {
+            hits: Arc::new(AtomicU32::new(0)),
+            retries_left: Arc::new(AtomicU32::new(0)),
+            permanent: false,
+        })
+        .expect("register");
+    Worker::new(queue.clone(), registry, 60, 20, 1)
+        .run(stop.as_ref())
+        .await
+        .expect("stopped");
+    assert_eq!(
+        queue.get(parked).await.expect("still pending").status,
+        JobStatus::Pending
+    );
 }

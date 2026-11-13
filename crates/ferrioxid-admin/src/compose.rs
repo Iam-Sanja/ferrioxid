@@ -540,6 +540,7 @@ fn typed(column: &ColumnSpec, text: &str) -> Result<Value, &'static str> {
             .or_else(|_| temporal::parse_datetime_utc(text))
             .map(|value| Value::String(temporal::format_datetime(value))),
         ColumnKind::Uuid | ColumnKind::Text => Ok(Value::String(text.to_owned())),
+        ColumnKind::Json => ferrioxid_core::canonical_json_text(text).map(Value::String),
         ColumnKind::Decimal => {
             ferrioxid_core::format_decimal_text(text, column.precision, column.scale)
                 .map(Value::String)

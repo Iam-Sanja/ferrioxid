@@ -106,17 +106,28 @@ impl MailService {
         )
     }
 
-    /// `ferrioxid.toml` liefert die Form. Das SMTP-Passwort kommt nur aus `FERRIOXID_SMTP_PASSWORD`.
+    /// `ferrioxid.toml` liefert die Form. Das SMTP-Passwort kommt aus
+    /// `FERRIOXID_SMTP_PASSWORD` oder dem gleichen `FERRUM_SMTP_PASSWORD`.
+    /// Unterschiedliche Werte werden abgelehnt.
     pub fn open(config: &MailConfig) -> Self {
-        let backend =
-            std::env::var("FERRIOXID_MAIL_BACKEND").unwrap_or_else(|_| config.backend.clone());
-        let from = env_or("FERRIOXID_MAIL_FROM", &config.from);
-        let reply = env_or("FERRIOXID_MAIL_REPLY_TO", &config.reply_to);
-        let origin = env_or("FERRIOXID_PUBLIC_ORIGIN", &config.public_origin);
+        Self::try_open(config).unwrap_or_else(|error| panic!("{error}"))
+    }
+
+    /// Same construction as `open`. A conflicting legacy alias returns the error.
+    pub fn try_open(config: &MailConfig) -> Result<Self, String> {
+        let backend = env_or("FERRIOXID_MAIL_BACKEND", &config.backend)?;
+        let _ = ferrioxid_core::aliased_env("FERRIOXID_SMTP_PASSWORD")?;
+        let _ = ferrioxid_core::aliased_env("FERRIOXID_SMTP_USERNAME")?;
+        let from = env_or("FERRIOXID_MAIL_FROM", &config.from)?;
+        let reply = env_or("FERRIOXID_MAIL_REPLY_TO", &config.reply_to)?;
+        let origin = env_or("FERRIOXID_PUBLIC_ORIGIN", &config.public_origin)?;
         let minutes =
-            env_u32("FERRIOXID_RESET_TTL_MINUTES", config.reset_ttl_minutes).clamp(5, 1440);
+            env_u32("FERRIOXID_RESET_TTL_MINUTES", config.reset_ttl_minutes)?.clamp(5, 1440);
         let reply_to = if reply.is_empty() { None } else { Some(reply) };
-        let production = std::env::var("FERRIOXID_ENV").ok().as_deref() == Some("production");
+        let production = matches!(
+            ferrioxid_core::aliased_env("FERRIOXID_ENV")?.as_deref(),
+            Some("production")
+        );
         let service = match backend.as_str() {
             "console" if !production => {
                 Self::console(from, origin).with_ttl(i64::from(minutes) * 60)
@@ -125,13 +136,13 @@ impl MailService {
                 .0
                 .with_ttl(i64::from(minutes) * 60),
             "smtp" => {
-                let host = env_or("FERRIOXID_SMTP_HOST", &config.host);
-                let port = env_u16("FERRIOXID_SMTP_PORT", config.port);
-                let security = env_or("FERRIOXID_SMTP_SECURITY", &config.security);
+                let host = env_or("FERRIOXID_SMTP_HOST", &config.host)?;
+                let port = env_u16("FERRIOXID_SMTP_PORT", config.port)?;
+                let security = env_or("FERRIOXID_SMTP_SECURITY", &config.security)?;
                 let timeout =
-                    env_u64("FERRIOXID_SMTP_TIMEOUT_SECS", config.timeout_secs).clamp(1, 30);
-                let username = std::env::var("FERRIOXID_SMTP_USERNAME").unwrap_or_default();
-                let password = std::env::var("FERRIOXID_SMTP_PASSWORD").unwrap_or_default();
+                    env_u64("FERRIOXID_SMTP_TIMEOUT_SECS", config.timeout_secs)?.clamp(1, 30);
+                let username = env_or("FERRIOXID_SMTP_USERNAME", "")?;
+                let password = env_or("FERRIOXID_SMTP_PASSWORD", "")?;
                 let mode = match security.as_str() {
                     "starttls" => Some(SmtpSecurity::Starttls),
                     "tls" => Some(SmtpSecurity::Tls),
@@ -180,11 +191,11 @@ impl MailService {
                 Self::disabled()
             }
         };
-        if let Some(reply_to) = reply_to {
+        Ok(if let Some(reply_to) = reply_to {
             service.with_reply_to(reply_to)
         } else {
             service
-        }
+        })
     }
 
     pub async fn send(&self, message: MailMessage) -> Result<MailReceipt, MailError> {
@@ -275,30 +286,70 @@ impl MailService {
     }
 }
 
-fn env_or(name: &str, fallback: &str) -> String {
-    std::env::var(name)
-        .ok()
+fn env_or(name: &str, fallback: &str) -> Result<String, String> {
+    Ok(ferrioxid_core::aliased_env(name)?
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(|| fallback.to_owned())
+        .unwrap_or_else(|| fallback.to_owned()))
 }
 
-fn env_u16(name: &str, fallback: u16) -> u16 {
-    std::env::var(name)
-        .ok()
+fn env_u16(name: &str, fallback: u16) -> Result<u16, String> {
+    Ok(ferrioxid_core::aliased_env(name)?
         .and_then(|value| value.parse().ok())
-        .unwrap_or(fallback)
+        .unwrap_or(fallback))
 }
 
-fn env_u32(name: &str, fallback: u32) -> u32 {
-    std::env::var(name)
-        .ok()
+fn env_u32(name: &str, fallback: u32) -> Result<u32, String> {
+    Ok(ferrioxid_core::aliased_env(name)?
         .and_then(|value| value.parse().ok())
-        .unwrap_or(fallback)
+        .unwrap_or(fallback))
 }
 
-fn env_u64(name: &str, fallback: u64) -> u64 {
-    std::env::var(name)
-        .ok()
+fn env_u64(name: &str, fallback: u64) -> Result<u64, String> {
+    Ok(ferrioxid_core::aliased_env(name)?
         .and_then(|value| value.parse().ok())
-        .unwrap_or(fallback)
+        .unwrap_or(fallback))
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::{MailConfig, MailService};
+
+    #[test]
+    fn conflicting_smtp_passwords_are_rejected() {
+        let previous_current = std::env::var("FERRIOXID_SMTP_PASSWORD").ok();
+        let previous_legacy = std::env::var("FERRUM_SMTP_PASSWORD").ok();
+        unsafe {
+            std::env::set_var("FERRIOXID_SMTP_PASSWORD", "current-secret");
+            std::env::set_var("FERRUM_SMTP_PASSWORD", "legacy-secret");
+        }
+        let config = MailConfig {
+            backend: "disabled".into(),
+            host: String::new(),
+            port: 0,
+            security: String::new(),
+            from: String::new(),
+            reply_to: String::new(),
+            timeout_secs: 5,
+            public_origin: String::new(),
+            reset_ttl_minutes: 30,
+        };
+        let error = match MailService::try_open(&config) {
+            Err(error) => error,
+            Ok(_) => panic!("conflicting SMTP passwords were accepted"),
+        };
+        assert!(error.contains("FERRIOXID_SMTP_PASSWORD"));
+        assert!(error.contains("FERRUM_SMTP_PASSWORD"));
+        assert!(!error.contains("current-secret"));
+        assert!(!error.contains("legacy-secret"));
+        unsafe {
+            match previous_current {
+                Some(value) => std::env::set_var("FERRIOXID_SMTP_PASSWORD", value),
+                None => std::env::remove_var("FERRIOXID_SMTP_PASSWORD"),
+            }
+            match previous_legacy {
+                Some(value) => std::env::set_var("FERRUM_SMTP_PASSWORD", value),
+                None => std::env::remove_var("FERRUM_SMTP_PASSWORD"),
+            }
+        }
+    }
 }

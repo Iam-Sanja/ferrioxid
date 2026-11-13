@@ -187,6 +187,13 @@ fn validate_value(
                 MigrationError::new(format!("Field '{}': {error}", column.name))
             })?;
         }
+        ColumnKind::Json => {
+            let text = serde_json::to_string(value).map_err(|error| {
+                MigrationError::new(format!("Field '{}': {error}", column.name))
+            })?;
+            ferrioxid_core::canonical_json_text(&text)
+                .map_err(|code| MigrationError::new(format!("Field '{}': {code}", column.name)))?;
+        }
         ColumnKind::Choice => {
             let text = value.as_str().ok_or_else(|| {
                 MigrationError::new(format!("Choice field '{}' must be a string.", column.name))
@@ -607,6 +614,17 @@ fn bind_value(
         ColumnKind::BigInt => Ok(Value::BigInt(Some(value.as_i64().expect("validated")))),
         ColumnKind::Boolean => Ok(Value::Bool(Some(value.as_bool().expect("validated")))),
         ColumnKind::Uuid => pk_value(backend, value.as_str().expect("validated")),
+        ColumnKind::Json => {
+            let text = serde_json::to_string(value).map_err(|error| {
+                MigrationError::new(format!("Field '{}': {error}", column.name))
+            })?;
+            let canonical = ferrioxid_core::canonical_json_text(&text)
+                .map_err(|code| MigrationError::new(format!("Field '{}': {code}", column.name)))?;
+            let parsed = serde_json::from_str(&canonical).map_err(|error| {
+                MigrationError::new(format!("Field '{}': {error}", column.name))
+            })?;
+            Ok(Value::Json(Some(Box::new(parsed))))
+        }
         ColumnKind::Text | ColumnKind::Choice => Ok(Value::String(Some(Box::new(
             value.as_str().expect("validated").to_owned(),
         )))),
@@ -778,6 +796,23 @@ fn read_cell(
                 .map_err(map_db)?;
             Ok(match value {
                 Some(value) => Json::String(value.to_string()),
+                None => Json::Null,
+            })
+        }
+        ColumnKind::Json => {
+            if let Ok(value) = row.try_get::<Option<serde_json::Value>>("", &column.name) {
+                return Ok(match value {
+                    Some(value) => value,
+                    None => Json::Null,
+                });
+            }
+            let value = row
+                .try_get::<Option<String>>("", &column.name)
+                .map_err(map_db)?;
+            Ok(match value {
+                Some(text) => serde_json::from_str(&text).map_err(|error| {
+                    MigrationError::new(format!("Field '{}': {error}", column.name))
+                })?,
                 None => Json::Null,
             })
         }

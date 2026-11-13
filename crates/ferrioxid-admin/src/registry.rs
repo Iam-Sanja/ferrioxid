@@ -186,6 +186,7 @@ pub struct AdminRegistry {
     model_apps: Vec<(String, String)>,
     view_apps: Vec<(String, String)>,
     pending_app: Option<String>,
+    configured: Vec<crate::configure::CheckedModelAdmin>,
 }
 
 impl AdminRegistry {
@@ -266,6 +267,27 @@ impl AdminRegistry {
             return self;
         }
         self.push(Arc::new(Policed::<M, P>::new()))
+    }
+
+    /// Engt ein bereits geprüftes Modell ein. Wirksam erst nach [`Self::seal`].
+    pub fn configure(
+        mut self,
+        checked: crate::configure::CheckedModelAdmin,
+    ) -> Result<Self, ExtensionError> {
+        if checked.key().is_empty()
+            || self
+                .configured
+                .iter()
+                .any(|item| item.key() == checked.key())
+        {
+            return Err(ExtensionError::new(
+                "admin.configure",
+                "The model configuration is empty or already registered.",
+            ));
+        }
+        self.sealed = false;
+        self.configured.push(checked);
+        Ok(self)
     }
 
     pub fn action(mut self, action: AdminAction) -> Self {
@@ -395,6 +417,7 @@ impl AdminRegistry {
 
     /// Prüft Erweiterungen gegen die registrierten Modelle. Danach ist die Registry startbereit.
     pub fn seal(mut self) -> Result<Self, ExtensionError> {
+        self.check_configured()?;
         let names: Vec<&str> = self.templates.iter().map(|(name, _)| *name).collect();
         for view in &self.views {
             views::check_view(view, &names)?;
@@ -476,13 +499,105 @@ impl AdminRegistry {
 
     pub(crate) fn sealed(&self) -> bool {
         self.sealed
-            || (self.views.is_empty()
+            || (self.configured.is_empty()
+                && self.views.is_empty()
                 && self.filters.is_empty()
                 && self.widgets.is_empty()
                 && self.templates.is_empty()
                 && self.actions.iter().all(|action| {
                     !matches!(action.operation, crate::actions::ActionOperation::Custom(_))
                 }))
+    }
+
+    pub(crate) fn field_slice<'a>(
+        &'a self,
+        meta: &'a ferrioxid_core::AdminModelMeta,
+    ) -> &'a [ferrioxid_core::AdminFieldMeta] {
+        if self.sealed {
+            if let Some(item) = self.configured.iter().find(|item| item.key() == meta.key) {
+                return item.fields();
+            }
+        }
+        meta.fields
+    }
+
+    pub(crate) fn fieldsets_of<'a>(
+        &'a self,
+        meta: &'a ferrioxid_core::AdminModelMeta,
+    ) -> &'a [ferrioxid_core::AdminFieldset] {
+        if self.sealed {
+            if let Some(item) = self.configured.iter().find(|item| item.key() == meta.key) {
+                if let Some(sections) = item.fieldsets() {
+                    return sections;
+                }
+            }
+        }
+        meta.fieldsets
+    }
+
+    pub(crate) fn ordering_of<'a>(
+        &'a self,
+        meta: &'a ferrioxid_core::AdminModelMeta,
+    ) -> Option<&'a str> {
+        if self.sealed {
+            if let Some(item) = self.configured.iter().find(|item| item.key() == meta.key) {
+                if item.ordering_replaced() {
+                    return item.ordering();
+                }
+            }
+        }
+        meta.ordering
+    }
+
+    pub(crate) fn per_page_of(&self, meta: &ferrioxid_core::AdminModelMeta) -> u16 {
+        if self.sealed {
+            if let Some(item) = self.configured.iter().find(|item| item.key() == meta.key) {
+                if let Some(value) = item.per_page() {
+                    return value;
+                }
+            }
+        }
+        meta.per_page
+    }
+
+    pub(crate) fn action_permission(&self, key: &str, action: &str) -> Option<&'static str> {
+        if !self.sealed {
+            return None;
+        }
+        self.configured
+            .iter()
+            .find(|item| item.key() == key)?
+            .actions()
+            .iter()
+            .find(|(name, _)| *name == action)
+            .map(|(_, code)| *code)
+    }
+
+    fn check_configured(&self) -> Result<(), ExtensionError> {
+        for item in &self.configured {
+            let Some(model) = self
+                .models
+                .iter()
+                .find(|model| model.meta().key == item.key())
+            else {
+                return Err(ExtensionError::new(
+                    "admin.configure",
+                    "The configured model is not registered.",
+                ));
+            };
+            let tables = self
+                .models
+                .iter()
+                .map(|model| model.descriptor().table)
+                .collect::<Vec<_>>();
+            if crate::configure::relation_targets_registered(model.columns(), &tables).is_err() {
+                return Err(ExtensionError::new(
+                    "admin.relation",
+                    "A foreign key target is not registered in this admin registry.",
+                ));
+            }
+        }
+        Ok(())
     }
 
     #[allow(dead_code)]

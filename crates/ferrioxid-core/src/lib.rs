@@ -145,6 +145,9 @@ pub enum ColumnKind {
     Decimal,
     /// Enum-Wert mit festem Speichertext. Zulässige Werte stehen in `ColumnSpec::choices`.
     Choice,
+    /// JSON-Dokument. PostgreSQL speichert `jsonb`, SQLite kanonischen Text.
+    /// Pfadoperatoren sind kein portabler Vertrag.
+    Json,
 }
 
 /// Aktion für `ON DELETE`. `ON UPDATE` bleibt `NO ACTION`.
@@ -218,6 +221,8 @@ pub struct FieldContract {
     pub max_length: Option<u32>,
     /// `"slug"` or `"email"` when the field declares `format`.
     pub format: Option<&'static str>,
+    /// `false` omits the field from generated read JSON. Create and update stay on `in_create` and `in_update`.
+    pub api_read: bool,
 }
 
 pub trait FerrioxidModel: Send + Sync + 'static {
@@ -258,6 +263,15 @@ pub fn foreign_key_name(
     format!("fk_{table}_{column}_{referenced_table}_{referenced_column}")
 }
 
+/// Kompaktes JSON. Objektschlüssel folgen der `serde_json`-Map, hier alphabetisch, weil `preserve_order` nicht aktiv ist.
+///
+/// Ein JSON-`null` ist ein Dokument, kein SQL-`NULL`. Leerer Text und ungültiges JSON
+/// werden abgelehnt. PostgreSQL-`jsonb`-Operatoren werden nicht erzeugt.
+pub fn canonical_json_text(text: &str) -> Result<String, &'static str> {
+    let value: serde_json::Value = serde_json::from_str(text).map_err(|_| "validation.json")?;
+    serde_json::to_string(&value).map_err(|_| "validation.json")
+}
+
 fn object_name(prefix: &str, table: &str, columns: &[&str]) -> String {
     let mut name = format!("{prefix}_{table}");
     for column in columns {
@@ -286,6 +300,34 @@ pub enum FerrioxidError {
 impl FerrioxidError {
     pub fn database<E: std::error::Error + Send + Sync + 'static>(error: E) -> Self {
         Self::Database(Box::new(error))
+    }
+}
+
+/// Reads `FERRIOXID_<NAME>` and the legacy `FERRUM_<NAME>` alias.
+///
+/// One set variable is used. Equal values are used. Different values are an
+/// error and neither value is returned. `DATABASE_URL` and `BIND_ADDRESS` are
+/// not aliases, so a second name cannot select another database or address.
+pub fn aliased_env(name: &str) -> Result<Option<String>, String> {
+    let Some(rest) = name.strip_prefix("FERRIOXID_") else {
+        return Err(format!(
+            "{name} is not a FERRIOXID_ setting. DATABASE_URL and BIND_ADDRESS have no legacy alias."
+        ));
+    };
+    if rest.is_empty()
+        || !rest
+            .chars()
+            .all(|char| char.is_ascii_uppercase() || char.is_ascii_digit() || char == '_')
+    {
+        return Err(format!("{name} is not a FERRIOXID_ setting."));
+    }
+    let legacy = format!("FERRUM_{rest}");
+    match (std::env::var(name), std::env::var(&legacy)) {
+        (Ok(current), Ok(previous)) if current != previous => Err(format!(
+            "{name} and {legacy} are both set to different values. Ferrioxid refuses to choose either value."
+        )),
+        (Ok(value), _) | (Err(_), Ok(value)) => Ok(Some(value)),
+        (Err(_), Err(_)) => Ok(None),
     }
 }
 
@@ -431,5 +473,65 @@ mod diagnostic_tests {
         assert!(chain.contains("csrf_token=[redacted]"));
         assert!(!chain.contains("hunter2"));
         assert!(!chain.contains("abc123"));
+    }
+}
+
+#[cfg(test)]
+mod json_tests {
+    use super::canonical_json_text;
+
+    #[test]
+    fn canonical_json_keeps_documents_distinct_from_empty_text() {
+        assert_eq!(
+            canonical_json_text(" { \"b\": 1, \"a\": null } ").unwrap(),
+            "{\"a\":null,\"b\":1}"
+        );
+        assert_eq!(canonical_json_text("null").unwrap(), "null");
+        assert!(canonical_json_text("").is_err());
+        assert!(canonical_json_text("{").is_err());
+    }
+}
+
+#[cfg(test)]
+mod alias_tests {
+    use super::aliased_env;
+
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    #[test]
+    fn conflicting_aliases_fail_without_returning_either_value() {
+        let _guard = LOCK.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+        unsafe {
+            std::env::set_var("FERRIOXID_ALIAS_TEST", "one");
+            std::env::set_var("FERRUM_ALIAS_TEST", "two");
+        }
+        let error = aliased_env("FERRIOXID_ALIAS_TEST").unwrap_err();
+        assert!(error.contains("FERRIOXID_ALIAS_TEST"));
+        assert!(error.contains("FERRUM_ALIAS_TEST"));
+        assert!(!error.contains("one"));
+        assert!(!error.contains("two"));
+        unsafe {
+            std::env::set_var("FERRUM_ALIAS_TEST", "one");
+        }
+        assert_eq!(
+            aliased_env("FERRIOXID_ALIAS_TEST").unwrap().as_deref(),
+            Some("one")
+        );
+        unsafe {
+            std::env::remove_var("FERRIOXID_ALIAS_TEST");
+        }
+        assert_eq!(
+            aliased_env("FERRIOXID_ALIAS_TEST").unwrap().as_deref(),
+            Some("one")
+        );
+        unsafe {
+            std::env::remove_var("FERRUM_ALIAS_TEST");
+        }
+        assert_eq!(aliased_env("FERRIOXID_ALIAS_TEST").unwrap(), None);
+        assert!(aliased_env("DATABASE_URL").is_err());
+        assert_eq!(
+            super::canonical_json_text(" { \"b\": 1, \"a\": null } ").unwrap(),
+            "{\"a\":null,\"b\":1}"
+        );
     }
 }

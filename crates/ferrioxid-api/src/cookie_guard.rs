@@ -1,9 +1,13 @@
 //! Cookie-Schreibzugriffe brauchen einen CSRF-Nachweis, bevor ein Handler läuft.
 //!
-//! Ohne `ferrioxid_session` oder `ferrioxid_anonymous` bleibt die Anfrage unberührt.
+//! Ohne `ferrioxid_session` oder `ferrioxid_anonymous` bleibt die Anfrage unberührt,
+//! außer `require_browser` verlangt einen Nachweis.
 //! Das gilt auch für `Authorization: Bearer`: der Header wird hier nicht geprüft.
 //! `POST /admin/login` und die Passwort-Reset-Formulare behalten ihren eigenen
-//! Double-Submit-Nachweis, auch wenn bereits ein anonymes Session-Cookie vorliegt.
+//! Double-Submit-Nachweis. Unter `require_browser` reicht dieses Login-Cookie auch dann,
+//! wenn noch kein Session-Cookie existiert. Andere Schreibrouten bleiben ohne Session-Cookie gesperrt.
+//! `Origin: null` wird nicht allgemein erlaubt. Die bestehende Ausnahme gilt nur zusammen mit
+//! `Sec-Fetch-Site: same-origin`. Der Host-Header und `X-Forwarded-*` werden hier nicht gelesen.
 
 use axum::body::Body;
 use axum::extract::{Request, State};
@@ -38,21 +42,24 @@ async fn gate(state: AppState, request: Request, next: Next, browser_required: b
     if request.method().is_safe() {
         return next.run(request).await;
     }
+    let path = request.uri().path().to_owned();
+    let dedicated = dedicated_csrf_cookie(&path);
     let protected = match state.auth.as_ref() {
         Some(auth) => auth.request_has_session_cookie(request.headers()),
         None => default_session_cookie(request.headers()),
     };
     if !protected {
-        if browser_required {
-            return reject(AuthError::CsrfRejected, request.headers());
+        let login_proof_without_session = browser_required && dedicated.is_some();
+        if !login_proof_without_session {
+            if browser_required {
+                return reject(AuthError::CsrfRejected, request.headers());
+            }
+            return next.run(request).await;
         }
-        return next.run(request).await;
     }
     let Some(auth) = state.auth.clone() else {
         return reject(AuthError::CsrfRejected, request.headers());
     };
-    let path = request.uri().path().to_owned();
-    let dedicated = dedicated_csrf_cookie(&path);
     let header_token = header_csrf(request.headers());
     let (request, field) = if header_token.is_empty() || dedicated.is_some() {
         match body_field(request).await {

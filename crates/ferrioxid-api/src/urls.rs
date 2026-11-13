@@ -166,6 +166,7 @@ fn reserved_path(path: &str) -> bool {
     matches!(
         path,
         "/healthz"
+            | "/readyz"
             | "/auth/login"
             | "/auth/logout"
             | "/auth/me"

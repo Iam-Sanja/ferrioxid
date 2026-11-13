@@ -6,7 +6,7 @@
 
 Ferrioxid validates users, passwords and sessions on the server. The `ferrioxid-auth` crate is independent of the HTML interface; the admin and generated CRUD routes use the same authentication service. Authentication errors use `problem_json`. Unknown users and incorrect passwords receive the same `Invalid email or password` message with code `auth.invalid_credentials`. The user directory adds role names without changing the `PublicUser` response from `/auth/me`.
 
-Admin changes to users, roles and permissions use `*_on` methods to run in the same transaction as the audit entry. Password changes and deactivation also revoke sessions in that transaction. CLI operations do not write this audit log. See [admin-directory-audit.md](admin-directory-audit.md). Users can reset forgotten passwords as described in [password-reset.md](password-reset.md); delivery is covered in [mail.md](mail.md).
+Admin changes to users, roles and permissions use `*_on` methods to run in the same transaction as the audit entry. Password changes and deactivation also revoke sessions in that transaction. CLI operations do not write this audit log. See [admin-directory-audit.md](admin-directory-audit.md). Users can reset forgotten passwords as described in [password-reset.md](password-reset.md); delivery is covered in [mail.md](mail.md). Confirmed TOTP, recovery codes, session revoke and account close are in [auth-providers.md](auth-providers.md). The threat model for protocols that are not implemented is in [auth-threat-model.md](auth-threat-model.md).
 
 ## Architecture
 
@@ -57,7 +57,7 @@ A new password has 12 to 128 characters. The hash uses Argon2id, version `0x13`,
 - A password change through the CLI or admin revokes all user sessions. The admin uses `validate_new_password` and `hash_password`, never displays the hash and never puts the password in a redirect URL.
 - The admin writes staff and role changes to the same user record. The next `authenticate_token` check reads the updated flags without deleting the session.
 - Login is limited to five failed attempts per process in 15 minutes. The key is peer plus normalized email.
-- `X-Forwarded-For` applies only if `FERRIOXID_TRUST_PROXY` is expressly `1` or `true`. The first hop is evaluated.
+- `X-Forwarded-For` applies only if `FERRIOXID_TRUST_PROXY` is expressly `1` or `true` and the immediate peer is listed in `FERRIOXID_TRUSTED_PROXIES`. `FERRUM_TRUST_PROXY` and `FERRUM_TRUSTED_PROXIES` are aliases. Different values are an error. A `*` entry is ignored. The first hop is then evaluated.
 - Security logs never include passwords, session tokens, anonymous tokens, login CSRF cookies or form tokens. `AnonymousSession`'s `Debug` output redacts the CSRF token and cookie. Database errors are still logged by the existing auth error path and can contain SQL text, not the raw cookie.
 - Anonymous and authenticated sessions are different tables and cookies. A user cookie is never downgraded to an anonymous session. Login always creates a new user session id.
 - Without `FERRIOXID_ALLOWED_ORIGINS`, `AuthConfig::apply_bound_address` replaces the development allowlist with loopback origins for the bound address. Public hosts and request Host headers are never added. `Origin: null` is invalid except for the explicit same-origin browser case documented in [csrf.md](csrf.md). Requests without Origin or Referer still require the login CSRF cookie and token.

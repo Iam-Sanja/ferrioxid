@@ -80,7 +80,63 @@ impl FormValues {
                 errors.push(&name, "validation.invalid_type");
                 return Err(errors);
             }
+            if values.values.contains_key(&name) {
+                let mut errors = FormErrors::default();
+                errors.push(&name, "validation.duplicate");
+                return Err(errors);
+            }
             values.insert(name, value);
+        }
+        Ok(values)
+    }
+
+    pub fn remove(&mut self, name: &str) -> Option<String> {
+        self.values.remove(name)
+    }
+
+    /// Flaches JSON-Objekt. Verschachtelte Werte und doppelte Schlüssel werden abgelehnt.
+    pub fn parse_json(body: &str) -> Result<Self, FormErrors> {
+        if body.len() > 65_536 {
+            let mut errors = FormErrors::default();
+            errors.push("", "request.rejected");
+            return Err(errors);
+        }
+        if let Some(name) = duplicate_json_key(body) {
+            let mut errors = FormErrors::default();
+            errors.push(name, "validation.duplicate");
+            return Err(errors);
+        }
+        let parsed = serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(body)
+            .map_err(|_| {
+                let mut errors = FormErrors::default();
+                errors.push("", "validation.invalid_type");
+                errors
+            })?;
+        let mut values = Self::default();
+        for (name, value) in parsed {
+            if !valid_field_name(&name) {
+                let mut errors = FormErrors::default();
+                errors.push(&name, "validation.invalid_type");
+                return Err(errors);
+            }
+            let text = match value {
+                serde_json::Value::String(text) => text,
+                serde_json::Value::Number(number) => number.to_string(),
+                serde_json::Value::Bool(flag) => {
+                    if flag {
+                        "true".to_owned()
+                    } else {
+                        "false".to_owned()
+                    }
+                }
+                serde_json::Value::Null => String::new(),
+                _ => {
+                    let mut errors = FormErrors::default();
+                    errors.push(name, "validation.invalid_type");
+                    return Err(errors);
+                }
+            };
+            values.insert(name, text);
         }
         Ok(values)
     }
@@ -548,6 +604,8 @@ pub enum Widget {
     Checkbox,
     Textarea,
     Select,
+    File,
+    Relation,
 }
 
 /// Sichtbares Feld. `required` ist nur ein Hinweis; die Prüfung bleibt serverseitig.
@@ -636,7 +694,15 @@ pub fn render_fields_with(
     locale: &str,
     overrides: &[FieldOverride],
 ) -> String {
-    let mut html = format!("<form method=\"post\" action=\"{}\">", escape(action));
+    let mut html = format!(
+        "<form method=\"post\" action=\"{}\"{}>",
+        escape(action),
+        if fields.iter().any(|field| field.widget == Widget::File) {
+            " enctype=\"multipart/form-data\""
+        } else {
+            ""
+        }
+    );
     if let Some(token) = csrf {
         html.push_str(&format!(
             "<input type=\"hidden\" name=\"csrf_token\" value=\"{}\">",
@@ -712,24 +778,7 @@ fn control(field: &Field, value: &str, errors: &FormErrors) -> String {
             "<textarea id=\"{name}\" name=\"{name}\"{required}{placeholder}{described}{invalid}>{value}</textarea>",
             value = escape(value)
         ),
-        Widget::Select => {
-            let mut html = format!(
-                "<select id=\"{name}\" name=\"{name}\"{required}{described}{invalid}>"
-            );
-            if !field.required {
-                html.push_str("<option value=\"\"></option>");
-            }
-            for (option, label) in field.options {
-                let selected = if *option == value { " selected" } else { "" };
-                html.push_str(&format!(
-                    "<option value=\"{option}\"{selected}>{label}</option>",
-                    option = escape(option),
-                    label = escape(label)
-                ));
-            }
-            html.push_str("</select>");
-            html
-        }
+        Widget::Select | Widget::Relation => select_control(&name, field, value, required, &described, invalid),
         Widget::Checkbox => {
             let checked = if matches!(value, "true" | "1" | "on") {
                 " checked"
@@ -743,8 +792,11 @@ fn control(field: &Field, value: &str, errors: &FormErrors) -> String {
         Widget::Password => format!(
             "<input id=\"{name}\" name=\"{name}\" type=\"password\" value=\"\"{required}{placeholder}{described}{invalid}>"
         ),
-        other => {
-            let kind = match other {
+        Widget::File => format!(
+            "<input id=\"{name}\" name=\"{name}\" type=\"file\"{required}{described}{invalid}>"
+        ),
+        Widget::Email | Widget::Number | Widget::Url | Widget::Text => {
+            let kind = match field.widget {
                 Widget::Email => "email",
                 Widget::Number => "number",
                 Widget::Url => "url",
@@ -756,6 +808,36 @@ fn control(field: &Field, value: &str, errors: &FormErrors) -> String {
             )
         }
     }
+}
+
+fn select_control(
+    name: &str,
+    field: &Field,
+    value: &str,
+    required: &str,
+    described: &str,
+    invalid: &str,
+) -> String {
+    let relation = if field.widget == Widget::Relation {
+        " data-ferrioxid-relation=\"true\""
+    } else {
+        ""
+    };
+    let mut html =
+        format!("<select id=\"{name}\" name=\"{name}\"{required}{described}{invalid}{relation}>");
+    if !field.required {
+        html.push_str("<option value=\"\"></option>");
+    }
+    for (option, label) in field.options {
+        let selected = if *option == value { " selected" } else { "" };
+        html.push_str(&format!(
+            "<option value=\"{option}\"{selected}>{label}</option>",
+            option = escape(option),
+            label = escape(label)
+        ));
+    }
+    html.push_str("</select>");
+    html
 }
 
 fn described_by(field: &Field, errors: &FormErrors) -> String {
@@ -902,6 +984,9 @@ pub struct ModelField {
     pub choices: &'static [ferrioxid_core::ChoiceValue],
     pub min: Option<i64>,
     pub max: Option<i64>,
+    pub min_length: Option<usize>,
+    pub max_length: Option<usize>,
+    pub format: Option<&'static str>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -964,6 +1049,9 @@ pub fn model_fields(
             choices: column.choices,
             min: None,
             max: None,
+            min_length: None,
+            max_length: None,
+            format: None,
         });
     }
     Ok(fields)
@@ -975,6 +1063,17 @@ pub fn apply_bounds(fields: &mut [ModelField], bounds: &[ferrioxid_core::Numeric
         if let Some(bound) = bounds.iter().find(|bound| bound.column == field.name) {
             field.min = bound.min;
             field.max = bound.max;
+        }
+    }
+}
+
+/// Copies text limits and `format` from the same model contract used by JSON writes.
+pub fn apply_contracts(fields: &mut [ModelField], contracts: &[ferrioxid_core::FieldContract]) {
+    for field in fields {
+        if let Some(contract) = contracts.iter().find(|item| item.column == field.name) {
+            field.min_length = contract.min_length.map(|value| value as usize);
+            field.max_length = contract.max_length.map(|value| value as usize);
+            field.format = contract.format;
         }
     }
 }
@@ -1018,6 +1117,66 @@ pub fn bind_model(
     }
 }
 
+/// HTML und JSON rufen dieselbe Bindung auf. Geschützte Namen werden nie übernommen.
+pub fn bind_submission(
+    mode: SubmitMode,
+    fields: &[ModelField],
+    values: &FormValues,
+    choices: &[(&str, &[&str])],
+    protected: &[&str],
+) -> Result<Vec<BoundField>, FormErrors> {
+    let mut errors = FormErrors::default();
+    let mut filtered = values.clone();
+    for name in protected {
+        if filtered.get(name).is_some() {
+            errors.push(*name, "validation.readonly");
+            filtered.remove(name);
+        }
+    }
+    match bind_model(mode, fields, &filtered, choices) {
+        Ok(bound) if errors.is_empty() => Ok(bound),
+        Ok(_) => Err(errors),
+        Err(mut more) => {
+            errors.fields.append(&mut more.fields);
+            Err(errors)
+        }
+    }
+}
+
+/// Auswahl, deren Optionen der Aufrufer bereits mit `QueryScope` begrenzt hat.
+pub fn render_relation_select(
+    name: &str,
+    label: &str,
+    options: &[(&str, &str)],
+    current: &str,
+    required: bool,
+) -> String {
+    let mut html = format!("<label for=\"{}\">{}</label>", escape(name), escape(label));
+    html.push_str(&select_markup(name, options, current, required));
+    html
+}
+
+fn select_markup(name: &str, options: &[(&str, &str)], current: &str, required: bool) -> String {
+    let required = if required { " required" } else { "" };
+    let mut html = format!(
+        "<select id=\"{name}\" name=\"{name}\"{required} data-ferrioxid-relation=\"true\">",
+        name = escape(name)
+    );
+    if required.is_empty() {
+        html.push_str("<option value=\"\"></option>");
+    }
+    for (option, label) in options {
+        let selected = if *option == current { " selected" } else { "" };
+        html.push_str(&format!(
+            "<option value=\"{option}\"{selected}>{label}</option>",
+            option = escape(option),
+            label = escape(label)
+        ));
+    }
+    html.push_str("</select>");
+    html
+}
+
 fn bind_one(
     mode: SubmitMode,
     field: &ModelField,
@@ -1054,7 +1213,21 @@ fn bind_one(
         ColumnKind::Date => parse_date(raw).map(|_| BoundValue::Text(raw.to_owned())),
         ColumnKind::Time => parse_time(raw).map(|_| BoundValue::Text(raw.to_owned())),
         ColumnKind::DateTime => parse_datetime_utc(raw).map(|_| BoundValue::Text(raw.to_owned())),
-        ColumnKind::Text => Ok(BoundValue::Text(raw.to_owned())),
+        ColumnKind::Text => {
+            let email = field.format == Some("email");
+            let url = field.format == Some("url");
+            if let Some(code) = text_code(raw, true, field.min_length, field.max_length, email, url)
+            {
+                return Err(code);
+            }
+            if field.format == Some("slug") {
+                ferrioxid_core::check_slug(field.name, raw).map_err(|_| "validation.slug")?;
+            }
+            Ok(BoundValue::Text(raw.to_owned()))
+        }
+        ColumnKind::Json => ferrioxid_core::canonical_json_text(raw)
+            .map(BoundValue::Text)
+            .map_err(|_| "validation.json"),
         ColumnKind::Decimal => {
             let value = parse_decimal(raw, field.precision, field.scale)
                 .map_err(|_| "validation.decimal")?;
@@ -1214,6 +1387,151 @@ pub async fn store_upload(
     }
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct UploadPolicy {
+    pub max_bytes: usize,
+    pub kinds: &'static [&'static str],
+}
+
+/// Prüft Name, Größe, erlaubte Art und bei Bildern die ersten Bytes.
+pub fn inspect_upload(
+    original_name: &str,
+    content_type: &str,
+    bytes: &[u8],
+    policy: UploadPolicy,
+) -> Result<(), FormErrors> {
+    let mut errors = FormErrors::default();
+    if original_name.trim().is_empty()
+        || original_name.contains("..")
+        || original_name.contains('/')
+        || original_name.contains('\\')
+        || original_name.contains('\0')
+    {
+        errors.push("file", "validation.upload_name");
+        return Err(errors);
+    }
+    if bytes.len() > policy.max_bytes {
+        errors.push("file", "validation.upload_size");
+        return Err(errors);
+    }
+    if !policy.kinds.contains(&content_type) {
+        errors.push("file", "validation.upload_type");
+        return Err(errors);
+    }
+    if content_type.starts_with("image/") && !image_matches(content_type, bytes) {
+        errors.push("file", "validation.upload_type");
+        return Err(errors);
+    }
+    Ok(())
+}
+
+fn image_matches(content_type: &str, bytes: &[u8]) -> bool {
+    match content_type {
+        "image/png" => bytes.starts_with(&[0x89, b'P', b'N', b'G']),
+        "image/jpeg" => bytes.starts_with(&[0xFF, 0xD8, 0xFF]),
+        "image/gif" => bytes.starts_with(b"GIF8"),
+        "image/webp" => bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP",
+        _ => false,
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct FormsetPlan {
+    pub create: usize,
+    pub update: usize,
+    pub delete: usize,
+}
+
+/// Zählt neue, geänderte und gelöschte Zeilen. Die Datenbank schreibt sie in einer Transaktion.
+pub fn plan_formset(
+    initial: usize,
+    total: usize,
+    delete_indexes: &[usize],
+) -> Result<FormsetPlan, &'static str> {
+    if total > FORMSET_MAX_ROWS || initial > total {
+        return Err("validation.formset_size");
+    }
+    let mut seen = Vec::new();
+    let mut deleted_existing = 0;
+    let mut deleted_new = 0;
+    for index in delete_indexes {
+        if *index >= total || seen.contains(index) {
+            return Err("validation.formset_size");
+        }
+        seen.push(*index);
+        if *index < initial {
+            deleted_existing += 1;
+        } else {
+            deleted_new += 1;
+        }
+    }
+    Ok(FormsetPlan {
+        update: initial - deleted_existing,
+        create: total - initial - deleted_new,
+        delete: deleted_existing,
+    })
+}
+
+fn duplicate_json_key(body: &str) -> Option<String> {
+    let bytes = body.as_bytes();
+    let mut index = 0;
+    while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+        index += 1;
+    }
+    if index >= bytes.len() || bytes[index] != b'{' {
+        return None;
+    }
+    index += 1;
+    let mut seen = Vec::new();
+    loop {
+        while index < bytes.len() && bytes[index].is_ascii_whitespace() {
+            index += 1;
+        }
+        if index < bytes.len() && bytes[index] == b'}' {
+            return None;
+        }
+        if index >= bytes.len() || bytes[index] != b'"' {
+            return None;
+        }
+        index += 1;
+        let start = index;
+        while index < bytes.len() && bytes[index] != b'"' {
+            if bytes[index] == b'\\' {
+                index += 1;
+            }
+            index += 1;
+        }
+        if index >= bytes.len() {
+            return None;
+        }
+        let key = body[start..index].to_owned();
+        if seen.iter().any(|existing: &String| existing == &key) {
+            return Some(key);
+        }
+        seen.push(key);
+        index += 1;
+        while index < bytes.len() && bytes[index] != b',' && bytes[index] != b'}' {
+            if bytes[index] == b'"' {
+                index += 1;
+                while index < bytes.len() && bytes[index] != b'"' {
+                    if bytes[index] == b'\\' {
+                        index += 1;
+                    }
+                    index += 1;
+                }
+            }
+            if index < bytes.len() {
+                index += 1;
+            }
+        }
+        if index < bytes.len() && bytes[index] == b',' {
+            index += 1;
+            continue;
+        }
+        return None;
+    }
+}
+
 pub fn escape(value: &str) -> String {
     let mut output = String::new();
     for char in value.chars() {
@@ -1269,10 +1587,11 @@ fn decode(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::{
-        apply_bounds, bind_formset, bind_model, escape, model_fields, render_fields,
+        apply_bounds, apply_contracts, bind_formset, bind_model, bind_submission, escape,
+        inspect_upload, message, model_fields, plan_formset, render_fields, render_relation_select,
         require_confirmation, required_choice, required_i64, required_postal, required_uuid,
         store_upload, BoundValue, ContactForm, FerrioxidForm, Field, FormErrors, FormValues,
-        SubmitMode, Widget,
+        ModelField, SubmitMode, UploadPolicy, Widget,
     };
     use ferrioxid_core::{AdminFieldMeta, ColumnKind, ColumnSpec, NumericBound};
     use ferrioxid_storage::Storage;
@@ -1447,6 +1766,49 @@ mod tests {
         let mut invalid = FormValues::default();
         invalid.insert("title", "Stift");
         invalid.insert("stock", "nope");
+        let mut json_values = FormValues::default();
+        json_values.insert("body", " { \"b\": 1 } ");
+        let json_fields = [ModelField {
+            name: "body",
+            kind: ColumnKind::Json,
+            required: true,
+            precision: 0,
+            scale: 0,
+            choices: &[],
+            min: None,
+            max: None,
+            min_length: None,
+            max_length: None,
+            format: None,
+        }];
+        let json_bound = bind_model(SubmitMode::Create, &json_fields, &json_values, &[]).unwrap();
+        assert_eq!(
+            json_bound[0].value,
+            BoundValue::Text("{\"b\":1}".to_owned())
+        );
+        let mut broken_json = FormValues::default();
+        broken_json.insert("body", "{");
+        assert_eq!(
+            bind_model(SubmitMode::Create, &json_fields, &broken_json, &[])
+                .unwrap_err()
+                .for_field("body"),
+            Some("validation.json")
+        );
+        let mut with_csrf = FormValues::default();
+        with_csrf.insert("csrf_token", "session-bound-token");
+        with_csrf.insert("body", " { \"b\": 1, \"a\": null } ");
+        let csrf_bound = bind_model(SubmitMode::Create, &json_fields, &with_csrf, &[]).unwrap();
+        assert_eq!(
+            csrf_bound[0].value,
+            BoundValue::Text("{\"a\":null,\"b\":1}".to_owned())
+        );
+        with_csrf.insert("extra", "nope");
+        assert_eq!(
+            bind_model(SubmitMode::Create, &json_fields, &with_csrf, &[])
+                .unwrap_err()
+                .for_field("extra"),
+            Some("validation.unknown_field")
+        );
         assert_eq!(
             bind_model(SubmitMode::Replace, &fields, &invalid, &[])
                 .unwrap_err()
@@ -1651,5 +2013,97 @@ mod tests {
             sensitive,
             fieldset: "",
         }
+    }
+
+    #[test]
+    fn html_and_json_share_codes_and_reject_forged_readonly_fields() {
+        let fields = model_fields(
+            &[column("title", ColumnKind::Text, false, false)],
+            &[],
+            &["title"],
+        )
+        .unwrap();
+        let contract = ferrioxid_core::FieldContract {
+            column: "title",
+            in_create: true,
+            in_update: true,
+            create_required: true,
+            min_length: Some(1),
+            max_length: Some(1),
+            format: None,
+            api_read: true,
+        };
+        let mut editable = fields.clone();
+        apply_contracts(&mut editable, &[contract]);
+        let html = FormValues::parse_urlencoded("title=%C3%A4").unwrap();
+        let json = FormValues::parse_json(r#"{"title":"ä"}"#).unwrap();
+        let html_bound = bind_submission(SubmitMode::Create, &editable, &html, &[], &[]).unwrap();
+        let json_bound = bind_submission(SubmitMode::Create, &editable, &json, &[], &[]).unwrap();
+        assert_eq!(html_bound, json_bound);
+        let long = FormValues::parse_json(r#"{"title":"ää"}"#).unwrap();
+        let too_long = bind_submission(SubmitMode::Create, &editable, &long, &[], &[]).unwrap_err();
+        assert_eq!(too_long.for_field("title"), Some("validation.max_length"));
+        assert_eq!(
+            message("de", too_long.for_field("title").unwrap()),
+            message("de", "validation.max_length")
+        );
+        assert_ne!(
+            message("de", "validation.readonly"),
+            message("en", "validation.readonly")
+        );
+        let forged = FormValues::parse_urlencoded("title=A&owner=forged").unwrap();
+        let rejected =
+            bind_submission(SubmitMode::Create, &editable, &forged, &[], &["owner"]).unwrap_err();
+        assert_eq!(rejected.for_field("owner"), Some("validation.readonly"));
+        assert!(FormValues::parse_urlencoded("title=A&title=B").is_err());
+        assert!(FormValues::parse_json(r#"{"title":"A","title":"B"}"#).is_err());
+        let page = render_relation_select("owner", "Owner <b>", &[("1", "<Ada>")], "1", true);
+        assert!(page.contains("data-ferrioxid-relation"));
+        assert!(page.contains("&lt;Ada&gt;"));
+        assert!(!page.contains("<Ada>"));
+        assert!(!page.contains("<b>"));
+        let upload = inspect_upload(
+            "../secret.png",
+            "image/png",
+            &[0x89, b'P', b'N', b'G'],
+            UploadPolicy {
+                max_bytes: 8,
+                kinds: &["image/png"],
+            },
+        );
+        assert_eq!(
+            upload.unwrap_err().for_field("file"),
+            Some("validation.upload_name")
+        );
+        let forged_image = inspect_upload(
+            "picture.png",
+            "image/png",
+            b"not-a-png",
+            UploadPolicy {
+                max_bytes: 32,
+                kinds: &["image/png"],
+            },
+        );
+        assert_eq!(
+            forged_image.unwrap_err().for_field("file"),
+            Some("validation.upload_type")
+        );
+        let plan = plan_formset(1, 2, &[0]).unwrap();
+        assert_eq!(plan.update, 0);
+        assert_eq!(plan.create, 1);
+        assert_eq!(plan.delete, 1);
+        assert!(plan_formset(2, 1, &[]).is_err());
+        let file = Field::new("upload", "Upload", Widget::File, false);
+        let html = render_fields(
+            "/save",
+            None,
+            &FormValues::default(),
+            &FormErrors::default(),
+            &[file],
+            "en",
+        );
+        assert!(html.contains("multipart/form-data"));
+        assert!(html.contains("type=\"file\""));
+        assert!(!html.contains("value="));
     }
 }

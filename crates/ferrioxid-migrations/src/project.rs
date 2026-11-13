@@ -22,6 +22,8 @@ pub struct ProjectConfig {
     pub database_url: String,
     pub host: String,
     pub port: u16,
+    /// Explicit opt-in for binding `0.0.0.0` or `::`. This does not add that address to allowed origins.
+    pub allow_wildcard_bind: bool,
     pub debug: bool,
     pub admin_enabled: bool,
     pub embedded_assets: bool,
@@ -115,17 +117,19 @@ impl ProjectConfig {
     }
 
     pub fn is_production(&self) -> bool {
-        std::env::var("FERRIOXID_ENV")
-            .ok()
-            .is_some_and(|value| value.eq_ignore_ascii_case("production"))
+        matches!(
+            ferrioxid_core::aliased_env("FERRIOXID_ENV"),
+            Ok(Some(value)) if value.eq_ignore_ascii_case("production")
+        )
     }
 
     /// `FERRIOXID_DEBUG` overrides `server.debug`. Invalid values remain errors.
+    /// `FERRUM_DEBUG` is the legacy alias. Different values are rejected.
     pub fn resolved_debug(&self) -> Result<bool, MigrationError> {
-        match std::env::var("FERRIOXID_DEBUG") {
-            Ok(value) if !value.is_empty() => parse_bool(&value).map_err(|_| {
+        match ferrioxid_core::aliased_env("FERRIOXID_DEBUG").map_err(MigrationError::new)? {
+            Some(value) if !value.is_empty() => parse_bool(&value).map_err(|_| {
                 MigrationError::new(
-                    "FERRIOXID_DEBUG accepts true or false. The invalid value is not silently replaced."
+                    "FERRIOXID_DEBUG or FERRUM_DEBUG accepts true or false. The invalid value is not silently replaced."
                         .to_owned(),
                 )
             }),
@@ -133,23 +137,35 @@ impl ProjectConfig {
         }
     }
 
-    /// `BIND_ADDRESS` ersetzt Host und Port. `0.0.0.0` bleibt abgelehnt.
+    /// Socket bind address. `BIND_ADDRESS` replaces host and port.
+    ///
+    /// A wildcard interface requires `server.allow_wildcard_bind = true` or
+    /// `FERRIOXID_ALLOW_WILDCARD_BIND=true`. The bind address is not a public origin.
     pub fn bind_address(&self) -> Result<String, MigrationError> {
-        if let Ok(value) = std::env::var("BIND_ADDRESS") {
+        let address = if let Ok(value) = std::env::var("BIND_ADDRESS") {
             if !value.is_empty() {
-                if value.starts_with("0.0.0.0") {
-                    return Err(MigrationError::new(
-                        "BIND_ADDRESS must not be 0.0.0.0.".to_owned(),
-                    ));
-                }
-                return Ok(value);
+                value
+            } else {
+                format!("{}:{}", self.host, self.port)
             }
+        } else {
+            format!("{}:{}", self.host, self.port)
+        };
+        if wildcard_bind(&address) && !self.wildcard_bind_allowed() {
+            return Err(MigrationError::new(
+                "A wildcard bind address requires server.allow_wildcard_bind = true or FERRIOXID_ALLOW_WILDCARD_BIND=true. The bind address is not added to allowed origins.".to_owned(),
+            ));
         }
-        Ok(format!("{}:{}", self.host, self.port))
+        Ok(address)
+    }
+
+    fn wildcard_bind_allowed(&self) -> bool {
+        self.allow_wildcard_bind || env_flag("FERRIOXID_ALLOW_WILDCARD_BIND")
     }
 
     /// Debug mode is forbidden in production. No implicit fallback is applied.
     pub fn enforce_runtime(&self) -> Result<(), MigrationError> {
+        ferrioxid_core::aliased_env("FERRIOXID_ENV").map_err(MigrationError::new)?;
         if self.is_production() && self.resolved_debug()? {
             return Err(MigrationError::new(
                 "server.debug is not permitted in production.".to_owned(),
@@ -225,13 +241,23 @@ pub fn discover_project(start: &Path) -> Result<ProjectConfig, MigrationError> {
     };
     while let Some(directory) = current {
         let manifest = directory.join("ferrioxid.toml");
-        if manifest.is_file() {
-            return parse_manifest(&manifest);
+        let legacy = directory.join("ferrum.toml");
+        match (manifest.is_file(), legacy.is_file()) {
+            (true, true) => {
+                return Err(MigrationError::new(format!(
+                    "Both {} and {} exist. Remove one file. Ferrioxid does not choose a database URL from two project files.",
+                    manifest.display(),
+                    legacy.display()
+                )));
+            }
+            (true, false) => return parse_manifest(&manifest),
+            (false, true) => return parse_manifest(&legacy),
+            (false, false) => {}
         }
         current = directory.parent();
     }
     Err(MigrationError::new(
-        "No ferrioxid.toml found. The CLI does not infer models from source code. Create ferrioxid.toml with migrations_dir and schema_command, or supply --schema-file and --migrations-dir.",
+        "No ferrioxid.toml found. ferrum.toml is accepted when it is the only project file in that directory. The CLI does not infer models from source code. Create ferrioxid.toml with migrations_dir and schema_command, or supply --schema-file and --migrations-dir.",
     ))
 }
 
@@ -271,6 +297,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
     let mut database_url = ferrioxid_db::DEFAULT_SQLITE_URL.to_owned();
     let mut host = "127.0.0.1".to_owned();
     let mut port = 3000_u16;
+    let mut allow_wildcard_bind = false;
     let mut admin_enabled = false;
     let mut embedded_assets = false;
     let mut default_locale = "de".to_owned();
@@ -469,6 +496,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
             "project.fallback_locale" => fallback_locale = value,
             "database.url" => database_url = value,
             "server.host" => host = value,
+            "server.allow_wildcard_bind" => allow_wildcard_bind = parse_bool(&value)?,
             "server.port" => {
                 port = value.parse().map_err(|_| {
                     MigrationError::new(format!(
@@ -744,9 +772,9 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         });
     }
     apps.sort_by(|left, right| left.name.cmp(&right.name));
-    if host == "0.0.0.0" {
+    if wildcard_host(&host) && !allow_wildcard_bind {
         return Err(MigrationError::new(
-            "server.host must not be 0.0.0.0.".to_owned(),
+            "server.host must not be a wildcard interface unless server.allow_wildcard_bind = true. The bind address is not a public origin.".to_owned(),
         ));
     }
     Ok(ProjectConfig {
@@ -762,6 +790,7 @@ fn parse_manifest(path: &Path) -> Result<ProjectConfig, MigrationError> {
         database_url,
         host,
         port,
+        allow_wildcard_bind,
         debug,
         admin_enabled,
         embedded_assets,
@@ -937,7 +966,7 @@ fn valid_static_prefix(value: &str) -> bool {
     {
         return false;
     }
-    let reserved = ["/admin", "/api", "/auth", "/healthz", "/uploads"];
+    let reserved = ["/admin", "/api", "/auth", "/healthz", "/readyz", "/uploads"];
     !reserved
         .iter()
         .any(|prefix| value == *prefix || value.starts_with(&format!("{prefix}/")))
@@ -1007,6 +1036,26 @@ fn parse_value(value: &str) -> Option<String> {
     None
 }
 
+fn wildcard_host(host: &str) -> bool {
+    let host = host.trim().trim_matches(['[', ']']);
+    host == "0.0.0.0" || host == "::"
+}
+
+fn wildcard_bind(address: &str) -> bool {
+    let host = address
+        .rsplit_once(':')
+        .map(|(host, _)| host)
+        .unwrap_or(address);
+    wildcard_host(host)
+}
+
+fn env_flag(name: &str) -> bool {
+    matches!(
+        std::env::var(name).ok().as_deref(),
+        Some("1" | "true" | "TRUE")
+    )
+}
+
 fn parse_bool(value: &str) -> Result<bool, MigrationError> {
     match value {
         "true" => Ok(true),
@@ -1058,13 +1107,17 @@ mod tests {
     }
 
     #[test]
-    fn discovery_requires_the_current_configuration_name() {
+    fn discovery_reads_one_project_file_and_rejects_both() {
         let path = write_manifest("migrations_dir = \"migrations\"\n");
         let root = path.parent().unwrap();
         let old = root.join("ferrum.toml");
         fs::rename(&path, &old).unwrap();
-        assert!(super::discover_project(root).is_err());
-        fs::rename(old, &path).unwrap();
+        assert_eq!(super::discover_project(root).unwrap().root, root);
+        fs::copy(&old, &path).unwrap();
+        let error = super::discover_project(root).unwrap_err();
+        assert!(error.0.contains("ferrioxid.toml"));
+        assert!(error.0.contains("ferrum.toml"));
+        fs::remove_file(&old).unwrap();
         let nested = root.join("nested");
         fs::create_dir(&nested).unwrap();
         assert_eq!(super::discover_project(&nested).unwrap().root, root);
@@ -1088,6 +1141,7 @@ mod tests {
         assert_eq!(config.jobs_poll_ms, 1000);
         assert_eq!(config.jobs_concurrency, 1);
         assert_eq!(config.jobs_max_attempts, 5);
+        assert!(!config.allow_wildcard_bind);
         let jobs = write_manifest(
             "migrations_dir = \"migrations\"\n[jobs]\nenabled = false\npoll_ms = 250\nconcurrency = 2\nlease_secs = 30\nmax_attempts = 3\nretention_hours = 24\njitter = false\n",
         );
@@ -1233,6 +1287,7 @@ primary_color = "#0f172a"
             .unwrap_or_else(|poisoned| poisoned.into_inner());
         let previous_env = std::env::var("FERRIOXID_ENV").ok();
         let previous_debug = std::env::var("FERRIOXID_DEBUG").ok();
+        let previous_legacy_debug = std::env::var("FERRUM_DEBUG").ok();
         unsafe {
             std::env::set_var("FERRIOXID_ENV", "production");
             std::env::set_var("FERRIOXID_DEBUG", "true");
@@ -1245,7 +1300,16 @@ primary_color = "#0f172a"
         }
         assert!(config.resolved_debug().is_err());
         unsafe {
+            std::env::set_var("FERRIOXID_DEBUG", "false");
+            std::env::set_var("FERRUM_DEBUG", "true");
+        }
+        let conflict = config.resolved_debug().unwrap_err();
+        assert!(conflict.0.contains("FERRIOXID_DEBUG"));
+        assert!(conflict.0.contains("FERRUM_DEBUG"));
+        assert!(!conflict.0.contains("true"));
+        unsafe {
             std::env::remove_var("FERRIOXID_DEBUG");
+            std::env::remove_var("FERRUM_DEBUG");
             std::env::remove_var("FERRIOXID_ENV");
         }
         if let Some(value) = previous_env {
@@ -1254,9 +1318,46 @@ primary_color = "#0f172a"
         if let Some(value) = previous_debug {
             unsafe { std::env::set_var("FERRIOXID_DEBUG", value) };
         }
+        if let Some(value) = previous_legacy_debug {
+            unsafe { std::env::set_var("FERRUM_DEBUG", value) };
+        }
         drop(guard);
         let _ = fs::remove_dir_all(path.parent().unwrap());
         let _ = fs::remove_dir_all(secret.parent().unwrap());
         let _ = fs::remove_dir_all(denied.parent().unwrap());
+    }
+
+    #[test]
+    fn wildcard_bind_requires_an_explicit_opt_in() {
+        let _guard = ENV_LOCK.lock().unwrap();
+        let rejected =
+            write_manifest("migrations_dir = \"migrations\"\n[server]\nhost = \"0.0.0.0\"\n");
+        let error = parse_manifest(&rejected).unwrap_err();
+        assert!(error.0.contains("allow_wildcard_bind"), "{error}");
+        let allowed = write_manifest(
+            "migrations_dir = \"migrations\"\n[server]\nhost = \"0.0.0.0\"\nallow_wildcard_bind = true\n",
+        );
+        let config = parse_manifest(&allowed).expect("opt-in");
+        unsafe {
+            std::env::remove_var("BIND_ADDRESS");
+            std::env::remove_var("FERRIOXID_ALLOW_WILDCARD_BIND");
+        }
+        assert_eq!(config.bind_address().unwrap(), "0.0.0.0:3000");
+        let strict = parse_manifest(&write_manifest("migrations_dir = \"migrations\"\n")).unwrap();
+        unsafe { std::env::set_var("BIND_ADDRESS", "0.0.0.0:3000") };
+        let denied = strict.bind_address().unwrap_err();
+        assert!(
+            denied.0.contains("not added to allowed origins"),
+            "{denied}"
+        );
+        unsafe { std::env::set_var("FERRIOXID_ALLOW_WILDCARD_BIND", "true") };
+        assert_eq!(strict.bind_address().unwrap(), "0.0.0.0:3000");
+        unsafe {
+            std::env::remove_var("BIND_ADDRESS");
+            std::env::remove_var("FERRIOXID_ALLOW_WILDCARD_BIND");
+        }
+        let _ = fs::remove_dir_all(rejected.parent().unwrap());
+        let _ = fs::remove_dir_all(allowed.parent().unwrap());
+        let _ = fs::remove_dir_all(strict.root);
     }
 }

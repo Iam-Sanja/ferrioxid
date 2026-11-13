@@ -1,0 +1,18 @@
+{% if history or history_href %}
+<aside class="record-history" aria-labelledby="record-history-title">
+<h2 id="record-history-title">{{ i18n.history }}</h2>
+{% if history %}
+<ol>
+{% for event in history %}
+<li>
+{% if event.when_iso %}<time datetime="{{ event.when_iso }}">{{ event.when }}</time>{% else %}<span>{{ i18n.time_unavailable }}</span>{% endif %}
+<span>{{ event.actor }}</span>
+<span>{{ event.action }}{% if event.outcome != "ok" %} ({{ event.outcome }}){% endif %}</span>
+{% if event.summary %}<p>{{ event.summary }}</p>{% endif %}
+</li>
+{% endfor %}
+</ol>
+{% endif %}
+{% if history_href %}<a href="{{ history_href }}">{{ i18n.history }}</a>{% endif %}
+</aside>
+{% endif %}

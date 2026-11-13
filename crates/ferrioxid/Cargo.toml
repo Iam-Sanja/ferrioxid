@@ -3,6 +3,9 @@ name = "ferrioxid"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [dependencies]
 ferrioxid-core = { path = "../ferrioxid-core" }
@@ -11,6 +14,7 @@ ferrioxid-db = { path = "../ferrioxid-db" }
 ferrioxid-migrations = { path = "../ferrioxid-migrations" }
 ferrioxid-api = { path = "../ferrioxid-api" }
 ferrioxid-auth = { path = "../ferrioxid-auth" }
+ferrioxid-cache = { path = "../ferrioxid-cache" }
 ferrioxid-admin = { path = "../ferrioxid-admin" }
 ferrioxid-forms = { path = "../ferrioxid-forms" }
 ferrioxid-static = { path = "../ferrioxid-static" }

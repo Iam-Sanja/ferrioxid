@@ -299,7 +299,8 @@ pub fn backfill_matches(logical_type: LogicalType, value: &BackfillLiteral) -> b
                     | LogicalType::Time
                     | LogicalType::DateTime
                     | LogicalType::Decimal
-                    | LogicalType::Choice,
+                    | LogicalType::Choice
+                    | LogicalType::Json,
                 BackfillLiteral::Text(_),
             )
     )
@@ -344,6 +345,20 @@ pub fn backfill_literal_for(
                 scale,
             )
             .map_err(|error| MigrationError::new(error.message.to_owned()))
+        }
+        (LogicalType::Json, BackfillLiteral::Text(text)) => {
+            let canonical = ferrioxid_core::canonical_json_text(text).map_err(|code| {
+                MigrationError::new(format!(
+                    "Backfill for `{}` is not JSON: {code}",
+                    column.name
+                ))
+            })?;
+            let literal = backfill_literal(kind, &BackfillLiteral::Text(canonical))?;
+            if matches!(kind, ferrioxid_core::DatabaseKind::Postgres) {
+                Ok(format!("{literal}::jsonb"))
+            } else {
+                Ok(literal)
+            }
         }
         (LogicalType::Choice, BackfillLiteral::Text(text)) => {
             if !column

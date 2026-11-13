@@ -9,6 +9,14 @@ use ferrioxid_core::{localize_detail, problem_json};
 use ferrioxid_middleware::RequestId;
 use tera::Context;
 
+pub use crate::crud::{
+    page_window, pagination_href, render_notice, require_scope, scoped_get, scoped_list, CrudError,
+    PageQuery,
+};
+pub use crate::flash::{
+    create_flash_table, push_flash, render_flashes, take_flashes, FlashLevel, FlashMessage,
+};
+
 #[derive(Debug)]
 pub struct ViewError {
     pub status: StatusCode,

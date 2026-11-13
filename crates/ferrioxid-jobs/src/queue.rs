@@ -73,6 +73,21 @@ pub struct JobRecord {
     pub idempotency_key: Option<String>,
     pub interval_secs: Option<i64>,
     pub schedule_key: Option<String>,
+    pub cron_expression: Option<String>,
+    pub cron_zone: Option<String>,
+}
+
+#[derive(Clone, Debug)]
+pub struct JobDiagnosis {
+    pub id: Uuid,
+    pub handler: String,
+    pub status: JobStatus,
+    pub attempts: u32,
+    pub max_attempts: u32,
+    pub error_code: Option<String>,
+    pub available_at: i64,
+    pub next_attempt_at: Option<i64>,
+    pub finished_at: Option<i64>,
 }
 
 #[derive(Clone, Debug)]
@@ -93,6 +108,8 @@ pub struct When {
     pub idempotency_key: Option<String>,
     pub interval_secs: Option<i64>,
     pub schedule_key: Option<String>,
+    pub cron_expression: Option<String>,
+    pub cron_zone: Option<String>,
 }
 
 impl When {
@@ -103,6 +120,8 @@ impl When {
             idempotency_key: None,
             interval_secs: None,
             schedule_key: None,
+            cron_expression: None,
+            cron_zone: None,
         }
     }
 
@@ -119,6 +138,21 @@ impl When {
             schedule_key: Some(schedule_key.into()),
             ..Self::now()
         }
+    }
+
+    pub fn cron(
+        schedule_key: impl Into<String>,
+        expression: &str,
+        zone: &str,
+    ) -> Result<Self, JobError> {
+        let _parsed = crate::schedule::parse_cron(expression)?;
+        let zone = crate::schedule::parse_zone(zone)?;
+        Ok(Self {
+            schedule_key: Some(schedule_key.into()),
+            cron_expression: Some(expression.trim().to_owned()),
+            cron_zone: Some(zone.canonical()),
+            ..Self::now()
+        })
     }
 }
 
@@ -183,7 +217,7 @@ impl Queue {
         } else {
             Err(JobError::message(
                 "job.migration.missing",
-                "Die Job-Migration 0001_jobs ist nicht angewendet. ferrioxid migrate up legt sie an. Der Worker migriert nicht selbst.",
+                "Die Job-Migrationen 0001_jobs und 0002_job_schedule sind nicht vollständig angewendet. ferrioxid migrate up legt sie an. Der Worker migriert nicht selbst.",
             ))
         }
     }
@@ -220,6 +254,12 @@ impl Queue {
         }
         let interval = normalize_interval(when.interval_secs, when.schedule_key.as_deref())?;
         let schedule_key = when.schedule_key.as_deref().map(validate_key).transpose()?;
+        let cron = normalize_cron(
+            when.cron_expression.as_deref(),
+            when.cron_zone.as_deref(),
+            schedule_key.as_deref(),
+            interval.is_some(),
+        )?;
         if interval.is_some() && schedule_key.is_none() {
             return Err(JobError::message(
                 "job.schedule",
@@ -227,7 +267,12 @@ impl Queue {
             ));
         }
         let now = self.clock.unix()?;
-        let available_at = when.available_at.unwrap_or(now);
+        let available_at = match &cron {
+            Some((expression, zone)) if when.available_at.is_none() => {
+                crate::schedule::next_after(expression, zone, now)?
+            }
+            _ => when.available_at.unwrap_or(now),
+        };
         let idempotency = match when.idempotency_key.as_deref() {
             Some(key) => Some(validate_key(key)?),
             None => schedule_key
@@ -262,6 +307,8 @@ impl Queue {
                 idempotency: idempotency.as_deref(),
                 interval,
                 schedule_key: schedule_key.as_deref(),
+                cron_expression: cron.as_ref().map(|(expression, _)| expression.as_str()),
+                cron_zone: cron.as_ref().map(|(_, zone)| zone.as_str()),
             },
         )
         .await;
@@ -360,7 +407,9 @@ impl Queue {
                         Expr::col(Alias::new("attempts")).add(1),
                     ),
                 ])
-                .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+                .and_where(
+                    Expr::col(Alias::new("id")).eq(id_expr(self.db.get_database_backend(), id)),
+                )
                 .and_where(Expr::expr(due(now)).or(expired(now)));
             if execute_rows(&self.db, &update).await? == 1 {
                 let record = load(&self.db, id).await?.ok_or_else(|| {
@@ -422,6 +471,39 @@ impl Queue {
                         idempotency: Some(&idempotency),
                         interval: Some(interval),
                         schedule_key: Some(&schedule_key),
+                        cron_expression: None,
+                        cron_zone: None,
+                    },
+                )
+                .await?;
+            }
+        } else if let (Some(expression), Some(zone), Some(schedule_key)) = (
+            record.cron_expression.clone(),
+            record.cron_zone.clone(),
+            record.schedule_key.clone(),
+        ) {
+            let next_at =
+                crate::schedule::next_after(&expression, &zone, now.max(record.available_at))?;
+            let idempotency = format!("recur:{schedule_key}:{next_at}");
+            if find_by_column(&transaction, "idempotency_key", &idempotency)
+                .await?
+                .is_none()
+            {
+                insert_job(
+                    &transaction,
+                    &NewJob {
+                        id: Uuid::new_v4(),
+                        handler: &record.handler,
+                        version: record.payload_version,
+                        payload: &record.payload,
+                        available_at: next_at,
+                        now,
+                        max_attempts: record.max_attempts,
+                        idempotency: Some(&idempotency),
+                        interval: None,
+                        schedule_key: Some(&schedule_key),
+                        cron_expression: Some(&expression),
+                        cron_zone: Some(&zone),
                     },
                 )
                 .await?;
@@ -500,7 +582,7 @@ impl Queue {
                 (Alias::new("error_code"), null_text()),
                 (Alias::new("finished_at"), null_number()),
             ])
-            .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+            .and_where(Expr::col(Alias::new("id")).eq(id_expr(self.db.get_database_backend(), id)))
             .and_where(
                 Expr::col(Alias::new("status"))
                     .eq(JobStatus::Failed.as_str())
@@ -530,7 +612,7 @@ impl Queue {
                 (Alias::new("lease_expires_at"), null_number()),
                 (Alias::new("error_code"), text("job.cancelled")),
             ])
-            .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+            .and_where(Expr::col(Alias::new("id")).eq(id_expr(self.db.get_database_backend(), id)))
             .and_where(
                 Expr::col(Alias::new("status"))
                     .eq(JobStatus::Pending.as_str())
@@ -576,15 +658,113 @@ impl Queue {
         if ids.is_empty() {
             return Ok(0);
         }
+        let backend = self.db.get_database_backend();
         let mut values = Vec::new();
         for row in ids {
-            values.push(required_text(&row, "id")?);
+            values.push(id_expr(backend, required_uuid(&row, "id")?));
         }
         let mut delete = Query::delete();
         delete
             .from_table(Alias::new(JOBS))
             .and_where(Expr::col(Alias::new("id")).is_in(values));
         execute_rows(&self.db, &delete).await
+    }
+
+    /// Endgültig fehlgeschlagene Jobs. Die Aufbewahrung löscht sie später mit.
+    /// Das ist eine Inspektion, keine zweite Zustellung.
+    pub async fn dead_letters(&self, limit: u32) -> Result<Vec<JobDiagnosis>, JobError> {
+        self.ready().await?;
+        let limit = limit.clamp(1, 100);
+        let mut query = Query::select();
+        query
+            .columns([
+                Alias::new("id"),
+                Alias::new("handler"),
+                Alias::new("status"),
+                Alias::new("attempts"),
+                Alias::new("max_attempts"),
+                Alias::new("available_at"),
+                Alias::new("error_code"),
+                Alias::new("next_attempt_at"),
+                Alias::new("finished_at"),
+            ])
+            .from(Alias::new(JOBS))
+            .and_where(Expr::col(Alias::new("status")).eq(JobStatus::Failed.as_str()))
+            .order_by(Alias::new("finished_at"), Order::Desc)
+            .order_by(Alias::new("id"), Order::Asc)
+            .limit(u64::from(limit));
+        let mut rows = Vec::new();
+        for row in all(&self.db, &query).await? {
+            rows.push(JobDiagnosis {
+                id: required_uuid(&row, "id")?,
+                handler: required_text(&row, "handler")?,
+                status: JobStatus::parse(&required_text(&row, "status")?)?,
+                attempts: u32_column(&row, "attempts")?,
+                max_attempts: u32_column(&row, "max_attempts")?,
+                error_code: optional_text(&row, "error_code")?,
+                available_at: required_i64(&row, "available_at")?,
+                next_attempt_at: optional_i64(&row, "next_attempt_at")?,
+                finished_at: optional_i64(&row, "finished_at")?,
+            });
+        }
+        Ok(rows)
+    }
+
+    /// Schreibt in die Verbindung des Aufrufers. Ein Rollback entfernt den Job.
+    /// Sichtbare Jobs bleiben at-least-once. Die Methode beginnt keine eigene Transaktion.
+    /// Ein eindeutiger Konflikt bricht die Transaktion des Aufrufers ab. Der Aufrufer rollt zurück.
+    pub async fn enqueue_json_on(
+        &self,
+        db: &impl ConnectionTrait,
+        handler: &str,
+        version: u32,
+        payload: &impl Serialize,
+        when: When,
+    ) -> Result<EnqueueOutcome, JobError> {
+        if !crate::schema::table_ready(db).await? {
+            return Err(JobError::message(
+                "job.migration.missing",
+                "Die Job-Migrationen 0001_jobs und 0002_job_schedule sind nicht vollständig angewendet. ferrioxid migrate up legt sie an. Der Worker migriert nicht selbst.",
+            ));
+        }
+        let planned = plan_enqueue(
+            self.clock.as_ref(),
+            self.policy.max_attempts,
+            handler,
+            version,
+            payload,
+            &when,
+        )?;
+        if let Some(key) = &planned.idempotency {
+            if let Some(existing) = find_by_column(db, "idempotency_key", key).await? {
+                return Ok(EnqueueOutcome::Existing(existing.id));
+            }
+        }
+        if let Some(key) = &planned.schedule_key {
+            if let Some(existing) = find_by_column(db, "schedule_key", key).await? {
+                return Ok(EnqueueOutcome::Existing(existing.id));
+            }
+        }
+        let id = Uuid::new_v4();
+        insert_job(
+            db,
+            &NewJob {
+                id,
+                handler,
+                version,
+                payload: &planned.payload,
+                available_at: planned.available_at,
+                now: planned.now,
+                max_attempts: planned.max_attempts,
+                idempotency: planned.idempotency.as_deref(),
+                interval: planned.interval,
+                schedule_key: planned.schedule_key.as_deref(),
+                cron_expression: planned.cron_expression.as_deref(),
+                cron_zone: planned.cron_zone.as_deref(),
+            },
+        )
+        .await?;
+        Ok(EnqueueOutcome::Created(id))
     }
 }
 
@@ -599,6 +779,8 @@ struct NewJob<'a> {
     idempotency: Option<&'a str>,
     interval: Option<i64>,
     schedule_key: Option<&'a str>,
+    cron_expression: Option<&'a str>,
+    cron_zone: Option<&'a str>,
 }
 
 fn due(now: i64) -> sea_orm::sea_query::SimpleExpr {
@@ -669,7 +851,7 @@ async fn conditional_status(
                 },
             ),
         ])
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()))
+        .and_where(Expr::col(Alias::new("id")).eq(id_expr(db.get_database_backend(), id)))
         .and_where(Expr::col(Alias::new("lease_token")).eq(token))
         .and_where(Expr::col(Alias::new("status")).eq(JobStatus::Running.as_str()))
         .and_where(Expr::col(Alias::new("lease_expires_at")).gte(now));
@@ -703,9 +885,11 @@ async fn insert_job(db: &impl ConnectionTrait, job: &NewJob<'_>) -> Result<(), J
             Alias::new("idempotency_key"),
             Alias::new("interval_secs"),
             Alias::new("schedule_key"),
+            Alias::new("cron_expression"),
+            Alias::new("cron_zone"),
         ])
         .values_panic([
-            text(&job.id.to_string()),
+            id_expr(db.get_database_backend(), job.id),
             text(job.handler),
             number(i64::from(job.version)),
             text(job.payload),
@@ -726,6 +910,14 @@ async fn insert_job(db: &impl ConnectionTrait, job: &NewJob<'_>) -> Result<(), J
             },
             opt_number(job.interval),
             match job.schedule_key {
+                Some(value) => text(value),
+                None => null_text(),
+            },
+            match job.cron_expression {
+                Some(value) => text(value),
+                None => null_text(),
+            },
+            match job.cron_zone {
                 Some(value) => text(value),
                 None => null_text(),
             },
@@ -767,14 +959,14 @@ async fn load(db: &impl ConnectionTrait, id: Uuid) -> Result<Option<JobRecord>, 
     query
         .columns(job_columns())
         .from(Alias::new(JOBS))
-        .and_where(Expr::col(Alias::new("id")).eq(id.to_string()));
+        .and_where(Expr::col(Alias::new("id")).eq(id_expr(db.get_database_backend(), id)));
     one(db, &query)
         .await?
         .map(|row| record_from_row(&row))
         .transpose()
 }
 
-fn job_columns() -> [Alias; 18] {
+fn job_columns() -> [Alias; 20] {
     [
         Alias::new("id"),
         Alias::new("handler"),
@@ -794,6 +986,8 @@ fn job_columns() -> [Alias; 18] {
         Alias::new("idempotency_key"),
         Alias::new("interval_secs"),
         Alias::new("schedule_key"),
+        Alias::new("cron_expression"),
+        Alias::new("cron_zone"),
     ]
 }
 
@@ -817,6 +1011,8 @@ fn record_from_row(row: &QueryResult) -> Result<JobRecord, JobError> {
         idempotency_key: optional_text(row, "idempotency_key")?,
         interval_secs: optional_i64(row, "interval_secs")?,
         schedule_key: optional_text(row, "schedule_key")?,
+        cron_expression: optional_text(row, "cron_expression")?,
+        cron_zone: optional_text(row, "cron_zone")?,
     })
 }
 
@@ -857,12 +1053,123 @@ pub fn delay_secs(attempt: u32, now: i64, jitter: bool) -> i64 {
     base.saturating_add(i64::try_from(extra).unwrap_or(0))
 }
 
+fn normalize_cron(
+    expression: Option<&str>,
+    zone: Option<&str>,
+    schedule_key: Option<&str>,
+    has_interval: bool,
+) -> Result<Option<(String, String)>, JobError> {
+    match (expression, zone) {
+        (None, None) => Ok(None),
+        (Some(expression), Some(zone)) if !has_interval && schedule_key.is_some() => {
+            let _parsed = crate::schedule::parse_cron(expression)?;
+            let parsed_zone = crate::schedule::parse_zone(zone)?;
+            Ok(Some((
+                expression.trim().to_owned(),
+                parsed_zone.canonical(),
+            )))
+        }
+        _ => Err(JobError::message(
+            "job.schedule",
+            "Cron braucht Ausdruck, Zeitzone und schedule_key und kein Intervall.",
+        )),
+    }
+}
+
+struct PlannedEnqueue {
+    payload: String,
+    available_at: i64,
+    now: i64,
+    max_attempts: u32,
+    idempotency: Option<String>,
+    interval: Option<i64>,
+    schedule_key: Option<String>,
+    cron_expression: Option<String>,
+    cron_zone: Option<String>,
+}
+
+fn plan_enqueue(
+    clock: &dyn crate::clock::Clock,
+    policy_attempts: u32,
+    handler: &str,
+    version: u32,
+    payload: &impl Serialize,
+    when: &When,
+) -> Result<PlannedEnqueue, JobError> {
+    validate_handler_name(handler)?;
+    if version == 0 {
+        return Err(JobError::permanent("job.version"));
+    }
+    let encoded =
+        serde_json::to_vec(payload).map_err(|_| JobError::permanent("job.payload.invalid"))?;
+    if encoded.len() > MAX_PAYLOAD_BYTES {
+        return Err(JobError::permanent("job.payload.large"));
+    }
+    let json: Json =
+        serde_json::from_slice(&encoded).map_err(|_| JobError::permanent("job.payload.invalid"))?;
+    if !json.is_object() {
+        return Err(JobError::permanent("job.payload.invalid"));
+    }
+    reject_sensitive(&json)?;
+    let max_attempts = when.max_attempts.unwrap_or(policy_attempts);
+    if !(1..=MAX_ATTEMPTS).contains(&max_attempts) {
+        return Err(JobError::message(
+            "job.attempts",
+            "max_attempts muss zwischen 1 und 20 liegen.",
+        ));
+    }
+    let interval = normalize_interval(when.interval_secs, when.schedule_key.as_deref())?;
+    let schedule_key = when
+        .schedule_key
+        .clone()
+        .map(|key| validate_key(&key))
+        .transpose()?;
+    let cron = normalize_cron(
+        when.cron_expression.as_deref(),
+        when.cron_zone.as_deref(),
+        schedule_key.as_deref(),
+        interval.is_some(),
+    )?;
+    if interval.is_some() && schedule_key.is_none() {
+        return Err(JobError::message(
+            "job.schedule",
+            "Ein Intervall braucht einen schedule_key.",
+        ));
+    }
+    let now = clock.unix()?;
+    let available_at = match &cron {
+        Some((expression, zone)) if when.available_at.is_none() => {
+            crate::schedule::next_after(expression, zone, now)?
+        }
+        _ => when.available_at.unwrap_or(now),
+    };
+    let idempotency = match when.idempotency_key.as_deref() {
+        Some(key) => Some(validate_key(key)?),
+        None => schedule_key
+            .as_ref()
+            .map(|key| format!("recur:{key}:{available_at}")),
+    };
+    let idempotency = idempotency.map(|key| validate_key(&key)).transpose()?;
+    Ok(PlannedEnqueue {
+        payload: String::from_utf8(encoded)
+            .map_err(|_| JobError::permanent("job.payload.invalid"))?,
+        available_at,
+        now,
+        max_attempts,
+        idempotency,
+        interval,
+        schedule_key,
+        cron_expression: cron.as_ref().map(|(expression, _)| expression.clone()),
+        cron_zone: cron.as_ref().map(|(_, zone)| zone.clone()),
+    })
+}
+
 fn normalize_interval(
     interval: Option<i64>,
     schedule: Option<&str>,
 ) -> Result<Option<i64>, JobError> {
     match (interval, schedule) {
-        (None, None) => Ok(None),
+        (None, _) => Ok(None),
         (Some(seconds), Some(_)) if (1..=2_592_000).contains(&seconds) => Ok(Some(seconds)),
         _ => Err(JobError::message(
             "job.schedule",
@@ -959,6 +1266,13 @@ fn database(error: impl ToString) -> JobError {
             "job.database",
             "Die Job-Tabelle konnte nicht geändert werden.",
         )
+    }
+}
+
+fn id_expr(backend: DatabaseBackend, id: Uuid) -> sea_orm::sea_query::SimpleExpr {
+    match backend {
+        DatabaseBackend::Postgres => Expr::value(Value::Uuid(Some(Box::new(id)))),
+        DatabaseBackend::Sqlite | DatabaseBackend::MySql => Expr::value(id.to_string()),
     }
 }
 

@@ -7,7 +7,7 @@
 use std::collections::BTreeSet;
 
 use axum::{
-    extract::{Path, State},
+    extract::State,
     http::{HeaderMap, Method, StatusCode},
     response::IntoResponse,
     routing::get,
@@ -22,13 +22,20 @@ use sea_orm::{ConnectionTrait, DatabaseConnection, Statement};
 use serde_json::json;
 
 mod cookie_guard;
+mod extract;
+mod listing;
 pub mod openapi;
 pub mod testing;
 
 pub use cookie_guard::require_browser;
+pub use listing::ApiPage;
 pub use openapi::{OpenApiOperation, OpenApiOptions};
 
+use extract::{ApiJson, ListQuery, RecordId};
+
 pub mod apps;
+pub mod crud;
+pub mod flash;
 pub mod pages;
 pub mod urls;
 pub mod views;
@@ -44,6 +51,7 @@ pub struct App {
     routes: Router<AppState>,
     schemas: Vec<(&'static str, &'static [ColumnSpec])>,
     installed: Vec<String>,
+    versions: Vec<(String, String)>,
     sealed: bool,
     paths: BTreeSet<String>,
     tables: BTreeSet<String>,
@@ -69,6 +77,7 @@ impl App {
             routes: Router::new(),
             schemas: Vec::new(),
             installed: Vec::new(),
+            versions: Vec::new(),
             sealed: false,
             paths: BTreeSet::new(),
             tables: BTreeSet::new(),
@@ -351,9 +360,19 @@ impl App {
             .as_ref()
             .map(|settings| settings.migrations_dir.clone())
             .unwrap_or_else(|| std::path::PathBuf::from("ferrioxid-no-app-migrations"));
-        let report = ferrioxid_migrations::inspect_migrations_with_packages(
+        let auth_files = ferrioxid_auth::embedded_migrations()
+            .map_err(|error| crate::apps::AppError::new("migration.strict", error.to_string()))?;
+        let jobs_files = ferrioxid_jobs::embedded_migrations().map_err(|error| {
+            crate::apps::AppError::new(
+                "migration.strict",
+                format!("{} {}", error.code(), error.detail()),
+            )
+        })?;
+        let report = ferrioxid_migrations::inspect_framework(
             &self.db,
-            &ferrioxid_auth::migrations_dir(),
+            &auth_files,
+            &jobs_files,
+            ferrioxid_jobs::JOB_HISTORY,
             &app_dir,
             None,
             &self.migrations,
@@ -362,6 +381,7 @@ impl App {
         .map_err(|error| crate::apps::AppError::new("migration.strict", error.0))?;
         let mut problems = Vec::new();
         collect_migration_problems("auth", &report.auth, &mut problems);
+        collect_migration_problems("jobs", &report.jobs, &mut problems);
         collect_migration_problems("app", &report.app, &mut problems);
         for package in &report.packages {
             collect_migration_problems(&package.name, &package.status, &mut problems);
@@ -406,6 +426,7 @@ impl App {
             routes
         }
         .route("/healthz", get(|| async { Json(json!({"status": "ok"})) }))
+        .route("/readyz", get(readyz))
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
             cookie_guard::enforce,
@@ -442,6 +463,43 @@ impl App {
     }
 }
 
+/// Serves the router and stops on Ctrl+C. Unix also stops on SIGTERM.
+///
+/// The listener is not closed until in-flight requests finish or the runtime
+/// ends. This does not migrate and it does not drain a database pool beyond
+/// what Axum does when the process exits.
+pub async fn serve(listener: tokio::net::TcpListener, router: Router) -> std::io::Result<()> {
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<std::net::SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+}
+
+async fn shutdown_signal() {
+    let ctrl_c = tokio::signal::ctrl_c();
+    #[cfg(unix)]
+    {
+        let mut terminate =
+            tokio::signal::unix::signal(tokio::signal::unix::SignalKind::terminate()).ok();
+        tokio::select! {
+            _ = ctrl_c => {}
+            _ = async {
+                if let Some(signal) = terminate.as_mut() {
+                    signal.recv().await;
+                } else {
+                    std::future::pending::<()>().await;
+                }
+            } => {}
+        }
+    }
+    #[cfg(not(unix))]
+    {
+        let _ = ctrl_c.await;
+    }
+}
+
 fn collect_migration_problems(
     app: &str,
     status: &ferrioxid_migrations::StatusReport,
@@ -460,7 +518,7 @@ fn collect_migration_problems(
     }
 }
 
-struct ApiError(FerrioxidError);
+pub(crate) struct ApiError(FerrioxidError);
 
 impl From<FerrioxidError> for ApiError {
     fn from(error: FerrioxidError) -> Self {
@@ -478,6 +536,28 @@ async fn denied() -> ApiError {
     ApiError(FerrioxidError::Forbidden)
 }
 
+async fn readyz(State(state): State<AppState>) -> axum::response::Response {
+    let probe = Statement::from_string(state.db.get_database_backend(), "SELECT 1");
+    match state.db.query_one(probe).await {
+        Ok(_) => Json(json!({"status": "ready"})).into_response(),
+        Err(error) => {
+            tracing::error!(
+                error = %ferrioxid_core::diagnostic_chain(&error),
+                "readiness check failed"
+            );
+            (
+                StatusCode::SERVICE_UNAVAILABLE,
+                Json(problem_json(
+                    StatusCode::SERVICE_UNAVAILABLE.as_u16(),
+                    "Not ready",
+                    "Database operation failed",
+                )),
+            )
+                .into_response()
+        }
+    }
+}
+
 async fn policy_unbound() -> ApiError {
     ApiError(FerrioxidError::Denied(
         "object policy is not bound; call register_policy".into(),
@@ -486,41 +566,43 @@ async fn policy_unbound() -> ApiError {
 
 async fn list<M: ModelRepository>(
     State(state): State<AppState>,
-) -> Result<Json<ferrioxid_db::ListPage<M>>, ApiError> {
-    Ok(Json(M::list(&state.db).await?))
+    ListQuery(query): ListQuery,
+) -> Result<Json<ApiPage>, ApiError> {
+    Ok(Json(
+        listing::page::<M>(&state.db, QueryScope::All, &query).await?,
+    ))
 }
 
 async fn get_one<M: ModelRepository>(
     State(state): State<AppState>,
-    Path(id): Path<uuid::Uuid>,
-) -> Result<Json<M>, ApiError> {
+    RecordId(id): RecordId,
+) -> Result<Json<serde_json::Value>, ApiError> {
     let model = M::get(&state.db, id)
         .await?
         .ok_or(FerrioxidError::NotFound)?;
-    Ok(Json(model))
+    Ok(Json(listing::read_json(&model)?))
 }
 
 async fn create<M: ModelRepository>(
     State(state): State<AppState>,
-    Json(input): Json<M::Create>,
-) -> Result<(StatusCode, Json<M>), ApiError> {
-    Ok((
-        StatusCode::CREATED,
-        Json(M::create(&state.db, input).await?),
-    ))
+    ApiJson(input): ApiJson<M::Create>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
+    let created = M::create(&state.db, input).await?;
+    Ok((StatusCode::CREATED, Json(listing::read_json(&created)?)))
 }
 
 async fn update<M: ModelRepository>(
     State(state): State<AppState>,
-    Path(id): Path<uuid::Uuid>,
-    Json(input): Json<M::Update>,
-) -> Result<Json<M>, ApiError> {
-    Ok(Json(M::update(&state.db, id, input).await?))
+    RecordId(id): RecordId,
+    ApiJson(input): ApiJson<M::Update>,
+) -> Result<Json<serde_json::Value>, ApiError> {
+    let updated = M::update(&state.db, id, input).await?;
+    Ok(Json(listing::read_json(&updated)?))
 }
 
 async fn delete_one<M: ModelRepository>(
     State(state): State<AppState>,
-    Path(id): Path<uuid::Uuid>,
+    RecordId(id): RecordId,
 ) -> Result<StatusCode, ApiError> {
     match M::delete(&state.db, id).await? {
         DeleteOutcome::Deleted => Ok(StatusCode::NO_CONTENT),
@@ -532,53 +614,55 @@ async fn guarded_list<M: ModelRepository>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-) -> Result<Json<ferrioxid_db::ListPage<M>>, ApiError> {
+    ListQuery(query): ListQuery,
+) -> Result<Json<ApiPage>, ApiError> {
     ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
-    Ok(Json(M::list(&state.db).await?))
+    Ok(Json(
+        listing::page::<M>(&state.db, QueryScope::All, &query).await?,
+    ))
 }
 
 async fn guarded_get<M: ModelRepository>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-    Path(id): Path<uuid::Uuid>,
-) -> Result<Json<M>, ApiError> {
+    RecordId(id): RecordId,
+) -> Result<Json<serde_json::Value>, ApiError> {
     ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
     let model = M::get(&state.db, id)
         .await?
         .ok_or(FerrioxidError::NotFound)?;
-    Ok(Json(model))
+    Ok(Json(listing::read_json(&model)?))
 }
 
 async fn guarded_create<M: ModelRepository>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-    Json(input): Json<M::Create>,
-) -> Result<(StatusCode, Json<M>), ApiError> {
+    ApiJson(input): ApiJson<M::Create>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError> {
     ensure::<M>(&state, &headers, &Method::POST, &peer.0, "create").await?;
-    Ok((
-        StatusCode::CREATED,
-        Json(M::create(&state.db, input).await?),
-    ))
+    let created = M::create(&state.db, input).await?;
+    Ok((StatusCode::CREATED, Json(listing::read_json(&created)?)))
 }
 
 async fn guarded_update<M: ModelRepository>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-    Path(id): Path<uuid::Uuid>,
-    Json(input): Json<M::Update>,
-) -> Result<Json<M>, ApiError> {
+    RecordId(id): RecordId,
+    ApiJson(input): ApiJson<M::Update>,
+) -> Result<Json<serde_json::Value>, ApiError> {
     ensure::<M>(&state, &headers, &Method::PATCH, &peer.0, "update").await?;
-    Ok(Json(M::update(&state.db, id, input).await?))
+    let updated = M::update(&state.db, id, input).await?;
+    Ok(Json(listing::read_json(&updated)?))
 }
 
 async fn guarded_delete<M: ModelRepository>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-    Path(id): Path<uuid::Uuid>,
+    RecordId(id): RecordId,
 ) -> Result<StatusCode, ApiError> {
     ensure::<M>(&state, &headers, &Method::DELETE, &peer.0, "delete").await?;
     match M::delete(&state.db, id).await? {
@@ -591,8 +675,8 @@ async fn policy_create<M, P>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-    Json(input): Json<M::Create>,
-) -> Result<(StatusCode, Json<M>), ApiError>
+    ApiJson(input): ApiJson<M::Create>,
+) -> Result<(StatusCode, Json<serde_json::Value>), ApiError>
 where
     M: ModelRepository,
     P: ObjectPolicy<M>,
@@ -601,32 +685,31 @@ where
     if !allows(user.is_superuser, P::can_create(&user, &input)) {
         return Err(FerrioxidError::Denied("create policy rejected the record".into()).into());
     }
-    Ok((
-        StatusCode::CREATED,
-        Json(M::create(&state.db, input).await?),
-    ))
+    let created = M::create(&state.db, input).await?;
+    Ok((StatusCode::CREATED, Json(listing::read_json(&created)?)))
 }
 
 async fn policy_list<M, P>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-) -> Result<Json<ferrioxid_db::ListPage<M>>, ApiError>
+    ListQuery(query): ListQuery,
+) -> Result<Json<ApiPage>, ApiError>
 where
     M: ModelRepository,
     P: ObjectPolicy<M>,
 {
     let user = ensure::<M>(&state, &headers, &Method::GET, &peer.0, "read").await?;
     let scope = actor_scope::<M, P>(&user, false);
-    Ok(Json(M::list_scoped(&state.db, &scope).await?))
+    Ok(Json(listing::page::<M>(&state.db, scope, &query).await?))
 }
 
 async fn policy_get<M, P>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-    Path(id): Path<uuid::Uuid>,
-) -> Result<Json<M>, ApiError>
+    RecordId(id): RecordId,
+) -> Result<Json<serde_json::Value>, ApiError>
 where
     M: ModelRepository,
     P: ObjectPolicy<M>,
@@ -639,16 +722,16 @@ where
     if !allows(user.is_superuser, P::can_read(&user, &model)) {
         return Err(FerrioxidError::NotFound.into());
     }
-    Ok(Json(model))
+    Ok(Json(listing::read_json(&model)?))
 }
 
 async fn policy_update<M, P>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-    Path(id): Path<uuid::Uuid>,
-    Json(input): Json<M::Update>,
-) -> Result<Json<M>, ApiError>
+    RecordId(id): RecordId,
+    ApiJson(input): ApiJson<M::Update>,
+) -> Result<Json<serde_json::Value>, ApiError>
 where
     M: ModelRepository,
     P: ObjectPolicy<M>,
@@ -661,14 +744,15 @@ where
     if !allows(user.is_superuser, P::can_update(&user, &current)) {
         return Err(FerrioxidError::NotFound.into());
     }
-    Ok(Json(M::update_scoped(&state.db, id, input, &scope).await?))
+    let updated = M::update_scoped(&state.db, id, input, &scope).await?;
+    Ok(Json(listing::read_json(&updated)?))
 }
 
 async fn policy_delete<M, P>(
     State(state): State<AppState>,
     headers: HeaderMap,
     peer: ClientIp,
-    Path(id): Path<uuid::Uuid>,
+    RecordId(id): RecordId,
 ) -> Result<StatusCode, ApiError>
 where
     M: ModelRepository,

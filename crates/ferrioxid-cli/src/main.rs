@@ -12,11 +12,11 @@ mod text;
 
 use clap::{Parser, Subcommand};
 use ferrioxid_migrations::{
-    apply_directory, apply_packages, baseline_database, discover_project,
-    inspect_migrations_with_packages, load_schema_from_command, make_migration_with_backfills,
-    readonly_database_url, render_diagnosis, reseal_unapplied, resolve_installed_schemas,
-    runtime_contract_note, write_explicit_migration, BackfillLiteral, ColumnBackfill, InstalledApp,
-    MakeOutcome, MigrationOperation, PackageMigration, SchemaSnapshot,
+    apply_directory, apply_packages, baseline_database, discover_project, inspect_framework,
+    load_schema_from_command, make_migration_with_backfills, plan_database, readonly_database_url,
+    render_diagnosis, reseal_unapplied, resolve_installed_schemas, runtime_contract_note,
+    write_explicit_migration, BackfillLiteral, ColumnBackfill, InstalledApp, MakeOutcome,
+    MigrationOperation, PackageMigration, SchemaSnapshot,
 };
 use std::path::PathBuf;
 use std::process::ExitCode;
@@ -42,6 +42,9 @@ enum Command {
         /// Warnings, pending migrations, and legacy projects result in exit code 2.
         #[arg(long)]
         strict: bool,
+        /// Read-only deployment checks. Does not migrate, write files, or print secret values.
+        #[arg(long)]
+        deploy: bool,
     },
     /// Inspects an existing project and writes at most one missing legacy manifest.
     Upgrade {
@@ -328,6 +331,15 @@ enum MigrateCommand {
         #[arg(long)]
         dry_run: bool,
     },
+    /// Compares migration files, history, and the live schema without writing.
+    Plan {
+        #[arg(long)]
+        database_url: Option<String>,
+        #[arg(long)]
+        migrations_dir: Option<PathBuf>,
+        #[arg(long)]
+        schema_file: Option<PathBuf>,
+    },
     /// Shows database backend, files, history, conflicts, and schema drift.
     Status {
         #[arg(long)]
@@ -407,7 +419,7 @@ fn main() -> ExitCode {
             }
         }
         Command::Doctor => diagnose::doctor(),
-        Command::Check { strict } => diagnose::check(strict),
+        Command::Check { strict, deploy } => diagnose::check(strict, deploy),
         Command::Upgrade {
             check,
             dry_run,
@@ -785,6 +797,39 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 );
             }
         }
+        MigrateCommand::Plan {
+            database_url,
+            migrations_dir,
+            schema_file,
+        } => {
+            let directory = resolve_directory(migrations_dir)?;
+            let schema = load_optional_schema(schema_file)?;
+            let url = resolve_database_url(database_url)?;
+            let readonly = readonly_database_url(&url).map_err(|error| error.0)?;
+            let report = runtime.block_on(async {
+                let db = ferrioxid_db::connect(&readonly)
+                    .await
+                    .map_err(|error| format!("migration.database.unavailable: {error}"))?;
+                plan_database(&db, &directory, schema.as_ref())
+                    .await
+                    .map_err(|error| error.0)
+            })?;
+            println!("Migration plan is read-only.");
+            println!("backend: {}", report.backend);
+            if report.pending.is_empty() {
+                println!("pending: none");
+            } else {
+                for id in &report.pending {
+                    println!("pending: {id}");
+                }
+            }
+            for finding in &report.findings {
+                println!("{}: {}", finding.level, finding.message);
+            }
+            if report.has_error() || report.has_drift() {
+                return Err("Migration plan found conflicts or live schema drift.".to_owned());
+            }
+        }
         MigrateCommand::Status {
             database_url,
             migrations_dir,
@@ -798,9 +843,15 @@ fn run_migrate(action: MigrateCommand) -> Result<(), String> {
                 let db = ferrioxid_db::connect(&readonly)
                     .await
                     .map_err(|error| format!("migration.database.unavailable: {error}"))?;
-                inspect_migrations_with_packages(
+                let auth_files =
+                    ferrioxid_auth::embedded_migrations().map_err(|error| error.to_string())?;
+                let jobs_files = ferrioxid_jobs::embedded_migrations()
+                    .map_err(|error| format!("{} {}", error.code(), error.detail()))?;
+                inspect_framework(
                     &db,
-                    &ferrioxid_auth::migrations_dir(),
+                    &auth_files,
+                    &jobs_files,
+                    ferrioxid_jobs::JOB_HISTORY,
                     &directory,
                     schema.as_ref(),
                     &declared_packages()?,
@@ -1054,21 +1105,23 @@ fn run_admin(action: AdminCommand) -> Result<(), String> {
                 Some(email) => email,
                 None => prompt_line("Email: ")?,
             };
-            let password = if let Ok(value) = std::env::var("FERRIOXID_PASSWORD") {
-                if value.len() < 12 {
+            let password = match ferrioxid_core::aliased_env("FERRIOXID_PASSWORD") {
+                Err(error) => return Err(error),
+                Ok(Some(value)) if value.len() < 12 => {
                     return Err(
-                        "FERRIOXID_PASSWORD must contain at least 12 characters. There is no default password."
+                        "FERRIOXID_PASSWORD or FERRUM_PASSWORD must contain at least 12 characters. There is no default password."
                             .to_owned(),
                     );
                 }
-                value
-            } else {
-                let password = prompt_secret("Password: ")?;
-                let confirm = prompt_secret("Confirm password: ")?;
-                if password != confirm {
-                    return Err("Passwords do not match.".to_owned());
+                Ok(Some(value)) => value,
+                Ok(None) => {
+                    let password = prompt_secret("Password: ")?;
+                    let confirm = prompt_secret("Confirm password: ")?;
+                    if password != confirm {
+                        return Err("Passwords do not match.".to_owned());
+                    }
+                    password
                 }
-                password
             };
             let url = resolve_database_url(database_url)?;
             let runtime = tokio::runtime::Runtime::new().map_err(|error| error.to_string())?;

@@ -714,7 +714,7 @@ async fn alter_postgres(
             LogicalType::Date => "date",
             LogicalType::Time => "time",
             LogicalType::DateTime => "timestamptz",
-            LogicalType::Decimal | LogicalType::Choice => {
+            LogicalType::Decimal | LogicalType::Choice | LogicalType::Json => {
                 return Err(MigrationError::new(format!(
                     "Changing `{}` to {:?} is not an automatic column rewrite. Add a new column and backfill it explicitly.",
                     to.name, to.logical_type
@@ -868,7 +868,11 @@ fn copy_expression(
             "TEXT"
         }
         LogicalType::I64 => "INTEGER",
-        LogicalType::Uuid | LogicalType::Bool | LogicalType::Decimal | LogicalType::Choice => {
+        LogicalType::Uuid
+        | LogicalType::Bool
+        | LogicalType::Decimal
+        | LogicalType::Choice
+        | LogicalType::Json => {
             return Err(MigrationError::new(format!(
                 "Changing `{}` from {:?} to {:?} is not supported.",
                 column.name, from.logical_type, to.logical_type
@@ -889,7 +893,8 @@ fn read_cell(
         | LogicalType::Date
         | LogicalType::Time
         | LogicalType::DateTime
-        | LogicalType::Choice => match row.try_get::<Option<String>>("", name) {
+        | LogicalType::Choice
+        | LogicalType::Json => match row.try_get::<Option<String>>("", name) {
             Ok(Some(text)) => Ok(Cell::Text(text)),
             Ok(None) => Ok(Cell::Null),
             Err(error) => Err(MigrationError::new(format!(

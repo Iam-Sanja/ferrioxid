@@ -295,7 +295,8 @@ async fn run_http_roundtrip(url: &str) -> Result<(), Box<dyn std::error::Error>>
         tokio::task::spawn_blocking(move || http_request(port, "GET", path, None)).await?;
     assert_eq!(status, 200);
     assert_eq!(list["limit"], 100);
-    assert_eq!(list["truncated"], false);
+    assert_eq!(list["has_more"], false);
+    assert!(list["next"].is_null());
     assert_eq!(list["data"].as_array().unwrap().len(), 1);
     assert_eq!(list["data"][0]["id"], created["id"]);
 
@@ -495,7 +496,8 @@ async fn run_http_roundtrip(url: &str) -> Result<(), Box<dyn std::error::Error>>
         tokio::task::spawn_blocking(move || http_request(port, "GET", path, None)).await?;
     assert_eq!(status, 200);
     assert_eq!(list["limit"], 100);
-    assert_eq!(list["truncated"], true);
+    assert_eq!(list["has_more"], true);
+    assert!(list["next"].is_string());
     assert_eq!(list["data"].as_array().unwrap().len(), 100);
 
     server.abort();

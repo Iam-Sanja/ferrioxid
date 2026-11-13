@@ -14,7 +14,6 @@ use myshop::models::internal_note::InternalNote;
 use myshop::models::order::Order;
 use myshop::models::order_line::OrderLine;
 use myshop::models::product::Product;
-use std::net::SocketAddr;
 use std::sync::Arc;
 
 async fn home() -> axum::response::Html<&'static str> {
@@ -62,7 +61,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         println!("{}", registered_schema()?.to_canonical_json()?);
         return Ok(());
     }
-    tracing_subscriber::fmt().with_env_filter("info").init();
+    ferrioxid::middleware::init_tracing();
     let url = std::env::var("DATABASE_URL")
         .unwrap_or_else(|_| ferrioxid::db::DEFAULT_SQLITE_URL.to_owned());
     let db = ferrioxid::db::connect(&url).await?;
@@ -164,12 +163,9 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         router,
         Standard {
             body_limit: 2 * 1024 * 1024,
+            ..Standard::default()
         },
     );
-    axum::serve(
-        listener,
-        router.into_make_service_with_connect_info::<SocketAddr>(),
-    )
-    .await?;
+    ferrioxid::serve(listener, router).await?;
     Ok(())
 }

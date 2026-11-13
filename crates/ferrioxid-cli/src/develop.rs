@@ -18,6 +18,7 @@ pub fn dev() -> ExitCode {
     if !notice.is_empty() {
         println!("{notice}");
     }
+    println!("{}", crate::text::line("dev_no_migrate"));
     let package = match package_name(&project.root) {
         Ok(name) => name,
         Err(error) => {
@@ -25,6 +26,16 @@ pub fn dev() -> ExitCode {
             return ExitCode::from(1);
         }
     };
+    if !crate::diagnose::port_available(&project.host, project.port) {
+        eprintln!(
+            "{} {}:{} {}",
+            crate::text::line("port_busy"),
+            project.host,
+            project.port,
+            crate::text::line("dev_no_migrate")
+        );
+        return ExitCode::from(1);
+    }
     let (control_tx, control_rx) = std::sync::mpsc::channel();
     let watch_tx = control_tx.clone();
     let mut watcher = match RecommendedWatcher::new(
@@ -167,11 +178,23 @@ fn migration_notice(project: &ferrioxid_migrations::ProjectConfig) -> String {
                 "migration.database.unavailable: {error}"
             ))
         })?;
-        ferrioxid_migrations::inspect_migrations(
+        let auth_files = ferrioxid_auth::embedded_migrations()
+            .map_err(|error| ferrioxid_migrations::MigrationError::new(error.to_string()))?;
+        let jobs_files = ferrioxid_jobs::embedded_migrations().map_err(|error| {
+            ferrioxid_migrations::MigrationError::new(format!(
+                "{} {}",
+                error.code(),
+                error.detail()
+            ))
+        })?;
+        ferrioxid_migrations::inspect_framework(
             &db,
-            &ferrioxid_auth::migrations_dir(),
+            &auth_files,
+            &jobs_files,
+            ferrioxid_jobs::JOB_HISTORY,
             &project.migrations_dir,
             None,
+            &[],
         )
         .await
     });
@@ -257,6 +280,7 @@ mod tests {
     fn watch_ignores_build_directories() {
         assert!(!relevant(Path::new("target/debug/app")));
         assert!(!relevant(Path::new("node_modules/react/index.js")));
+        assert!(!relevant(Path::new("app.sqlite")));
         assert!(relevant(Path::new("src/main.rs")));
     }
 

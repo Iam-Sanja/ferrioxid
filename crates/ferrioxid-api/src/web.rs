@@ -19,6 +19,7 @@ pub fn prepare(router: Router, settings: &ProjectConfig) -> Router {
         router,
         Standard {
             body_limit: limit.max(1024),
+            ..Standard::default()
         },
     )
 }

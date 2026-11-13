@@ -110,6 +110,10 @@ async fn download(
                 header::X_CONTENT_TYPE_OPTIONS,
                 HeaderValue::from_static("nosniff"),
             );
+            headers.insert(
+                header::CONTENT_SECURITY_POLICY,
+                HeaderValue::from_static("sandbox; default-src 'none'"),
+            );
             if let Ok(value) = HeaderValue::from_str(&disposition) {
                 headers.insert(header::CONTENT_DISPOSITION, value);
             }
@@ -145,6 +149,9 @@ fn storage_error(error: StorageError) -> Response {
         StorageError::TypeRejected => (415, "upload.type", "file type is not allowed"),
         StorageError::Failed => (500, "request.rejected", "Request rejected"),
         StorageError::InvalidImage => (415, "upload.image", "image was rejected"),
+        StorageError::Forbidden => (403, "upload.forbidden", "file access was denied"),
+        StorageError::QuotaExceeded => (413, "upload.quota", "storage quota was reached"),
+        StorageError::Expired => (404, "resource.not_found", "file was not found"),
     };
     (
         StatusCode::from_u16(status).unwrap_or(StatusCode::BAD_REQUEST),

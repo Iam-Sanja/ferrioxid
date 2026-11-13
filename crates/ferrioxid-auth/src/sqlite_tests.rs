@@ -196,7 +196,8 @@ async fn sessions_permissions_and_repeatable_migrations() {
             "0002_admin_journal".to_owned(),
             "0003_audit_operation".to_owned(),
             "0004_password_reset".to_owned(),
-            "0005_anonymous_sessions".to_owned()
+            "0005_anonymous_sessions".to_owned(),
+            "0006_account_security".to_owned()
         ]
     );
     assert_eq!(auth.list_users().await.unwrap().len(), 2);
@@ -293,8 +294,15 @@ async fn login_rate_limit_and_proxy_header() {
     assert_eq!(auth.client_key(&headers, "127.0.0.1"), "127.0.0.1");
     let mut trusting = AuthConfig::development();
     trusting.trust_proxy = true;
+    let unlisted = AuthService::new(auth.database().clone(), trusting.clone());
+    assert_eq!(unlisted.client_key(&headers, "127.0.0.1"), "127.0.0.1");
+    trusting.trusted_proxies = vec!["127.0.0.1".to_owned()];
     let trusting = AuthService::new(auth.database().clone(), trusting);
     assert_eq!(trusting.client_key(&headers, "127.0.0.1"), "203.0.113.5");
+    assert_eq!(trusting.client_key(&headers, "10.1.1.1"), "10.1.1.1");
+    headers.insert("x-forwarded-host", "https://evil.example".parse().unwrap());
+    headers.insert("origin", "https://evil.example".parse().unwrap());
+    assert!(trusting.presented_origin_allowed(&headers).is_err());
 }
 
 async fn expiries_for(db: &sea_orm::DatabaseConnection, user_id: &str) -> Vec<i64> {

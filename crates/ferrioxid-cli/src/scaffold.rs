@@ -60,7 +60,7 @@ pub fn new_project(
         &destination.join("ferrioxid.toml"),
         &manifest(name, template, apps_dir),
     )?;
-    write(&destination.join(".gitignore"), "target/\n.env\n.env.*\n!.env.example\n.ferrioxid/csrf.key\n*.sqlite3\n*.sqlite3-*\nmedia/*\n!media/.gitkeep\n")?;
+    write(&destination.join(".gitignore"), "target/\n.env\n.env.*\n!.env.example\n.ferrioxid/csrf.key\n.ferrioxid/mfa.key\n*.sqlite3\n*.sqlite3-*\nmedia/*\n!media/.gitkeep\n")?;
     write(&destination.join(".env.example"), env_example())?;
     write(&destination.join("README.md"), &readme(name))?;
     write(
@@ -402,7 +402,7 @@ reset_ttl_minutes = 30
 }
 
 fn env_example() -> &'static str {
-    "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRIOXID_CSRF_SECRET must contain 64 hexadecimal characters in production.\n# FERRIOXID_PASSWORD is read only when creating users non-interactively.\n# FERRIOXID_SMTP_PASSWORD must not be stored in ferrioxid.toml.\n# FERRIOXID_PUBLIC_ORIGIN sets the password reset URL, for example https://example.com.\n"
+    "DATABASE_URL=sqlite://db.sqlite3?mode=rwc\nBIND_ADDRESS=127.0.0.1:3000\n# FERRIOXID_CSRF_SECRET must contain 64 hexadecimal characters in production.\n# FERRIOXID_MFA_KEY must contain 64 hexadecimal characters in production. It is not the CSRF secret.\n# FERRIOXID_PASSWORD is read only when creating users non-interactively.\n# FERRIOXID_SMTP_PASSWORD must not be stored in ferrioxid.toml.\n# FERRIOXID_PUBLIC_ORIGIN sets the password reset URL, for example https://example.com.\n"
 }
 
 fn settings_rs() -> &'static str {

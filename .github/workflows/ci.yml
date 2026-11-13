@@ -51,9 +51,33 @@ jobs:
       - name: Build the workspace
         run: cargo build --workspace
 
+      - name: Relocated embedded migrations
+        shell: bash
+        run: |
+          set -eu
+          cargo build -p ferrioxid-cli --bin embedded-migrate
+          dest=$(mktemp -d)
+          work=$(mktemp -d)
+          if [ -f target/debug/embedded-migrate.exe ]; then
+            cp target/debug/embedded-migrate.exe "$dest/embedded-migrate.exe"
+            bin="$dest/embedded-migrate.exe"
+          else
+            cp target/debug/embedded-migrate "$dest/embedded-migrate"
+            bin="$dest/embedded-migrate"
+            chmod +x "$bin"
+          fi
+          db="$work/app.sqlite"
+          if command -v cygpath >/dev/null 2>&1; then
+            db=$(cygpath -m "$db")
+          fi
+          DATABASE_URL="sqlite://$db?mode=rwc" "$bin"
+          test -s "$work/app.sqlite"
+
   postgres:
     name: PostgreSQL
-    runs-on: ubuntu-latest
+    # ubuntu-latest is 26.04 and installs a PostgreSQL 18 client. pg_dump then
+    # writes SET transaction_timeout, which the postgres:16 service rejects.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
       postgres:
@@ -96,6 +120,8 @@ jobs:
         env:
           DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid
           FERRIOXID_MIGRATIONS_DOWN_DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid_migrations_down_test
+          PGPASSWORD: ferrioxid_dev_only
+          POSTGRES_PASSWORD: ferrioxid_dev_only
         run: |
           cargo test -p myshop --test framework_names -- --ignored fresh_postgres_initializes_auth_jobs_and_application
           cargo test -p myshop --test postgres_api -- --ignored postgres_http_roundtrip
@@ -115,4 +141,69 @@ jobs:
           cargo test -p ferrioxid-api --lib testing::tests::postgres_isolated_databases_do_not_share_rows -- --ignored
           cargo test -p ferrioxid-db --lib write::tests::postgres_shop_cases -- --ignored
           cargo test -p ferrioxid-db --lib write::tests::postgres_write_security -- --ignored
+          cargo test -p ferrioxid --test api_contract -- --ignored postgres_cursor_filters_and_openapi_describe_the_same_list
+          cargo test -p ferrioxid-db --test backup_restore -- --ignored postgres_dump_and_restore_roundtrip
           cargo test -p desk --test flow -- --ignored postgres_same_operations
+          cargo test -p ferrioxid --test embedded_runtime -- --ignored postgres_embedded_auth_and_jobs
+          cargo test -p ferrioxid-db --test grouped_report -- --ignored postgres_grouped_report_scope_json_and_one_to_one
+          cargo test -p ferrioxid-migrations --lib plan::tests::postgres_plan_detects_live_drift_on_a_disposable_database -- --ignored
+          cargo test -p ferrioxid-admin --lib -- --ignored postgres_matching_uses_the_record_id_not_a_similar_name
+          cargo test -p ferrioxid --test integration_regression -- --ignored postgres_inspect_framework_and_plan_stay_read_only
+          cargo build -p ferrioxid-cli --bin embedded-migrate
+          psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS ferrioxid_test_relocated WITH (FORCE);' \
+            -c 'CREATE DATABASE ferrioxid_test_relocated;'
+          DATABASE_URL="postgres://ferrioxid:${POSTGRES_PASSWORD}@127.0.0.1:5432/ferrioxid_test_relocated" \
+            ./target/debug/embedded-migrate
+          psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS ferrioxid_test_relocated WITH (FORCE);'
+
+  browser:
+    name: Browser
+    runs-on: ubuntu-24.04
+    timeout-minutes: 45
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@683b588c487a69d01f6c6ddf40f036ff682cc2c8
+        with:
+          toolchain: stable
+
+      - name: Cache Cargo
+        uses: Swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2.9.3
+
+      - name: Install Node
+        uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 22
+
+      - name: Install Playwright
+        working-directory: tests/browser
+        run: npm ci
+
+      - name: Install Chromium
+        working-directory: tests/browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Run the fresh-profile admin login test
+        working-directory: tests/browser
+        env:
+          FERRIOXID_BROWSER_BASE_URL: http://127.0.0.1:4173
+        run: |
+          mkdir -p /tmp/ferrioxid-browser
+          DATABASE_URL="sqlite:///tmp/ferrioxid-browser/browser.sqlite3?mode=rwc" BIND_ADDRESS=127.0.0.1:4173 cargo run -p myshop --bin myshop --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" >/tmp/ferrioxid-browser/server.log 2>&1 &
+          echo $! > /tmp/ferrioxid-browser/server.pid
+          for i in $(seq 1 180); do
+            if curl -fsS http://127.0.0.1:4173/admin/login >/dev/null; then
+              npx playwright test
+              status=$?
+              kill "$(cat /tmp/ferrioxid-browser/server.pid)" || true
+              exit $status
+            fi
+            sleep 2
+          done
+          echo "myshop did not answer /admin/login"
+          cat /tmp/ferrioxid-browser/server.log || true
+          exit 1

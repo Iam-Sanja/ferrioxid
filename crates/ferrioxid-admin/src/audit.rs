@@ -45,17 +45,17 @@ pub async fn insert(db: &impl ConnectionTrait, event: &Event) -> Result<(), Ferr
     let backend = db.get_database_backend();
     let mut query = Query::insert();
     let values = [
-        DbValue::from(Uuid::new_v4().to_string()).into(),
+        stored_uuid(backend, Uuid::new_v4()).into(),
         DbValue::from(unix_now()).into(),
-        DbValue::from(event.actor_id.to_string()).into(),
+        stored_uuid(backend, event.actor_id).into(),
         DbValue::from(clip(&event.model_key, 80)).into(),
         DbValue::from(clip(&event.record_id, 80)).into(),
         DbValue::from(clip(&event.action, 40)).into(),
         DbValue::from(clip(&event.outcome, 16)).into(),
         DbValue::from(clip(&event.summary, 1500)).into(),
         match event.operation_id {
-            Some(id) => DbValue::from(id.to_string()).into(),
-            None => DbValue::String(None).into(),
+            Some(id) => stored_uuid(backend, id).into(),
+            None => stored_uuid_null(backend).into(),
         },
     ];
     query
@@ -110,8 +110,9 @@ pub async fn matching(
         .limit(PAGE_SIZE + 1)
         .offset(offset);
     if let Some(actor) = actor {
-        query
-            .and_where(sea_orm::sea_query::Expr::col(Alias::new("actor_id")).eq(actor.to_string()));
+        query.and_where(
+            sea_orm::sea_query::Expr::col(Alias::new("actor_id")).eq(stored_uuid(backend, actor)),
+        );
     }
     if let Some(model_key) = model_key {
         query.and_where(sea_orm::sea_query::Expr::col(Alias::new("model_key")).eq(model_key));
@@ -255,6 +256,20 @@ pub fn fail_next_insert() {
     FAIL_NEXT.with(|flag| flag.set(true));
 }
 
+fn stored_uuid(backend: DatabaseBackend, id: Uuid) -> DbValue {
+    match backend {
+        DatabaseBackend::Postgres => DbValue::Uuid(Some(Box::new(id))),
+        _ => DbValue::String(Some(Box::new(id.to_string()))),
+    }
+}
+
+fn stored_uuid_null(backend: DatabaseBackend) -> DbValue {
+    match backend {
+        DatabaseBackend::Postgres => DbValue::Uuid(None),
+        _ => DbValue::String(None),
+    }
+}
+
 fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FerrioxidError> {
     if let Ok(value) = row.try_get::<Uuid>("", column) {
         return Ok(value);
@@ -372,5 +387,85 @@ mod tests {
         assert_eq!(label, "1970-01-01 00:00:00 UTC");
         assert_eq!(iso, "1970-01-01T00:00:00Z");
         assert!(super::format_unix_utc(i64::MAX).is_none());
+    }
+
+    #[tokio::test]
+    async fn matching_uses_the_record_id_not_a_similar_name() {
+        let db = ferrioxid_db::connect("sqlite::memory:").await.unwrap();
+        ferrioxid_auth::apply_migrations(&db).await.unwrap();
+        record_id_match(&db).await.unwrap();
+    }
+
+    #[tokio::test]
+    #[ignore = "creates and drops one ferrioxid_test_* PostgreSQL database"]
+    async fn postgres_matching_uses_the_record_id_not_a_similar_name() {
+        let admin = std::env::var("FERRIOXID_POSTGRES_ADMIN")
+            .ok()
+            .filter(|value| !value.is_empty())
+            .or_else(|| std::env::var("DATABASE_URL").ok())
+            .expect("FERRIOXID_POSTGRES_ADMIN or DATABASE_URL must name an approved PostgreSQL admin database");
+        let disposable = ferrioxid_db::DisposablePostgres::create(&admin)
+            .await
+            .expect("disposable database");
+        let db = ferrioxid_db::connect(disposable.url())
+            .await
+            .expect("connect");
+        let matched = async {
+            ferrioxid_auth::apply_migrations(&db)
+                .await
+                .map_err(|error| format!("{error:?}"))?;
+            record_id_match(&db).await
+        }
+        .await;
+        db.close().await.ok();
+        disposable
+            .drop_database()
+            .await
+            .expect("drop test database");
+        matched.expect("record id match on the disposable database");
+    }
+
+    async fn record_id_match(db: &sea_orm::DatabaseConnection) -> Result<(), String> {
+        let actor = uuid::Uuid::nil();
+        let apple = "11111111-1111-1111-1111-111111111111";
+        let other = "22222222-2222-2222-2222-222222222222";
+        for (record, summary) in [(apple, "Name: \"Apfel\""), (other, "Name: \"Apfelbaum\"")] {
+            super::insert(
+                db,
+                &super::Event {
+                    actor_id: actor,
+                    model_key: "products".into(),
+                    record_id: record.into(),
+                    action: "update".into(),
+                    outcome: "ok".into(),
+                    summary: summary.into(),
+                    operation_id: None,
+                },
+            )
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+        }
+        let (rows, has_more) = super::matching(db, None, Some("products"), Some(apple), 0)
+            .await
+            .map_err(|error| format!("{error:?}"))?;
+        if has_more || rows.len() != 1 || rows[0].record_id != apple {
+            return Err(format!("expected one row for {apple}, got {rows:?}"));
+        }
+        if !rows[0].summary.contains("Apfel") || rows[0].summary.contains("Apfelbaum") {
+            return Err(rows[0].summary.clone());
+        }
+        let (foreign, _) = super::matching(
+            db,
+            Some(uuid::Uuid::from_u128(9)),
+            Some("products"),
+            Some(apple),
+            0,
+        )
+        .await
+        .map_err(|error| format!("{error:?}"))?;
+        if !foreign.is_empty() {
+            return Err("another actor can see the record history".into());
+        }
+        Ok(())
     }
 }

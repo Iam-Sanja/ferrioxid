@@ -24,6 +24,7 @@
 <option value="{{ option.id }}" {% if option.selected %}selected{% endif %}>{{ option.label }}</option>
 {% endfor %}
 </select>
+{% if field.truncated %}<p class="hint">{{ i18n.lookup_truncated }}</p>{% endif %}
 {% if field.pick %}<p class="hint"><button type="submit" class="button ghost" formaction="{{ field.pick }}" name="pick_field" value="{{ field.name }}">{{ i18n.pick_more }}</button></p>{% endif %}
 {% else %}
 <label for="{{ field.name }}">{{ field.label }} {% if field.required %}<span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span>{% else %}<span class="hint">{{ i18n.optional }}</span>{% endif %}</label>

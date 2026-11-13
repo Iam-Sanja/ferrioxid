@@ -1,0 +1,5 @@
+# HTTPS reverse proxy. Caddy terminates TLS. The app sees the proxy as its peer.
+# Untrusted X-Forwarded-* headers from other clients are not public origins.
+shop.example {
+    reverse_proxy app:3000
+}

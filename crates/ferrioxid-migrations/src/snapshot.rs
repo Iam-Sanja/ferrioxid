@@ -21,6 +21,7 @@ pub enum LogicalType {
     DateTime,
     Decimal,
     Choice,
+    Json,
 }
 
 impl From<ColumnKind> for LogicalType {
@@ -35,6 +36,7 @@ impl From<ColumnKind> for LogicalType {
             ColumnKind::DateTime => Self::DateTime,
             ColumnKind::Decimal => Self::Decimal,
             ColumnKind::Choice => Self::Choice,
+            ColumnKind::Json => Self::Json,
         }
     }
 }
@@ -51,6 +53,7 @@ impl From<LogicalType> for ColumnKind {
             LogicalType::DateTime => Self::DateTime,
             LogicalType::Decimal => Self::Decimal,
             LogicalType::Choice => Self::Choice,
+            LogicalType::Json => Self::Json,
         }
     }
 }

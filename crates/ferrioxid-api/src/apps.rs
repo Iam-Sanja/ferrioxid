@@ -57,6 +57,8 @@ pub struct AppConfig {
     label: Option<&'static str>,
     prefix: Option<&'static str>,
     depends_on: Vec<&'static str>,
+    version: Option<&'static str>,
+    requirements: Vec<(&'static str, &'static str)>,
 }
 
 impl AppConfig {
@@ -66,6 +68,8 @@ impl AppConfig {
             label: None,
             prefix: None,
             depends_on: Vec::new(),
+            version: None,
+            requirements: Vec::new(),
         }
     }
 
@@ -82,6 +86,22 @@ impl AppConfig {
     pub fn depends_on(mut self, names: &[&'static str]) -> Self {
         self.depends_on = names.to_vec();
         self
+    }
+
+    /// `major.minor.patch`. Fehlende Versionen gelten als `0.0.0`.
+    pub fn version(mut self, version: &'static str) -> Self {
+        self.version = Some(version);
+        self
+    }
+
+    /// Die genannte App muss vorher installiert sein und mindestens diese Version haben.
+    pub fn requires(mut self, name: &'static str, minimum: &'static str) -> Self {
+        self.requirements.push((name, minimum));
+        self
+    }
+
+    pub fn declared_version(&self) -> Option<&'static str> {
+        self.version
     }
 
     pub fn name(&self) -> &'static str {
@@ -415,6 +435,35 @@ impl App {
         if let Some(prefix) = config.prefix {
             validate_prefix(prefix)?;
         }
+        for (name, minimum) in &config.requirements {
+            let Some((_, current)) = self
+                .versions
+                .iter()
+                .find(|(installed, _)| installed == name)
+            else {
+                return Err(AppError::new(
+                    "app.dependency.missing",
+                    format!(
+                        "Install `{name}` {minimum} or newer before `{}`.",
+                        config.name
+                    ),
+                ));
+            };
+            if version_cmp(current, minimum)?.is_lt() {
+                return Err(AppError::new(
+                    "app.dependency.version",
+                    format!("`{name}` {current} is older than the required {minimum}."),
+                ));
+            }
+        }
+        if let Some(version) = config.version {
+            parse_version(version).map_err(|_| {
+                AppError::new(
+                    "app.version",
+                    format!("`{version}` is not major.minor.patch."),
+                )
+            })?;
+        }
         let mut registration = Registration {
             app: &mut self,
             name: config.name,
@@ -423,6 +472,8 @@ impl App {
             depends_on: config.depends_on,
         };
         application.contribute(&mut registration)?;
+        let version = config.version.unwrap_or("0.0.0").to_owned();
+        self.versions.push((config.name.to_owned(), version));
         self.installed.push(config.name.to_owned());
         Ok(self)
     }
@@ -471,6 +522,76 @@ impl App {
         &self.installed
     }
 
+    pub fn installed_version(&self, name: &str) -> Option<&str> {
+        self.versions
+            .iter()
+            .find(|(installed, _)| installed == name)
+            .map(|(_, version)| version.as_str())
+    }
+
+    /// Beschreibt ein Upgrade. Es schreibt weder Dateien noch Tabellen.
+    pub fn upgrade_plan(
+        &self,
+        name: &str,
+        from: Option<&str>,
+        to: &str,
+    ) -> Result<UpgradePlan, AppError> {
+        if !self.installed.iter().any(|installed| installed == name) {
+            return Err(AppError::new(
+                "app.missing",
+                format!("`{name}` is not installed."),
+            ));
+        }
+        parse_version(to).map_err(|_| {
+            AppError::new("app.version", format!("`{to}` is not major.minor.patch."))
+        })?;
+        if let Some(from) = from {
+            parse_version(from).map_err(|_| {
+                AppError::new("app.version", format!("`{from}` is not major.minor.patch."))
+            })?;
+            if version_cmp(to, from)?.is_lt() {
+                return Err(AppError::new(
+                    "app.downgrade",
+                    format!("Refusing to move `{name}` from {from} to {to}."),
+                ));
+            }
+        }
+        let current = self.installed_version(name).unwrap_or("0.0.0");
+        if version_cmp(to, current)?.is_lt() {
+            return Err(AppError::new(
+                "app.downgrade",
+                format!("Refusing to move `{name}` from {current} to {to}."),
+            ));
+        }
+        Ok(UpgradePlan {
+            name: name.to_owned(),
+            from: from.map(str::to_owned),
+            to: to.to_owned(),
+            applies_migrations: false,
+        })
+    }
+
+    /// Beschreibt die Entfernung aus dem nächsten Build. Tabellen und Zeilen bleiben.
+    pub fn uninstall_plan(&self, name: &str) -> Result<UninstallPlan, AppError> {
+        if !self.installed.iter().any(|installed| installed == name) {
+            return Err(AppError::new(
+                "app.missing",
+                format!("`{name}` is not installed."),
+            ));
+        }
+        Ok(UninstallPlan {
+            name: name.to_owned(),
+            removes_from_next_build: true,
+            drops_tables: false,
+            drops_rows: false,
+            retained: vec![
+                "database tables".to_owned(),
+                "table rows".to_owned(),
+                "applied migration history".to_owned(),
+            ],
+        })
+    }
+
     /// Renders one registered template. The name is an app namespace, not a filesystem path.
     pub fn render_template(
         &self,
@@ -481,6 +602,76 @@ impl App {
     }
 }
 
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UpgradePlan {
+    pub name: String,
+    pub from: Option<String>,
+    pub to: String,
+    /// `upgrade_plan` verändert die Datenbank nicht. Migrationen bleiben `ferrioxid migrate`.
+    pub applies_migrations: bool,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct UninstallPlan {
+    pub name: String,
+    /// Der nächste Build lässt `install` weg. Ein laufender Prozess entlädt die App nicht.
+    pub removes_from_next_build: bool,
+    pub drops_tables: bool,
+    pub drops_rows: bool,
+    pub retained: Vec<String>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum VersionOrder {
+    Less,
+    Equal,
+    Greater,
+}
+
+impl VersionOrder {
+    fn is_lt(self) -> bool {
+        matches!(self, Self::Less)
+    }
+}
+
+fn parse_version(value: &str) -> Result<(u16, u16, u16), ()> {
+    let mut parts = value.split('.');
+    let major = canonical_part(parts.next().ok_or(())?)?;
+    let minor = canonical_part(parts.next().ok_or(())?)?;
+    let patch = canonical_part(parts.next().ok_or(())?)?;
+    if parts.next().is_some() {
+        return Err(());
+    }
+    Ok((major, minor, patch))
+}
+
+fn canonical_part(part: &str) -> Result<u16, ()> {
+    if part.is_empty()
+        || part.len() > 4
+        || !part.chars().all(|char| char.is_ascii_digit())
+        || (part.len() > 1 && part.starts_with('0'))
+    {
+        return Err(());
+    }
+    part.parse().map_err(|_| ())
+}
+
+fn version_cmp(left: &str, right: &str) -> Result<VersionOrder, AppError> {
+    let left = parse_version(left)
+        .map_err(|_| AppError::new("app.version", format!("`{left}` is not major.minor.patch.")))?;
+    let right = parse_version(right).map_err(|_| {
+        AppError::new(
+            "app.version",
+            format!("`{right}` is not major.minor.patch."),
+        )
+    })?;
+    Ok(match left.cmp(&right) {
+        std::cmp::Ordering::Less => VersionOrder::Less,
+        std::cmp::Ordering::Equal => VersionOrder::Equal,
+        std::cmp::Ordering::Greater => VersionOrder::Greater,
+    })
+}
+
 fn validate_app_name(name: &str) -> Result<(), AppError> {
     let mut chars = name.chars();
     let ok = matches!(chars.next(), Some(char) if char.is_ascii_lowercase())
@@ -489,7 +680,7 @@ fn validate_app_name(name: &str) -> Result<(), AppError> {
     if !ok
         || matches!(
             name,
-            "admin" | "auth" | "api" | "static" | "healthz" | "uploads"
+            "admin" | "auth" | "api" | "static" | "healthz" | "readyz" | "uploads"
         )
     {
         return Err(AppError::new(
@@ -690,7 +881,7 @@ mod tests {
     use crate::App;
     use axum::routing::get;
     use ferrioxid_db::connect;
-    use sea_orm::ConnectionTrait;
+    use sea_orm::{ConnectionTrait, DatabaseConnection};
     use tower::ServiceExt;
 
     struct Shop;
@@ -732,6 +923,93 @@ mod tests {
                 .unwrap(),
         );
         assert!(collision.is_err());
+    }
+
+    struct Catalog;
+
+    impl FerrioxidApplication for Catalog {
+        fn config(&self) -> AppConfig {
+            AppConfig::new("catalog")
+                .label("Catalog")
+                .prefix("/catalog")
+                .version("1.2.0")
+                .requires("shop", "0.0.0")
+        }
+
+        fn contribute(&self, registry: &mut Registration<'_>) -> Result<(), super::AppError> {
+            registry.routes(UrlSet::new().route(
+                "catalog.list",
+                "/items",
+                get(|| async { "ok" }),
+            )?)
+        }
+    }
+
+    fn exercise_two_installs(
+        left_db: DatabaseConnection,
+        right_db: DatabaseConnection,
+        early_db: DatabaseConnection,
+    ) {
+        let left = App::new(left_db)
+            .install(Shop)
+            .unwrap()
+            .install(Catalog)
+            .unwrap();
+        let right = App::new(right_db)
+            .install(Shop)
+            .unwrap()
+            .install(Catalog)
+            .unwrap();
+        assert_eq!(left.installed_version("catalog"), Some("1.2.0"));
+        assert_eq!(right.installed_version("catalog"), Some("1.2.0"));
+        assert_ne!(
+            left.installed_apps().as_ptr(),
+            right.installed_apps().as_ptr()
+        );
+        let upgrade = right
+            .upgrade_plan("catalog", Some("1.2.0"), "1.3.0")
+            .unwrap();
+        assert!(!upgrade.applies_migrations);
+        assert!(
+            right
+                .upgrade_plan("catalog", Some("1.3.0"), "1.2.0")
+                .unwrap_err()
+                .code
+                == "app.downgrade"
+        );
+        let removal = left.uninstall_plan("catalog").unwrap();
+        assert!(!removal.drops_tables);
+        assert!(!removal.drops_rows);
+        assert!(removal.retained.iter().any(|item| item == "table rows"));
+        assert_eq!(left.installed_apps().len(), 2);
+        let early = App::new(early_db).install(Catalog);
+        match early {
+            Ok(_) => panic!("catalog installed before its required app"),
+            Err(error) => assert_eq!(error.code, "app.dependency.missing"),
+        }
+    }
+
+    #[tokio::test]
+    async fn the_same_package_installs_in_two_projects_and_refuses_a_downgrade() {
+        exercise_two_installs(
+            connect("sqlite::memory:").await.unwrap(),
+            connect("sqlite::memory:").await.unwrap(),
+            connect("sqlite::memory:").await.unwrap(),
+        );
+    }
+
+    #[tokio::test]
+    #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
+    async fn postgres_same_package_installs_in_two_projects_and_refuses_a_downgrade() {
+        let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
+        let disposable = ferrioxid_db::DisposablePostgres::create(&admin)
+            .await
+            .expect("isolated postgres");
+        let left = connect(disposable.url()).await.expect("postgres");
+        let right = connect(disposable.url()).await.expect("postgres");
+        let early = connect(disposable.url()).await.expect("postgres");
+        exercise_two_installs(left, right, early);
+        disposable.drop_database().await.expect("drop");
     }
 
     #[tokio::test]
@@ -1210,6 +1488,24 @@ mod tests {
 
         let ready = connect("sqlite::memory:").await.unwrap();
         ferrioxid_auth::apply_migrations(&ready).await.unwrap();
+        let jobs_pending = App::new(ready.clone())
+            .strict_migrations()
+            .try_into_router_strict()
+            .await;
+        let Err(jobs_pending) = jobs_pending else {
+            panic!("pending job migrations were accepted");
+        };
+        assert!(
+            jobs_pending.detail.contains("0001_jobs"),
+            "{}",
+            jobs_pending.detail
+        );
+        assert!(
+            !ferrioxid_migrations::table_exists(&ready, ferrioxid_jobs::JOB_HISTORY)
+                .await
+                .unwrap()
+        );
+        ferrioxid_jobs::apply_migrations(&ready).await.unwrap();
         let before = ready
             .query_one(sea_orm::Statement::from_string(
                 ready.get_database_backend(),

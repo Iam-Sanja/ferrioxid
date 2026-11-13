@@ -1,5 +1,28 @@
 # Changelog
 
+## Unreleased — Integration of pull requests #103, #102 and #104
+
+- `ModelAdmin` narrows `AdminModelMeta`. HTML and JSON forms share validation. The audit timeline, fieldsets, JSON documents and one-to-one loads remain.
+- Generated lists use keyset pages. OpenAPI 3.1, problem JSON, `/readyz` and read-only `ferrioxid check --deploy` are on the same branch. An enabled proxy trusts only the peer allow-list.
+- Embedded auth migrations are `0001` through `0006_account_security`. Embedded job migrations are `0001_jobs` and `0002_job_schedule`. TOTP, recovery codes, scheduled jobs, a process-local cache and signed storage downloads are included.
+- A text value written to a JSON column is canonicalized before insert. Invalid JSON is `validation.json` and is not sent to PostgreSQL as binary jsonb.
+- `FERRIOXID_MFA_KEY` is a separate 32-byte AES-256-GCM key, encoded as 64 hex characters. New TOTP rows and recovery hashes use a `v2.` prefix. Legacy TOTP ciphertext is re-sealed after it opens. Legacy recovery hashes stay one-way HMAC values and are not rewritten. See [the threat model](docs/auth-threat-model.md).
+- The Cargo package version remains `0.1.0`. Nothing was published.
+
+## Unreleased — Integration of pull requests #97 to #100
+
+- Embedded auth and job migrations, trusted proxy peers, `inspect_framework`, `migrate plan`, JSON documents, one-to-one loads, grouped reports, the admin audit timeline, `aliased_env` and a single legacy project file are on one branch. See [the integration record](docs/advanced-framework-integration.md).
+- `FERRIOXID_TRUST_PROXY` no longer trusts every peer. Set `FERRIOXID_TRUSTED_PROXIES` or the `FERRUM_` alias. Conflicting alias values are a startup error and are not printed.
+- `#[field(json)]` is a new column kind. Existing text columns are not converted. `migrate plan` is read-only.
+- The Cargo package version remains `0.1.0`.
+
+## Unreleased — API contract, checks and release notes (v0.1.0)
+
+- Generated list routes use keyset pages (`limit`, `cursor`, `sort`, repeated `filter`) instead of a silent 100-row window with `truncated`. The read JSON omits `write_only` fields and the secret-named columns. Invalid JSON and a non-UUID id use the problem document. OpenAPI 3.1 describes the same page, parameters and read/write schemas. `info.version` is the HTTP contract `1`. The crate version stays `0.1.0`.
+- `/readyz` runs `SELECT 1` and does not migrate. `ferrioxid::serve` stops on Ctrl+C and SIGTERM. `FERRIOXID_LOG_FORMAT=json` selects JSON logs. `ferrioxid check --deploy` is read-only. An enabled proxy trusts only peers named by `FERRIOXID_TRUSTED_PROXIES`. A wildcard is ignored, and conflicting alias values are an error that is not printed.
+- `deploy/` is a disposable Compose example. `tests/browser` opens the admin login with a fresh Playwright profile. The PostgreSQL job also runs the API contract test and a `pg_dump`/`pg_restore` roundtrip on `ferrioxid_test_*` databases.
+- Nothing was published to crates.io. See [release readiness](docs/release-readiness.md) and [the framework comparison](docs/framework-comparison.md).
+
 ## Unreleased — Ferrioxid names only (breaking)
 
 - Configuration discovery and generation use `ferrioxid.toml`; metadata and runtime CSRF keys use `.ferrioxid/`. Environment settings use `FERRIOXID_*`, and the default session cookie is `ferrioxid_session`. No old-name aliases are read or generated.

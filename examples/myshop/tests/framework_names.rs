@@ -24,11 +24,11 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
     );
     assert_eq!(
         ferrioxid::auth::apply_migrations(db).await.unwrap().len(),
-        5
+        6
     );
     assert_eq!(
         ferrioxid::jobs::apply_migrations(db).await.unwrap().len(),
-        1
+        2
     );
     let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
     assert_eq!(
@@ -54,6 +54,9 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
         "_ferrioxid_password_reset_exchanges",
         "_ferrioxid_mail_outbox",
         "_ferrioxid_jobs",
+        "_ferrioxid_mfa_totp",
+        "_ferrioxid_recovery_codes",
+        "_ferrioxid_login_challenges",
         "_ferrioxid_auth_migrations",
         "_ferrioxid_job_migrations",
         "_ferrioxid_migrations",
@@ -66,7 +69,7 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
     ] {
         assert!(names.contains(name), "missing table: {name}");
     }
-    assert_eq!(names.len(), 22, "unexpected table in disposable database");
+    assert_eq!(names.len(), 25, "unexpected table in disposable database");
     assert!(!names.iter().any(|name| name.contains("ferrum")));
     assert!(ferrioxid::auth::apply_migrations(db)
         .await

@@ -337,6 +337,9 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         let mut precision: Option<u8> = None;
         let mut scale: Option<u8> = None;
         let mut choice = false;
+        let mut json = false;
+        let mut write_only = false;
+        let mut api_read_set: Option<bool> = None;
         for attr in &field.attrs {
             if !attr.path().is_ident("field") {
                 continue;
@@ -380,13 +383,39 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                     scale = Some(meta.value()?.parse::<LitInt>()?.base10_parse()?);
                 } else if meta.path.is_ident("choice") {
                     choice = true;
+                } else if meta.path.is_ident("json") {
+                    json = true;
+                } else if meta.path.is_ident("write_only") {
+                    write_only = true;
+                } else if meta.path.is_ident("api_read") {
+                    api_read_set = Some(meta.value()?.parse::<LitBool>()?.value());
                 } else {
-                    return Err(meta.error("unsupported field attribute"));
+                    return Err(meta.error(
+                        "unsupported field attribute; expected primary_key, auto, required, readonly, write_only, api_read, json, min_length, max_length, min, max, default, unique, index, foreign_key, on_delete, belongs_to, managed, format, precision, scale or choice",
+                    ));
                 }
                 Ok(())
             })?;
         }
-        let (column_kind, decimal_precision, decimal_scale, is_choice) = if choice {
+        let (column_kind, decimal_precision, decimal_scale, is_choice) = if json {
+            if choice
+                || type_name != "String"
+                || precision.is_some()
+                || scale.is_some()
+                || default_bool.is_some()
+            {
+                return Err(syn::Error::new_spanned(
+                    &ident,
+                    "json is a String document without precision, scale, choice, or a bool default",
+                ));
+            }
+            (
+                quote! { ::ferrioxid::core::ColumnKind::Json },
+                0_u8,
+                0_u8,
+                false,
+            )
+        } else if choice {
             if known_kind.is_some() {
                 return Err(syn::Error::new_spanned(
                     &ident,
@@ -441,7 +470,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
         } else {
             return Err(syn::Error::new_spanned(
                 &field.ty,
-                "supported types are Uuid, String, i64, bool, Decimal, NaiveDate, NaiveTime, DateTime<Utc>, Option of those except a nullable id, or an enum marked #[field(choice)]",
+                "supported types are Uuid, String, i64, bool, Decimal, NaiveDate, NaiveTime, DateTime<Utc>, Option of those except a nullable id, an enum marked #[field(choice)], or String marked #[field(json)]",
             ));
         };
         let choices_expr = if is_choice {
@@ -822,6 +851,31 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 choices: #choices_expr,
             }
         });
+        if write_only && (primary || readonly || managed_kind.is_some()) {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "write_only applies to a client-supplied field, not a primary key, readonly field, or managed timestamp",
+            ));
+        }
+        if write_only && api_read_set == Some(true) {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "write_only cannot be combined with api_read = true",
+            ));
+        }
+        if primary && api_read_set == Some(false) {
+            return Err(syn::Error::new_spanned(
+                &ident,
+                "the primary key stays in the read serializer",
+            ));
+        }
+        let api_read = if write_only {
+            false
+        } else if let Some(value) = api_read_set {
+            value
+        } else {
+            !sensitive_admin_name(&field_name)
+        };
         let in_create = !primary && managed_kind.is_none();
         let in_update = in_create && !readonly;
         let create_required = in_create && (required || (!nullable && default_bool.is_none()));
@@ -856,6 +910,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 min_length: #min_length_token,
                 max_length: #max_length_token,
                 format: #format_token,
+                api_read: #api_read,
             }
         });
         if primary {
@@ -893,8 +948,10 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 is_choice,
                 decimal_precision,
                 decimal_scale,
+                json,
+                &field_name,
             );
-            let null_sql = null_value(&type_name);
+            let null_sql = null_value(&type_name, json);
             values.push(quote! {
                 match payload.#ident {
                     ::core::option::Option::Some(value) => #some_value,
@@ -912,6 +969,8 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
                 is_choice,
                 decimal_precision,
                 decimal_scale,
+                json,
+                &field_name,
             );
             values.push(stored);
         }
@@ -1017,6 +1076,7 @@ fn expand(input: DeriveInput) -> syn::Result<proc_macro2::TokenStream> {
             max,
             format: format.as_deref(),
             choice: is_choice,
+            json,
             precision: decimal_precision,
             scale: decimal_scale,
         }));
@@ -1874,7 +1934,24 @@ fn stored_sql(
     choice: bool,
     precision: u8,
     scale: u8,
+    json: bool,
+    field_name: &str,
 ) -> proc_macro2::TokenStream {
+    if json {
+        return quote! {{
+            let canonical = ::ferrioxid::core::canonical_json_text(#expr.as_str()).map_err(|code| {
+                ::ferrioxid::core::FerrioxidError::Validation(format!("field:{}:{code}", #field_name))
+            })?;
+            let parsed = ::ferrioxid::serde_json::from_str::<::ferrioxid::serde_json::Value>(&canonical)
+                .map_err(|_| {
+                    ::ferrioxid::core::FerrioxidError::Validation(format!(
+                        "field:{}:validation.json",
+                        #field_name
+                    ))
+                })?;
+            ::ferrioxid::sea_orm::Value::Json(Some(::std::boxed::Box::new(parsed)))
+        }};
+    }
     if type_name == "Decimal" {
         quote! {
             ::ferrioxid::sea_orm::Value::Bytes(Some(::std::boxed::Box::new(
@@ -1894,7 +1971,10 @@ fn stored_sql(
     }
 }
 
-fn null_value(type_name: &str) -> proc_macro2::TokenStream {
+fn null_value(type_name: &str, json: bool) -> proc_macro2::TokenStream {
+    if json {
+        return quote! { ::ferrioxid::sea_orm::Value::Json(None) };
+    }
     match type_name {
         "String" => quote! { ::ferrioxid::sea_orm::Value::String(None) },
         "i64" => quote! { ::ferrioxid::sea_orm::Value::BigInt(None) },
@@ -1985,6 +2065,7 @@ struct PatchRules<'a> {
     max: Option<i64>,
     format: Option<&'a str>,
     choice: bool,
+    json: bool,
     precision: u8,
     scale: u8,
 }
@@ -2002,6 +2083,7 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
         max,
         format,
         choice,
+        json,
         precision,
         scale,
     } = rules;
@@ -2050,7 +2132,7 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
         } });
     }
     let null_arm = if nullable {
-        let null_sql = null_value(type_name);
+        let null_sql = null_value(type_name, json);
         quote! { ::ferrioxid::db::PatchField::Null => { changes.push((#field_name, #null_sql)); } }
     } else {
         quote! {
@@ -2059,7 +2141,15 @@ fn update_binding(rules: PatchRules<'_>) -> proc_macro2::TokenStream {
             }
         }
     };
-    let stored = stored_sql(quote!(value), type_name, choice, precision, scale);
+    let stored = stored_sql(
+        quote!(value),
+        type_name,
+        choice,
+        precision,
+        scale,
+        json,
+        field_name,
+    );
     quote! {
         match payload.#ident {
             ::ferrioxid::db::PatchField::Missing => {}

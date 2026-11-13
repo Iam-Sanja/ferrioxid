@@ -43,7 +43,7 @@ queue.enqueue::<PulseHandler>(&Pulse { label: "wieder".into() }, When::every("no
 
 `JobRegistry` belongs to the process that builds the worker. There is no global registry and no reloading of programs. `NAME` consists of lower case, numerals and underscores. `VERSION` starts at 1. The payload is a JSON object, maximum 16 KiB. Keys such as `password`, `token`, `secret` and `reset_url` are rejected.
 
-`When::now` is due immediately. `When::at` sets `available_at` as a Unix second in UTC. `When::every` carries an interval of 1 to 2 592 000 seconds and a `schedule_key`. There is no cron syntax.
+`When::now` is due immediately. `When::at` sets `available_at` as a Unix second in UTC. `When::every` carries an interval of 1 to 2 592 000 seconds and a `schedule_key`. `When::cron` stores a five-field expression and a zone. See [job-scheduling.md](job-scheduling.md). Delivery stays at-least-once. `ferrioxid::jobs::DELIVERY` is `"at-least-once"`. There is no exactly-once claim.
 
 ## Status
 
@@ -60,7 +60,7 @@ Workers claim due `pending` and `retry` jobs, and may reclaim `running` jobs who
 
 ## Schema
 
-The migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` creates `_ferrioxid_jobs`, with history in `_ferrioxid_job_migrations`. Auth migrations `0001` to `0004` remain unchanged. `ferrioxid migrate up` applies the job migration; workers and `ferrioxid dev` do not.
+The migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` creates `_ferrioxid_jobs`. `0002_job_schedule.json` adds the nullable columns `cron_expression` and `cron_zone`. History stays in `_ferrioxid_job_migrations`. `table_ready` requires both the table and `cron_expression`. Auth migrations `0001` to `0005` remain unchanged; account security is `0006_account_security`. `ferrioxid migrate up` applies the job migrations; workers and `ferrioxid dev` do not.
 
 Timestamps are UTC Unix seconds. Reusing an `idempotency_key` returns the existing job. A `schedule_key` belongs to one row at a time and transfers to the next scheduled job after success. Missed intervals are skipped to avoid a backlog when a worker has been stopped.
 
@@ -78,3 +78,5 @@ The example with Instant, Delay, Interval and Mail Job is in `examples/notes`. `
 6. Handle failures with `JobError::retry` or `JobError::permanent`. Operators can use `ferrioxid jobs retry <id> --yes` or `ferrioxid jobs cancel <id> --yes` for eligible states.
 
 An unknown handler remains `pending` and does not increase `attempts`. If the migration is missing, the worker ends with `job.migration.missing` and Exitcode 2.
+
+`enqueue_json_on` writes through the caller's connection and does not begin its own transaction. A rollback removes the staged job. A committed job is still at-least-once if the worker crashes after a side effect. A unique conflict returns `job.conflict` and can abort a PostgreSQL transaction; the caller rolls back. `Queue::dead_letters` lists rows with status `failed`. That is not a separate status. Retention still deletes old failed rows. A stop flag prevents new claims. An in-flight handler finishes or times out. Two workers cannot both finish the same lease. A stale lease token returns `LostLease`.

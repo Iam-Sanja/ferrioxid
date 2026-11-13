@@ -54,7 +54,7 @@ ferrioxid auth assign-role --email admin@example.com --role editor
 
 `generate worker` writes `src/bin/worker.rs` without overwriting an existing file. `jobs inspect` hides the payload unless `--show-payload` is supplied, which warns that it may contain personal data. Neither output includes the lease token. `ferrioxid worker` runs only the mail handler.
 
-`ferrioxid migrate down` reverts the latest migration. `--app <name>` reverts the latest migration of that app. `--dry-run` writes nothing. Dropping a created table or column needs `--allow-destructive` and does not restore those rows. `ferrioxid dev` starts neither a worker nor Vite, and warns about pending migrations without applying them. Generator integration tests limit nested Cargo builds to two jobs after unrestricted release builds crashed rustc 1.98.1 on Windows. The product command `ferrioxid build` still performs a release build.
+`ferrioxid migrate plan` compares files, history and the live catalog without writing. Exit code `1` means a history conflict or live drift. A pending migration or a model that is ahead of the latest pending file is printed as a warning and does not by itself change the exit code. `ferrioxid migrate down` reverts the latest migration. `--app <name>` reverts the latest migration of that app. `--dry-run` writes nothing. Dropping a created table or column needs `--allow-destructive` and does not restore those rows. `ferrioxid dev` starts neither a worker nor Vite, and warns about pending migrations without applying them. Generator integration tests limit nested Cargo builds to two jobs after unrestricted release builds crashed rustc 1.98.1 on Windows. The product command `ferrioxid build` still performs a release build.
 
 Exit codes of the test: `0` without error, warnings included. `1` for conflicts, an unreadable existing database or a failed `cargo check`. `migrate status` also uses `1` if the SQLite file is missing and does not create it. `check --strict` uses `2` if only warnings remain. `upgrade` uses `1` for file conflicts and then does not write anything.
 
@@ -71,7 +71,7 @@ ferrioxid
 ├─ generate model <name>       Kompilierbare Modelldatei erstellen
 ├─ check [--strict]            IST, Projekt und Migrationen, ohne Schreiben
 ├─ upgrade --check|--dry-run|--yes   IST, nur ein fehlendes Legacy-Manifest
-├─ migrate make|up|down|status IST, siehe migrations.md
+├─ migrate make|up|down|plan|status IST, siehe migrations.md
 ├─ dumpdata / loaddata         IST, siehe fixtures.md
 ├─ manage <command>            IST, siehe management-commands.md
 ├─ migrate rename-column       IST, explizite Spaltenumbenennung

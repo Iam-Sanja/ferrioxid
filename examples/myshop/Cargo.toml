@@ -3,6 +3,11 @@ name = "myshop"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
+default-run = "myshop"
 
 [dev-dependencies]
 http-body-util = "0.1"

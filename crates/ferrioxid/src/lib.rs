@@ -5,10 +5,11 @@ pub use async_trait;
 pub use chrono;
 pub use ferrioxid_admin as admin;
 pub use ferrioxid_api::{
-    apps, openapi, pages, require_browser, testing, urls, views, web, App, OpenApiOperation,
+    apps, openapi, pages, require_browser, serve, testing, urls, views, web, App, OpenApiOperation,
     OpenApiOptions,
 };
 pub use ferrioxid_auth as auth;
+pub use ferrioxid_cache as cache;
 pub use ferrioxid_core as core;
 pub use ferrioxid_db as db;
 pub use ferrioxid_forms as forms;

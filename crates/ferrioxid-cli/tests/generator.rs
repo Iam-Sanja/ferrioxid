@@ -425,6 +425,7 @@ fn assert_current_framework_names(project: &std::path::Path) {
         ".env.*\n",
         "!.env.example\n",
         ".ferrioxid/csrf.key\n",
+        ".ferrioxid/mfa.key\n",
     ] {
         assert!(
             ignored.contains(pattern),

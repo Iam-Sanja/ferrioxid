@@ -68,7 +68,7 @@ SeaQuery binds values using PostgreSQL `$1`, `$2` or SQLite `?` placeholders. Id
 
 ### Delete, Get and List
 
-`DELETE` filters by the bound UUID. Zero affected rows produce `Missing`; `get` returns `Ok(None)` when no row exists. `list` orders by `"id"` and reads 101 rows, returning at most 100 objects and setting `truncated` if more exist. UUID ordering does not represent creation time. The generated REST `list` response is still not a page API. Bounded pages are `Model::query()`, described below.
+`DELETE` filters by the bound UUID. Zero affected rows produce `Missing`; `get` returns `Ok(None)` when no row exists. Repository `list` orders by `"id"` and reads 101 rows, returning at most 100 objects and setting `truncated` if more exist. UUID ordering does not represent creation time. The generated REST list is a cursor page (`data`, `limit`, `next`, `has_more`) on the same keyset engine as `Model::query()`. `truncated` stays on the repository `ListPage` and is not an HTTP field.
 
 ## Setup
 
@@ -172,7 +172,9 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 - Page size is 1..=100 (`PAGE_LIMIT`). Offset is at most 1_000_000 (`OFFSET_LIMIT`).
 - One `IN` or `NOT IN` list holds 1..=100 values (`IN_LIMIT`). An empty list is an error, not `IN ()`.
 - `all` never scans the whole table. A result larger than 100 rows requires further pages.
-- `annotate` adds one related `COUNT` or `SUM`. There is no general `GROUP BY` and no arbitrary SQL expression.
+- `annotate` adds one related `COUNT` or `SUM`.
+- `Select::aggregate` builds a grouped report. `group_by` accepts text, choice, bigint, uuid, date, time and datetime columns. Boolean, decimal and JSON columns are rejected. Measures are `count`, `count_column`, bigint `sum`, bigint `average`, and `min`/`max` of bigint, text, choice, date, time or datetime. `average` is `sum * 1_000_000 / count`, truncated toward zero to six decimal places. SQL `AVG` is not used, because SQLite returns a float and PostgreSQL returns numeric. `HAVING` accepts only integer measures and a bound `i64`. Ordering by `average` is rejected. The report returns at most 100 groups and has no offset. Filters, named filters and `QueryScope` stay in `WHERE`. Remaining group columns are a deterministic ascending tie-break. `character_length_eq` is a bound length check for text and choice only: PostgreSQL `char_length`, SQLite `length`. The length is 0..=200.
+- JSON path operators, arbitrary SQL expressions and MySQL are not part of this API.
 - MySQL is rejected.
 - SQLite behavior is covered by `cargo test -p ferrioxid-db`. PostgreSQL SQL generation is asserted in the same crate. `postgres_filters_and_pages_runtime` is `#[ignore]` and runs only with `DATABASE_URL` and a disposable PostgreSQL database. A local workspace run does not mark that test as passed.
 
@@ -200,7 +202,7 @@ Text, email and slug rules from `update_record` are not repeated here. `rows_aff
 
 - PostgreSQL baseline. Explicit renames, SQLite table rebuilds, SQLite baselining and `migrate down` are described in [migrations.md](migrations.md). Multi-model transactions are described in [transactions.md](transactions.md).
 - Own error codes apart from the two fixed validation texts for Unique and Foreign Key.
-- JSON columns, automatic eager loading and MySQL. Explicit many-to-many loads and batched foreign-key reads are in [relations.md](relations.md).
+- Automatic eager loading and MySQL. JSON documents are stored, not queried with path operators. Explicit many-to-many loads, one-to-one loads and batched foreign-key reads are in [relations.md](relations.md).
 - Pool sizes and timeouts as an application configuration except for the fixed SQLite limit of a connection.
 - Optimistic locking.
 

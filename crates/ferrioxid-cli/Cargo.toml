@@ -3,15 +3,23 @@ name = "ferrioxid-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "ferrioxid"
 path = "src/main.rs"
 
+[[bin]]
+name = "embedded-migrate"
+path = "src/bin/embedded_migrate.rs"
+
 [dependencies]
 clap.workspace = true
 serde_json.workspace = true
 ctrlc = "3.4"
+ferrioxid-core = { path = "../ferrioxid-core" }
 ferrioxid-auth = { path = "../ferrioxid-auth" }
 ferrioxid-db = { path = "../ferrioxid-db" }
 ferrioxid-jobs = { path = "../ferrioxid-jobs" }

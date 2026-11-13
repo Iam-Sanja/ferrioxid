@@ -1,0 +1,323 @@
+{
+  "format_version": 1,
+  "id": "0002_job_schedule",
+  "name": "job_schedule",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "_ferrioxid_jobs",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "handler",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload_version",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "available_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "max_attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "next_attempt_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_owner",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_token",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "error_code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "finished_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "idempotency_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "interval_secs",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "schedule_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_jobs_idempotency_key",
+            "columns": [
+              "idempotency_key"
+            ]
+          },
+          {
+            "name": "uq__ferrioxid_jobs_schedule_key",
+            "columns": [
+              "schedule_key"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_jobs_status_available_at",
+            "columns": [
+              "status",
+              "available_at"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "_ferrioxid_jobs",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "handler",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload_version",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "available_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "max_attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "next_attempt_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_owner",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_token",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "error_code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "finished_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "idempotency_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "interval_secs",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "schedule_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "cron_expression",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "cron_zone",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_jobs_idempotency_key",
+            "columns": [
+              "idempotency_key"
+            ]
+          },
+          {
+            "name": "uq__ferrioxid_jobs_schedule_key",
+            "columns": [
+              "schedule_key"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_jobs_status_available_at",
+            "columns": [
+              "status",
+              "available_at"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "add_column",
+      "table": "_ferrioxid_jobs",
+      "column": {
+        "name": "cron_expression",
+        "type": "string",
+        "primary_key": false,
+        "nullable": true
+      }
+    },
+    {
+      "type": "add_column",
+      "table": "_ferrioxid_jobs",
+      "column": {
+        "name": "cron_zone",
+        "type": "string",
+        "primary_key": false,
+        "nullable": true
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "d0747de61635c3288a73d37bd4396bee9ebbaf8b3482290c7fc69d960903b58a"
+}

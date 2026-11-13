@@ -41,6 +41,24 @@ App::new(db).with_auth(auth).with_admin(admin)
 
 The surface is below `http://127.0.0.1:3000/admin`. The API is under `/admin/api`.
 
+## Typed configuration
+
+`AdminModelMeta` from `#[ferrioxid(admin = true)]` is the model admin declaration. `ModelAdmin` narrows that metadata. It does not start a second admin. List columns, search, filters, ordering, readonly, hidden and sensitive fields, fieldsets, inlines and the permission stem stay on `AdminModelMeta`. Compile-time checks reject a list link without list display, an unknown fieldset, duplicate fieldset names, a visible field without a fieldset when fieldsets exist, and a password, token, secret or sensitive field that is not hidden. Runtime paths still check the session, staff access, `{permission}.read|create|update|delete`, the object query scope and CSRF on writes.
+
+Call `ModelAdmin::check` with the model metadata and columns, then `AdminRegistry::configure`, then `seal`. Until `seal`, the derive metadata stays in effect. A configuration can reduce list, search and filter fields, mark more fields readonly or hidden, replace fieldsets, set ordering and page size, and require an extra `resource.action` code through `holds`. It cannot reveal a sensitive or hidden field. Foreign keys of a configured model must point at a table that is also in the registry. Inlines stay on the model derive. Has-many editing remains `save_with_children`. Many-to-many membership uses `replace_links` inside one transaction. The HTML picker pages past 100 rows; the select shows the first 100 and links to that search. One-to-one batch loading is `load_one_to_one`. Unique foreign keys can still use the existing picker.
+
+```rust
+let notes = ModelAdmin::new("notes")
+    .list_display(&["title"])
+    .search_fields(&["title"])
+    .readonly(&["body"])
+    .action_permission("update", "notes.publish")
+    .check(Note::admin_meta().unwrap(), Note::columns())?;
+let registry = AdminRegistry::new().add::<Note>().configure(notes)?.seal()?;
+```
+
+See [admin-list-configuration.md](admin-list-configuration.md), [admin-fieldsets.md](admin-fieldsets.md), [admin-inlines.md](admin-inlines.md), [admin-relational-widgets.md](admin-relational-widgets.md) and [admin-devex.md](admin-devex.md).
+
 ## Security
 
 Admin model and directory requests require a valid session and `is_staff = true`; public configuration and login routes are exceptions. `allow_anonymous` never grants admin access. Superusers still need staff access. Models with no admin permission are available only to superusers. Bound object policies filter lists through SQL query scopes and check individual records.
