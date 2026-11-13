@@ -4,9 +4,9 @@ Thanks for considering a contribution! Fexu is an experimental Rust web framewor
 
 ## Start small
 
-Good first contributions are a clear documentation correction, a reproducible test for an existing bug, a small example, or a focused improvement to diagnostics. Before starting larger features, [open a discussion](https://github.com/Iam-Sanja/ferrioxid/discussions) or comment on the issue to avoid duplicated work.
+Good first contributions are a clear documentation correction, a reproducible test for an existing bug, a small example, or a focused improvement to diagnostics. Before starting larger features, [open a discussion](https://github.com/Iam-Sanja/fexu-rs/discussions) or comment on the issue to avoid duplicated work.
 
-Browse [open issues](https://github.com/Iam-Sanja/ferrioxid/issues) and [good first issues](https://github.com/Iam-Sanja/ferrioxid/labels/good%20first%20issue).
+Browse [open issues](https://github.com/Iam-Sanja/fexu-rs/issues) and [good first issues](https://github.com/Iam-Sanja/fexu-rs/labels/good%20first%20issue).
 
 ## Local setup
 
@@ -15,8 +15,8 @@ Browse [open issues](https://github.com/Iam-Sanja/ferrioxid/issues) and [good fi
 3. Build and run the SQLite example; no PostgreSQL service is needed for the initial setup.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/fexu.git
-cd fexu
+git clone https://github.com/YOUR-USERNAME/fexu-rs.git
+cd fexu-rs
 cargo build --workspace
 cargo run -p fexu-cli -- migrate up
 cargo run -p myshop
@@ -65,4 +65,4 @@ Read the full [CONTRIBUTING.md](../CONTRIBUTING.md), [Code of Conduct](../CODE_O
 
 An issue describing confusing setup instructions, a missing code example, or a precise reproduction of unexpected behavior is a genuinely useful contribution.
 
-You are welcome to ask questions in [Discussions](https://github.com/Iam-Sanja/ferrioxid/discussions) before sending code.
+You are welcome to ask questions in [Discussions](https://github.com/Iam-Sanja/fexu-rs/discussions) before sending code.
