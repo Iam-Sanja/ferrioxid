@@ -3,16 +3,19 @@ name = "ferrioxid-jobs"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Background jobs for the Ferrioxid framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [dependencies]
 async-trait.workspace = true
-ferrioxid-core = { path = "../ferrioxid-core" }
-ferrioxid-db = { path = "../ferrioxid-db" }
-ferrioxid-mail = { path = "../ferrioxid-mail" }
-ferrioxid-migrations = { path = "../ferrioxid-migrations" }
+ferrioxid-core.workspace = true
+ferrioxid-db.workspace = true
+ferrioxid-mail.workspace = true
+ferrioxid-migrations.workspace = true
 sea-orm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
@@ -23,4 +26,4 @@ tracing.workspace = true
 uuid.workspace = true
 
 [dev-dependencies]
-ferrioxid-auth = { path = "../ferrioxid-auth" }
+ferrioxid-auth.workspace = true
