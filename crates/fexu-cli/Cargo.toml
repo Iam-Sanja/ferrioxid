@@ -31,5 +31,4 @@ fexu-migrations.workspace = true
 notify = "8"
 rpassword.workspace = true
 tokio.workspace = true
-sea-orm.workspace = true
 uuid.workspace = true

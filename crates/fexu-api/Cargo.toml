@@ -22,7 +22,6 @@ fexu-static.workspace = true
 fexu-middleware.workspace = true
 axum.workspace = true
 tera.workspace = true
-sea-orm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 tokio.workspace = true

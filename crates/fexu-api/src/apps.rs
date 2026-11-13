@@ -879,7 +879,7 @@ mod tests {
     use crate::App;
     use axum::routing::get;
     use fexu_db::connect;
-    use sea_orm::{ConnectionTrait, DatabaseConnection};
+    use fexu_db::driver::{ConnectionTrait, DatabaseConnection};
     use tower::ServiceExt;
 
     struct Shop;
@@ -1463,7 +1463,7 @@ mod tests {
         assert_eq!(pending.code, "migration.strict");
         assert!(pending.detail.contains("pending"), "{}", pending.detail);
         let tables = fresh
-            .query_one(sea_orm::Statement::from_string(
+            .query_one(fexu_db::driver::Statement::from_string(
                 fresh.get_database_backend(),
                 "SELECT count(*) AS n FROM sqlite_master".to_owned(),
             ))
@@ -1493,7 +1493,7 @@ mod tests {
         );
         fexu_jobs::apply_migrations(&ready).await.unwrap();
         let before = ready
-            .query_one(sea_orm::Statement::from_string(
+            .query_one(fexu_db::driver::Statement::from_string(
                 ready.get_database_backend(),
                 "SELECT count(*) AS n FROM _fexu_auth_migrations".to_owned(),
             ))
@@ -1505,7 +1505,7 @@ mod tests {
             .await
             .unwrap();
         let after = ready
-            .query_one(sea_orm::Statement::from_string(
+            .query_one(fexu_db::driver::Statement::from_string(
                 ready.get_database_backend(),
                 "SELECT count(*) AS n FROM _fexu_auth_migrations".to_owned(),
             ))

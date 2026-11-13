@@ -5,8 +5,10 @@ use crate::schema::{
     ADMIN_AUDIT, ANONYMOUS_SESSIONS, MAIL_OUTBOX, PASSWORD_RESETS, PASSWORD_RESET_EXCHANGES,
     PERMISSIONS, ROLES, ROLE_PERMISSIONS, SESSIONS, USERS, USER_ROLES,
 };
-use sea_orm::sea_query::{Alias, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder};
-use sea_orm::{ConnectionTrait, DatabaseBackend, QueryResult, Statement, Value};
+use fexu_db::driver::sea_query::{
+    Alias, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder,
+};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, QueryResult, Statement, Value};
 use std::collections::HashMap;
 use uuid::Uuid;
 
@@ -1029,19 +1031,22 @@ fn required_flag(row: &QueryResult, column: &str) -> Result<bool, AuthError> {
     Ok(required_i64(row, column)? != 0)
 }
 
-fn text(value: &str) -> sea_orm::sea_query::SimpleExpr {
+fn text(value: &str) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(value)
 }
 
 /// PostgreSQL-Spalten vom Typ UUID bekommen einen UUID-Parameter. SQLite speichert dieselbe Spalte als TEXT.
-fn uuid_expr(backend: DatabaseBackend, id: Uuid) -> sea_orm::sea_query::SimpleExpr {
+fn uuid_expr(backend: DatabaseBackend, id: Uuid) -> fexu_db::driver::sea_query::SimpleExpr {
     match backend {
         DatabaseBackend::Postgres => Expr::value(Value::Uuid(Some(Box::new(id)))),
         DatabaseBackend::Sqlite | DatabaseBackend::MySql => Expr::value(id.to_string()),
     }
 }
 
-fn opt_uuid_expr(backend: DatabaseBackend, id: Option<Uuid>) -> sea_orm::sea_query::SimpleExpr {
+fn opt_uuid_expr(
+    backend: DatabaseBackend,
+    id: Option<Uuid>,
+) -> fexu_db::driver::sea_query::SimpleExpr {
     match id {
         Some(id) => uuid_expr(backend, id),
         None => match backend {
@@ -1051,7 +1056,7 @@ fn opt_uuid_expr(backend: DatabaseBackend, id: Option<Uuid>) -> sea_orm::sea_que
     }
 }
 
-fn opt_text(value: Option<&str>) -> sea_orm::sea_query::SimpleExpr {
+fn opt_text(value: Option<&str>) -> fexu_db::driver::sea_query::SimpleExpr {
     match value {
         Some(value) => Expr::value(value),
         None => Expr::value(Option::<String>::None),
@@ -1063,24 +1068,24 @@ fn optional_text(row: &QueryResult, column: &str) -> Result<Option<String>, Auth
         .map_err(|_| AuthError::database(format!("column {column} is not text")))
 }
 
-fn number(value: i64) -> sea_orm::sea_query::SimpleExpr {
+fn number(value: i64) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(value)
 }
 
-fn opt_number(value: Option<i64>) -> sea_orm::sea_query::SimpleExpr {
+fn opt_number(value: Option<i64>) -> fexu_db::driver::sea_query::SimpleExpr {
     match value {
         Some(value) => Expr::value(value),
         None => Expr::value(Value::BigInt(None)),
     }
 }
 
-fn flag(value: bool) -> sea_orm::sea_query::SimpleExpr {
+fn flag(value: bool) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(value)
 }
 
 async fn execute(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<(), AuthError> {
     execute_rows(db, query).await?;
     Ok(())
@@ -1088,7 +1093,7 @@ async fn execute(
 
 async fn execute_rows(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<u64, AuthError> {
     let result = db.execute(statement(db, query)?).await.map_err(map_write)?;
     Ok(result.rows_affected())
@@ -1096,7 +1101,7 @@ async fn execute_rows(
 
 async fn one(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Option<QueryResult>, AuthError> {
     db.query_one(statement(db, query)?)
         .await
@@ -1105,7 +1110,7 @@ async fn one(
 
 async fn all(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Vec<QueryResult>, AuthError> {
     db.query_all(statement(db, query)?)
         .await
@@ -1114,7 +1119,7 @@ async fn all(
 
 fn statement(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Statement, AuthError> {
     let backend = db.get_database_backend();
     let (sql, values) = match backend {
@@ -1127,31 +1132,21 @@ fn statement(
     Ok(Statement::from_sql_and_values(backend, sql, values.0))
 }
 
-fn map_write(error: sea_orm::DbErr) -> AuthError {
+fn map_write(error: fexu_db::driver::DbErr) -> AuthError {
     if unique_violation(&error) {
         return AuthError::Validation("record already exists".into());
     }
     AuthError::database(error)
 }
 
-fn unique_violation(error: &sea_orm::DbErr) -> bool {
-    let runtime = match error {
-        sea_orm::DbErr::Exec(runtime) | sea_orm::DbErr::Query(runtime) => runtime,
-        _ => return false,
-    };
-    let sea_orm::RuntimeErr::SqlxError(sqlx_error) = runtime else {
-        return false;
-    };
-    let sea_orm::sqlx::Error::Database(database) = sqlx_error else {
-        return false;
-    };
-    database.kind() == sea_orm::sqlx::error::ErrorKind::UniqueViolation
+fn unique_violation(error: &fexu_db::driver::DbErr) -> bool {
+    error.constraint() == Some(fexu_db::driver::ConstraintKind::Unique)
 }
 
 #[cfg(test)]
 mod anonymous_binding_tests {
     use super::*;
-    use sea_orm::sea_query::QueryStatementWriter;
+    use fexu_db::driver::sea_query::QueryStatementWriter;
 
     fn bound(backend: DatabaseBackend, query: &impl QueryStatementWriter) -> Vec<Value> {
         let (_sql, values) = match backend {

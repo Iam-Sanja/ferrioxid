@@ -11,15 +11,19 @@ readme.workspace = true
 categories.workspace = true
 
 [dependencies]
-# This bound makes missing root-level SQLx patches fail resolution instead of using vulnerable SQLite.
-libsqlite3-sys.workspace = true
 fexu-core.workspace = true
-sea-orm.workspace = true
+sea-query.workspace = true
+sqlx-core.workspace = true
+sqlx-postgres.workspace = true
+rusqlite.workspace = true
+rust_decimal.workspace = true
 serde_json.workspace = true
 async-trait.workspace = true
 serde.workspace = true
 chrono.workspace = true
 uuid.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["sync", "time"] }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["time"] }

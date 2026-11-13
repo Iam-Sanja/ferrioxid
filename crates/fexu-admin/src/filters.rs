@@ -1,7 +1,7 @@
 //! Registrierte Listenfilter. Die Spalte steht in der Registry, der Wert wird gebunden.
 
 use fexu_core::{AdminModelMeta, ColumnKind, ColumnSpec};
-use sea_orm::Value as DbValue;
+use fexu_db::driver::Value as DbValue;
 
 use crate::views::{valid_key, valid_label, ExtensionError};
 

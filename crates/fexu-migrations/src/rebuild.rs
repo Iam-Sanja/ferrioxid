@@ -15,8 +15,8 @@ use crate::snapshot::{
     TableSnapshot,
 };
 use fexu_core::{DatabaseKind, ReferentialAction};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement, Value};
 use fexu_db::{render_create_index, render_table_bundle, ForeignKeyClause, PhysicalColumn};
-use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 enum Cell {
@@ -883,7 +883,7 @@ fn copy_expression(
 }
 
 fn read_cell(
-    row: &sea_orm::QueryResult,
+    row: &fexu_db::driver::QueryResult,
     name: &str,
     logical: LogicalType,
 ) -> Result<Cell, MigrationError> {
@@ -1034,7 +1034,7 @@ async fn execute(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_orm::DatabaseBackend;
+    use fexu_db::driver::DatabaseBackend;
 
     #[tokio::test]
     async fn null_rows_block_the_not_null_check() {

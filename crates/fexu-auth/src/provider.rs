@@ -5,7 +5,7 @@ use crate::password::{verify_against_dummy, verify_password};
 use crate::service::normalize_email;
 use crate::store::{self, UserRow};
 use async_trait::async_trait;
-use sea_orm::DatabaseConnection;
+use fexu_db::driver::DatabaseConnection;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

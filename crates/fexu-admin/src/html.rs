@@ -21,11 +21,11 @@ use axum::routing::{get, post};
 use axum::Router;
 use fexu_auth::{AppState, AuthConfig, AuthError, AuthUser, CookieSameSite};
 use fexu_core::{ColumnKind, ColumnSpec, FexuError};
+use fexu_db::driver::{TransactionTrait, Value as DbValue};
 use fexu_db::{date_buckets, delete_record, get_record, query_labels, update_record};
 use fexu_forms::{
     reject_unknown, require_confirmation, required_bool, required_text, FormValues, TextSpec,
 };
-use sea_orm::{TransactionTrait, Value as DbValue};
 use serde_json::{json, Map, Value};
 use std::collections::HashMap;
 use uuid::Uuid;

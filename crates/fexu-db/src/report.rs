@@ -3,9 +3,9 @@
 
 use std::collections::BTreeMap;
 
+use crate::driver::sea_query::{Alias, Expr, ExprTrait, Func, Order, Query, SelectStatement};
+use crate::driver::{ConnectionTrait, DatabaseBackend, QueryResult};
 use fexu_core::{ColumnKind, FexuError, FexuModel};
-use sea_orm::sea_query::{Alias, Expr, ExprTrait, Func, Order, Query, SelectStatement};
-use sea_orm::{ConnectionTrait, DatabaseBackend, QueryResult};
 use uuid::Uuid;
 
 use crate::query::{Direction, Select, PAGE_LIMIT};
@@ -451,7 +451,7 @@ fn aggregate_expr(
     columns: &[fexu_core::ColumnSpec],
     measure: &Measure,
     backend: DatabaseBackend,
-) -> Result<sea_orm::sea_query::SimpleExpr, FexuError> {
+) -> Result<crate::driver::sea_query::SimpleExpr, FexuError> {
     let column = measure.column.unwrap_or("id");
     let source = Expr::col(Alias::new(column));
     Ok(match measure.function {
@@ -478,9 +478,9 @@ fn aggregate_expr(
 }
 
 fn integer_aggregate(
-    expr: sea_orm::sea_query::SimpleExpr,
+    expr: crate::driver::sea_query::SimpleExpr,
     backend: DatabaseBackend,
-) -> sea_orm::sea_query::SimpleExpr {
+) -> crate::driver::sea_query::SimpleExpr {
     let cast = match backend {
         DatabaseBackend::Postgres => "bigint",
         DatabaseBackend::Sqlite | DatabaseBackend::MySql => "integer",

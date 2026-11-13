@@ -3,10 +3,10 @@
 use crate::clock::Clock;
 use crate::error::JobError;
 use crate::schema::{table_ready, JOBS};
-use sea_orm::sea_query::{
+use fexu_db::driver::sea_query::{
     Alias, Expr, ExprTrait, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder,
 };
-use sea_orm::{
+use fexu_db::driver::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, QueryResult, Statement, TransactionTrait,
     Value,
 };
@@ -809,7 +809,7 @@ struct NewJob<'a> {
     cron_zone: Option<&'a str>,
 }
 
-fn due(now: i64) -> sea_orm::sea_query::SimpleExpr {
+fn due(now: i64) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::col(Alias::new("status"))
         .is_in([JobStatus::Pending.as_str(), JobStatus::Retry.as_str()])
         .and(Expr::col(Alias::new("available_at")).lte(now))
@@ -820,7 +820,7 @@ fn due(now: i64) -> sea_orm::sea_query::SimpleExpr {
         )
 }
 
-fn expired(now: i64) -> sea_orm::sea_query::SimpleExpr {
+fn expired(now: i64) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::col(Alias::new("status"))
         .eq(JobStatus::Running.as_str())
         .and(Expr::col(Alias::new("lease_expires_at")).lt(now))
@@ -1312,39 +1312,39 @@ fn database(error: impl ToString) -> JobError {
     }
 }
 
-fn id_expr(backend: DatabaseBackend, id: Uuid) -> sea_orm::sea_query::SimpleExpr {
+fn id_expr(backend: DatabaseBackend, id: Uuid) -> fexu_db::driver::sea_query::SimpleExpr {
     match backend {
         DatabaseBackend::Postgres => Expr::value(Value::Uuid(Some(Box::new(id)))),
         DatabaseBackend::Sqlite | DatabaseBackend::MySql => Expr::value(id.to_string()),
     }
 }
 
-fn text(value: &str) -> sea_orm::sea_query::SimpleExpr {
+fn text(value: &str) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(value)
 }
 
-fn number(value: i64) -> sea_orm::sea_query::SimpleExpr {
+fn number(value: i64) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(value)
 }
 
-fn opt_number(value: Option<i64>) -> sea_orm::sea_query::SimpleExpr {
+fn opt_number(value: Option<i64>) -> fexu_db::driver::sea_query::SimpleExpr {
     match value {
         Some(value) => Expr::value(value),
         None => Expr::value(Value::BigInt(None)),
     }
 }
 
-fn null_number() -> sea_orm::sea_query::SimpleExpr {
+fn null_number() -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(Value::BigInt(None))
 }
 
-fn null_text() -> sea_orm::sea_query::SimpleExpr {
+fn null_text() -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(Value::String(None))
 }
 
 async fn execute_rows(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<u64, JobError> {
     let result = db.execute(statement(db, query)?).await.map_err(database)?;
     Ok(result.rows_affected())
@@ -1352,21 +1352,21 @@ async fn execute_rows(
 
 async fn one(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Option<QueryResult>, JobError> {
     db.query_one(statement(db, query)?).await.map_err(database)
 }
 
 async fn all(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Vec<QueryResult>, JobError> {
     db.query_all(statement(db, query)?).await.map_err(database)
 }
 
 fn statement(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Statement, JobError> {
     let backend = db.get_database_backend();
     let (sql, values) = match backend {

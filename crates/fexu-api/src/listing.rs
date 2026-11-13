@@ -5,8 +5,8 @@
 //! serializer still returns. [`QueryScope`] is applied by the caller.
 
 use fexu_core::{ColumnKind, ColumnSpec, FexuError, FexuModel, QueryScope};
+use fexu_db::driver::DatabaseConnection;
 use fexu_db::{col, Bound, Direction, ModelQuery, ModelRepository, PAGE_LIMIT};
-use sea_orm::DatabaseConnection;
 use serde::Serialize;
 use serde_json::Value;
 

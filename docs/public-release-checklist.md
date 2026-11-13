@@ -41,7 +41,7 @@ CodeQL is enabled but is **not** one of the four required check contexts. Review
 - [ ] Assess whether additional Secret Scanning coverage is appropriate: non-provider patterns and validity checks were both reported **disabled**. No setting was changed by this PR.
 - [x] **CodeQL default setup** configured, weekly schedule, default query suite, remote threat model, with language identifiers `actions`, `javascript`, `javascript-typescript`, `rust` and `typescript`. This is not a claim that every security query suite is enabled.
 - [x] Retain the [94-alert review](security/codeql-review.md) and [per-alert ledger](security/codeql-alerts.csv) from PR #27, plus the documented PR #25 follow-up for false positive #95. Individual technical assessments do not authorize blanket alert dismissal or query suppression.
-- [x] Preserve the existing [audit workflow](../.github/workflows/security.yml): unfiltered audit remains visible; `RUSTSEC-2023-0071` is the sole existing exception and is guarded by an all-target enabled-dependency check that fails if RSA becomes reachable. [Issue #8](https://github.com/Iam-Sanja/ferrioxid/issues/8) remains open. Do not broaden this exception to make a check green.
+- [x] Preserve the [audit workflow](../.github/workflows/security.yml): `cargo audit` runs without an advisory ignore. The job also fails if RSA becomes reachable in the enabled graph. Do not add an ignore to make a check green. The former `RUSTSEC-2023-0071` ignore is not still in force; see [security-rsa.md](security-rsa.md).
 
 ## 4. Actions, fork PRs and external contributions
 

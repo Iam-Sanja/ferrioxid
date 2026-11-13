@@ -1,6 +1,7 @@
 //! SQLite-Migrationsläufe ohne Docker und ohne die Entwicklungsdatenbank.
 
 use fexu_core::{ColumnKind, DatabaseKind};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
 use fexu_db::{connect, render_create_table, PhysicalColumn};
 use fexu_migrations::{
     apply_directory, baseline_database, history_exists, make_migration, migration_status,
@@ -8,7 +9,6 @@ use fexu_migrations::{
     write_explicit_migration, ColumnSnapshot, LogicalType, MakeOutcome, MigrationOperation,
     SchemaSnapshot, TableSnapshot,
 };
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};

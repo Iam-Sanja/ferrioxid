@@ -1,11 +1,11 @@
 //! Required columns and foreign keys on populated SQLite tables.
 
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
 use fexu_migrations::{
     apply_directory, make_migration, make_migration_with_backfills, BackfillLiteral,
     ColumnBackfill, ColumnSnapshot, ForeignKeySnapshot, IndexSnapshot, LogicalType, MakeOutcome,
     OnDelete, SchemaSnapshot, TableSnapshot,
 };
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -66,7 +66,7 @@ fn open_url(path: &Path) -> String {
     )
 }
 
-async fn execute(db: &DatabaseConnection, sql: &str) -> Result<(), sea_orm::DbErr> {
+async fn execute(db: &DatabaseConnection, sql: &str) -> Result<(), fexu_db::driver::DbErr> {
     db.execute(Statement::from_string(DatabaseBackend::Sqlite, sql))
         .await
         .map(|_| ())

@@ -128,6 +128,8 @@ jobs:
           cargo test -p fexu-migrations --test engine -- --ignored postgres_migration_roundtrip
           cargo test -p fexu-migrations --test cross_app -- --ignored postgres_enforces_cross_app_foreign_keys
           cargo test -p fexu-auth --lib -- --ignored postgres_anonymous_session_roundtrip
+          cargo test -p fexu-auth --lib -- --ignored postgres_account_security_roundtrip
+          cargo test -p fexu-jobs --lib -- --ignored postgres_job_claim_and_rollback
           cargo test -p fexu --test money -- --ignored postgres_decimal_and_choice_roundtrip
           cargo test -p fexu-migrations --lib fixtures::tests::postgres_fixture_roundtrip -- --ignored
           cargo test -p fexu-migrations --lib down::tests::postgres_reverts_backfill_and_foreign_key -- --ignored
@@ -146,6 +148,7 @@ jobs:
           cargo test -p desk --test flow -- --ignored postgres_same_operations
           cargo test -p fexu --test embedded_runtime -- --ignored postgres_embedded_auth_and_jobs
           cargo test -p fexu-db --test grouped_report -- --ignored postgres_grouped_report_scope_json_and_one_to_one
+          cargo test -p fexu-db --test driver_types -- --ignored postgres_native_types_and_decimal_blob
           cargo test -p fexu-migrations --lib plan::tests::postgres_plan_detects_live_drift_on_a_disposable_database -- --ignored
           cargo test -p fexu-admin --lib -- --ignored postgres_matching_uses_the_record_id_not_a_similar_name
           cargo test -p fexu --test integration_regression -- --ignored postgres_inspect_framework_and_plan_stay_read_only

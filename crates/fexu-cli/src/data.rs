@@ -187,7 +187,7 @@ fn database_url_for(override_url: Option<String>) -> Result<String, DataError> {
     crate::jobs_database_url(override_url, project.as_ref()).map_err(DataError::failed)
 }
 
-async fn connect(url: &str) -> Result<sea_orm::DatabaseConnection, DataError> {
+async fn connect(url: &str) -> Result<fexu_db::driver::DatabaseConnection, DataError> {
     fexu_db::connect(url).await.map_err(|error| {
         let message = error.to_string().replace(url, "[database]");
         DataError::failed(format!("database unavailable: {message}"))

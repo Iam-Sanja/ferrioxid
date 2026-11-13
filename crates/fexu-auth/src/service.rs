@@ -8,7 +8,7 @@ use crate::schema::{PERMISSIONS, ROLES, ROLE_PERMISSIONS, USER_ROLES};
 use crate::store::{self, SessionRow, UserRow};
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use axum::http::{HeaderMap, Method};
-use sea_orm::{ConnectionTrait, DatabaseConnection, DatabaseTransaction, TransactionTrait};
+use fexu_db::driver::{ConnectionTrait, DatabaseConnection, DatabaseTransaction, TransactionTrait};
 use serde::Serialize;
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
@@ -892,7 +892,7 @@ pub(crate) struct RawSession {
 }
 
 pub(crate) async fn insert_session(
-    db: &impl sea_orm::ConnectionTrait,
+    db: &impl fexu_db::driver::ConnectionTrait,
     secret: &[u8; 32],
     user_id: Uuid,
     now: i64,

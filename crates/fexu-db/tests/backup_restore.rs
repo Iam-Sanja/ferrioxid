@@ -7,8 +7,8 @@
 
 use std::process::Command;
 
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement};
 use fexu_db::DisposablePostgres;
-use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
 
 #[tokio::test]
 #[ignore = "needs DATABASE_URL, pg_dump and pg_restore; disposable databases only"]

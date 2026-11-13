@@ -122,7 +122,7 @@ pub fn cancel(url: String, id: String, yes: bool) -> ExitCode {
     })
 }
 
-pub async fn print_status(db: &sea_orm::DatabaseConnection) -> Result<bool, String> {
+pub async fn print_status(db: &fexu_db::driver::DatabaseConnection) -> Result<bool, String> {
     let (text, current) = render_migration_status(db)
         .await
         .map_err(|error| format!("{} {}", error.code(), error.detail()))?;

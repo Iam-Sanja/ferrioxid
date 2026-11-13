@@ -129,6 +129,8 @@ Lokal auf `work/integration`, nicht GitHub-CI:
 | `cargo audit` | nur `RUSTSEC-2023-0071` (`rsa` 0.9.10, lockfile-only) |
 | `cargo audit --ignore RUSTSEC-2023-0071` | ok |
 
+Die Tabelle beschreibt diesen Integrationsstand. Der spätere Datenbanktreiber entfernt die `sqlx`-Fassade, damit auch `rsa` aus der Lock-Datei. `cargo audit` hat danach kein Ignore mehr. Siehe [database-driver.md](database-driver.md).
+
 ## PostgreSQL
 
 Admin-URL für `DisposablePostgres`: `postgresql://postgres@127.0.0.1:5432/postgres`. Die Kataloge `fexu` und `fexu_migrations_down_test` wurden nicht als Testdatenbanken verwendet.

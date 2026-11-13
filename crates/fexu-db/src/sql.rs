@@ -1,15 +1,15 @@
 //! SeaQuery-backed CRUD and DDL for SQLite and PostgreSQL.
 
-use fexu_core::{
-    ColumnKind, ColumnSpec, DatabaseKind, FexuError, FexuModel, QueryScope, ReferentialAction,
-    ScopeValue,
-};
-use sea_orm::sea_query::{
+use crate::driver::sea_query::{
     Alias, ColumnDef, Expr, ForeignKey, ForeignKeyAction, Func, Index, LikeExpr, Order,
     PostgresQueryBuilder, Query, SqliteQueryBuilder, Table,
 };
-use sea_orm::{
+use crate::driver::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, QueryResult, Statement, Value,
+};
+use fexu_core::{
+    ColumnKind, ColumnSpec, DatabaseKind, FexuError, FexuModel, QueryScope, ReferentialAction,
+    ScopeValue,
 };
 use serde_json::{Map, Number, Value as Json};
 use uuid::Uuid;
@@ -292,7 +292,7 @@ fn column_definition(kind: DatabaseKind, column: &PhysicalColumn<'_>) -> ColumnD
 
 fn render_ddl(
     kind: DatabaseKind,
-    statement: impl sea_orm::sea_query::SchemaStatementBuilder,
+    statement: impl crate::driver::sea_query::SchemaStatementBuilder,
 ) -> String {
     match kind {
         DatabaseKind::Postgres => statement.to_string(PostgresQueryBuilder),
@@ -617,7 +617,7 @@ fn bucket_expression(
 
 #[allow(clippy::too_many_arguments)]
 fn constrain(
-    query: &mut sea_orm::sea_query::SelectStatement,
+    query: &mut crate::driver::sea_query::SelectStatement,
     backend: DatabaseBackend,
     columns: &[ColumnSpec],
     search_columns: &[&str],
@@ -671,7 +671,7 @@ fn ensure_column(columns: &[ColumnSpec], name: &str) -> Result<(), FexuError> {
 pub(crate) fn scope_condition(
     columns: &[ColumnSpec],
     scope: &QueryScope,
-) -> Result<Option<sea_orm::sea_query::SimpleExpr>, FexuError> {
+) -> Result<Option<crate::driver::sea_query::SimpleExpr>, FexuError> {
     scope_condition_in(columns, scope, None)
 }
 
@@ -679,7 +679,7 @@ pub(crate) fn scope_condition_in(
     columns: &[ColumnSpec],
     scope: &QueryScope,
     alias: Option<&str>,
-) -> Result<Option<sea_orm::sea_query::SimpleExpr>, FexuError> {
+) -> Result<Option<crate::driver::sea_query::SimpleExpr>, FexuError> {
     match scope {
         QueryScope::All => Ok(None),
         QueryScope::None => Ok(Some(Expr::val(0).eq(1))),
@@ -697,10 +697,12 @@ pub(crate) fn scope_condition_in(
     }
 }
 
-fn qualified_col(alias: Option<&str>, name: &str) -> sea_orm::sea_query::SimpleExpr {
+fn qualified_col(alias: Option<&str>, name: &str) -> crate::driver::sea_query::SimpleExpr {
     match alias {
-        Some(alias) => sea_orm::sea_query::Expr::col((Alias::new(alias), Alias::new(name))).into(),
-        None => sea_orm::sea_query::Expr::col(Alias::new(name)).into(),
+        Some(alias) => {
+            crate::driver::sea_query::Expr::col((Alias::new(alias), Alias::new(name))).into()
+        }
+        None => crate::driver::sea_query::Expr::col(Alias::new(name)).into(),
     }
 }
 
@@ -916,62 +918,29 @@ fn json_parameter(column: &ColumnSpec, value: Value) -> Result<Value, FexuError>
     }
 }
 
-pub(crate) fn map_write(error: sea_orm::DbErr) -> FexuError {
+pub(crate) fn map_write(error: crate::driver::DbErr) -> FexuError {
     if let Some(mapped) = constraint_violation(&error) {
         return mapped;
     }
     FexuError::database(error)
 }
 
-fn constraint_violation(error: &sea_orm::DbErr) -> Option<FexuError> {
-    let database = sqlite_or_postgres_database(error)?;
-    match database.kind() {
-        sea_orm::sqlx::error::ErrorKind::UniqueViolation => {
+fn constraint_violation(error: &crate::driver::DbErr) -> Option<FexuError> {
+    // PostgreSQL 23001 and SQLite extended code 1811 are classified by the driver.
+    match error.constraint() {
+        Some(crate::driver::ConstraintKind::Unique) => {
             Some(FexuError::Validation("unique constraint violated".into()))
         }
-        sea_orm::sqlx::error::ErrorKind::ForeignKeyViolation => Some(FexuError::Validation(
+        Some(crate::driver::ConstraintKind::ForeignKey) => Some(FexuError::Validation(
             "foreign key constraint violated".into(),
         )),
-        // PostgreSQL reports ON DELETE/UPDATE RESTRICT as 23001, not 23503.
-        sea_orm::sqlx::error::ErrorKind::Other if database.code().as_deref() == Some("23001") => {
-            Some(FexuError::Validation(
-                "foreign key constraint violated".into(),
-            ))
-        }
-        // SQLite setzt ON DELETE/UPDATE RESTRICT als internes RAISE um.
-        // Der erweiterte Code ist dann 1811 (SQLITE_CONSTRAINT_TRIGGER) und nicht 787.
-        // Die Meldung ist der feste Text dieser Implementierung.
-        sea_orm::sqlx::error::ErrorKind::Other
-            if database.code().as_deref() == Some("1811")
-                && database.message() == "FOREIGN KEY constraint failed" =>
-        {
-            Some(FexuError::Validation(
-                "foreign key constraint violated".into(),
-            ))
-        }
-        _ => None,
+        None => None,
     }
-}
-
-fn sqlite_or_postgres_database(
-    error: &sea_orm::DbErr,
-) -> Option<&dyn sea_orm::sqlx::error::DatabaseError> {
-    let runtime = match error {
-        sea_orm::DbErr::Exec(runtime) | sea_orm::DbErr::Query(runtime) => runtime,
-        _ => return None,
-    };
-    let sea_orm::RuntimeErr::SqlxError(sqlx_error) = runtime else {
-        return None;
-    };
-    let sea_orm::sqlx::Error::Database(database) = sqlx_error else {
-        return None;
-    };
-    Some(database.as_ref())
 }
 
 pub(crate) fn statement(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl crate::driver::sea_query::QueryStatementWriter,
 ) -> Result<Statement, FexuError> {
     let backend = db.get_database_backend();
     let (sql, values) = match backend {
@@ -1189,9 +1158,9 @@ impl std::error::Error for UnsupportedBackend {}
 
 #[cfg(test)]
 mod tests {
+    use crate::driver::sea_query::{Alias, PostgresQueryBuilder, Query};
+    use crate::driver::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
     use fexu_core::{ColumnKind, ColumnSpec, QueryScope, ScopeValue};
-    use sea_orm::sea_query::{Alias, PostgresQueryBuilder, Query};
-    use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
     use uuid::Uuid;
 
     use super::{constrain, query_admin_page, AdminPageRequest};
@@ -1280,7 +1249,7 @@ mod tests {
             &QueryScope::All,
         )
         .unwrap();
-        let (_, sqlite_values) = sqlite.build(sea_orm::sea_query::SqliteQueryBuilder);
+        let (_, sqlite_values) = sqlite.build(crate::driver::sea_query::SqliteQueryBuilder);
         match &sqlite_values.0[0] {
             Value::String(Some(pattern)) => assert_eq!(pattern.as_str(), "%mÜnchen%"),
             other => panic!("expected sqlite ASCII folding, got {other:?}"),

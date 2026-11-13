@@ -16,7 +16,6 @@ fexu-core.workspace = true
 fexu-db.workspace = true
 fexu-mail.workspace = true
 fexu-migrations.workspace = true
-sea-orm.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 chrono.workspace = true

@@ -10,7 +10,7 @@ use crate::totp::{
     open_stored, otpauth_uri, random_secret, reauth_proof, reauth_valid, recovery_codes,
     recovery_format, recovery_hash, seal, seal_format, RecoveryFormat, SealFormat,
 };
-use sea_orm::TransactionTrait;
+use fexu_db::driver::TransactionTrait;
 use uuid::Uuid;
 
 #[derive(Debug, Clone, PartialEq, Eq)]

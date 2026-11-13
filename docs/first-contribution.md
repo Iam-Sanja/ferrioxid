@@ -24,7 +24,7 @@ cargo run -p myshop
 
 Test the running example at `http://127.0.0.1:3000/healthz`.
 
-Fexu includes a local SQLx/SQLite patch. Keep the workspace's `[patch.crates-io]` configuration intact. Read [SQLite setup and consumer guidance](security/sqlite-rustsec-2026-0459.md) before copying workspace dependencies into a standalone project.
+SQLite uses rusqlite with bundled SQLite. PostgreSQL uses `sqlx-postgres` directly. There is no `[patch.crates-io]` entry and no vendored SQLite driver. Read [the database driver note](database-driver.md) before copying workspace dependencies into a standalone project.
 
 ## Find the relevant code
 

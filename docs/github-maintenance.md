@@ -7,7 +7,7 @@ The repository is already **public**. Use the [public release security checklist
 ## Tracked policies and workflows
 
 - [CI](../.github/workflows/ci.yml) validates main and PRs on Ubuntu and Windows, with a separate disposable PostgreSQL 16 job. PostgreSQL runs fresh framework initialization first, then HTTP and migration roundtrips.
-- [Security audit](../.github/workflows/security.yml) runs cargo-audit 0.22.2, preserves an unfiltered report and guards the existing RSA exception with an all-target enabled-dependency check.
+- [Security audit](../.github/workflows/security.yml) runs cargo-audit 0.22.2 without an advisory ignore and fails if RSA appears in the enabled dependency graph.
 - [Dependabot](../.github/dependabot.yml) proposes weekly Cargo and GitHub Actions updates; it does not merge them.
 - [CODEOWNERS](../.github/CODEOWNERS) routes changes to `@Iam-Sanja`; it grants no permissions and the current ruleset does not require code-owner approval.
 - [Issue forms](../.github/ISSUE_TEMPLATE/config.yml) disallow blank issues and link to the security policy; the [PR template](../.github/pull_request_template.md) requests validation and security considerations.
@@ -115,6 +115,6 @@ cargo build --workspace --locked
 
 The PostgreSQL job runs all three integration tests against its disposable database. Its success does not prove the Ubuntu or Windows jobs passed. Branch rules require the exact four names above; if workflow names change, maintainers must review the corresponding ruleset contexts rather than removing checks to bypass failures.
 
-The unfiltered cargo-audit report can match optional lockfile packages. The sole existing `RUSTSEC-2023-0071` exception is tracked in [issue #8](https://github.com/Iam-Sanja/ferrioxid/issues/8), which remains open. The workflow must fail if RSA becomes reachable in the enabled workspace graph on any target, and every other advisory remains gated. Reassess the exception when features or SQLx change; never broaden it simply to obtain a green check.
+`cargo audit` has no advisory ignore. The workflow still fails if a workspace target enables a crate named `rsa`. Do not add an ignore to make that check pass. The old `RUSTSEC-2023-0071` ignore applied only while the `sqlx` facade kept optional `sqlx-mysql` in the lockfile.
 
 Current CI does not prove complete secret-history scanning, third-party asset licensing, successful fork moderation or safety of all production deployments. Follow the remaining checklist items and report validation limits explicitly. This documentation update changes no security setting, workflow permission, dependency exception or protection rule.

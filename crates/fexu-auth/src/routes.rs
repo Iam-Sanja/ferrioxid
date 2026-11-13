@@ -14,7 +14,7 @@ use axum::extract::ConnectInfo;
 
 #[derive(Clone)]
 pub struct AppState {
-    pub db: sea_orm::DatabaseConnection,
+    pub db: fexu_db::driver::DatabaseConnection,
     pub auth: Option<AuthService>,
     pub mail: Option<fexu_mail::MailService>,
 }

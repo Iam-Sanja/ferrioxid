@@ -4,7 +4,7 @@ use crate::audit::{self, Event};
 use fexu_auth::{AuthError, AuthService, PublicUser};
 use fexu_core::FexuError;
 use fexu_db::conclude;
-use sea_orm::DatabaseTransaction;
+use fexu_db::driver::DatabaseTransaction;
 use uuid::Uuid;
 
 pub async fn create_user(
@@ -271,7 +271,7 @@ mod tests {
     use crate::audit::{self, fail_next_insert};
     use fexu_auth::{AuthConfig, AuthService};
     use fexu_core::FexuError;
-    use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value as DbValue};
+    use fexu_db::driver::{ConnectionTrait, DatabaseBackend, Statement, Value as DbValue};
 
     fn ephemeral_password() -> String {
         uuid::Uuid::new_v4().simple().to_string()

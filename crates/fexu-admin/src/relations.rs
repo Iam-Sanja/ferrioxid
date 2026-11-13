@@ -5,11 +5,11 @@
 //! Transaktion. Ein Objekt-Scope bleibt ein Parameter des Aufrufers.
 
 use fexu_core::{ColumnKind, ColumnSpec, FexuError, QueryScope};
-use fexu_db::{query_admin_page, AdminPageRequest, ManyToMany};
-use sea_orm::sea_query::{Alias, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder};
-use sea_orm::{
+use fexu_db::driver::sea_query::{Alias, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder};
+use fexu_db::driver::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait, Value,
 };
+use fexu_db::{query_admin_page, AdminPageRequest, ManyToMany};
 use serde_json::Value as Json;
 use uuid::Uuid;
 
@@ -259,7 +259,7 @@ pub async fn replace_links(
 
 fn statement(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Statement, FexuError> {
     let backend = db.get_database_backend();
     let (sql, values) = match backend {
@@ -286,10 +286,10 @@ mod tests {
         scoped_membership, shape_of, RelationShape,
     };
     use fexu_core::{ColumnKind, ColumnSpec, QueryScope, ReferentialAction, ScopeValue};
-    use fexu_db::{insert_record, ManyToMany};
-    use sea_orm::{
+    use fexu_db::driver::{
         ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait, Value,
     };
+    use fexu_db::{insert_record, ManyToMany};
     use uuid::Uuid;
 
     fn text_column(name: &'static str) -> ColumnSpec {

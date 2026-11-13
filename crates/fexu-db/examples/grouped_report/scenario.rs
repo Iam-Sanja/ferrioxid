@@ -5,11 +5,11 @@
 use fexu_core::{
     ColumnKind, ColumnSpec, DatabaseKind, FexuModel, ModelDescriptor, QueryScope, ScopeValue,
 };
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
 use fexu_db::{
     col, insert_record, load_one_to_one, render_schema, Bound, Direction, GroupKey, Having,
     HavingCompare, Measure, MeasureValue, ModelQuery, NamedFilter,
 };
-use sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, Value};
 use serde::Deserialize;
 use uuid::Uuid;
 

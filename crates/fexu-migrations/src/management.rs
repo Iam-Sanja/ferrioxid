@@ -6,7 +6,7 @@
 
 use std::collections::{BTreeMap, BTreeSet};
 
-use sea_orm::DatabaseConnection;
+use fexu_db::driver::DatabaseConnection;
 
 use crate::error::MigrationError;
 use crate::project::ProjectConfig;
@@ -363,7 +363,7 @@ pub fn is_command_name(name: &str) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sea_orm::ConnectionTrait;
+    use fexu_db::driver::ConnectionTrait;
     use std::path::PathBuf;
     use std::sync::atomic::{AtomicBool, Ordering};
     use std::sync::Arc;
@@ -446,19 +446,19 @@ mod tests {
             self.0.store(true, Ordering::SeqCst);
             let db = invocation.database().await?;
             let backend = db.get_database_backend();
-            db.execute(sea_orm::Statement::from_string(
+            db.execute(fexu_db::driver::Statement::from_string(
                 backend,
                 "CREATE TABLE IF NOT EXISTS markers (id TEXT PRIMARY KEY, note TEXT NOT NULL)",
             ))
             .await
             .map_err(|error| CommandError::new(error.to_string()))?;
             let note = invocation.options.get("note").cloned().unwrap_or_default();
-            db.execute(sea_orm::Statement::from_sql_and_values(
+            db.execute(fexu_db::driver::Statement::from_sql_and_values(
                 backend,
                 "INSERT INTO markers (id, note) VALUES (?, ?)",
                 vec![
-                    sea_orm::Value::String(Some(Box::new("one".into()))),
-                    sea_orm::Value::String(Some(Box::new(note))),
+                    fexu_db::driver::Value::String(Some(Box::new("one".into()))),
+                    fexu_db::driver::Value::String(Some(Box::new(note))),
                 ],
             ))
             .await
@@ -516,8 +516,8 @@ mod tests {
 
         let db = fexu_db::connect(&url).await.unwrap();
         let rows = db
-            .query_all(sea_orm::Statement::from_string(
-                sea_orm::DatabaseBackend::Sqlite,
+            .query_all(fexu_db::driver::Statement::from_string(
+                fexu_db::driver::DatabaseBackend::Sqlite,
                 "SELECT note FROM markers",
             ))
             .await

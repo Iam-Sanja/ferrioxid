@@ -1,8 +1,10 @@
 //! Sitzungsgebundene Hinweise. Die Tabelle entsteht nur durch `create_flash_table`.
 
 use fexu_core::FexuError;
-use sea_orm::sea_query::{Alias, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder};
-use sea_orm::{
+use fexu_db::driver::sea_query::{
+    Alias, Expr, Order, PostgresQueryBuilder, Query, SqliteQueryBuilder,
+};
+use fexu_db::driver::{
     ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait, Value,
 };
 use uuid::Uuid;
@@ -183,7 +185,7 @@ fn escape(value: &str) -> String {
 
 fn statement(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Statement, FexuError> {
     let backend = db.get_database_backend();
     let (sql, values) = match backend {
@@ -201,7 +203,7 @@ mod tests {
     use super::{create_flash_table, push_flash, render_flashes, take_flashes, FlashLevel};
     use uuid::Uuid;
 
-    async fn exercise(db: &sea_orm::DatabaseConnection) {
+    async fn exercise(db: &fexu_db::driver::DatabaseConnection) {
         let session = Uuid::new_v4();
         let other = Uuid::new_v4();
         assert!(push_flash(db, session, FlashLevel::Success, "saved")

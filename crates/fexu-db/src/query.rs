@@ -11,13 +11,13 @@
 use std::collections::BTreeMap;
 use std::marker::PhantomData;
 
-use fexu_core::{ColumnKind, ColumnSpec, FexuError, FexuModel, QueryScope};
-use sea_orm::sea_query::{
+use crate::driver::sea_query::{
     extension::sqlite::SqliteExpr, Alias, Condition, Expr, ExprTrait, Func, JoinType, LikeExpr,
     Order, PostgresQueryBuilder, Query, QueryStatementWriter, SelectStatement, SimpleExpr,
     SqliteQueryBuilder,
 };
-use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value};
+use crate::driver::{ConnectionTrait, DatabaseBackend, Statement, Value};
+use fexu_core::{ColumnKind, ColumnSpec, FexuError, FexuModel, QueryScope};
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
@@ -604,7 +604,7 @@ impl<M> Select<M> {
     /// A unique constraint is what stops two concurrent first inserts.
     pub async fn lock_existing(
         self,
-        db: &sea_orm::DatabaseTransaction,
+        db: &crate::driver::DatabaseTransaction,
     ) -> Result<crate::write::LockResult, FexuError>
     where
         M: FexuModel,
@@ -1997,7 +1997,7 @@ where
     Ok(pairs)
 }
 
-fn read_uuid(row: &sea_orm::QueryResult, column: &str) -> Result<Uuid, FexuError> {
+fn read_uuid(row: &crate::driver::QueryResult, column: &str) -> Result<Uuid, FexuError> {
     if let Ok(id) = row.try_get::<Uuid>("", column) {
         return Ok(id);
     }
@@ -2167,11 +2167,11 @@ where
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::driver::{
+        ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait,
+    };
     use fexu_core::{
         ColumnKind, ColumnSpec, DatabaseKind, ModelDescriptor, QueryScope, ScopeValue,
-    };
-    use sea_orm::{
-        ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement, TransactionTrait,
     };
     use serde::{Deserialize, Serialize};
 
@@ -2744,7 +2744,7 @@ mod tests {
         async fn execute(
             &self,
             statement: Statement,
-        ) -> Result<sea_orm::ExecResult, sea_orm::DbErr> {
+        ) -> Result<crate::driver::ExecResult, crate::driver::DbErr> {
             self.record(&statement);
             self.inner.execute(statement).await
         }
@@ -2752,7 +2752,7 @@ mod tests {
         async fn execute_unprepared(
             &self,
             sql: &str,
-        ) -> Result<sea_orm::ExecResult, sea_orm::DbErr> {
+        ) -> Result<crate::driver::ExecResult, crate::driver::DbErr> {
             self.queries
                 .fetch_add(1, std::sync::atomic::Ordering::Relaxed);
             self.inner.execute_unprepared(sql).await
@@ -2761,7 +2761,7 @@ mod tests {
         async fn query_one(
             &self,
             statement: Statement,
-        ) -> Result<Option<sea_orm::QueryResult>, sea_orm::DbErr> {
+        ) -> Result<Option<crate::driver::QueryResult>, crate::driver::DbErr> {
             self.record(&statement);
             self.inner.query_one(statement).await
         }
@@ -2769,7 +2769,7 @@ mod tests {
         async fn query_all(
             &self,
             statement: Statement,
-        ) -> Result<Vec<sea_orm::QueryResult>, sea_orm::DbErr> {
+        ) -> Result<Vec<crate::driver::QueryResult>, crate::driver::DbErr> {
             self.record(&statement);
             self.inner.query_all(statement).await
         }

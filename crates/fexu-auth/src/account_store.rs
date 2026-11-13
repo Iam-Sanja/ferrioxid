@@ -3,8 +3,8 @@
 use crate::error::AuthError;
 use crate::schema::{LOGIN_CHALLENGES, MFA_TOTP, RECOVERY_CODES, SESSIONS};
 use crate::store::SessionRow;
-use sea_orm::sea_query::{Alias, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder};
-use sea_orm::{ConnectionTrait, DatabaseBackend, QueryResult, Statement, Value};
+use fexu_db::driver::sea_query::{Alias, Expr, PostgresQueryBuilder, Query, SqliteQueryBuilder};
+use fexu_db::driver::{ConnectionTrait, DatabaseBackend, QueryResult, Statement, Value};
 use uuid::Uuid;
 
 #[derive(Debug, Clone)]
@@ -357,28 +357,28 @@ pub async fn list_open_sessions(
     Ok(rows)
 }
 
-fn uuid_expr(db: &impl ConnectionTrait, id: Uuid) -> sea_orm::sea_query::SimpleExpr {
+fn uuid_expr(db: &impl ConnectionTrait, id: Uuid) -> fexu_db::driver::sea_query::SimpleExpr {
     match db.get_database_backend() {
         DatabaseBackend::Postgres => Expr::value(Value::Uuid(Some(Box::new(id)))),
         DatabaseBackend::Sqlite | DatabaseBackend::MySql => Expr::value(id.to_string()),
     }
 }
 
-fn text(value: &str) -> sea_orm::sea_query::SimpleExpr {
+fn text(value: &str) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(value)
 }
 
-fn number(value: i64) -> sea_orm::sea_query::SimpleExpr {
+fn number(value: i64) -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(value)
 }
 
-fn null_number() -> sea_orm::sea_query::SimpleExpr {
+fn null_number() -> fexu_db::driver::sea_query::SimpleExpr {
     Expr::value(Value::BigInt(None))
 }
 
 async fn execute(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<(), AuthError> {
     execute_rows(db, query).await?;
     Ok(())
@@ -386,7 +386,7 @@ async fn execute(
 
 async fn execute_rows(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<u64, AuthError> {
     let backend = db.get_database_backend();
     let (sql, values) = match backend {
@@ -405,7 +405,7 @@ async fn execute_rows(
 
 async fn one(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Option<QueryResult>, AuthError> {
     let backend = db.get_database_backend();
     let (sql, values) = match backend {
@@ -422,7 +422,7 @@ async fn one(
 
 async fn all(
     db: &impl ConnectionTrait,
-    query: &impl sea_orm::sea_query::QueryStatementWriter,
+    query: &impl fexu_db::driver::sea_query::QueryStatementWriter,
 ) -> Result<Vec<QueryResult>, AuthError> {
     let backend = db.get_database_backend();
     let (sql, values) = match backend {
