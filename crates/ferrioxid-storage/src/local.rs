@@ -103,8 +103,43 @@ impl LocalStorage {
         self
     }
 
-    fn owner_dir(&self, owner: Uuid) -> PathBuf {
-        self.root.join(owner.to_string())
+    /// Resolves `{root}/{owner}` and refuses a symlink or a path outside the root.
+    fn rooted_owner(&self, owner: Uuid, create: bool) -> Result<PathBuf, StorageError> {
+        let root = canonicalize_existing(&self.root)?;
+        let directory = root.join(owner.to_string());
+        match std::fs::symlink_metadata(&directory) {
+            Ok(meta) if meta.file_type().is_symlink() => {
+                return Err(if create {
+                    StorageError::Failed
+                } else {
+                    StorageError::NotFound
+                });
+            }
+            Ok(meta) if meta.is_dir() => {}
+            Ok(_) => return Err(StorageError::Failed),
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => {
+                if !create {
+                    return Err(StorageError::NotFound);
+                }
+                std::fs::create_dir(&directory).map_err(|_| StorageError::Failed)?;
+            }
+            Err(_) => return Err(StorageError::Failed),
+        }
+        if is_symlink(&directory) {
+            return Err(if create {
+                StorageError::Failed
+            } else {
+                StorageError::NotFound
+            });
+        }
+        let canonical = canonicalize_existing(&directory)?;
+        if canonical.starts_with(&root) {
+            Ok(canonical)
+        } else if create {
+            Err(StorageError::Failed)
+        } else {
+            Err(StorageError::NotFound)
+        }
     }
 
     fn contained(root: &Path, candidate: &Path) -> Result<PathBuf, StorageError> {
@@ -143,8 +178,7 @@ impl LocalStorage {
         if !extension_matches(original_name, content_type) {
             return Err(StorageError::TypeRejected);
         }
-        let directory = self.owner_dir(owner);
-        std::fs::create_dir_all(&directory).map_err(|_| StorageError::Failed)?;
+        let directory = self.rooted_owner(owner, true)?;
         self.enforce_quota(&directory, bytes.len() as u64)?;
         let id = Uuid::new_v4();
         let partial = directory.join(format!("{id}.partial"));
@@ -158,6 +192,10 @@ impl LocalStorage {
             let _ = std::fs::remove_file(&partial);
             let _ = std::fs::remove_file(&target);
             return Err(StorageError::Failed);
+        }
+        if let Err(error) = ensure_regular_inside(&self.root, &target) {
+            let _ = std::fs::remove_file(&partial);
+            return Err(error);
         }
         let stored = StoredFile {
             id,
@@ -175,6 +213,10 @@ impl LocalStorage {
             let _ = std::fs::remove_file(&meta_path);
             return Err(StorageError::Failed);
         }
+        if let Err(error) = ensure_regular_inside(&self.root, &meta_path) {
+            let _ = std::fs::remove_file(&target);
+            return Err(error);
+        }
         Ok(stored)
     }
 
@@ -186,7 +228,12 @@ impl LocalStorage {
         let mut report = CleanupReport::default();
         let root = std::fs::read_dir(&self.root).map_err(|_| StorageError::Failed)?;
         for owner in root.flatten() {
-            if !owner.file_type().map(|kind| kind.is_dir()).unwrap_or(false) {
+            let kind = match owner.file_type() {
+                Ok(kind) => kind,
+                Err(_) => continue,
+            };
+            // Directory links are not walked. Their targets stay outside this cleanup.
+            if kind.is_symlink() || !kind.is_dir() {
                 continue;
             }
             let directory = owner.path();
@@ -196,6 +243,19 @@ impl LocalStorage {
                 let Some(name) = name.to_str() else {
                     continue;
                 };
+                if is_symlink(&entry.path()) {
+                    if let Some(id) = managed_id(name) {
+                        let _ = std::fs::remove_file(entry.path());
+                        if !name.ends_with(".json") && !name.ends_with(".partial") {
+                            let sidecar = directory.join(format!("{id}.json"));
+                            if is_symlink(&sidecar) || regular_file(&sidecar) {
+                                let _ = std::fs::remove_file(sidecar);
+                            }
+                        }
+                        report.removed_orphans += 1;
+                    }
+                    continue;
+                }
                 if !regular_file(&entry.path()) {
                     continue;
                 }
@@ -211,7 +271,7 @@ impl LocalStorage {
                         continue;
                     }
                     let data = directory.join(id);
-                    if !data.is_file() {
+                    if !regular_file(&data) {
                         let _ = std::fs::remove_file(entry.path());
                         report.removed_orphans += 1;
                         continue;
@@ -226,7 +286,7 @@ impl LocalStorage {
                     continue;
                 }
                 if Uuid::parse_str(name).is_ok()
-                    && !directory.join(format!("{name}.json")).is_file()
+                    && !regular_file(&directory.join(format!("{name}.json")))
                 {
                     let _ = std::fs::remove_file(entry.path());
                     report.removed_orphans += 1;
@@ -241,11 +301,26 @@ impl LocalStorage {
             .gate
             .lock()
             .unwrap_or_else(|poisoned| poisoned.into_inner());
-        let directory = self.owner_dir(owner);
-        if !directory.exists() {
-            return Ok(0);
+        let root = canonicalize_existing(&self.root)?;
+        let directory = root.join(owner.to_string());
+        let meta = match std::fs::symlink_metadata(&directory) {
+            Ok(meta) => meta,
+            Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(0),
+            Err(_) => return Err(StorageError::Failed),
+        };
+        if meta.file_type().is_symlink() {
+            std::fs::remove_file(&directory)
+                .or_else(|_| std::fs::remove_dir(&directory))
+                .map_err(|_| StorageError::Failed)?;
+            return Ok(1);
         }
-        let canonical = Self::contained(&self.root, &directory)?;
+        if !meta.is_dir() {
+            return Err(StorageError::Failed);
+        }
+        let canonical = canonicalize_existing(&directory)?;
+        if !canonical.starts_with(&root) {
+            return Err(StorageError::Failed);
+        }
         let mut removed = 0u64;
         let entries = std::fs::read_dir(&canonical).map_err(|_| StorageError::Failed)?;
         for entry in entries.flatten() {
@@ -274,7 +349,10 @@ impl LocalStorage {
                 let Some(id) = name.strip_suffix(".json") else {
                     continue;
                 };
-                if Uuid::parse_str(id).is_err() || !directory.join(id).is_file() {
+                if Uuid::parse_str(id).is_err()
+                    || !regular_file(&entry.path())
+                    || !regular_file(&directory.join(id))
+                {
                     continue;
                 }
                 if let Ok(meta) = read_meta(&entry.path()) {
@@ -309,20 +387,30 @@ impl Storage for LocalStorage {
         if expired(&meta, unix_now()) {
             return Err(StorageError::Expired);
         }
-        let path = Self::contained(
-            &self.owner_dir(owner),
-            &self.owner_dir(owner).join(id.to_string()),
-        )?;
+        let directory = self.rooted_owner(owner, false)?;
+        let path = directory.join(id.to_string());
+        if !regular_file(&path) {
+            return Err(StorageError::NotFound);
+        }
+        let path = Self::contained(&directory, &path)?;
         let bytes = std::fs::read(path).map_err(|_| StorageError::NotFound)?;
         Ok((meta, bytes))
     }
 
     async fn delete(&self, owner: Uuid, id: Uuid) -> Result<(), StorageError> {
-        let directory = self.owner_dir(owner);
-        let file = Self::contained(&directory, &directory.join(id.to_string()))?;
-        let meta = Self::contained(&directory, &directory.join(format!("{id}.json")))?;
+        let directory = self.rooted_owner(owner, false)?;
+        let file = directory.join(id.to_string());
+        if !regular_file(&file) {
+            return Err(StorageError::NotFound);
+        }
+        let file = Self::contained(&directory, &file)?;
+        let meta = directory.join(format!("{id}.json"));
         std::fs::remove_file(file).map_err(|_| StorageError::NotFound)?;
-        let _ = std::fs::remove_file(meta);
+        if regular_file(&meta) {
+            if let Ok(meta) = Self::contained(&directory, &meta) {
+                let _ = std::fs::remove_file(meta);
+            }
+        }
         Ok(())
     }
 
@@ -336,8 +424,12 @@ impl Storage for LocalStorage {
     }
 
     async fn metadata(&self, owner: Uuid, id: Uuid) -> Result<StoredFile, StorageError> {
-        let directory = self.owner_dir(owner);
-        let path = Self::contained(&directory, &directory.join(format!("{id}.json")))?;
+        let directory = self.rooted_owner(owner, false)?;
+        let path = directory.join(format!("{id}.json"));
+        if !regular_file(&path) {
+            return Err(StorageError::NotFound);
+        }
+        let path = Self::contained(&directory, &path)?;
         let bytes = std::fs::read(path).map_err(|_| StorageError::NotFound)?;
         let stored: StoredFile =
             serde_json::from_slice(&bytes).map_err(|_| StorageError::Failed)?;
@@ -345,6 +437,20 @@ impl Storage for LocalStorage {
             return Err(StorageError::NotFound);
         }
         Ok(stored)
+    }
+}
+
+fn ensure_regular_inside(root: &Path, path: &Path) -> Result<(), StorageError> {
+    if !regular_file(path) {
+        return Err(StorageError::Failed);
+    }
+    let root = canonicalize_existing(root)?;
+    let canonical = canonicalize_existing(path)?;
+    if canonical.starts_with(&root) {
+        Ok(())
+    } else {
+        let _ = std::fs::remove_file(path);
+        Err(StorageError::Failed)
     }
 }
 
@@ -628,6 +734,20 @@ fn regular_file(path: &Path) -> bool {
         .unwrap_or(false)
 }
 
+fn is_symlink(path: &Path) -> bool {
+    std::fs::symlink_metadata(path)
+        .map(|meta| meta.file_type().is_symlink())
+        .unwrap_or(false)
+}
+
+fn managed_id(name: &str) -> Option<&str> {
+    let stem = name
+        .strip_suffix(".partial")
+        .or_else(|| name.strip_suffix(".json"))
+        .unwrap_or(name);
+    Uuid::parse_str(stem).is_ok().then_some(stem)
+}
+
 fn read_meta(path: &Path) -> Result<StoredFile, StorageError> {
     let bytes = std::fs::read(path).map_err(|_| StorageError::NotFound)?;
     serde_json::from_slice(&bytes).map_err(|_| StorageError::Failed)
@@ -826,5 +946,119 @@ mod tests {
         let second = second.expect("right");
         assert_ne!(first.id, second.id);
         let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn parallel_uploads_stop_at_the_quota() {
+        let root = std::env::temp_dir().join(format!("ferrioxid-quota-{}", Uuid::new_v4()));
+        let storage = std::sync::Arc::new(
+            LocalStorage::open(&root, 64, &["text/plain"])
+                .unwrap()
+                .with_quota(1, 32),
+        );
+        let owner = Uuid::new_v4();
+        let mut tasks = Vec::new();
+        for _ in 0..8 {
+            let storage = storage.clone();
+            tasks.push(tokio::spawn(async move {
+                storage.save(owner, "notes.txt", b"hello").await
+            }));
+        }
+        let mut stored = 0usize;
+        for task in tasks {
+            if task.await.expect("join").is_ok() {
+                stored += 1;
+            }
+        }
+        assert_eq!(stored, 1);
+        let data_files = std::fs::read_dir(root.join(owner.to_string()))
+            .expect("owner")
+            .filter_map(|entry| entry.ok())
+            .filter(|entry| {
+                entry
+                    .file_name()
+                    .to_str()
+                    .is_some_and(|name| Uuid::parse_str(name).is_ok())
+            })
+            .count();
+        assert_eq!(data_files, 1);
+        let _ = std::fs::remove_dir_all(root);
+    }
+
+    #[tokio::test]
+    async fn traversal_mime_partials_and_symlinks_do_not_escape() {
+        let root = std::env::temp_dir().join(format!("ferrioxid-escape-{}", Uuid::new_v4()));
+        let storage = LocalStorage::open(&root, 64, &["text/plain"]).unwrap();
+        let owner = Uuid::new_v4();
+        let stored = storage
+            .save(owner, r"C:\Windows\system32\notes.txt", b"hello")
+            .await
+            .unwrap();
+        assert_eq!(stored.original_name, "notes.txt");
+        assert!(root
+            .join(owner.to_string())
+            .join(stored.id.to_string())
+            .is_file());
+        assert!(!root.join("Windows").exists());
+        assert!(storage.save(owner, "notes.png", b"hello").await.is_err());
+        assert!(storage.save(owner, "notes.exe", b"hello").await.is_err());
+        let orphan = Uuid::new_v4();
+        std::fs::write(
+            root.join(owner.to_string()).join(orphan.to_string()),
+            b"cut",
+        )
+        .unwrap();
+        let report = storage.cleanup_orphans(0).unwrap();
+        assert!(report.removed_orphans >= 1);
+        assert!(!root
+            .join(owner.to_string())
+            .join(orphan.to_string())
+            .exists());
+        let (_, bytes) = storage.read(owner, stored.id).await.unwrap();
+        assert_eq!(bytes, b"hello");
+
+        let outside =
+            std::env::temp_dir().join(format!("ferrioxid-link-target-{}", Uuid::new_v4()));
+        std::fs::create_dir(&outside).unwrap();
+        std::fs::write(outside.join("secret.txt"), b"secret").unwrap();
+        let linked_owner = Uuid::new_v4();
+        link_dir(&outside, &root.join(linked_owner.to_string()));
+        assert!(storage
+            .save(linked_owner, "notes.txt", b"leaked")
+            .await
+            .is_err());
+        assert_eq!(
+            std::fs::read(outside.join("secret.txt")).unwrap(),
+            b"secret"
+        );
+        assert_eq!(std::fs::read_dir(&outside).unwrap().count(), 1);
+
+        let data = root.join(owner.to_string()).join(stored.id.to_string());
+        std::fs::remove_file(&data).unwrap();
+        link_file(&outside.join("secret.txt"), &data);
+        assert!(storage.read(owner, stored.id).await.is_err());
+        storage.cleanup_orphans(0).unwrap();
+        assert_eq!(
+            std::fs::read(outside.join("secret.txt")).unwrap(),
+            b"secret"
+        );
+        assert_eq!(storage.purge_owner(linked_owner).unwrap(), 1);
+        assert!(outside.join("secret.txt").is_file());
+        let _ = std::fs::remove_dir_all(&root);
+        let _ = std::fs::remove_dir_all(&outside);
+    }
+
+    fn link_dir(target: &std::path::Path, link: &std::path::Path) {
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_dir(target, link).expect("directory symlink");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).expect("directory symlink");
+    }
+
+    fn link_file(target: &std::path::Path, link: &std::path::Path) {
+        #[cfg(windows)]
+        std::os::windows::fs::symlink_file(target, link).expect("file symlink");
+        #[cfg(unix)]
+        std::os::unix::fs::symlink(target, link).expect("file symlink");
     }
 }

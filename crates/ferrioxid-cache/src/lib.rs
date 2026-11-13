@@ -231,4 +231,168 @@ mod tests {
             .expect("fresh");
         assert_eq!(third, "fresh");
     }
+
+    #[tokio::test]
+    async fn ttl_boundary_frees_bytes_and_eviction_is_deterministic() {
+        let now = Arc::new(AtomicU32::new(10));
+        let memory = MemoryCache::with_now(
+            MemoryLimits {
+                max_entries: 2,
+                max_bytes: 48,
+            },
+            clock(now.clone()),
+        )
+        .expect("memory");
+        let cache = TypedCache::new(memory, 1);
+        let value = "x".repeat(20);
+        cache
+            .set("app", "live", &value, Some(Duration::from_secs(5)))
+            .await
+            .expect("set");
+        now.store(15, Ordering::SeqCst);
+        assert!(cache
+            .get::<String>("app", "live")
+            .await
+            .expect("boundary")
+            .is_none());
+        cache
+            .set("app", "after", &value, None)
+            .await
+            .expect("bytes released by expiry");
+
+        let frozen = Arc::new(AtomicU32::new(5));
+        let memory = MemoryCache::with_now(
+            MemoryLimits {
+                max_entries: 2,
+                max_bytes: 4096,
+            },
+            clock(frozen),
+        )
+        .expect("frozen");
+        let cache = TypedCache::new(memory, 1);
+        cache.set("app", "b", &"beta", None).await.expect("b");
+        cache.set("app", "c", &"gamma", None).await.expect("c");
+        cache.set("app", "a", &"alpha", None).await.expect("a");
+        assert!(cache
+            .get::<String>("app", "b")
+            .await
+            .expect("evicted")
+            .is_none());
+        assert_eq!(
+            cache
+                .get::<String>("app", "c")
+                .await
+                .expect("kept")
+                .unwrap(),
+            "gamma"
+        );
+        cache.invalidate_namespace("app").await.expect("drop");
+        cache
+            .set("app", "again", &value, None)
+            .await
+            .expect("bytes released by invalidation");
+        assert!(cache
+            .get::<String>("app", "c")
+            .await
+            .expect("namespace")
+            .is_none());
+        let other = TypedCache::new(
+            MemoryCache::new(MemoryLimits {
+                max_entries: 2,
+                max_bytes: 4096,
+            })
+            .expect("other"),
+            1,
+        );
+        assert!(other
+            .get::<String>("app", "again")
+            .await
+            .expect("isolated")
+            .is_none());
+    }
+
+    #[tokio::test]
+    async fn instant_get_or_set_does_not_drop_waiters() {
+        let cache = Arc::new(open_cache(32, 8192));
+        for round in 0..40 {
+            let calls = Arc::new(AtomicU32::new(0));
+            let mut tasks = Vec::new();
+            for _ in 0..8 {
+                let cache = cache.clone();
+                let calls = calls.clone();
+                let key = format!("fast-{round}");
+                tasks.push(tokio::spawn(async move {
+                    cache
+                        .get_or_set("app", &key, None, || {
+                            let calls = calls.clone();
+                            async move {
+                                calls.fetch_add(1, Ordering::SeqCst);
+                                Ok::<_, CacheError>("ready".to_owned())
+                            }
+                        })
+                        .await
+                }));
+            }
+            let finished = tokio::time::timeout(Duration::from_secs(2), async {
+                let mut values = Vec::new();
+                for task in tasks {
+                    values.push(task.await.expect("join").expect("value"));
+                }
+                values
+            })
+            .await
+            .expect("waiters finished");
+            assert!(finished.iter().all(|value| value == "ready"));
+            assert_eq!(calls.load(Ordering::SeqCst), 1);
+        }
+    }
+
+    #[tokio::test]
+    async fn parallel_reads_and_writes_release_bytes() {
+        let cache = Arc::new(open_cache(64, 4096));
+        let mut tasks = Vec::new();
+        for index in 0..16 {
+            let cache = cache.clone();
+            tasks.push(tokio::spawn(async move {
+                let key = format!("k{index}");
+                cache
+                    .set("hammer", &key, &format!("value-{index}"), None)
+                    .await
+                    .expect("set");
+                let loaded: Option<String> = cache.get("hammer", &key).await.expect("get");
+                assert!(loaded.is_some());
+                cache.delete("hammer", &key).await.expect("delete");
+            }));
+        }
+        for task in tasks {
+            task.await.expect("join");
+        }
+        cache
+            .invalidate_namespace("hammer")
+            .await
+            .expect("invalidate");
+        for index in 0..16 {
+            assert!(cache
+                .get::<String>("hammer", &format!("k{index}"))
+                .await
+                .expect("cleared")
+                .is_none());
+        }
+        let big = "x".repeat(2500);
+        cache
+            .set("hammer", "full", &big, None)
+            .await
+            .expect("fits after release");
+        cache.delete("hammer", "full").await.expect("free");
+        cache
+            .set("hammer", "full", &big, None)
+            .await
+            .expect("reused");
+        let other = open_cache(8, 4096);
+        assert!(other
+            .get::<String>("hammer", "full")
+            .await
+            .expect("isolated")
+            .is_none());
+    }
 }

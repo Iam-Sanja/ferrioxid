@@ -8,7 +8,7 @@
 
 `TypedCache::new(backend, version)` offers `get`, `set`, `delete`, `invalidate_namespace` and `get_or_set`. Keys are split into a namespace and a key. Values are JSON with a `FXC1` prefix and a `u32` version. A version mismatch or corrupt bytes is an error. The cache does not recompute silently.
 
-`get_or_set` coalesces concurrent producers inside one process with `tokio::sync::Notify`. A second process, or a second `MemoryCache`, runs its own producer.
+`get_or_set` coalesces concurrent producers inside one process with `tokio::sync::Notify`. Waiters subscribe before they read the result, so a producer that finishes immediately cannot drop the wakeup. A second process, or a second `MemoryCache`, runs its own producer. Invalidating a namespace frees its bytes for later inserts. Eviction order is earliest expiry, then oldest insert time, then key order.
 
 `MemoryLimits` rejects zero `max_entries` or `max_bytes`. The defaults used by callers should stay small. The crate tests use 1024 entries and 8 MiB as an upper example, not a requirement. TTL is an optional duration from an injectable millisecond clock.
 

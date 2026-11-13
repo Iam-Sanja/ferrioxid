@@ -275,11 +275,11 @@ impl Queue {
         };
         let idempotency = match when.idempotency_key.as_deref() {
             Some(key) => Some(validate_key(key)?),
-            None => schedule_key
-                .as_ref()
-                .map(|key| format!("recur:{key}:{available_at}")),
+            None => match schedule_key.as_deref() {
+                Some(key) => Some(recur_key(key, available_at)?),
+                None => None,
+            },
         };
-        let idempotency = idempotency.as_deref().map(validate_key).transpose()?;
         let transaction = self.db.begin().await.map_err(database)?;
         if let Some(key) = &idempotency {
             if let Some(existing) = find_by_column(&transaction, "idempotency_key", key).await? {
@@ -453,7 +453,7 @@ impl Queue {
             (record.interval_secs, record.schedule_key.clone())
         {
             let next_at = next_slot(record.available_at, interval, now);
-            let idempotency = format!("recur:{schedule_key}:{next_at}");
+            let idempotency = recur_key(&schedule_key, next_at)?;
             if find_by_column(&transaction, "idempotency_key", &idempotency)
                 .await?
                 .is_none()
@@ -484,7 +484,7 @@ impl Queue {
         ) {
             let next_at =
                 crate::schedule::next_after(&expression, &zone, now.max(record.available_at))?;
-            let idempotency = format!("recur:{schedule_key}:{next_at}");
+            let idempotency = recur_key(&schedule_key, next_at)?;
             if find_by_column(&transaction, "idempotency_key", &idempotency)
                 .await?
                 .is_none()
@@ -659,15 +659,21 @@ impl Queue {
             return Ok(0);
         }
         let backend = self.db.get_database_backend();
-        let mut values = Vec::new();
+        let mut removed = 0u64;
         for row in ids {
-            values.push(id_expr(backend, required_uuid(&row, "id")?));
+            let id = required_uuid(&row, "id")?;
+            let mut delete = Query::delete();
+            delete
+                .from_table(Alias::new(JOBS))
+                .and_where(Expr::col(Alias::new("id")).eq(id_expr(backend, id)))
+                .and_where(Expr::col(Alias::new("status")).is_in([
+                    JobStatus::Succeeded.as_str(),
+                    JobStatus::Failed.as_str(),
+                    JobStatus::Cancelled.as_str(),
+                ]));
+            removed += execute_rows(&self.db, &delete).await?;
         }
-        let mut delete = Query::delete();
-        delete
-            .from_table(Alias::new(JOBS))
-            .and_where(Expr::col(Alias::new("id")).is_in(values));
-        execute_rows(&self.db, &delete).await
+        Ok(removed)
     }
 
     /// Endgültig fehlgeschlagene Jobs. Die Aufbewahrung löscht sie später mit.
@@ -710,9 +716,10 @@ impl Queue {
         Ok(rows)
     }
 
-    /// Schreibt in die Verbindung des Aufrufers. Ein Rollback entfernt den Job.
+    /// Schreibt in die Verbindung des Aufrufers. Ein Rollback des Aufrufers entfernt den Job.
     /// Sichtbare Jobs bleiben at-least-once. Die Methode beginnt keine eigene Transaktion.
-    /// Ein eindeutiger Konflikt bricht die Transaktion des Aufrufers ab. Der Aufrufer rollt zurück.
+    /// Ein eindeutiger Konflikt rollt nur auf einen Sicherungspunkt zurück. Die Transaktion
+    /// des Aufrufers bleibt benutzbar. Der Aufrufer entscheidet über Commit oder Rollback.
     pub async fn enqueue_json_on(
         &self,
         db: &impl ConnectionTrait,
@@ -746,7 +753,8 @@ impl Queue {
             }
         }
         let id = Uuid::new_v4();
-        insert_job(
+        savepoint(db, "SAVEPOINT ferrioxid_job_insert").await?;
+        let inserted = insert_job(
             db,
             &NewJob {
                 id,
@@ -763,7 +771,25 @@ impl Queue {
                 cron_zone: planned.cron_zone.as_deref(),
             },
         )
-        .await?;
+        .await;
+        if let Err(error) = inserted {
+            savepoint(db, "ROLLBACK TO SAVEPOINT ferrioxid_job_insert").await?;
+            savepoint(db, "RELEASE SAVEPOINT ferrioxid_job_insert").await?;
+            if error.code() == "job.conflict" {
+                if let Some(key) = planned.idempotency.as_deref() {
+                    if let Some(existing) = find_by_column(db, "idempotency_key", key).await? {
+                        return Ok(EnqueueOutcome::Existing(existing.id));
+                    }
+                }
+                if let Some(key) = planned.schedule_key.as_deref() {
+                    if let Some(existing) = find_by_column(db, "schedule_key", key).await? {
+                        return Ok(EnqueueOutcome::Existing(existing.id));
+                    }
+                }
+            }
+            return Err(error);
+        }
+        savepoint(db, "RELEASE SAVEPOINT ferrioxid_job_insert").await?;
         Ok(EnqueueOutcome::Created(id))
     }
 }
@@ -860,6 +886,13 @@ async fn conditional_status(
     } else {
         Ok(Finish::LostLease)
     }
+}
+
+async fn savepoint(db: &impl ConnectionTrait, sql: &str) -> Result<(), JobError> {
+    db.execute(Statement::from_string(db.get_database_backend(), sql))
+        .await
+        .map(|_| ())
+        .map_err(database)
 }
 
 async fn insert_job(db: &impl ConnectionTrait, job: &NewJob<'_>) -> Result<(), JobError> {
@@ -1145,11 +1178,11 @@ fn plan_enqueue(
     };
     let idempotency = match when.idempotency_key.as_deref() {
         Some(key) => Some(validate_key(key)?),
-        None => schedule_key
-            .as_ref()
-            .map(|key| format!("recur:{key}:{available_at}")),
+        None => match schedule_key.as_deref() {
+            Some(key) => Some(recur_key(key, available_at)?),
+            None => None,
+        },
     };
-    let idempotency = idempotency.map(|key| validate_key(&key)).transpose()?;
     Ok(PlannedEnqueue {
         payload: String::from_utf8(encoded)
             .map_err(|_| JobError::permanent("job.payload.invalid"))?,
@@ -1194,8 +1227,18 @@ fn validate_handler_name(name: &str) -> Result<(), JobError> {
 }
 
 fn validate_key(value: &str) -> Result<String, JobError> {
+    validate_key_len(value, 80)
+}
+
+/// Generated `recur:{schedule_key}:{unix}` keys are longer than the caller key.
+/// A schedule key of 80 characters plus the prefix and an i64 still fits in 120.
+fn recur_key(schedule_key: &str, at: i64) -> Result<String, JobError> {
+    validate_key_len(&format!("recur:{schedule_key}:{at}"), 120)
+}
+
+fn validate_key_len(value: &str, max: usize) -> Result<String, JobError> {
     let ok = !value.is_empty()
-        && value.len() <= 80
+        && value.len() <= max
         && value
             .chars()
             .all(|char| char.is_ascii_alphanumeric() || matches!(char, ':' | '_' | '-'));
