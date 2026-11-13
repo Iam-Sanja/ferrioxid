@@ -10,7 +10,7 @@ This page records attacks the current code is built to resist, and the protocols
 |---|---|
 | Password guessing | Argon2id, dummy hash for unknown users, five failures per process and client key in 15 minutes |
 | Session fixation | Login creates a new session. The anonymous session is revoked only when that session is issued, not when MFA is still pending |
-| Stolen database | Session tokens and recovery codes are keyed hashes. TOTP secrets are AES-GCM with the server key and the user id as AAD. A database copy without the server key does not reveal recovery codes |
+| Stolen database | Session tokens and recovery codes are keyed hashes. TOTP secrets are AES-256-GCM with `FERRIOXID_MFA_KEY` and the user id as AAD. A database copy without that key does not reveal the authenticator secret. Recovery codes are HMAC hashes, not ciphertext |
 | TOTP replay | The accepted step is stored. The same step is rejected. The window is the previous, current and next 30-second step |
 | Challenge as session | `authenticate_token` rejects the challenge. HTTP login sets no cookie while MFA is pending |
 | Cross-user session revoke | A non-superuser receives `Forbidden`. Staff does not bypass this |
@@ -29,7 +29,13 @@ The login rate limit and the MFA attempt limit live in process memory. A restart
 
 The reauthentication proof can be replayed on the same session until it expires. Password change still revokes sessions.
 
-TOTP ciphertext and recovery-code hashes are derived from `AuthConfig.csrf_secret` by HMAC-SHA256 with the label `ferrioxid-mfa-v1`. That is not a separate MFA key. Rotating `FERRIOXID_CSRF_SECRET` or `.ferrioxid/csrf.key` makes enrolled authenticators and unused recovery codes unreadable. This is a release blocker for any deployment that already has confirmed TOTP. The follow-up is a 32-byte `FERRIOXID_MFA_KEY`, used for new seals, with open and recovery checks trying that key and then the legacy derived key, and a re-seal after a successful legacy open. Do not rotate the CSRF secret until that migration exists. Do not add another advisory ignore for this.
+`FERRIOXID_MFA_KEY` is 32 bytes, encoded as 64 hexadecimal characters with no prefix. Those bytes are the AES-256-GCM key. There is no `FERRUM_MFA_KEY` alias. Production refuses to start when the variable is missing or not 64 hex characters, and the error does not include the value. Development reads `.ferrioxid/mfa.key` as 32 raw bytes, or creates that file once. `AuthConfig::development` uses a fixed key that is not the CSRF development key.
+
+New TOTP rows store the nonce as `v2.` plus 24 hex characters. New recovery records store `v2.` plus a 64-hex HMAC-SHA256 over the label `ferrioxid-recovery-v2`, the user id and the normalized code. A legacy nonce is exactly 24 hex characters and opens only with HMAC-SHA256 of the CSRF secret and the label `ferrioxid-mfa-v1`. A legacy recovery record is exactly 64 hex characters and uses the label `ferrioxid-recovery-v1` with that same derived key. A password hash, including an Argon2 PHC string, matches neither format and is not decrypted.
+
+After a legacy TOTP secret decrypts, Ferrioxid seals it again with `FERRIOXID_MFA_KEY` and writes the `v2.` nonce. Confirmed state and the last accepted step stay in place. Recovery hashes are not rewritten. The plaintext code is not stored, so replacing the hash would either invent a new code or destroy the existing one. A legacy code still verifies once with the original CSRF secret and is then consumed. Unused legacy codes remain valid only while that CSRF secret is unchanged. Rotating `FERRIOXID_CSRF_SECRET` after the TOTP row has moved to `v2.` does not make the authenticator unreadable. It does invalidate unused legacy recovery hashes. New `v2.` recovery codes and `v2.` reauthentication proofs do not depend on the CSRF secret. A `v1.` reauthentication proof still checks the CSRF-derived key and therefore fails after that rotation.
+
+Deployments that already confirmed TOTP should keep the current CSRF secret until every unused legacy recovery code has been used. Do not generate a replacement set automatically. Do not add another advisory ignore for this residual.
 
 Account close does not remove files. An application that skips `purge_owner` leaves the owner's bytes on disk.
 

@@ -6,7 +6,7 @@
 - Generated lists use keyset pages. OpenAPI 3.1, problem JSON, `/readyz` and read-only `ferrioxid check --deploy` are on the same branch. An enabled proxy trusts only the peer allow-list.
 - Embedded auth migrations are `0001` through `0006_account_security`. Embedded job migrations are `0001_jobs` and `0002_job_schedule`. TOTP, recovery codes, scheduled jobs, a process-local cache and signed storage downloads are included.
 - A text value written to a JSON column is canonicalized before insert. Invalid JSON is `validation.json` and is not sent to PostgreSQL as binary jsonb.
-- TOTP encryption is still derived from the CSRF secret. That coupling is a release blocker. See [the threat model](docs/auth-threat-model.md).
+- `FERRIOXID_MFA_KEY` is a separate 32-byte AES-256-GCM key, encoded as 64 hex characters. New TOTP rows and recovery hashes use a `v2.` prefix. Legacy TOTP ciphertext is re-sealed after it opens. Legacy recovery hashes stay one-way HMAC values and are not rewritten. See [the threat model](docs/auth-threat-model.md).
 - The Cargo package version remains `0.1.0`. Nothing was published.
 
 ## Unreleased — Integration of pull requests #97 to #100

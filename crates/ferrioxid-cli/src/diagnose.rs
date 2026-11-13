@@ -374,6 +374,28 @@ pub fn deploy_findings(debug: bool, host: &str) -> i32 {
             );
         }
     }
+    match std::env::var("FERRIOXID_MFA_KEY") {
+        Ok(value) if csrf_secret_shape_ok(&value) => {
+            report(
+                "OK",
+                "deploy.mfa FERRIOXID_MFA_KEY is present and has the expected shape. The value is not shown.",
+            );
+        }
+        Ok(_) => {
+            errors += 1;
+            report(
+                "ERROR",
+                "deploy.mfa FERRIOXID_MFA_KEY must contain 64 hexadecimal characters. The value is not shown.",
+            );
+        }
+        Err(_) => {
+            errors += 1;
+            report(
+                "ERROR",
+                "deploy.mfa FERRIOXID_MFA_KEY is missing. A file key is not a deployment secret.",
+            );
+        }
+    }
     match std::env::var("FERRIOXID_ALLOWED_ORIGINS") {
         Ok(value) if origins_are_https(&value) => {
             let count = value

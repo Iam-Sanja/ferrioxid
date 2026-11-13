@@ -105,7 +105,7 @@ Ein Verzeichnis mit nur `ferrum.toml` wird weiter geladen. Liegen `ferrioxid.tom
 
 ## Issue #8
 
-`rsa 0.9.10` bleibt eine Lockfile-Abhängigkeit von `sqlx-mysql 0.8.6`. Der aktivierte Graph enthält sie nicht. Der ungefilterte Audit bleibt absichtlich rot. Ein Patch auf `rsa` 0.10 ist keine Lösung, weil `sqlx-mysql` 0.9 erwartet. Der konkrete Weg ist ein späteres SQLx-Release mit `rsa >= 0.10`, danach `cargo update -p sqlx-mysql` und erst dann das Entfernen der Ausnahme. Details stehen in [security-rsa.md](security-rsa.md).
+`rsa 0.9.10` bleibt eine Lockfile-Abhängigkeit der optionalen Kiste `sqlx-mysql 0.8.6`. Der aktivierte Graph enthält sie nicht. Am 2026-11-13 drucken `cargo tree -i rsa` und `cargo tree -i sqlx-mysql` nichts. SeaORM hat MySQL bereits aus. Ein weiteres Abschalten ändert das Lockfile nicht. SQLx 0.9 macht `rsa` nur optional und bleibt bei `rsa` 0.9; der Sprung wäre mit dem vendored SQLite-0.8.6-Patch nicht verträglich. Der ungefilterte Audit bleibt absichtlich rot. Details stehen in [security-rsa.md](security-rsa.md).
 
 ## Folgeaufgaben
 
@@ -166,7 +166,7 @@ Vorher und nachher: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_
 - Docker ist auf dieser Maschine nicht installiert. `examples/deploy/compose.yaml` wurde nicht gebootet.
 - Eine Desktop-Browserabnahme fehlt. Die HTTP-Verträge liefen über den Axum-Router.
 - `load_one_to_one` lädt nicht automatisch in Admin-Listen. Die vorhandene Inline-Liste bleibt bei höchstens 25 Zeilen.
-- Issue #8 bleibt offen, bis SQLx `rsa >= 0.10` zieht. Die Ausnahme wird nicht erweitert.
+- Issue #8 bleibt offen. `rsa 0.9.10` ist nicht im aktivierten Graphen. SQLx 0.9 macht die Kiste nur optional und bleibt bei `rsa` 0.9. Die Ausnahme wird nicht erweitert.
 - Ein Rollback von #98 nach einer bereits angelegten JSON-Spalte braucht eine eigene Schemaentscheidung.
 - Alias-Konflikte, die vor #100 still auf `FERRIOXID_*` fielen, sind jetzt Startfehler.
 - Der PostgreSQL-16-Log enthielt auf `f479808` und erneut auf `b953360` bei `INSERT INTO "ferrioxid_report_notes" ("id", "body")` die Meldung `unsupported jsonb version number 110`. Parameter `$2` ist die JSONB-Spalte. Byte 110 ist `n` aus dem absichtlich abgelehnten Text `not-json`. `Value::Json` trägt die JSONB-Version 1 und wurde gespeichert. Seit `7371dba` wird Text für eine JSON-Spalte vor dem Binden geprüft und nur als `Value::Json` gesendet. Ungültiger Text ist `validation.json`.
@@ -197,8 +197,8 @@ PostgreSQL 18.6 auf `127.0.0.1` danach, nur über Wegwerfdatenbanken `ferrioxid_
 
 ## Release-Blocker
 
-- TOTP und Recovery-Codes hängen am CSRF-Geheimnis. Details und der Folgeplan stehen in [auth-threat-model.md](auth-threat-model.md).
-- Issue #8 bleibt offen. `rsa 0.9.10` ist nur über `sqlx-mysql` im Lockfile. Der Abbau steht in [security-rsa.md](security-rsa.md). Die Ausnahme wird nicht erweitert.
+- Neue TOTP-Geheimnisse verwenden `FERRIOXID_MFA_KEY` (64 Hex-Zeichen, 32 Byte, kein `FERRUM_`-Alias). Legacy-Geheimtext wird nach dem Öffnen neu versiegelt. Legacy-Recovery-Hashes bleiben HMAC und werden nicht umgeschrieben; dafür muss das bisherige CSRF-Geheimnis bleiben, bis die Codes verbraucht sind. Details stehen in [auth-threat-model.md](auth-threat-model.md).
+- Issue #8 bleibt offen. `rsa 0.9.10` liegt nur als optionale `sqlx-mysql`-Abhängigkeit im Lockfile. `cargo tree -i rsa` und `cargo tree -i sqlx-mysql` drucken nichts. Ein Feature-Schalter entfernt den Eintrag nicht. Die Ausnahme wird nicht erweitert. Der Stand steht in [security-rsa.md](security-rsa.md).
 - Docker ist auf dieser Maschine nicht installiert. `deploy/compose.yaml` und `examples/deploy/compose.yaml` wurden nicht gestartet.
 - Playwright lief lokal nicht. Auf `febc241` installierte Playwright Chromium auf Ubuntu 26.04 nicht. Der Browser-Job läuft deshalb auf `ubuntu-24.04`. Auf `57f0266` startete `cargo run -p myshop` nicht, weil das Paket zusätzlich `ferrioxid-manage` enthält. `default-run` ist `myshop`, und der Job ruft `--bin myshop` auf. Der PostgreSQL-Job ist ebenfalls auf `ubuntu-24.04` festgelegt: der Client von `ubuntu-latest` schreibt `SET transaction_timeout`, und der Dienst `postgres:16` lehnt das ab. Auf `d844517` sind Browser, PostgreSQL, beide Rust-Jobs und Cargo Audit grün. Die PostgreSQL-Logs dieses Laufs enthalten `unsupported jsonb version number 110` nicht. CodeQL meldete drei kritische Treffer der bekannten Regel `rust/hard-coded-cryptographic-value`: die In-Memory-Passwörter in `security_tests` und den mit Nullen angelegten Nonce-Puffer in `seal`, den `OsRng` danach füllte. Die Passwörter werden wie die übrigen Fixtures aus Bytes gebaut. Der Nonce kommt von `Aes256Gcm::generate_nonce`. Das ist kein neues Produktionsgeheimnis.
 

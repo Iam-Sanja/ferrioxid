@@ -6,8 +6,9 @@ use crate::password::verify_password;
 use crate::service::{constant_eq, digest, unix_now, AuthService, AuthUser, IssuedSession};
 use crate::store::{self, SessionRow};
 use crate::totp::{
-    accept_totp, mfa_key, normalize_recovery, open, otpauth_uri, random_secret, reauth_proof,
-    reauth_valid, recovery_codes, recovery_hash, seal,
+    accept_totp, current_nonce, current_recovery_record, legacy_mfa_key, normalize_recovery,
+    open_stored, otpauth_uri, random_secret, reauth_proof, reauth_valid, recovery_codes,
+    recovery_format, recovery_hash, seal, seal_format, RecoveryFormat, SealFormat,
 };
 use sea_orm::TransactionTrait;
 use uuid::Uuid;
@@ -108,10 +109,15 @@ impl AuthService {
             return Err(AuthError::Validation("totp is already enabled".into()));
         }
         let secret = random_secret();
-        let key = mfa_key(&self.config().csrf_secret);
-        let (nonce, ciphertext) = seal(&key, user.id, &secret)?;
-        account_store::replace_totp(self.database(), user.id, &nonce, &ciphertext, unix_now()?)
-            .await?;
+        let (nonce, ciphertext) = seal(&self.config().mfa_key, user.id, &secret)?;
+        account_store::replace_totp(
+            self.database(),
+            user.id,
+            &current_nonce(&nonce),
+            &ciphertext,
+            unix_now()?,
+        )
+        .await?;
         Ok(TotpEnrollment {
             otpauth_uri: otpauth_uri(&user.email, &secret),
             secret_base32: crate::totp::base32(&secret),
@@ -124,11 +130,10 @@ impl AuthService {
         code: &str,
     ) -> Result<RecoverySet, AuthError> {
         let row = self.totp_row(user.id).await?;
-        let secret = self.open_secret(user.id, &row)?;
+        let secret = self.open_secret(user.id, &row).await?;
         let now = unix_now()?;
         let step = accept_totp(&secret, code, now, None)?;
         let codes = recovery_codes();
-        let key = mfa_key(&self.config().csrf_secret);
         let transaction = self.database().begin().await.map_err(AuthError::database)?;
         account_store::confirm_totp(&transaction, user.id, now, step).await?;
         account_store::delete_recovery(&transaction, user.id).await?;
@@ -138,7 +143,7 @@ impl AuthService {
                 &transaction,
                 Uuid::new_v4(),
                 user.id,
-                &recovery_hash(&key, user.id, &normalized),
+                &current_recovery_record(&self.config().mfa_key, user.id, &normalized),
                 now,
             )
             .await?;
@@ -260,19 +265,15 @@ impl AuthService {
         }
         let now = unix_now()?;
         let expires_at = now.saturating_add(300);
-        let proof = reauth_proof(
-            &mfa_key(&self.config().csrf_secret),
-            user.id,
-            user.session_id,
-            expires_at,
-        );
+        let proof = reauth_proof(&self.config().mfa_key, user.id, user.session_id, expires_at);
         Ok(ReauthGrant { proof, expires_at })
     }
 
     pub fn require_reauth(&self, user: &AuthUser, proof: &str) -> Result<(), AuthError> {
         let now = unix_now()?;
         if reauth_valid(
-            &mfa_key(&self.config().csrf_secret),
+            &self.config().mfa_key,
+            &legacy_mfa_key(&self.config().csrf_secret),
             user.id,
             user.session_id,
             proof,
@@ -381,13 +382,26 @@ impl AuthService {
             .ok_or_else(|| AuthError::Validation("totp is not enrolled".into()))
     }
 
-    fn open_secret(&self, user_id: Uuid, row: &TotpRow) -> Result<Vec<u8>, AuthError> {
-        open(
-            &mfa_key(&self.config().csrf_secret),
+    async fn open_secret(&self, user_id: Uuid, row: &TotpRow) -> Result<Vec<u8>, AuthError> {
+        let legacy = legacy_mfa_key(&self.config().csrf_secret);
+        let secret = open_stored(
+            &self.config().mfa_key,
+            &legacy,
             user_id,
             &row.nonce,
             &row.ciphertext,
-        )
+        )?;
+        if seal_format(&row.nonce)? == SealFormat::Legacy {
+            let (nonce, ciphertext) = seal(&self.config().mfa_key, user_id, &secret)?;
+            account_store::update_totp_secret(
+                self.database(),
+                user_id,
+                &current_nonce(&nonce),
+                &ciphertext,
+            )
+            .await?;
+        }
+        Ok(secret)
     }
 
     async fn accept_second_factor(&self, user_id: Uuid, code: &str) -> Result<(), AuthError> {
@@ -395,16 +409,24 @@ impl AuthService {
         if row.confirmed_at.is_none() {
             return Err(AuthError::Validation("totp is not confirmed".into()));
         }
-        let secret = self.open_secret(user_id, &row)?;
+        let secret = self.open_secret(user_id, &row).await?;
         let now = unix_now()?;
         if let Ok(step) = accept_totp(&secret, code, now, row.last_used_step) {
             account_store::set_totp_step(self.database(), user_id, step).await?;
             return Ok(());
         }
         let normalized = normalize_recovery(code)?;
-        let key = mfa_key(&self.config().csrf_secret);
-        let expected = recovery_hash(&key, user_id, &normalized);
+        let legacy = legacy_mfa_key(&self.config().csrf_secret);
         for (id, hash) in account_store::unused_recovery(self.database(), user_id).await? {
+            let Some(format) = recovery_format(&hash) else {
+                continue;
+            };
+            let expected = match format {
+                RecoveryFormat::Current => {
+                    current_recovery_record(&self.config().mfa_key, user_id, &normalized)
+                }
+                RecoveryFormat::Legacy => recovery_hash(&legacy, user_id, &normalized),
+            };
             if constant_eq(&hash, &expected) {
                 account_store::consume_recovery(self.database(), id, now).await?;
                 return Ok(());

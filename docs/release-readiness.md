@@ -123,3 +123,15 @@ Git can auto-merge other overlapping files, and those still need a semantic pass
 - `deploy/` and `examples/deploy/` are different paths. A merge would keep both stacks.
 
 Resolve those conflicts on the integration branch. Do not copy pull request 101 into this branch to clear them.
+
+## Security follow-up on work/integration (2026-11-13)
+
+Pull request 101 now contains the merged work from pull requests 97–104. The notes above describe the earlier `work/api-quality` snapshot. They are not the current integration head.
+
+`FERRIOXID_MFA_KEY` is required in production. The encoding is 64 hexadecimal characters and the value is 32 bytes. It is not derived from `FERRIOXID_CSRF_SECRET` and it has no `FERRUM_` alias. Existing development checkouts keep working: when the variable is unset and the process is not in production, Ferrioxid reads or creates `.ferrioxid/mfa.key`. Generated projects ignore that file. `ferrioxid check --deploy` reports the variable's presence and shape and does not print it.
+
+A deployment that already stored confirmed TOTP under the old CSRF-derived key can still open that ciphertext. The next successful open re-seals it with the MFA key. Unused recovery codes from that enrollment stay HMAC hashes of the old key. Keep the current CSRF secret until those codes are used. New enrollments do not need the CSRF secret for TOTP or recovery codes.
+
+`RUSTSEC-2023-0071` is still present because `Cargo.lock` records optional `sqlx-mysql`. It is not in the enabled build graph. No feature change removes it without leaving the SQLx 0.8.6 line that the vendored SQLite patch requires. The audit ignore stays limited to that one advisory. See [security-rsa.md](security-rsa.md) and [auth-threat-model.md](auth-threat-model.md).
+
+Nothing in this follow-up was published to crates.io. The project was not renamed.

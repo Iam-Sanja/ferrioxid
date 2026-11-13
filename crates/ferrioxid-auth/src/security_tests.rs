@@ -45,8 +45,9 @@ async fn codes(auth: &AuthService, user_id: Uuid) -> (String, String) {
         .await
         .expect("totp row")
         .expect("enrolled");
-    let secret = crate::totp::open(
-        &crate::totp::mfa_key(&auth.config().csrf_secret),
+    let secret = crate::totp::open_stored(
+        &auth.config().mfa_key,
+        &crate::totp::legacy_mfa_key(&auth.config().csrf_secret),
         user_id,
         &row.nonce,
         &row.ciphertext,
@@ -201,14 +202,10 @@ async fn session_revoke_reauth_and_close_respect_the_actor_on(auth: &AuthService
     auth.require_reauth(&owner, &grant.proof).expect("bound");
     assert!(auth.require_reauth(&owner_again, &grant.proof).is_err());
     let now = crate::service::unix_now().expect("clock");
-    let expired = crate::totp::reauth_proof(
-        &crate::totp::mfa_key(&auth.config().csrf_secret),
-        owner.id,
-        owner.session_id,
-        now,
-    );
+    let expired =
+        crate::totp::reauth_proof(&auth.config().mfa_key, owner.id, owner.session_id, now);
     let too_long = crate::totp::reauth_proof(
-        &crate::totp::mfa_key(&auth.config().csrf_secret),
+        &auth.config().mfa_key,
         owner.id,
         owner.session_id,
         now.saturating_add(301),
@@ -291,6 +288,12 @@ async fn login_http_returns_the_challenge_without_a_cookie_on(auth: &AuthService
         .expect("login");
     let user = auth.authenticate_token(&issued.token).await.expect("actor");
     auth.begin_totp(&user, password()).await.expect("enroll");
+    let stored = crate::account_store::find_totp(auth.database(), created.id)
+        .await
+        .expect("row")
+        .expect("totp");
+    assert!(stored.nonce.starts_with("v2."));
+    assert!(!stored.ciphertext.contains("BEGIN"));
     let (current, _) = codes(auth, created.id).await;
     auth.confirm_totp(&user, &current).await.expect("confirm");
     let app = crate::mount(Router::new()).with_state(crate::AppState {
@@ -379,6 +382,233 @@ async fn failed_checks_do_not_issue_sessions(auth: &AuthService) {
 #[tokio::test]
 async fn failed_permission_and_csrf_checks_keep_the_session() {
     failed_checks_do_not_issue_sessions(&service().await).await;
+}
+
+#[tokio::test]
+async fn new_mfa_uses_the_dedicated_key_and_keeps_recovery_codes_one_time() {
+    let auth = service().await;
+    let address = email("fresh");
+    let created = auth
+        .create_user(&address, password(), false, false)
+        .await
+        .expect("user");
+    let user = auth
+        .authenticate_token(
+            &auth
+                .login(&address, password(), "fresh")
+                .await
+                .expect("session")
+                .token,
+        )
+        .await
+        .expect("actor");
+    let enrollment = auth.begin_totp(&user, password()).await.expect("enroll");
+    assert!(!format!("{enrollment:?}").contains(&enrollment.secret_base32));
+    let row = crate::account_store::find_totp(auth.database(), created.id)
+        .await
+        .expect("row")
+        .expect("totp");
+    assert!(row.nonce.starts_with("v2."));
+    assert!(!row.ciphertext.contains(&enrollment.secret_base32));
+    assert!(crate::totp::open(
+        &crate::totp::legacy_mfa_key(&auth.config().csrf_secret),
+        created.id,
+        row.nonce.strip_prefix("v2.").unwrap(),
+        &row.ciphertext,
+    )
+    .is_err());
+    let (current, _) = codes(&auth, created.id).await;
+    let recovery = auth.confirm_totp(&user, &current).await.expect("confirm");
+    assert!(!format!("{recovery:?}").contains(&recovery.codes[0]));
+    let hashes = crate::account_store::unused_recovery(auth.database(), created.id)
+        .await
+        .expect("hashes");
+    assert_eq!(hashes.len(), recovery.codes.len());
+    for (_, hash) in &hashes {
+        assert!(hash.starts_with("v2."));
+        assert!(crate::totp::recovery_format(hash) == Some(crate::totp::RecoveryFormat::Current));
+        assert!(crate::totp::seal_format(hash).is_err());
+        for code in &recovery.codes {
+            assert!(!hash.contains(code));
+        }
+    }
+    let pending = auth.login(&address, password(), "fresh-2").await;
+    let crate::AuthError::MfaPending(challenge) = pending.expect_err("challenge") else {
+        panic!("mfa challenge");
+    };
+    assert!(auth.authenticate_token(&challenge.challenge).await.is_err());
+    let issued = auth
+        .complete_mfa_login(&challenge.challenge, &recovery.codes[0], "fresh-2", None)
+        .await
+        .expect("recovery login");
+    assert!(auth.authenticate_token(&issued.token).await.is_ok());
+    let again = auth.login(&address, password(), "fresh-3").await;
+    let crate::AuthError::MfaPending(second) = again.expect_err("second challenge") else {
+        panic!("second challenge");
+    };
+    assert!(auth
+        .complete_mfa_login(&second.challenge, &recovery.codes[0], "fresh-3", None)
+        .await
+        .is_err());
+    auth.complete_mfa_login(&second.challenge, &recovery.codes[1], "fresh-3", None)
+        .await
+        .expect("next code");
+}
+
+#[tokio::test]
+async fn legacy_totp_migrates_and_recovery_hashes_stay_until_used() {
+    let auth = service().await;
+    let address = email("legacy");
+    let created = auth
+        .create_user(&address, password(), false, false)
+        .await
+        .expect("user");
+    let user_id = created.id;
+    let secret = crate::totp::random_secret();
+    let legacy = crate::totp::legacy_mfa_key(&auth.config().csrf_secret);
+    let (nonce, ciphertext) = crate::totp::seal(&legacy, user_id, &secret).expect("seal");
+    let now = crate::service::unix_now().expect("clock");
+    crate::account_store::replace_totp(auth.database(), user_id, &nonce, &ciphertext, now)
+        .await
+        .expect("store");
+    crate::account_store::confirm_totp(auth.database(), user_id, now, 0)
+        .await
+        .expect("confirm");
+    let first = "ABCDEFGHJK";
+    let second = "ABCD2EFGHJ";
+    let first_hash = crate::totp::recovery_hash(&legacy, user_id, first);
+    let second_hash = crate::totp::recovery_hash(&legacy, user_id, second);
+    crate::account_store::insert_recovery(
+        auth.database(),
+        Uuid::new_v4(),
+        user_id,
+        &first_hash,
+        now,
+    )
+    .await
+    .expect("first code");
+    crate::account_store::insert_recovery(
+        auth.database(),
+        Uuid::new_v4(),
+        user_id,
+        &second_hash,
+        now,
+    )
+    .await
+    .expect("second code");
+    let code = crate::totp::totp_code(&secret, now, 6).expect("code");
+    let crate::AuthError::MfaPending(challenge) = auth
+        .login(&address, password(), "legacy")
+        .await
+        .expect_err("challenge")
+    else {
+        panic!("challenge");
+    };
+    let issued = auth
+        .complete_mfa_login(&challenge.challenge, &code, "legacy", None)
+        .await
+        .expect("totp");
+    let moved = crate::account_store::find_totp(auth.database(), user_id)
+        .await
+        .expect("row")
+        .expect("totp");
+    assert!(moved.nonce.starts_with("v2."));
+    assert_ne!(moved.ciphertext, ciphertext);
+    assert!(!moved.ciphertext.contains(&crate::totp::base32(&secret)));
+    let hashes = crate::account_store::unused_recovery(auth.database(), user_id)
+        .await
+        .expect("hashes");
+    let stored: Vec<&str> = hashes.iter().map(|(_, hash)| hash.as_str()).collect();
+    assert!(stored.contains(&first_hash.as_str()));
+    assert!(stored.contains(&second_hash.as_str()));
+    let crate::AuthError::MfaPending(use_code) = auth
+        .login(&address, password(), "legacy-code")
+        .await
+        .expect_err("code challenge")
+    else {
+        panic!("code challenge");
+    };
+    auth.complete_mfa_login(&use_code.challenge, first, "legacy-code", None)
+        .await
+        .expect("first recovery");
+    let crate::AuthError::MfaPending(replay) = auth
+        .login(&address, password(), "legacy-replay")
+        .await
+        .expect_err("replay challenge")
+    else {
+        panic!("replay challenge");
+    };
+    assert!(auth
+        .complete_mfa_login(&replay.challenge, first, "legacy-replay", None)
+        .await
+        .is_err());
+    let remaining = crate::account_store::unused_recovery(auth.database(), user_id)
+        .await
+        .expect("remaining");
+    assert_eq!(remaining.len(), 1);
+    assert_eq!(remaining[0].1, second_hash);
+
+    let mut rotated = auth.config().clone();
+    rotated.csrf_secret = *b"rotated-csrf-secret-32-bytes!!!!";
+    let rotated = AuthService::new(auth.database().clone(), rotated);
+    let crate::AuthError::MfaPending(after) = rotated
+        .login(&address, password(), "rotated")
+        .await
+        .expect_err("rotated challenge")
+    else {
+        panic!("rotated challenge");
+    };
+    assert!(rotated
+        .complete_mfa_login(&after.challenge, second, "rotated", None)
+        .await
+        .is_err());
+    let rotated_legacy = crate::totp::legacy_mfa_key(&rotated.config().csrf_secret);
+    assert!(crate::totp::open_stored(
+        &rotated.config().mfa_key,
+        &rotated_legacy,
+        user_id,
+        &nonce,
+        &ciphertext,
+    )
+    .is_err());
+    let opened = crate::totp::open_stored(
+        &rotated.config().mfa_key,
+        &rotated_legacy,
+        user_id,
+        &moved.nonce,
+        &moved.ciphertext,
+    )
+    .expect("current seal");
+    assert_eq!(opened, secret);
+    let actor = rotated
+        .authenticate_token(&issued.token)
+        .await
+        .expect("actor");
+    let used_step = now.div_euclid(30);
+    let following = crate::totp::totp_code(&secret, (used_step + 1) * 30, 6).expect("following");
+    let proof = rotated
+        .reauthenticate(&actor, password(), Some(&following))
+        .await
+        .expect("reauth");
+    rotated
+        .require_reauth(&actor, &proof.proof)
+        .expect("v2 proof");
+    let legacy_proof = crate::totp::legacy_reauth_proof(
+        &legacy,
+        actor.id,
+        actor.session_id,
+        crate::service::unix_now()
+            .expect("clock")
+            .saturating_add(60),
+    );
+    assert!(rotated.require_reauth(&actor, &legacy_proof).is_err());
+    assert_eq!(
+        crate::account_store::unused_recovery(rotated.database(), user_id)
+            .await
+            .expect("unchanged")
+            .len(),
+        1
+    );
 }
 
 #[tokio::test]

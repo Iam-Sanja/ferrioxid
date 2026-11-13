@@ -43,6 +43,7 @@ Existing sections remain `project`, `server`, `database`, `admin`, `auth`, `temp
 | `FERRIOXID_DEBUG` | Only `true` or `false`. `FERRUM_DEBUG` is the legacy alias. Different values are an error and are not replaced by the file |
 | `FERRIOXID_SMTP_PASSWORD` | SMTP password. `FERRUM_SMTP_PASSWORD` is the legacy alias. It is not in `ferrioxid.toml` or `ferrum.toml` |
 | `FERRIOXID_CSRF_SECRET` | 64 hex characters in production. `FERRUM_CSRF_SECRET` is the legacy alias. The value is not logged |
+| `FERRIOXID_MFA_KEY` | 64 hex characters, 32 bytes, no prefix. Production requires it. There is no `FERRUM_` alias. Development uses `.ferrioxid/mfa.key` when the variable is unset. The value is not logged |
 | `BIND_ADDRESS` |Replaces `host:port`. A value starting with `0.0.0.0` is rejected|
 | `FERRIOXID_PUBLIC_ORIGIN` |Replaces `mail.public_origin` only when opening the mail service|
 | `FERRIOXID_SMTP_USERNAME` | SMTP user. `FERRUM_SMTP_USERNAME` is the legacy alias. If both are missing, the field remains empty |

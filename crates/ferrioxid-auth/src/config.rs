@@ -30,6 +30,8 @@ pub struct AuthConfig {
     pub login_window_secs: i64,
     /// Stabiler HMAC-Schlüssel für sitzungsgebundene CSRF-Tokens. Ein Neustart darf ihn nicht neu würfeln.
     pub csrf_secret: [u8; 32],
+    /// AES-256-GCM-Schlüssel für TOTP. 32 Byte, unabhängig vom CSRF-Geheimnis.
+    pub mfa_key: [u8; 32],
 }
 
 impl std::fmt::Debug for AuthConfig {
@@ -49,6 +51,7 @@ impl std::fmt::Debug for AuthConfig {
             .field("login_max_attempts", &self.login_max_attempts)
             .field("login_window_secs", &self.login_window_secs)
             .field("csrf_secret", &"[redacted]")
+            .field("mfa_key", &"[redacted]")
             .finish()
     }
 }
@@ -72,6 +75,7 @@ impl AuthConfig {
             login_max_attempts: 5,
             login_window_secs: 15 * 60,
             csrf_secret: *b"ferrioxid-dev-csrf-key-32-bytes!",
+            mfa_key: *b"ferrioxid-dev-mfa-key-32-bytes!!",
         }
     }
 
@@ -103,6 +107,7 @@ impl AuthConfig {
             config.allowed_origins.clear();
         }
         config.csrf_secret = load_csrf_secret()?;
+        config.mfa_key = load_mfa_key(environment)?;
         config.trust_proxy = matches!(
             ferrioxid_core::aliased_env("FERRIOXID_TRUST_PROXY")?.as_deref(),
             Some("1" | "true" | "TRUE")
@@ -248,6 +253,44 @@ fn load_csrf_secret() -> Result<[u8; 32], String> {
     Ok(secret)
 }
 
+fn load_mfa_key(environment: Environment) -> Result<[u8; 32], String> {
+    match std::env::var("FERRIOXID_MFA_KEY") {
+        Ok(value) => decode_hex_32(&value)
+            .ok_or_else(|| "FERRIOXID_MFA_KEY must contain 64 hexadecimal characters.".to_owned()),
+        Err(_) if environment == Environment::Production => Err(
+            "FERRIOXID_MFA_KEY is missing. Production requires 64 hexadecimal characters."
+                .to_owned(),
+        ),
+        Err(_) => load_or_create_mfa_file(),
+    }
+}
+
+fn load_or_create_mfa_file() -> Result<[u8; 32], String> {
+    let path = std::path::PathBuf::from(".ferrioxid/mfa.key");
+    if let Ok(bytes) = std::fs::read(&path) {
+        if bytes.len() == 32 {
+            let mut secret = [0u8; 32];
+            secret.copy_from_slice(&bytes);
+            return Ok(secret);
+        }
+        return Err(
+            "FERRIOXID_MFA_KEY file must contain exactly 32 bytes. The contents are not shown."
+                .to_owned(),
+        );
+    }
+    let mut secret = [0u8; 32];
+    getrandom::getrandom(&mut secret).expect("mfa key");
+    if let Some(parent) = path.parent() {
+        let _ = std::fs::create_dir_all(parent);
+    }
+    if std::fs::write(&path, secret).is_err() {
+        tracing::warn!(
+            "MFA-Schlüsseldatei konnte nicht geschrieben werden. Der Prozessschlüssel gilt nur bis zum Neustart."
+        );
+    }
+    Ok(secret)
+}
+
 fn decode_hex_32(value: &str) -> Option<[u8; 32]> {
     let value = value.trim();
     if value.len() != 64 || !value.chars().all(|char| char.is_ascii_hexdigit()) {
@@ -374,5 +417,51 @@ mod tests {
         assert!(!error.contains("10.0.0.2"));
         restore_var("FERRIOXID_TRUSTED_PROXIES", previous_current);
         restore_var("FERRUM_TRUSTED_PROXIES", previous_legacy);
+    }
+
+    #[test]
+    fn mfa_key_is_independent_and_invalid_values_are_not_echoed() {
+        let config = AuthConfig::development();
+        assert_ne!(config.mfa_key, config.csrf_secret);
+        let rendered = format!("{config:?}");
+        assert!(rendered.contains("[redacted]"));
+        assert!(!rendered.contains("ferrioxid-dev-mfa"));
+        assert!(!rendered.contains("ferrioxid-dev-csrf"));
+        let invalid = "not-a-real-mfa-key";
+        assert!(decode_hex_32(invalid).is_none());
+        let error = "FERRIOXID_MFA_KEY must contain 64 hexadecimal characters.";
+        assert!(!error.contains(invalid));
+        let _guard = ENV_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        let previous_env = std::env::var("FERRIOXID_ENV").ok();
+        let previous_mfa = std::env::var("FERRIOXID_MFA_KEY").ok();
+        let previous_csrf = std::env::var("FERRIOXID_CSRF_SECRET").ok();
+        let previous_legacy = std::env::var("FERRUM_CSRF_SECRET").ok();
+        unsafe {
+            std::env::set_var("FERRIOXID_ENV", "production");
+            std::env::set_var("FERRIOXID_CSRF_SECRET", "ab".repeat(32));
+            std::env::remove_var("FERRUM_CSRF_SECRET");
+            std::env::remove_var("FERRIOXID_MFA_KEY");
+        }
+        let missing = AuthConfig::try_from_env().unwrap_err();
+        assert!(missing.contains("FERRIOXID_MFA_KEY"));
+        assert!(missing.contains("64"));
+        unsafe {
+            std::env::set_var("FERRIOXID_MFA_KEY", invalid);
+        }
+        let rejected = AuthConfig::try_from_env().unwrap_err();
+        assert!(rejected.contains("64 hexadecimal"));
+        assert!(!rejected.contains(invalid));
+        unsafe {
+            std::env::set_var("FERRIOXID_MFA_KEY", "cd".repeat(32));
+        }
+        let loaded = AuthConfig::try_from_env().expect("mfa key");
+        assert_eq!(loaded.mfa_key, decode_hex_32(&"cd".repeat(32)).unwrap());
+        assert_ne!(loaded.mfa_key, loaded.csrf_secret);
+        restore_var("FERRIOXID_ENV", previous_env);
+        restore_var("FERRIOXID_MFA_KEY", previous_mfa);
+        restore_var("FERRIOXID_CSRF_SECRET", previous_csrf);
+        restore_var("FERRUM_CSRF_SECRET", previous_legacy);
     }
 }

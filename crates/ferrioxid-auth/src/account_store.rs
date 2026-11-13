@@ -103,6 +103,29 @@ pub async fn confirm_totp(
     }
 }
 
+pub async fn update_totp_secret(
+    db: &impl ConnectionTrait,
+    user_id: Uuid,
+    nonce: &str,
+    ciphertext: &str,
+) -> Result<(), AuthError> {
+    let mut query = Query::update();
+    query
+        .table(Alias::new(MFA_TOTP))
+        .values([
+            (Alias::new("nonce"), text(nonce)),
+            (Alias::new("ciphertext"), text(ciphertext)),
+        ])
+        .and_where(Expr::col(Alias::new("user_id")).eq(uuid_expr(db, user_id)));
+    if execute_rows(db, &query).await? == 1 {
+        Ok(())
+    } else {
+        Err(AuthError::Validation(
+            "totp secret could not be moved".into(),
+        ))
+    }
+}
+
 pub async fn set_totp_step(
     db: &impl ConnectionTrait,
     user_id: Uuid,

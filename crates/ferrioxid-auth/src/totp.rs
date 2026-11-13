@@ -19,10 +19,75 @@ type HmacSha256 = Hmac<Sha256>;
 const ALPHABET: &[u8] = b"ABCDEFGHIJKLMNOPQRSTUVWXYZ234567";
 const RECOVERY_ALPHABET: &[u8] = b"ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
 
-pub fn mfa_key(secret: &[u8; 32]) -> [u8; 32] {
-    let mut mac = <HmacSha256 as Mac>::new_from_slice(secret).expect("mfa key length");
+/// Schlüssel, mit dem ältere TOTP-Geheimnisse und Recovery-Hashes gebaut wurden.
+/// Das ist HMAC-SHA256 über das CSRF-Geheimnis, nicht der aktuelle MFA-Schlüssel.
+pub fn legacy_mfa_key(csrf_secret: &[u8; 32]) -> [u8; 32] {
+    let mut mac = <HmacSha256 as Mac>::new_from_slice(csrf_secret).expect("mfa key length");
     mac.update(b"ferrioxid-mfa-v1");
     mac.finalize().into_bytes().into()
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SealFormat {
+    /// `v2.` und 24 Hex-Zeichen. Nur mit `FERRIOXID_MFA_KEY` zu öffnen.
+    Current,
+    /// Genau 24 Hex-Zeichen. Nur mit dem vom CSRF-Geheimnis abgeleiteten Schlüssel zu öffnen.
+    Legacy,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum RecoveryFormat {
+    /// `v2.` und 64 Hex-Zeichen. HMAC, kein Geheimtext.
+    Current,
+    /// Genau 64 Hex-Zeichen. HMAC mit dem Legacy-Schlüssel, kein Geheimtext.
+    Legacy,
+}
+
+pub fn seal_format(nonce: &str) -> Result<SealFormat, AuthError> {
+    if let Some(rest) = nonce.strip_prefix("v2.") {
+        if is_hex(rest, 24) {
+            return Ok(SealFormat::Current);
+        }
+        return Err(AuthError::Validation("mfa secret could not be read".into()));
+    }
+    if is_hex(nonce, 24) {
+        Ok(SealFormat::Legacy)
+    } else {
+        Err(AuthError::Validation("mfa secret could not be read".into()))
+    }
+}
+
+pub fn recovery_format(value: &str) -> Option<RecoveryFormat> {
+    if let Some(rest) = value.strip_prefix("v2.") {
+        return is_hex(rest, 64).then_some(RecoveryFormat::Current);
+    }
+    is_hex(value, 64).then_some(RecoveryFormat::Legacy)
+}
+
+pub fn current_nonce(nonce_hex: &str) -> String {
+    format!("v2.{nonce_hex}")
+}
+
+pub fn open_stored(
+    mfa_key: &[u8; 32],
+    legacy_key: &[u8; 32],
+    user_id: Uuid,
+    nonce: &str,
+    ciphertext: &str,
+) -> Result<Vec<u8>, AuthError> {
+    match seal_format(nonce)? {
+        SealFormat::Current => {
+            let Some(nonce_hex) = nonce.strip_prefix("v2.") else {
+                return Err(AuthError::Validation("mfa secret could not be read".into()));
+            };
+            open(mfa_key, user_id, nonce_hex, ciphertext)
+        }
+        SealFormat::Legacy => open(legacy_key, user_id, nonce, ciphertext),
+    }
+}
+
+fn is_hex(value: &str, len: usize) -> bool {
+    value.len() == len && value.chars().all(|char| char.is_ascii_hexdigit())
 }
 
 pub fn random_secret() -> Vec<u8> {
@@ -166,8 +231,19 @@ pub fn normalize_recovery(code: &str) -> Result<String, AuthError> {
 }
 
 pub fn recovery_hash(key: &[u8; 32], user_id: Uuid, normalized: &str) -> String {
+    keyed_recovery(key, b"ferrioxid-recovery-v1", user_id, normalized)
+}
+
+pub fn current_recovery_record(key: &[u8; 32], user_id: Uuid, normalized: &str) -> String {
+    format!(
+        "v2.{}",
+        keyed_recovery(key, b"ferrioxid-recovery-v2", user_id, normalized)
+    )
+}
+
+fn keyed_recovery(key: &[u8; 32], label: &[u8], user_id: Uuid, normalized: &str) -> String {
     let mut mac = <HmacSha256 as Mac>::new_from_slice(key).expect("recovery key");
-    mac.update(b"ferrioxid-recovery-v1");
+    mac.update(label);
     mac.update(user_id.as_bytes());
     mac.update(normalized.as_bytes());
     hex(&mac.finalize().into_bytes())
@@ -175,13 +251,27 @@ pub fn recovery_hash(key: &[u8; 32], user_id: Uuid, normalized: &str) -> String 
 
 pub fn reauth_proof(key: &[u8; 32], user_id: Uuid, session_id: Uuid, expires_at: i64) -> String {
     format!(
+        "v2.{expires_at}.{}",
+        reauth_mac(key, b"ferrioxid-reauth-v2", user_id, session_id, expires_at)
+    )
+}
+
+#[cfg(test)]
+pub fn legacy_reauth_proof(
+    key: &[u8; 32],
+    user_id: Uuid,
+    session_id: Uuid,
+    expires_at: i64,
+) -> String {
+    format!(
         "v1.{expires_at}.{}",
-        reauth_mac(key, user_id, session_id, expires_at)
+        reauth_mac(key, b"ferrioxid-reauth-v1", user_id, session_id, expires_at)
     )
 }
 
 pub fn reauth_valid(
-    key: &[u8; 32],
+    mfa_key: &[u8; 32],
+    legacy_key: &[u8; 32],
     user_id: Uuid,
     session_id: Uuid,
     proof: &str,
@@ -191,21 +281,40 @@ pub fn reauth_valid(
     let version = parts.next().unwrap_or("");
     let expires = parts.next().unwrap_or("");
     let mac = parts.next().unwrap_or("");
-    if version != "v1" || parts.next().is_some() {
+    if parts.next().is_some() {
         return false;
     }
+    let key = match version {
+        "v2" => mfa_key,
+        "v1" => legacy_key,
+        _ => return false,
+    };
+    let label: &[u8] = if version == "v2" {
+        b"ferrioxid-reauth-v2"
+    } else {
+        b"ferrioxid-reauth-v1"
+    };
     let Ok(expires_at) = expires.parse::<i64>() else {
         return false;
     };
     if expires_at <= now || expires_at > now.saturating_add(300) {
         return false;
     }
-    constant_eq(&reauth_mac(key, user_id, session_id, expires_at), mac)
+    constant_eq(
+        &reauth_mac(key, label, user_id, session_id, expires_at),
+        mac,
+    )
 }
 
-fn reauth_mac(key: &[u8; 32], user_id: Uuid, session_id: Uuid, expires_at: i64) -> String {
+fn reauth_mac(
+    key: &[u8; 32],
+    label: &[u8],
+    user_id: Uuid,
+    session_id: Uuid,
+    expires_at: i64,
+) -> String {
     let mut mac = <HmacSha256 as Mac>::new_from_slice(key).expect("reauth key");
-    mac.update(b"ferrioxid-reauth-v1");
+    mac.update(label);
     mac.update(user_id.as_bytes());
     mac.update(session_id.as_bytes());
     mac.update(expires_at.to_string().as_bytes());
@@ -254,7 +363,10 @@ fn decode_hex(value: &str) -> Result<Vec<u8>, AuthError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{accept_totp, mfa_key, open, reauth_valid, recovery_hash, seal, totp_code};
+    use super::{
+        accept_totp, legacy_mfa_key, legacy_reauth_proof, open, open_stored, recovery_format,
+        recovery_hash, seal, seal_format, totp_code, RecoveryFormat, SealFormat,
+    };
     use uuid::Uuid;
 
     #[test]
@@ -275,25 +387,77 @@ mod tests {
 
     #[test]
     fn sealed_secret_is_bound_to_the_user_and_codes_do_not_repeat() {
-        let key = mfa_key(b"ferrioxid-dev-csrf-key-32-bytes!");
+        let legacy = legacy_mfa_key(b"ferrioxid-dev-csrf-key-32-bytes!");
+        let mfa = *b"ferrioxid-dev-mfa-key-32-bytes!!";
         let user = Uuid::new_v4();
         let secret = b"12345678901234567890";
-        let (nonce, ciphertext) = seal(&key, user, secret).unwrap();
+        let (nonce, ciphertext) = seal(&legacy, user, secret).unwrap();
         assert!(!ciphertext.contains("12345678901234567890"));
-        assert_eq!(open(&key, user, &nonce, &ciphertext).unwrap(), secret);
-        assert!(open(&key, Uuid::new_v4(), &nonce, &ciphertext).is_err());
+        assert_eq!(open(&legacy, user, &nonce, &ciphertext).unwrap(), secret);
+        assert!(open(&legacy, Uuid::new_v4(), &nonce, &ciphertext).is_err());
+        assert_eq!(seal_format(&nonce).unwrap(), SealFormat::Legacy);
+        assert!(seal_format(&super::current_nonce(&nonce)).is_ok());
         let code = totp_code(secret, 1_700_000_000, 6).unwrap();
         let step = accept_totp(secret, &code, 1_700_000_000, None).unwrap();
         assert!(accept_totp(secret, &code, 1_700_000_000, Some(step)).is_err());
-        let hash = recovery_hash(&key, user, "ABCDEFGHJK");
+        let hash = recovery_hash(&legacy, user, "ABCDEFGHJK");
+        assert_eq!(recovery_format(&hash), Some(RecoveryFormat::Legacy));
+        assert!(seal_format(&hash).is_err());
         assert_ne!(hash, "ABCDEFGHJK");
-        let proof = super::reauth_proof(&key, user, user, 1_300);
-        assert!(reauth_valid(&key, user, user, &proof, 1_000));
-        assert!(!reauth_valid(&key, user, Uuid::new_v4(), &proof, 1_000));
-        let expired = super::reauth_proof(&key, user, user, 1_000);
-        assert!(!reauth_valid(&key, user, user, &expired, 1_000));
-        let too_long = super::reauth_proof(&key, user, user, 1_301);
-        assert!(!reauth_valid(&key, user, user, &too_long, 1_000));
-        assert!(!proof.to_string().contains("ferrioxid-dev"));
+        let current = super::current_recovery_record(&mfa, user, "ABCDEFGHJK");
+        assert_eq!(recovery_format(&current), Some(RecoveryFormat::Current));
+        assert!(seal_format(&current).is_err());
+        assert_ne!(current, hash);
+        assert!(recovery_format("$argon2id$v=19$m=19456,t=2,p=1$salt$hash").is_none());
+        let stored = open_stored(&mfa, &legacy, user, &nonce, &ciphertext).unwrap();
+        assert_eq!(stored, secret);
+        let proof = super::reauth_proof(&mfa, user, user, 1_300);
+        assert!(super::reauth_valid(
+            &mfa, &legacy, user, user, &proof, 1_000
+        ));
+        assert!(!super::reauth_valid(
+            &mfa,
+            &legacy,
+            user,
+            Uuid::new_v4(),
+            &proof,
+            1_000
+        ));
+        let legacy_proof = legacy_reauth_proof(&legacy, user, user, 1_300);
+        assert!(super::reauth_valid(
+            &mfa,
+            &legacy,
+            user,
+            user,
+            &legacy_proof,
+            1_000
+        ));
+        let other_legacy = legacy_mfa_key(b"rotated-csrf-secret-32-bytes!!!!");
+        assert!(!super::reauth_valid(
+            &mfa,
+            &other_legacy,
+            user,
+            user,
+            &legacy_proof,
+            1_000
+        ));
+        assert!(super::reauth_valid(
+            &mfa,
+            &other_legacy,
+            user,
+            user,
+            &proof,
+            1_000
+        ));
+        let expired = super::reauth_proof(&mfa, user, user, 1_000);
+        assert!(!super::reauth_valid(
+            &mfa, &legacy, user, user, &expired, 1_000
+        ));
+        let too_long = super::reauth_proof(&mfa, user, user, 1_301);
+        assert!(!super::reauth_valid(
+            &mfa, &legacy, user, user, &too_long, 1_000
+        ));
+        assert!(!proof.contains("ferrioxid-dev"));
+        assert!(!legacy_proof.contains("ferrioxid-dev"));
     }
 }
