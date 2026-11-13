@@ -135,6 +135,7 @@ a { color: var(--focus); text-underline-offset: 0.15em; }
   border-radius: var(--radius-control);
   text-decoration: none;
 }
+.sidebar nav ul { list-style: none; margin: 0; padding: 0; }
 .sidebar a:hover { background: var(--accent-wash); }
 .sidebar a:focus-visible { outline-color: var(--sidebar-ink); }
 .sidebar a[aria-current="page"] { font-weight: 650; background: var(--accent-wash); text-decoration: none; }
@@ -169,6 +170,8 @@ div.toolbar { justify-content: space-between; }
 .toolbar form, .filters { flex: 1 1 18rem; display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; }
 .filter-fields { display: flex; gap: var(--space-3); align-items: flex-end; flex-wrap: wrap; flex: 1 1 auto; }
 .filter-fields label, .tools form label { display: grid; gap: var(--space-1); align-items: stretch; }
+.checks { list-style: none; margin: 0; padding: 0; }
+.checks li { display: flex; gap: var(--space-2); align-items: center; min-height: 2rem; }
 .section { margin-top: var(--space-6); }
 .stack { display: grid; gap: var(--space-6); }
 label, .label { font-size: var(--label); font-weight: 650; }
