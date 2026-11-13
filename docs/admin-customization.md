@@ -9,7 +9,7 @@ Customize the admin through Rust model attributes. There is no runtime schema bu
 ## Attributes
 
 ```rust
-#[ferrioxid(
+#[fexu(
     table = "products",
     api = "/api/v1/products",
     allow_anonymous = true,

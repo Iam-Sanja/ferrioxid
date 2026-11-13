@@ -2,11 +2,11 @@
 
 [Overview](index.md) · Manifest: [project-manifest.md](project-manifest.md) · Diagnostics: [migration-diagnostics.md](migration-diagnostics.md)
 
-**Implemented:** `crates/ferrioxid-migrations/src/upgrade.rs` and `ferrioxid upgrade`. The Cargo version remains `0.1.0`. v0.21.1 does not change the writing rules: `--yes` continues to create only a missing legacy manifest.
+**Implemented:** `crates/fexu-migrations/src/upgrade.rs` and `fexu upgrade`. The Cargo version remains `0.1.0`. v0.21.1 does not change the writing rules: `--yes` continues to create only a missing legacy manifest.
 
 ## What the command does
 
-The command checks an existing project and can create a missing legacy manifest at `.ferrioxid/project.json` without regenerating the project.
+The command checks an existing project and can create a missing legacy manifest at `.fexu/project.json` without regenerating the project.
 
 The following operations are outside the command’s scope:
 
@@ -22,9 +22,9 @@ The following operations are outside the command’s scope:
 ## Usage
 
 ```powershell
-ferrioxid upgrade --check
-ferrioxid upgrade --dry-run
-ferrioxid upgrade --yes
+fexu upgrade --check
+fexu upgrade --dry-run
+fexu upgrade --yes
 ```
 
 `--check` analyses dependency, manifest and migration situation. `--dry-run` shows the same codes and the planned file changes under the heading `Geplante Dateiänderungen`. Both do not write. `--yes` together with `--check` or `--dry-run` also does not write.
@@ -35,7 +35,7 @@ Without `--yes` nothing is written. The consent is this flag, not a question.
 
 | Action | Meaning |
 |---|---|
-| `upgrade.plan.add .ferrioxid/project.json` | The legacy manifest is missing and may be created. |
+| `upgrade.plan.add .fexu/project.json` | The legacy manifest is missing and may be created. |
 | `upgrade.unchanged` | The file matches its recorded hash, or the legacy manifest already exists |
 | `project.template.legacy` |Unknown origin. Existing files remain|
 | `project.template.outdated` |The template version is not `0.25`. Nothing is replaced|
@@ -45,15 +45,15 @@ Without `--yes` nothing is written. The consent is this flag, not a question.
 | `project.dependency.path` |Local path, also `D:\…` and `D:/…`|
 | `project.dependency.git` |Git dependency|
 | `project.dependency.registry` |Registry dependency|
-| `project.dependency.unavailable` | No Ferrioxid dependency in `Cargo.toml` |
+| `project.dependency.unavailable` | No Fexu dependency in `Cargo.toml` |
 | `upgrade.conflict` | Abort without replacing files |
 | `upgrade.unsafe_path` |The path leaves the project|
 
 ## File safety
 
-Paths must be relative and contain only normal components. `..`, absolute paths and drive prefixes produce `upgrade.unsafe_path`. If the target or an ancestor exists, its canonical path is checked against the project root. Junctions and symlinks that escape the project, including those under `.ferrioxid`, are rejected before writing.
+Paths must be relative and contain only normal components. `..`, absolute paths and drive prefixes produce `upgrade.unsafe_path`. If the target or an ancestor exists, its canonical path is checked against the project root. Junctions and symlinks that escape the project, including those under `.fexu`, are rejected before writing.
 
-The manifest is first written to `.ferrioxid/project.json.partial`, then renamed. An existing partial file is moved to `.ferrioxid/backup/<zeit>/`. If the target appears between planning and writing, the command aborts and preserves it. An interruption before the rename leaves no incomplete `project.json`.
+The manifest is first written to `.fexu/project.json.partial`, then renamed. An existing partial file is moved to `.fexu/backup/<zeit>/`. If the target appears between planning and writing, the command aborts and preserves it. An interruption before the rename leaves no incomplete `project.json`.
 
 Conflicts also prevent the creation of the manifest. The run ends with exit code 1.
 
@@ -63,9 +63,9 @@ Conflicts also prevent the creation of the manifest. The run ends with exit code
 |---|---|
 | 0 |Plan without file conflict. With `--yes` the manifest was created or there was nothing to do|
 | 1 | Invalid project, file conflict, unsafe path or aborted operation |
-| 2 |clap reports an invalid command line before Ferrioxid builds the plan|
+| 2 |clap reports an invalid command line before Fexu builds the plan|
 
-Pending migrations produce a recommendation to run `ferrioxid migrate up`; they are neither a file conflict nor a step performed by upgrade.
+Pending migrations produce a recommendation to run `fexu migrate up`; they are neither a file conflict nor a step performed by upgrade.
 
 ## Limitations
 

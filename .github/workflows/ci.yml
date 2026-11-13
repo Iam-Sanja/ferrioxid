@@ -55,7 +55,7 @@ jobs:
         shell: bash
         run: |
           set -eu
-          cargo build -p ferrioxid-cli --bin embedded-migrate
+          cargo build -p fexu-cli --bin embedded-migrate
           dest=$(mktemp -d)
           work=$(mktemp -d)
           if [ -f target/debug/embedded-migrate.exe ]; then
@@ -83,13 +83,13 @@ jobs:
       postgres:
         image: postgres:16
         env:
-          POSTGRES_USER: ferrioxid
-          POSTGRES_PASSWORD: ferrioxid_dev_only
-          POSTGRES_DB: ferrioxid
+          POSTGRES_USER: fexu
+          POSTGRES_PASSWORD: fexu_dev_only
+          POSTGRES_DB: fexu
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U ferrioxid -d ferrioxid"
+          --health-cmd "pg_isready -U fexu -d fexu"
           --health-interval 10s
           --health-timeout 5s
           --health-retries 5
@@ -108,55 +108,55 @@ jobs:
 
       - name: Prepare isolated migration down database
         env:
-          PGPASSWORD: ferrioxid_dev_only
+          PGPASSWORD: fexu_dev_only
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq postgresql-client > /dev/null
-          psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
-            -c 'DROP DATABASE IF EXISTS ferrioxid_migrations_down_test WITH (FORCE);' \
-            -c 'CREATE DATABASE ferrioxid_migrations_down_test;'
+          psql -h 127.0.0.1 -U fexu -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS fexu_migrations_down_test WITH (FORCE);' \
+            -c 'CREATE DATABASE fexu_migrations_down_test;'
 
       - name: Run the ignored PostgreSQL tests
         env:
-          DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid
-          FERRIOXID_MIGRATIONS_DOWN_DATABASE_URL: postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid_migrations_down_test
-          PGPASSWORD: ferrioxid_dev_only
-          POSTGRES_PASSWORD: ferrioxid_dev_only
+          DATABASE_URL: postgres://fexu:fexu_dev_only@127.0.0.1:5432/fexu
+          FEXU_MIGRATIONS_DOWN_DATABASE_URL: postgres://fexu:fexu_dev_only@127.0.0.1:5432/fexu_migrations_down_test
+          PGPASSWORD: fexu_dev_only
+          POSTGRES_PASSWORD: fexu_dev_only
         run: |
           cargo test -p myshop --test framework_names -- --ignored fresh_postgres_initializes_auth_jobs_and_application
           cargo test -p myshop --test postgres_api -- --ignored postgres_http_roundtrip
-          cargo test -p ferrioxid-migrations --test engine -- --ignored postgres_migration_roundtrip
-          cargo test -p ferrioxid-migrations --test cross_app -- --ignored postgres_enforces_cross_app_foreign_keys
-          cargo test -p ferrioxid-auth --lib -- --ignored postgres_anonymous_session_roundtrip
-          cargo test -p ferrioxid --test money -- --ignored postgres_decimal_and_choice_roundtrip
-          cargo test -p ferrioxid-migrations --lib fixtures::tests::postgres_fixture_roundtrip -- --ignored
-          cargo test -p ferrioxid-migrations --lib down::tests::postgres_reverts_backfill_and_foreign_key -- --ignored
-          cargo test -p ferrioxid-db --lib -- --ignored postgres_filters_and_pages_runtime
-          cargo test -p ferrioxid-db --lib -- --ignored postgres_transaction_query_and_rollback_runtime
-          cargo test -p ferrioxid-db --lib -- --ignored postgres_keyset_annotations_and_many_to_many
-          cargo test -p ferrioxid-db --lib -- --ignored postgres_text_search_relations_count_and_pages
-          cargo test -p ferrioxid-db --lib -- --ignored postgres_admin_search_runtime
-          cargo test -p ferrioxid-db --lib -- --ignored postgres_temporal_filters_and_keyset
-          cargo test -p ferrioxid-migrations --lib fixtures::tests::postgres_temporal_fixture_roundtrip -- --ignored
-          cargo test -p ferrioxid-api --lib testing::tests::postgres_isolated_databases_do_not_share_rows -- --ignored
-          cargo test -p ferrioxid-db --lib write::tests::postgres_shop_cases -- --ignored
-          cargo test -p ferrioxid-db --lib write::tests::postgres_write_security -- --ignored
-          cargo test -p ferrioxid --test api_contract -- --ignored postgres_cursor_filters_and_openapi_describe_the_same_list
-          cargo test -p ferrioxid-db --test backup_restore -- --ignored postgres_dump_and_restore_roundtrip
+          cargo test -p fexu-migrations --test engine -- --ignored postgres_migration_roundtrip
+          cargo test -p fexu-migrations --test cross_app -- --ignored postgres_enforces_cross_app_foreign_keys
+          cargo test -p fexu-auth --lib -- --ignored postgres_anonymous_session_roundtrip
+          cargo test -p fexu --test money -- --ignored postgres_decimal_and_choice_roundtrip
+          cargo test -p fexu-migrations --lib fixtures::tests::postgres_fixture_roundtrip -- --ignored
+          cargo test -p fexu-migrations --lib down::tests::postgres_reverts_backfill_and_foreign_key -- --ignored
+          cargo test -p fexu-db --lib -- --ignored postgres_filters_and_pages_runtime
+          cargo test -p fexu-db --lib -- --ignored postgres_transaction_query_and_rollback_runtime
+          cargo test -p fexu-db --lib -- --ignored postgres_keyset_annotations_and_many_to_many
+          cargo test -p fexu-db --lib -- --ignored postgres_text_search_relations_count_and_pages
+          cargo test -p fexu-db --lib -- --ignored postgres_admin_search_runtime
+          cargo test -p fexu-db --lib -- --ignored postgres_temporal_filters_and_keyset
+          cargo test -p fexu-migrations --lib fixtures::tests::postgres_temporal_fixture_roundtrip -- --ignored
+          cargo test -p fexu-api --lib testing::tests::postgres_isolated_databases_do_not_share_rows -- --ignored
+          cargo test -p fexu-db --lib write::tests::postgres_shop_cases -- --ignored
+          cargo test -p fexu-db --lib write::tests::postgres_write_security -- --ignored
+          cargo test -p fexu --test api_contract -- --ignored postgres_cursor_filters_and_openapi_describe_the_same_list
+          cargo test -p fexu-db --test backup_restore -- --ignored postgres_dump_and_restore_roundtrip
           cargo test -p desk --test flow -- --ignored postgres_same_operations
-          cargo test -p ferrioxid --test embedded_runtime -- --ignored postgres_embedded_auth_and_jobs
-          cargo test -p ferrioxid-db --test grouped_report -- --ignored postgres_grouped_report_scope_json_and_one_to_one
-          cargo test -p ferrioxid-migrations --lib plan::tests::postgres_plan_detects_live_drift_on_a_disposable_database -- --ignored
-          cargo test -p ferrioxid-admin --lib -- --ignored postgres_matching_uses_the_record_id_not_a_similar_name
-          cargo test -p ferrioxid --test integration_regression -- --ignored postgres_inspect_framework_and_plan_stay_read_only
-          cargo build -p ferrioxid-cli --bin embedded-migrate
-          psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
-            -c 'DROP DATABASE IF EXISTS ferrioxid_test_relocated WITH (FORCE);' \
-            -c 'CREATE DATABASE ferrioxid_test_relocated;'
-          DATABASE_URL="postgres://ferrioxid:${POSTGRES_PASSWORD}@127.0.0.1:5432/ferrioxid_test_relocated" \
+          cargo test -p fexu --test embedded_runtime -- --ignored postgres_embedded_auth_and_jobs
+          cargo test -p fexu-db --test grouped_report -- --ignored postgres_grouped_report_scope_json_and_one_to_one
+          cargo test -p fexu-migrations --lib plan::tests::postgres_plan_detects_live_drift_on_a_disposable_database -- --ignored
+          cargo test -p fexu-admin --lib -- --ignored postgres_matching_uses_the_record_id_not_a_similar_name
+          cargo test -p fexu --test integration_regression -- --ignored postgres_inspect_framework_and_plan_stay_read_only
+          cargo build -p fexu-cli --bin embedded-migrate
+          psql -h 127.0.0.1 -U fexu -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS fexu_test_relocated WITH (FORCE);' \
+            -c 'CREATE DATABASE fexu_test_relocated;'
+          DATABASE_URL="postgres://fexu:${POSTGRES_PASSWORD}@127.0.0.1:5432/fexu_test_relocated" \
             ./target/debug/embedded-migrate
-          psql -h 127.0.0.1 -U ferrioxid -d postgres -v ON_ERROR_STOP=1 \
-            -c 'DROP DATABASE IF EXISTS ferrioxid_test_relocated WITH (FORCE);'
+          psql -h 127.0.0.1 -U fexu -d postgres -v ON_ERROR_STOP=1 \
+            -c 'DROP DATABASE IF EXISTS fexu_test_relocated WITH (FORCE);'
 
   browser:
     name: Browser
@@ -190,20 +190,20 @@ jobs:
       - name: Run the fresh-profile admin login test
         working-directory: tests/browser
         env:
-          FERRIOXID_BROWSER_BASE_URL: http://127.0.0.1:4173
+          FEXU_BROWSER_BASE_URL: http://127.0.0.1:4173
         run: |
-          mkdir -p /tmp/ferrioxid-browser
-          DATABASE_URL="sqlite:///tmp/ferrioxid-browser/browser.sqlite3?mode=rwc" BIND_ADDRESS=127.0.0.1:4173 cargo run -p myshop --bin myshop --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" >/tmp/ferrioxid-browser/server.log 2>&1 &
-          echo $! > /tmp/ferrioxid-browser/server.pid
+          mkdir -p /tmp/fexu-browser
+          DATABASE_URL="sqlite:///tmp/fexu-browser/browser.sqlite3?mode=rwc" BIND_ADDRESS=127.0.0.1:4173 cargo run -p myshop --bin myshop --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" >/tmp/fexu-browser/server.log 2>&1 &
+          echo $! > /tmp/fexu-browser/server.pid
           for i in $(seq 1 180); do
             if curl -fsS http://127.0.0.1:4173/admin/login >/dev/null; then
               npx playwright test
               status=$?
-              kill "$(cat /tmp/ferrioxid-browser/server.pid)" || true
+              kill "$(cat /tmp/fexu-browser/server.pid)" || true
               exit $status
             fi
             sleep 2
           done
           echo "myshop did not answer /admin/login"
-          cat /tmp/ferrioxid-browser/server.log || true
+          cat /tmp/fexu-browser/server.log || true
           exit 1

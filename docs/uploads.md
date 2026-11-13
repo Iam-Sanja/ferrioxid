@@ -4,11 +4,11 @@
 
 ## Responsibility
 
-The upload routes are not mounted by default. An application calls `ferrioxid::storage::routes` and mounts the router with `App::merge`. Without auth service, the routes answer with 403.
+The upload routes are not mounted by default. An application calls `fexu::storage::routes` and mounts the router with `App::merge`. Without auth service, the routes answer with 403.
 
 ## Crates and files
 
-- `crates/ferrioxid-storage/src/http.rs`
+- `crates/fexu-storage/src/http.rs`
 - Example: `examples/myshop/src/main.rs`
 - Storage details: [storage.md](storage.md)
 
@@ -35,8 +35,8 @@ Responses are 401 for a missing session, 403 for missing CSRF or auth service, 4
 ## Example
 
 ```rust
-let storage = ferrioxid::storage::LocalStorage::open("media", 1024 * 1024, &["text/plain"])?;
-let app = app.merge(ferrioxid::storage::routes(std::sync::Arc::new(storage)));
+let storage = fexu::storage::LocalStorage::open("media", 1024 * 1024, &["text/plain"])?;
+let app = app.merge(fexu::storage::routes(std::sync::Arc::new(storage)));
 ```
 
 ## Tests

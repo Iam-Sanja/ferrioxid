@@ -14,7 +14,7 @@ http-body-util = "0.1"
 tower = { version = "0.5", features = ["util"] }
 
 [dependencies]
-ferrioxid = { path = "../../crates/ferrioxid", features = ["admin-ui"] }
+fexu = { path = "../../crates/fexu", features = ["admin-ui"] }
 axum.workspace = true
 tokio.workspace = true
 serde.workspace = true

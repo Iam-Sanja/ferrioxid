@@ -1,0 +1,35 @@
+[package]
+name = "fexu-cli"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Command line for the Fexu framework"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories = ["command-line-utilities", "web-programming"]
+
+[[bin]]
+name = "fexu"
+path = "src/main.rs"
+
+[[bin]]
+name = "embedded-migrate"
+path = "src/bin/embedded_migrate.rs"
+
+[dependencies]
+clap.workspace = true
+serde_json.workspace = true
+ctrlc = "3.4"
+fexu-core.workspace = true
+fexu-auth.workspace = true
+fexu-db.workspace = true
+fexu-jobs.workspace = true
+fexu-mail.workspace = true
+fexu-migrations.workspace = true
+notify = "8"
+rpassword.workspace = true
+tokio.workspace = true
+sea-orm.workspace = true
+uuid.workspace = true

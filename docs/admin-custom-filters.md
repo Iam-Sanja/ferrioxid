@@ -9,13 +9,13 @@
 An empty value omits the filter. A choice value must correspond to one of the fixed options, otherwise the list is 422. An equals value is bound by the column type. It is not used as SQL text. Search, sorting, date hierarchy, page size and the query scope of the object rule remain additionally active.
 
 ```rust
-const STATUS: &[ferrioxid::admin::FilterOption] = &[
-    ferrioxid::admin::FilterOption::new("open", "Offen", "Open"),
-    ferrioxid::admin::FilterOption::new("processed", "Bearbeitet", "Processed"),
+const STATUS: &[fexu::admin::FilterOption] = &[
+    fexu::admin::FilterOption::new("open", "Offen", "Open"),
+    fexu::admin::FilterOption::new("processed", "Bearbeitet", "Processed"),
 ];
 
 registry.filter(
-    ferrioxid::admin::AdminFilter::choice("orders", "order_status", "status", STATUS)
+    fexu::admin::AdminFilter::choice("orders", "order_status", "status", STATUS)
         .labels("Status", "Status"),
 )?;
 ```

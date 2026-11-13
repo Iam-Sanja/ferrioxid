@@ -22,9 +22,9 @@ The integration branch `work/integration` combines the four pull requests in ord
 Local, not GitHub CI, and not merged:
 
 - `cargo fmt --all -- --check` passed.
-- `cargo clippy --workspace --all-targets -- -D warnings` passed. The pre-existing `linker_messages` warning on `ferrioxid-macros` remains and is not denied by `-D warnings`.
+- `cargo clippy --workspace --all-targets -- -D warnings` passed. The pre-existing `linker_messages` warning on `fexu-macros` remains and is not denied by `-D warnings`.
 - `cargo test --workspace` passed on SQLite. Ignored PostgreSQL tests in that command were not executed.
-- `postgres_embedded_auth_and_jobs` passed against a disposable database created from the local `postgres` admin database. The populated `ferrioxid` and `ferrioxid_migrations_down_test` databases were unchanged (15 and 1 public tables).
+- `postgres_embedded_auth_and_jobs` passed against a disposable database created from the local `postgres` admin database. The populated `fexu` and `fexu_migrations_down_test` databases were unchanged (15 and 1 public tables).
 - The release `embedded-migrate` binary was copied outside the source tree. It applied auth and jobs, logged in, and enqueued a job on a fresh SQLite file and on a disposable PostgreSQL database. That database was dropped.
 - `cargo tree --workspace --target all --prefix none --locked -i rsa` and the same query for `sqlx-mysql` both printed nothing.
 - Docker is not installed here, so `examples/deploy/compose.yaml` was not started.
@@ -46,7 +46,7 @@ Branch: `feat/orm-migrations-lifecycle`, created from `main` at `53a95aa`. Imple
 | [#82](https://github.com/Iam-Sanja/ferrioxid/issues/82) | `#[field(json)]`, canonical documents, forms, admin, fixtures and OpenAPI | Same run, plus the form binding test | Not run | Not merged |
 | [#83](https://github.com/Iam-Sanja/ferrioxid/issues/83) | Read-only `migrate plan`, live SQLite and PostgreSQL catalog, checksum conflicts | SQLite file bytes unchanged; PostgreSQL disposable database | Not run | Not merged |
 
-The shared application code is `crates/ferrioxid-db/examples/grouped_report`. `sqlite_grouped_report_scope_json_and_one_to_one` and the ignored `postgres_grouped_report_scope_json_and_one_to_one` both call it. The PostgreSQL test was executed locally on 12 November 2026 against PostgreSQL 18.6 through `DisposablePostgres`. The admin URL was the local `postgres` database. The populated databases `ferrioxid` (15 public tables) and `ferrioxid_migrations_down_test` (1 public table) had the same counts after the run. No `ferrioxid_test_*` database remained.
+The shared application code is `crates/fexu-db/examples/grouped_report`. `sqlite_grouped_report_scope_json_and_one_to_one` and the ignored `postgres_grouped_report_scope_json_and_one_to_one` both call it. The PostgreSQL test was executed locally on 12 November 2026 against PostgreSQL 18.6 through `DisposablePostgres`. The admin URL was the local `postgres` database. The populated databases `fexu` (15 public tables) and `fexu_migrations_down_test` (1 public table) had the same counts after the run. No `fexu_test_*` database remained.
 
 `postgres_plan_detects_live_drift_on_a_disposable_database` also passed on that server. A clean applied schema produced no finding. An added column was reported as drift. The disposable database was dropped.
 
@@ -60,14 +60,14 @@ The shared application code is `crates/ferrioxid-db/examples/grouped_report`. `s
 - Boolean, decimal and JSON columns cannot be grouped. Decimal and non-bigint columns cannot be summed.
 - Reports return at most 100 groups and have no offset. `HAVING` accepts only integer measures. Ordering by the average is rejected.
 - One-to-one is a unique UUID foreign key plus an explicit loader. It is not a separate macro relation and it does not load automatically.
-- `migrate plan` reads `sqlite_master` and `PRAGMA` on SQLite, and `information_schema` plus `pg_catalog` on PostgreSQL. History tables named `_ferrioxid_*` are ignored. Pending migrations are not compared as if they were already applied. A checksum or history-order error suppresses the live comparison.
+- `migrate plan` reads `sqlite_master` and `PRAGMA` on SQLite, and `information_schema` plus `pg_catalog` on PostgreSQL. History tables named `_fexu_*` are ignored. Pending migrations are not compared as if they were already applied. A checksum or history-order error suppresses the live comparison.
 - PostgreSQL baseline, automatic type changes to or from JSON, and MySQL remain unimplemented.
 - Changing a column type is still limited to the existing supported pairs. Destructive changes still need `--allow-destructive` on `migrate up` and `migrate down`. The plan command does not perform them.
 
 ## Still open
 
 - Issues stay open until the branch is pushed, reviewed, green in GitHub CI and merged.
-- `postgres_keyset_annotations_and_many_to_many` was not executed in this pass. It targets whatever `DATABASE_URL` points at and drops its own tables there, so it was not pointed at the populated `ferrioxid` database.
+- `postgres_keyset_annotations_and_many_to_many` was not executed in this pass. It targets whatever `DATABASE_URL` points at and drops its own tables there, so it was not pointed at the populated `fexu` database.
 - There is no automatic eager loading, no JSON path query, no decimal average and no offset inside a grouped report.
 - Multi-column foreign-key order on PostgreSQL is taken from the catalog join. The plan test covers a table without a foreign key. A schema with secondary indexes and foreign keys still uses the same name and column comparison as the SQLite baseline.
 
@@ -90,7 +90,7 @@ Offen: keine manuelle Browserabnahme. Die Darstellung wurde über HTTP geprüft,
 
 ### Issue #79
 
-Die typisierte Konfiguration ist das bestehende `AdminModelMeta` aus `#[ferrioxid(admin = true)]`. Eine zweite Admin-Konfiguration wurde nicht angelegt. `docs/admin.md` beschreibt diese Zuordnung.
+Die typisierte Konfiguration ist das bestehende `AdminModelMeta` aus `#[fexu(admin = true)]`. Eine zweite Admin-Konfiguration wurde nicht angelegt. `docs/admin.md` beschreibt diese Zuordnung.
 
 Offen: keine zusätzliche Berechtigung je Aktion über `{permission}.read|create|update|delete` hinaus. Keine neue Startup-Prüfung für app-übergreifende Relationen. Die bestehenden Compile-Time-Prüfungen für Fieldsets und geheime Felder bleiben.
 
@@ -109,9 +109,9 @@ Offen: keine neue Prüfung, die HTML- und JSON-Validierungstexte Feld für Feld 
 ### Tests auf diesem Branch
 
 - SQLite: `matching_uses_the_record_id_not_a_similar_name`, `admin_v018_drafts_inlines_bulk_and_audit`
-- PostgreSQL: `postgres_matching_uses_the_record_id_not_a_similar_name` auf einer Datenbank `ferrioxid_test_<32 hex>`, danach gelöscht
-- Danach: `ferrioxid` 15 öffentliche Tabellen, `ferrioxid_migrations_down_test` 1 öffentliche Tabelle, keine übrige `ferrioxid_test_*`-Datenbank
-- `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` und `cargo build --workspace` waren auf diesem Branch grün. Die bestehende `linker_messages`-Warnung von `ferrioxid-macros` bleibt.
+- PostgreSQL: `postgres_matching_uses_the_record_id_not_a_similar_name` auf einer Datenbank `fexu_test_<32 hex>`, danach gelöscht
+- Danach: `fexu` 15 öffentliche Tabellen, `fexu_migrations_down_test` 1 öffentliche Tabelle, keine übrige `fexu_test_*`-Datenbank
+- `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` und `cargo build --workspace` waren auf diesem Branch grün. Die bestehende `linker_messages`-Warnung von `fexu-macros` bleibt.
 
 ### Browser
 
@@ -123,21 +123,20 @@ Branch: `feat/developer-apps`. Implementation: `938c267a5fb057b3d5c5780ae798ec37
 
 ### Umgesetzt
 
-- `discover_project` lädt `ferrioxid.toml`. Liegt in demselben Verzeichnis nur `ferrum.toml`, wird diese Datei geladen. Liegen beide Dateien dort, bricht das Lesen ab und nennt beide Pfade. Es wird keine der beiden Datenbank-URLs gewählt.
-- `ferrioxid_core::aliased_env` liest `FERRIOXID_<NAME>` und `FERRUM_<NAME>`. Ein gesetzter Name gilt. Gleiche Werte gelten. Unterschiedliche Werte sind ein Fehler, und die Meldung enthält die Werte nicht.
-- `DATABASE_URL` und `BIND_ADDRESS` haben keinen Legacy-Alias.
-- `AuthConfig::try_from_env` und `MailService::try_open` geben den Konflikt zurück. `from_env` und `open` brechen in diesem Fall ab, statt ein Geheimnis still zu wählen.
-- `.ferrum/project.json` und die Tabellennamen `_ferrum_*` bleiben unverändert.
+- `discover_project` lädt nur `fexu.toml`.
+- `fexu_core::aliased_env` liest genau eine `FEXU_<NAME>`-Variable. `DATABASE_URL` und `BIND_ADDRESS` sind keine Framework-Einstellungen.
+- `AuthConfig::try_from_env` und `MailService::try_open` lesen dieselben einzelnen Namen.
+- `.fexu/project.json` und die Tabellennamen `_fexu_*` bleiben unverändert.
 
 ### Issue #19
 
-Erfüllt auf diesem Branch: neue Projekte bleiben bei `ferrioxid.toml`. Ein altes Projekt mit nur `ferrum.toml` wird geladen. Zwei Projektdateien und widersprüchliche Geheimnis-Aliase werden getestet. Die Cargo-Version bleibt `0.1.0`.
+Erfüllt auf diesem Branch: neue Projekte verwenden `fexu.toml`. Die Cargo-Version bleibt `0.1.0`.
 
 Offen: kein eigener PostgreSQL-Lauf für diese Änderung, weil sie keine Datenbank schreibt. Linux-CI ist hier nicht ausgeführt.
 
 ### Issue #86
 
-Nicht in diesem Commit erweitert. `App::install`, `FerrioxidApplication` und `docs/apps.md` beschreiben bereits die statische Registrierung. Ein versioniertes App-Paket, das zwei generierte Projekte ohne Quelländerung installieren, fehlt. Eine Deinstallation, die Daten stehen lässt, ist nicht neu spezifiziert.
+Nicht in diesem Commit erweitert. `App::install`, `FexuApplication` und `docs/apps.md` beschreiben bereits die statische Registrierung. Ein versioniertes App-Paket, das zwei generierte Projekte ohne Quelländerung installieren, fehlt. Eine Deinstallation, die Daten stehen lässt, ist nicht neu spezifiziert.
 
 ### Issue #89
 
@@ -145,7 +144,7 @@ Nicht in diesem Commit erweitert. Listen, Formulare und CSRF bleiben in den best
 
 ### Issue #91
 
-Nicht in diesem Commit erweitert. `ferrioxid check` meldet einen Alias-Konflikt für das CSRF-Geheimnis und das SMTP-Passwort mit dem Variablennamen und ohne den Wert. `ferrioxid dev` startet bereits mit Watch und ohne automatische Migration. Ein sauberer Projektstart von der Installation bis zum laufenden Formular wurde in diesem Commit nicht erneut auf Windows und Linux ausgeführt.
+Nicht in diesem Commit erweitert. `fexu check` meldet einen Alias-Konflikt für das CSRF-Geheimnis und das SMTP-Passwort mit dem Variablennamen und ohne den Wert. `fexu dev` startet bereits mit Watch und ohne automatische Migration. Ein sauberer Projektstart von der Installation bis zum laufenden Formular wurde in diesem Commit nicht erneut auf Windows und Linux ausgeführt.
 
 ### Tests
 
@@ -156,18 +155,18 @@ Nicht in diesem Commit erweitert. `ferrioxid check` meldet einen Alias-Konflikt 
 - `custom_settings_env_and_production_stay_explicit`
 - `conflicting_secret_aliases_fail_closed`
 - `conflicting_smtp_passwords_are_rejected`
-- `cargo clippy --workspace --all-targets -- -D warnings` war grün. Die bestehende `linker_messages`-Warnung von `ferrioxid-macros` bleibt und bricht `-D warnings` nicht ab.
+- `cargo clippy --workspace --all-targets -- -D warnings` war grün. Die bestehende `linker_messages`-Warnung von `fexu-macros` bleibt und bricht `-D warnings` nicht ab.
 - `cargo fmt --all -- --check`, `cargo test --workspace` und `cargo build --workspace` waren auf diesem Branch grün. Der Generator-Test `generated_api_and_fullstack_projects_compile` lief dabei mit.
 
 ### Neue APIs
 
-- `ferrioxid_core::aliased_env`
+- `fexu_core::aliased_env`
 - `AuthConfig::try_from_env`
 - `MailService::try_open`
 
 ### Verhalten
 
-`AuthConfig::from_env` und `MailService::open` bleiben die bisherigen Aufrufe. Sie brechen ab, wenn ein Alias-Paar widersprüchlich ist. Vorher wurden `FERRUM_*` an diesen Stellen ignoriert.
+`AuthConfig::from_env` und `MailService::open` lesen `FEXU_*`. `DATABASE_URL` und `BIND_ADDRESS` bleiben unverändert.
 
 ## Integration branch
 
@@ -176,7 +175,7 @@ Nicht in diesem Commit erweitert. `ferrioxid check` meldet einen Alias-Konflikt 
 Local evidence on 12 November 2026:
 
 - `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace` and `cargo build --workspace` passed.
-- Ignored PostgreSQL tests `postgres_embedded_auth_and_jobs`, `postgres_grouped_report_scope_json_and_one_to_one`, `postgres_plan_detects_live_drift_on_a_disposable_database`, `postgres_matching_uses_the_record_id_not_a_similar_name` and `postgres_inspect_framework_and_plan_stay_read_only` passed against disposable `ferrioxid_test_*` databases created from the local `postgres` admin database.
-- After those runs, `ferrioxid` still had 15 public tables and `ferrioxid_migrations_down_test` still had 1. No `ferrioxid_test_*` database remained.
+- Ignored PostgreSQL tests `postgres_embedded_auth_and_jobs`, `postgres_grouped_report_scope_json_and_one_to_one`, `postgres_plan_detects_live_drift_on_a_disposable_database`, `postgres_matching_uses_the_record_id_not_a_similar_name` and `postgres_inspect_framework_and_plan_stay_read_only` passed against disposable `fexu_test_*` databases created from the local `postgres` admin database.
+- After those runs, `fexu` still had 15 public tables and `fexu_migrations_down_test` still had 1. No `fexu_test_*` database remained.
 - `cargo audit --ignore RUSTSEC-2023-0071` passed. The unfiltered audit still reports only that lockfile-only RSA advisory.
 - GitHub CI has not run for this combined branch. The four source PR branches were not rewritten.

@@ -43,8 +43,8 @@ Desktop.ini
 node_modules/
 
 # Local framework metadata and embedded admin build output.
-.ferrioxid/
-crates/ferrioxid-admin/embedded-admin/
+.fexu/
+crates/fexu-admin/embedded-admin/
 
 # Uploaded example media. The keep-file stays tracked.
 examples/myshop/media/*

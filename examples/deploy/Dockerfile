@@ -3,7 +3,7 @@
 FROM rust:1-bookworm AS build
 WORKDIR /src
 COPY . .
-RUN cargo build --release -p ferrioxid-cli --bin embedded-migrate
+RUN cargo build --release -p fexu-cli --bin embedded-migrate
 
 FROM debian:bookworm-slim
 RUN apt-get update \
@@ -12,5 +12,5 @@ RUN apt-get update \
 COPY --from=build /src/target/release/embedded-migrate /usr/local/bin/embedded-migrate
 USER nobody
 ENV BIND_ADDRESS=0.0.0.0:3000
-ENV FERRIOXID_ALLOW_WILDCARD_BIND=true
+ENV FEXU_ALLOW_WILDCARD_BIND=true
 ENTRYPOINT ["embedded-migrate"]

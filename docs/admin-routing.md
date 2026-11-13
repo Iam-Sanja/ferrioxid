@@ -7,7 +7,7 @@
 | Method | Path | Effect |
 |---|---|---|
 | GET | `/admin`, `/admin/` | Dashboard; requests without a session redirect to login. |
-| GET | `/admin/login` | Render the form; create or reuse `ferrioxid_login_csrf`. |
+| GET | `/admin/login` | Render the form; create or reuse `fexu_login_csrf`. |
 | POST | `/admin/login` | Validate login CSRF, origin and credentials; redirect with 303 on success. |
 | POST | `/admin/logout` |Check the session CSRF and end the session.|
 | POST | `/admin/preferences` |Language and theme. Requires Staff and Session CSRF.|
@@ -41,9 +41,9 @@ GET does not change data. Writing actions are POST and respond to success with 3
 
 ## Login before a session exists
 
-Session CSRF is available only after login. A visitor who already has `ferrioxid_anonymous` can still submit this form: the cookie guard checks `ferrioxid_login_csrf` and does not demand the anonymous session token. The login form therefore uses a separate `ferrioxid_login_csrf` cookie: 64 hex characters, HttpOnly, path `/`, SameSite from auth configuration, `Secure` when the session cookie is secure, and a lifetime of at most ten minutes. `Cache-Control: no-store` keeps the form and cookie together. Tabs reuse the same valid cookie, which is deleted after successful login. JSON `POST /auth/login` does not use this HTML login cookie.
+Session CSRF is available only after login. A visitor who already has `fexu_anonymous` can still submit this form: the cookie guard checks `fexu_login_csrf` and does not demand the anonymous session token. The login form therefore uses a separate `fexu_login_csrf` cookie: 64 hex characters, HttpOnly, path `/`, SameSite from auth configuration, `Secure` when the session cookie is secure, and a lifetime of at most ten minutes. `Cache-Control: no-store` keeps the form and cookie together. Tabs reuse the same valid cookie, which is deleted after successful login. JSON `POST /auth/login` does not use this HTML login cookie.
 
-`Origin`, or `Referer` when Origin is absent, must match the allowlist. When both are missing, origin validation permits the request, but the login cookie and token are still required. `AuthConfig::apply_bound_address` derives loopback origins from `BIND_ADDRESS` or `server.host` and `server.port` in `ferrioxid.toml`. Unless `FERRIOXID_ALLOWED_ORIGINS` is explicitly set, the origins are `http://127.0.0.1:{port}` and `http://localhost:{port}` for the bound port. Public hosts and request Host headers are never added. `Origin: null` is accepted only with `Sec-Fetch-Site: same-origin`, as browsers may send it for a same-origin form with `Referrer-Policy: no-referrer`. Rejection shows “The security check failed”. Logs record the reason code and, for origin rejection, only source, category and port; they never log cookies or tokens.
+`Origin`, or `Referer` when Origin is absent, must match the allowlist. When both are missing, origin validation permits the request, but the login cookie and token are still required. `AuthConfig::apply_bound_address` derives loopback origins from `BIND_ADDRESS` or `server.host` and `server.port` in `fexu.toml`. Unless `FEXU_ALLOWED_ORIGINS` is explicitly set, the origins are `http://127.0.0.1:{port}` and `http://localhost:{port}` for the bound port. Public hosts and request Host headers are never added. `Origin: null` is accepted only with `Sec-Fetch-Site: same-origin`, as browsers may send it for a same-origin form with `Referrer-Policy: no-referrer`. Rejection shows “The security check failed”. Logs record the reason code and, for origin rejection, only source, category and port; they never log cookies or tokens.
 
 `next` is only accepted if the value begins with `/admin`, has a maximum of 200 characters and contains neither `//`, `\`, `://` nor control characters. Everything else becomes `/admin`.
 

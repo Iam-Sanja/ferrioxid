@@ -2,7 +2,7 @@
 
 [Overview](index.md) · Routes: [admin-routing.md](admin-routing.md) Templates: [admin-templates.md](admin-templates.md) Design: [admin-design-system.md](admin-design-system.md)
 
-**Milestone:** v0.22. The Cargo version remains `0.1.0`. Custom pages under `/admin/pages/{key}` share the native server-rendered layout. React, Vite and Node.js are not required. Allowed login origins follow the bind address from `ferrioxid.toml` or `BIND_ADDRESS`. Drafts, has-many inlines, opt-in parent-child forms, bulk actions, history and date hierarchy work without JavaScript. `admin.js` uses `defer` and is not required for submission. Date fields use `type="date"`, `type="time"` and `type="datetime-local"` with a UTC hint.
+**Milestone:** v0.22. The Cargo version remains `0.1.0`. Custom pages under `/admin/pages/{key}` share the native server-rendered layout. React, Vite and Node.js are not required. Allowed login origins follow the bind address from `fexu.toml` or `BIND_ADDRESS`. Drafts, has-many inlines, opt-in parent-child forms, bulk actions, history and date hierarchy work without JavaScript. `admin.js` uses `defer` and is not required for submission. Date fields use `type="date"`, `type="time"` and `type="datetime-local"` with a UTC hint.
 
 ## Purpose
 
@@ -12,7 +12,7 @@ An authenticated user without staff status receives a 403 page with a logout for
 
 ## List columns
 
-`listed_fields` in `crates/ferrioxid-admin/src/html.rs` selects the columns:
+`listed_fields` in `crates/fexu-admin/src/html.rs` selects the columns:
 
 1. If there is at least one field with `#[admin(list_display)]` except `id`, all `list_display` fields in the struct order apply. `id` is included because the macro always sets it as a list column.
 2. Otherwise, the first visible text field, then `id`.
@@ -38,23 +38,23 @@ The JSON API remains under `/admin/api`. It uses the same models, permissions an
 
 | Area |File|
 |---|---|
-|Routes and forms| `crates/ferrioxid-admin/src/html.rs` |
-|JSON API and joint audits| `crates/ferrioxid-admin/src/http.rs` |
-| Templates | `crates/ferrioxid-admin/src/rendering.rs`, `crates/ferrioxid-admin/templates/` |
-| Text and localization | `crates/ferrioxid-admin/src/localization.rs` |
-|CSS and Script| `crates/ferrioxid-admin/static/css/admin.css`, `crates/ferrioxid-admin/static/js/admin.js` |
-| Asset delivery | `crates/ferrioxid-admin/src/assets.rs` |
-| Models | `crates/ferrioxid-admin/src/registry.rs` |
+|Routes and forms| `crates/fexu-admin/src/html.rs` |
+|JSON API and joint audits| `crates/fexu-admin/src/http.rs` |
+| Templates | `crates/fexu-admin/src/rendering.rs`, `crates/fexu-admin/templates/` |
+| Text and localization | `crates/fexu-admin/src/localization.rs` |
+|CSS and Script| `crates/fexu-admin/static/css/admin.css`, `crates/fexu-admin/static/js/admin.js` |
+| Asset delivery | `crates/fexu-admin/src/assets.rs` |
+| Models | `crates/fexu-admin/src/registry.rs` |
 
 `build.rs` does not call npm. CSS, script and templates are in the binary via `include_str!`. The cargo feature `admin-ui` remains as an empty compatibility flag. It doesn’t require a frontend build anymore.
 
 ## Branding
 
-`AdminBranding` reads `ferrioxid.toml`. Titles, headers and application names must not contain HTML. `primary_color` accepts `#rgb` or `#rrggbb`; languages are `de` and `en`, and currency is a three-uppercase-letter code. `--brand` colors the light sidebar only if white text reaches at least 4.5:1 contrast; otherwise it remains `#0f172a`. The dark sidebar does not use `--brand`. Tera escapes values, and database content never uses the `safe` filter. The JSON API returns the configured color.
+`AdminBranding` reads `fexu.toml`. Titles, headers and application names must not contain HTML. `primary_color` accepts `#rgb` or `#rrggbb`; languages are `de` and `en`, and currency is a three-uppercase-letter code. `--brand` colors the light sidebar only if white text reaches at least 4.5:1 contrast; otherwise it remains `#0f172a`. The dark sidebar does not use `--brand`. Tera escapes values, and database content never uses the `safe` filter. The JSON API returns the configured color.
 
 ## Language and presentation
 
-`ferrioxid_locale` and `ferrioxid_theme` are HttpOnly cookies set by `POST /admin/preferences`. Languages are `de` and `en`; themes are `light`, `dark` and `system`. `system` follows `prefers-color-scheme`. With no cookie, the project language and `system` apply. `next` must begin with `/admin` and contain neither a URL scheme nor a host.
+`fexu_locale` and `fexu_theme` are HttpOnly cookies set by `POST /admin/preferences`. Languages are `de` and `en`; themes are `light`, `dark` and `system`. `system` follows `prefers-color-scheme`. With no cookie, the project language and `system` apply. `next` must begin with `/admin` and contain neither a URL scheme nor a host.
 
 ## Limitations
 

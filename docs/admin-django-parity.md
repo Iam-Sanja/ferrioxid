@@ -1,4 +1,4 @@
-# Django admin and Ferrioxid
+# Django admin and Fexu
 
 [Overview](index.md) · Roadmap: [roadmap.md](roadmap.md) · UX: [admin-ux-backlog.md](admin-ux-backlog.md)
 
@@ -13,23 +13,23 @@ Status values:
 
 ## Lists
 
-| Django | Ferrioxid | Status | Phase | Files |
+| Django | Fexu | Status | Phase | Files |
 |---|---|---|---|---|
-| `list_display` |`#[admin(list_display)]` has priority. Without further marking: first visible text field, otherwise another visible field, plus `id`| Implemented | — | `ferrioxid-macros`, `html.rs` `listed_fields`, `templates/models/list.html` |
+| `list_display` |`#[admin(list_display)]` has priority. Without further marking: first visible text field, otherwise another visible field, plus `id`| Implemented | — | `fexu-macros`, `html.rs` `listed_fields`, `templates/models/list.html` |
 | `list_display_links` |`#[admin(list_link)]`. Without marking the first listed column except `id`| Implemented | — | `list.html`, [admin-list-configuration.md](admin-list-configuration.md) |
 | `list_filter` |`filterable` and registered `AdminFilter`| Implemented |Bool, foreign key, number and fixed selections. Date ranges remain open| [admin-custom-filters.md](admin-custom-filters.md) |
 | `search_fields` |`searchable` on string columns, parameters `q`| Implemented | — | Macro, `html.rs` |
 | `ordering` |`admin_ordering`, otherwise `id`. A query `sort` has priority and is checked against the metadata| Implemented | — | `html.rs` `resolved_sort` |
 | `list_per_page` |`admin_per_page`, 1 to 100, HTML specification 25. JSON remains at 100| Implemented | — | `html.rs` |
 | `list_max_show_all` | No “show all” mode; page size is capped. | Implemented | — | `html.rs` |
-| `list_select_related` |No join. Display names come from one query per destination table and page| Partial | — | `ferrioxid-db` `query_labels` |
+| `list_select_related` |No join. Display names come from one query per destination table and page| Partial | — | `fexu-db` `query_labels` |
 | `date_hierarchy` |`admin_date_hierarchy` on `NaiveDate` or `DateTime<Utc>`| Implemented |UTC calendar, maximum 100 groups, Query scope remains| [admin-date-hierarchy.md](admin-date-hierarchy.md) |
 |Actions on several lines|Checkbox per line, `scope=page` for the current page, registered action, confirmation page| Implemented |Delete, activate, deactivate and `AdminAction`. All or nothing in a transaction| [admin-bulk-actions.md](admin-bulk-actions.md) |
 | Extra list rows | No additional rows beneath a record | Missing | Open | Template |
 
 ## Forms
 
-| Django | Ferrioxid | Status | Phase | Files |
+| Django | Fexu | Status | Phase | Files |
 |---|---|---|---|---|
 | `fields` |Visible fields come from `AdminFieldMeta`, minus hidden and sensitive| Implemented | — | `visible_fields` |
 | `exclude` |`hidden` hides and `reject_locked` rejects POST| Partial | — | Macro, `html.rs` |
@@ -40,7 +40,7 @@ Status values:
 | `filter_horizontal` / `filter_vertical` |No multiple selection with two lists|Not suitable as a JavaScript widget. Multiple selection without script can later be a checkbox group|v0.18, only if Many-to-Many exists| — |
 | `formfield_overrides` |`AdminWidget` for text, text area, email, URL, number and read-only| Partial |Foreign keys remain the built-in select| [admin-custom-widgets.md](admin-custom-widgets.md) |
 | Initial values |No default from the admin configuration. Database defaults remain in the migration| Missing | v0.17 | Form handler |
-| Validation |Field rules and `can_create` run on the server side. Errors are in the field| Implemented | — | `ferrioxid-forms`, `html.rs` |
+| Validation |Field rules and `can_create` run on the server side. Errors are in the field| Implemented | — | `fexu-forms`, `html.rs` |
 | Client-side validation | No JavaScript validation before POST | Not applicable as a requirement; server-side validation is authoritative | — | — |
 
 ## Relations
@@ -93,7 +93,7 @@ Status values:
 | Grant superuser access | Not supported in the admin |Remains CLI. The admin responds 403 to superuser mutation|
 | Self-lockout | Implemented |Your own deactivation and own staff withdrawal are blocked|
 
-## What Ferrioxid does not adopt
+## What Fexu does not adopt
 
 - Same class and method signature as `django.contrib.admin`.
 - Django templates, Django forms or the Django design.

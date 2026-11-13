@@ -26,8 +26,8 @@ let visible = product.category_scoped(&db, &scope).await?;
 
 | Field |Return|
 |---|---|
-| `Option<Uuid>` | `Result<Option<Category>, FerrioxidError>` |
-| `Uuid` | `Result<Category, FerrioxidError>` |
+| `Option<Uuid>` | `Result<Option<Category>, FexuError>` |
+| `Uuid` | `Result<Category, FexuError>` |
 
 If the optional key is `None`, `Ok(None)` comes and there is no second query. If a key is set and the parent line is missing, `NotFound` comes. With an effective foreign key, this only occurs if the database does not contain the constraint. An invalid key is already rejected when writing.
 
@@ -36,7 +36,7 @@ If the optional key is `None`, `Ok(None)` comes and there is no second query. If
 The opposite direction must be explicit. The macro does not see the child models.
 
 ```rust
-#[ferrioxid(
+#[fexu(
     table = "categories",
     api = "/api/v1/categories",
     allow_anonymous = true,
@@ -57,7 +57,7 @@ let products = category.products(&db).await?;
 let visible = category.products_scoped(&db, &scope).await?;
 ```
 
-The return is `Result<Vec<Product>, FerrioxidError>`. No children make an empty vector, no error. One statement orders the lines by `id`. `products` uses `QueryScope::All`. `products_scoped` applies the scope and calls `load_children`. Neither method caps the number of child rows. Page with `Product::query()` when a parent can own a large set.
+The return is `Result<Vec<Product>, FexuError>`. No children make an empty vector, no error. One statement orders the lines by `id`. `products` uses `QueryScope::All`. `products_scoped` applies the scope and calls `load_children`. Neither method caps the number of child rows. Page with `Product::query()` when a parent can own a large set.
 
 Mutual module references are allowed because the types are only in method signatures. `myshop` separates `category.rs` and `product.rs`.
 
@@ -66,8 +66,8 @@ Mutual module references are allowed because the types are only in method signat
 `product.category(&db)` and `category.products(&db)` each run one query. A loop that calls the lazy method is still N+1. The batch functions are the supported way to avoid that.
 
 ```rust
-use ferrioxid::db::{col, load_by_ids, load_children, ModelQuery};
-use ferrioxid::uuid::Uuid;
+use fexu::db::{col, load_by_ids, load_children, ModelQuery};
+use fexu::uuid::Uuid;
 
 // 5. Twenty cart lines load their products in one statement, not twenty.
 let lines = CartLine::query()
@@ -91,13 +91,13 @@ The returned child set is not limited to 100 rows. A parent with a very large co
 
 Calling `product.category(&db)` inside a loop does not become a batch. `load_many_to_many` is the explicit join-table load. There is no automatic join API.
 
-`load_one_to_one` loads one child per parent through a unique UUID foreign key. The column must declare `foreign_table` and `unique`. Parents are read in batches of at most 100 identifiers. `QueryScope::None` returns no rows. A second stored row for one parent is `Validation` and is not returned as a list. A column that is not a unique foreign key is rejected before a statement is sent. The example `crates/ferrioxid-db/examples/grouped_report` uses this loader and a grouped report on SQLite and on a disposable PostgreSQL database.
+`load_one_to_one` loads one child per parent through a unique UUID foreign key. The column must declare `foreign_table` and `unique`. Parents are read in batches of at most 100 identifiers. `QueryScope::None` returns no rows. A second stored row for one parent is `Validation` and is not returned as a list. A column that is not a unique foreign key is rejected before a statement is sent. The example `crates/fexu-db/examples/grouped_report` uses this loader and a grouped report on SQLite and on a disposable PostgreSQL database.
 
 The repository methods `list`, `get`, `create`, `update` and `delete` remain unchanged. The relationship methods are separate methods on the model, not new repository methods.
 
 ## HTTP
 
-There are no additional routes for relationships. `GET /categories/{id}/products` does not exist. The CRUD routes of the registered models remain. Unique and foreign key violations become `FerrioxidError::Validation` and thus HTTP 422. The answer contains the fixed English text `unique constraint violated` or `foreign key constraint violated`, not the SQL and not the database message. A missing single line remains 404. An unreleased route remains 403. An unknown database error remains 500.
+There are no additional routes for relationships. `GET /categories/{id}/products` does not exist. The CRUD routes of the registered models remain. Unique and foreign key violations become `FexuError::Validation` and thus HTTP 422. The answer contains the fixed English text `unique constraint violated` or `foreign key constraint violated`, not the SQL and not the database message. A missing single line remains 404. An unreleased route remains 403. An unknown database error remains 500.
 
 `DELETE` of a parent line with `on_delete = "restrict"` and existing children answers 422.
 

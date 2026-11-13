@@ -1,7 +1,7 @@
-use ferrioxid::prelude::*;
+use fexu::prelude::*;
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "order_lines",
     api = "/api/v1/order_lines",
     admin = true,

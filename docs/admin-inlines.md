@@ -7,7 +7,7 @@
 The attribute must match an existing `has_many` relation. It explicitly names the child table so models with identically named columns cannot be confused.
 
 ```rust
-#[ferrioxid(
+#[fexu(
     has_many = "products=super::product::Product.category_id",
     admin_inline = "products=products.category_id"
 )]

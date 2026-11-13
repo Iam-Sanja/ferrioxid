@@ -1,6 +1,6 @@
 # Fixtures
 
-[Overview](index.md) · **Implemented in this pull request:** `crates/ferrioxid-migrations/src/fixtures.rs` and `ferrioxid dumpdata` / `ferrioxid loaddata`.
+[Overview](index.md) · **Implemented in this pull request:** `crates/fexu-migrations/src/fixtures.rs` and `fexu dumpdata` / `fexu loaddata`.
 
 Fixtures move rows. They are not migrations, they do not change tables, and the JSON file does not execute code.
 
@@ -8,7 +8,7 @@ Fixtures move rows. They are not migrations, they do not change tables, and the 
 
 ```json
 {
-  "ferrioxid": 1,
+  "fexu": 1,
   "records": [
     {
       "model": "products",
@@ -38,14 +38,14 @@ The loader orders records by foreign keys. A product may appear before its categ
 ## Commands
 
 ```powershell
-ferrioxid dumpdata
-ferrioxid dumpdata --model products --output fixtures/products.json
-ferrioxid dumpdata --app shop
-ferrioxid loaddata fixtures/catalog.json
-ferrioxid loaddata fixtures/catalog.json --dry-run
-ferrioxid loaddata fixtures/catalog.json --upsert
-ferrioxid loaddata fixtures/catalog.json --model products
-ferrioxid loaddata fixtures/catalog.json --truncate --yes
+fexu dumpdata
+fexu dumpdata --model products --output fixtures/products.json
+fexu dumpdata --app shop
+fexu loaddata fixtures/catalog.json
+fexu loaddata fixtures/catalog.json --dry-run
+fexu loaddata fixtures/catalog.json --upsert
+fexu loaddata fixtures/catalog.json --model products
+fexu loaddata fixtures/catalog.json --truncate --yes
 ```
 
 `dumpdata` prints the fixture, or replaces the file named by `--output`. It prints row contents. Do not point it at a database you are not allowed to export.
@@ -57,7 +57,7 @@ Exit code `0` means the command finished. Exit code `2` means the invocation its
 ## Library
 
 ```rust
-use ferrioxid::migrations::{dump_fixture, load_fixture, parse_fixture, LoadRequest};
+use fexu::migrations::{dump_fixture, load_fixture, parse_fixture, LoadRequest};
 
 let file = parse_fixture(include_str!("../fixtures/catalog.json"))?;
 let request = LoadRequest {
@@ -74,7 +74,7 @@ assert!(report.written);
 
 SQLite and PostgreSQL use the same JSON file. Decimal columns are stored as the 16-byte coefficient from [models.md](models.md), not as `REAL` or text, so a later dump prints the same decimal string. Choice columns stay text. On PostgreSQL, UUID, date, time and datetime values are bound as native parameters; SQLite binds the canonical text. Nulls use the same typed parameter family. Identifiers in SQL are quoted and must already be plain identifiers; values are bound parameters.
 
-The import is one transaction. A failure rolls back every insert and every `--truncate` delete from that command. SQLite foreign keys are enabled on the Ferrioxid connection, so a truncate that would orphan a row outside the selected tables fails and rolls back.
+The import is one transaction. A failure rolls back every insert and every `--truncate` delete from that command. SQLite foreign keys are enabled on the Fexu connection, so a truncate that would orphan a row outside the selected tables fails and rolls back.
 
 These cases are not reordered or repaired:
 

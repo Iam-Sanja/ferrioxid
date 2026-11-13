@@ -1,27 +1,27 @@
-# Ferrioxid – public framework facade
+# Fexu – public framework facade
 
-[Overview](index.md) · **Implemented file:** `crates/ferrioxid/src/lib.rs`.
+[Overview](index.md) · **Implemented file:** `crates/fexu/src/lib.rs`.
 
 ## Task (Implemented)
 
-The `ferrioxid`-Crate is the public entry point. It exports `App`, `FerrioxidModel` (derive macro) and wrapper namespaces for the libraries used. The `prelude` block exports `App`, `FerrioxidModel`, `Uuid`.
+The `fexu`-Crate is the public entry point. It exports `App`, `FexuModel` (derive macro) and wrapper namespaces for the libraries used. The `prelude` block exports `App`, `FexuModel`, `Uuid`.
 
 ### Current exports
 
-- `ferrioxid::App`, `ferrioxid::pages`, `ferrioxid::web`
-- `ferrioxid::forms`, `ferrioxid::static_files`, `ferrioxid::storage`, `ferrioxid::cache`, `ferrioxid::middleware`
-- `ferrioxid::core` (`ferrioxid-core`)
-- `ferrioxid::db` (`ferrioxid-db`)
-- `ferrioxid::FerrioxidModel` (Macro)
-- `ferrioxid::sea_orm`, `ferrioxid::serde`, `ferrioxid::serde_json`, `ferrioxid::uuid`, `ferrioxid::async_trait`
-- `ferrioxid::prelude::{App, FerrioxidModel, Uuid}`
+- `fexu::App`, `fexu::pages`, `fexu::web`
+- `fexu::forms`, `fexu::static_files`, `fexu::storage`, `fexu::cache`, `fexu::middleware`
+- `fexu::core` (`fexu-core`)
+- `fexu::db` (`fexu-db`)
+- `fexu::FexuModel` (Macro)
+- `fexu::sea_orm`, `fexu::serde`, `fexu::serde_json`, `fexu::uuid`, `fexu::async_trait`
+- `fexu::prelude::{App, FexuModel, Uuid}`
 
 ### Developer usage
 
 ```rust
-use ferrioxid::prelude::*;
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(table = "products", api = "/api/v1/products", allow_anonymous = true)]
+use fexu::prelude::*;
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(table = "products", api = "/api/v1/products", allow_anonymous = true)]
 pub struct Product {
     #[field(primary_key, auto)] pub id: Uuid,
     #[field(required)] pub name: String,
@@ -32,7 +32,7 @@ pub struct Product {
 
 ## Compatibility rules
 
-1. The macro references generated paths such as `::ferrioxid::db::...`: changes to re-exports directly affect each user model.
+1. The macro references generated paths such as `::fexu::db::...`: changes to re-exports directly affect each user model.
 2. New trait bound or new mandatory fields can be build-breaking.
 3. The macro generates public DTO names such as `ProductCreate`; changing them requires a migration plan.
 4. Do not use `prelude` as a collection point for all internal implementation details.

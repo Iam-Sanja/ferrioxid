@@ -1,0 +1,36 @@
+[package]
+name = "fexu-auth"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Sessions and passwords for the Fexu framework"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
+
+[dependencies]
+fexu-core.workspace = true
+fexu-db.workspace = true
+fexu-migrations.workspace = true
+fexu-mail.workspace = true
+aes-gcm = "0.10"
+argon2.workspace = true
+async-trait.workspace = true
+axum.workspace = true
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+sha1 = "0.10"
+sha2.workspace = true
+hmac = "0.12"
+getrandom = "0.2"
+thiserror.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }

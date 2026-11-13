@@ -9,7 +9,7 @@ homepage.workspace = true
 publish = false
 
 [dependencies]
-ferrioxid = { path = "../../crates/ferrioxid" }
+fexu = { path = "../../crates/fexu" }
 axum.workspace = true
 tokio.workspace = true
 serde.workspace = true

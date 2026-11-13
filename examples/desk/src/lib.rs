@@ -1,5 +1,5 @@
 //! Kleine Desk-Anwendung. Geschäftslogik steht in [`shop`] und verwendet nur
-//! die öffentliche Ferrioxid-API.
+//! die öffentliche Fexu-API.
 
 pub mod models;
 pub mod shop;
@@ -8,12 +8,12 @@ use std::path::Path;
 
 use axum::response::Html;
 use axum::routing::get;
-use ferrioxid::apps::{AppConfig, AppError, FerrioxidApplication, Registration, TemplateMode};
-use ferrioxid::urls::{UrlError, UrlSet};
+use fexu::apps::{AppConfig, AppError, FexuApplication, Registration, TemplateMode};
+use fexu::urls::{UrlError, UrlSet};
 
 pub struct DeskApp;
 
-impl FerrioxidApplication for DeskApp {
+impl FexuApplication for DeskApp {
     fn config(&self) -> AppConfig {
         AppConfig::new("desk").label("Desk").prefix("/desk")
     }

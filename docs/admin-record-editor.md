@@ -54,9 +54,9 @@ authorization tests or perform browser-driven database writes.
 
 ```powershell
 $fixturePath = Join-Path $env:TEMP ([guid]::NewGuid().ToString())
-$env:FERRIOXID_BROWSER_FIXTURES = $fixturePath
+$env:FEXU_BROWSER_FIXTURES = $fixturePath
 cargo test -p myshop --test admin_html canonical_editors_preserve_permissions_readonly_fields_roles_and_navigation
-Remove-Item Env:FERRIOXID_BROWSER_FIXTURES
+Remove-Item Env:FEXU_BROWSER_FIXTURES
 python -m pip install playwright
 python -m playwright install chromium
 python scripts/test_admin_navigation.py --fixtures $fixturePath --artifacts "$env:TEMP/admin-editor-screenshots"

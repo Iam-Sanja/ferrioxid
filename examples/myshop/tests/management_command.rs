@@ -3,8 +3,8 @@
 //! Bad fixtures are unique files under the system temp directory. The test does
 //! not create or delete `examples/myshop/fixtures/bad-seed.json`.
 
-use ferrioxid::migrations::discover_project;
-use ferrioxid::sea_orm::ConnectionTrait;
+use fexu::migrations::discover_project;
+use fexu::sea_orm::ConnectionTrait;
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicU64, Ordering};
 
@@ -30,7 +30,7 @@ fn unique_path(prefix: &str, extension: &str) -> PathBuf {
 }
 
 fn database() -> (TempFile, String) {
-    let path = unique_path("ferrioxid-seed", "sqlite3");
+    let path = unique_path("fexu-seed", "sqlite3");
     let url = format!(
         "sqlite://{}?mode=rwc",
         path.display().to_string().replace('\\', "/")
@@ -39,7 +39,7 @@ fn database() -> (TempFile, String) {
 }
 
 fn temp_fixture(body: &str) -> TempFile {
-    let path = unique_path("ferrioxid-fixture", "json");
+    let path = unique_path("fexu-fixture", "json");
     std::fs::write(&path, body).expect("temp fixture");
     TempFile(path)
 }
@@ -49,9 +49,9 @@ fn shared_source_fixture() -> PathBuf {
 }
 
 async fn product_count(url: &str) -> usize {
-    let db = ferrioxid::db::connect(url).await.unwrap();
-    db.query_all(ferrioxid::sea_orm::Statement::from_string(
-        ferrioxid::sea_orm::DatabaseBackend::Sqlite,
+    let db = fexu::db::connect(url).await.unwrap();
+    db.query_all(fexu::sea_orm::Statement::from_string(
+        fexu::sea_orm::DatabaseBackend::Sqlite,
         "SELECT id FROM products",
     ))
     .await
@@ -85,7 +85,7 @@ async fn seed_shop_is_idempotent_and_a_bad_file_rolls_back() {
 
     let bad = temp_fixture(
         r#"{
-          "ferrioxid": 1,
+          "fexu": 1,
           "records": [
             {
               "model": "categories",
@@ -121,10 +121,10 @@ async fn seed_shop_is_idempotent_and_a_bad_file_rolls_back() {
     .await;
     assert_eq!(failed, 1);
     assert_eq!(product_count(&url).await, 2);
-    let reopened = ferrioxid::db::connect(&url).await.unwrap();
+    let reopened = fexu::db::connect(&url).await.unwrap();
     let names = reopened
-        .query_all(ferrioxid::sea_orm::Statement::from_string(
-            ferrioxid::sea_orm::DatabaseBackend::Sqlite,
+        .query_all(fexu::sea_orm::Statement::from_string(
+            fexu::sea_orm::DatabaseBackend::Sqlite,
             "SELECT name FROM categories ORDER BY name",
         ))
         .await
@@ -163,8 +163,8 @@ async fn seed_shop_rejects_escaped_paths_without_opening_the_database() {
     assert!(!database_file.0.exists());
     assert_eq!(shared.exists(), shared_before);
 
-    let first = temp_fixture("{\"ferrioxid\":1,\"records\":[]}");
-    let second = temp_fixture("{\"ferrioxid\":1,\"records\":[]}");
+    let first = temp_fixture("{\"fexu\":1,\"records\":[]}");
+    let second = temp_fixture("{\"fexu\":1,\"records\":[]}");
     assert_ne!(first.0, second.0);
     assert!(first.0.starts_with(std::env::temp_dir()));
     assert!(second.0.starts_with(std::env::temp_dir()));

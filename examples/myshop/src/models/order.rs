@@ -1,7 +1,7 @@
-use ferrioxid::prelude::*;
-use ferrioxid::FerrioxidChoice;
+use fexu::prelude::*;
+use fexu::FexuChoice;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FerrioxidChoice)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FexuChoice)]
 pub enum OrderStatus {
     #[choice(value = "pending", de = "Offen", en = "Pending")]
     Pending,
@@ -13,8 +13,8 @@ pub enum OrderStatus {
     Cancelled,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "orders",
     api = "/api/v1/orders",
     admin = true,

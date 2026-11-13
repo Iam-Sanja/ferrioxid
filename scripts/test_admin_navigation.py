@@ -1,6 +1,6 @@
 """Browser regressions against HTML captured from the actual Rust HTTP integration test.
 
-Generate a fresh fixture directory with FERRIOXID_BROWSER_FIXTURES set while running
+Generate a fresh fixture directory with FEXU_BROWSER_FIXTURES set while running
 canonical_editors_preserve_permissions_readonly_fields_roles_and_navigation.
 Requires the development-only playwright package and Chromium (or --browser-executable).
 """
@@ -28,7 +28,7 @@ def main():
         routes["user"]: "user.html", "/admin/directory/roles": "roles.html",
         routes["role"]: "role.html",
     }
-    assets = root / "crates/ferrioxid-admin/static"
+    assets = root / "crates/fexu-admin/static"
 
     class Handler(BaseHTTPRequestHandler):
         def do_GET(self):

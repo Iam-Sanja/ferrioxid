@@ -2,7 +2,7 @@
 
 **Milestone:** v0.19. The Cargo version remains `0.1.0`.
 
-Ferrioxid distinguishes three types. They are not converted into each other.
+Fexu distinguishes three types. They are not converted into each other.
 
 | Rust | `ColumnKind` | Meaning | Canonical string |
 |---|---|---|---|
@@ -34,12 +34,12 @@ A UTC `+00:00` offset is accepted on input and serialized as `Z`. Other offsets 
 | Time | `<input type="time">` |
 | DateTime | `<input type="datetime-local">` |
 
-`datetime-local` does not contain a zone. Ferrioxid treats the value as UTC and says so in the Note. `2026-11-07T13:30` becomes `2026-11-07T13:30:00Z`. There is no conversion to the time zone of the browser and therefore no summer time gap.
+`datetime-local` does not contain a zone. Fexu treats the value as UTC and says so in the Note. `2026-11-07T13:30` becomes `2026-11-07T13:30:00Z`. There is no conversion to the time zone of the browser and therefore no summer time gap.
 
 ## Model
 
 ```rust
-#[ferrioxid(table = "events", api = "/api/v1/events", admin = true, admin_date_hierarchy = "event_date")]
+#[fexu(table = "events", api = "/api/v1/events", admin = true, admin_date_hierarchy = "event_date")]
 pub struct Event {
     pub event_date: NaiveDate,
     pub start_time: Option<NaiveTime>,
@@ -47,7 +47,7 @@ pub struct Event {
 }
 ```
 
-The types are exported through `ferrioxid::prelude`. Existing models do not need to adopt them.
+The types are exported through `fexu::prelude`. Existing models do not need to adopt them.
 
 ## Limitations
 

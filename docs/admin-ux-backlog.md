@@ -41,7 +41,7 @@ Implemented in v0.14. Active, Staff and Superuser are independent flags. The CLI
 ### Acceptance criteria
 
 - Neither login nor an admin request silently sets `is_staff`.
-- `ferrioxid admin create-user --superuser` without `--staff` reports that staff access is required for the admin while preserving the requested flags.
+- `fexu admin create-user --superuser` without `--staff` reports that staff access is required for the admin while preserving the requested flags.
 - The 403 page explains the missing staff flag without revealing whether other accounts exist.
 - Active, Staff and Superuser are expressed in words rather than color alone.
 - [auth.md](auth.md) documents the combinations.
@@ -60,7 +60,7 @@ The CLI reports that a superuser without staff cannot enter the admin and preser
 
 ### Files
 
-`crates/ferrioxid-cli/src/main.rs`, `crates/ferrioxid-cli/src/text.rs`, `html.rs`, `templates/directory/users.html`, `templates/errors/error.html`, `docs/auth.md`.
+`crates/fexu-cli/src/main.rs`, `crates/fexu-cli/src/text.rs`, `html.rs`, `templates/directory/users.html`, `templates/errors/error.html`, `docs/auth.md`.
 
 ## P0 – List columns
 
@@ -86,7 +86,7 @@ Implemented in v0.14. The current column rules are in [admin-native.md](admin-na
 
 ### Files
 
-`crates/ferrioxid-macros/src/lib.rs`, `crates/ferrioxid-admin/src/registry.rs`, `crates/ferrioxid-admin/src/html.rs`, `templates/models/list.html`, `crates/ferrioxid-cli/src/scaffold.rs`, `examples/myshop/tests/admin_html.rs`.
+`crates/fexu-macros/src/lib.rs`, `crates/fexu-admin/src/registry.rs`, `crates/fexu-admin/src/html.rs`, `templates/models/list.html`, `crates/fexu-cli/src/scaffold.rs`, `examples/myshop/tests/admin_html.rs`.
 
 The generator marks the name field with `list_display` in new fullstack projects so explicit selection and fallback agree.
 
@@ -152,7 +152,7 @@ User, password, session and confirmation requirements are implemented. Drafts, i
 
 ### Files
 
-`html.rs`, `templates/directory/`, the `ferrioxid-auth` service methods used by the CLI, `admin_html.rs`, `admin_http.rs`. No migration is needed while the existing auth tables suffice.
+`html.rs`, `templates/directory/`, the `fexu-auth` service methods used by the CLI, `admin_html.rs`, `admin_http.rs`. No migration is needed while the existing auth tables suffice.
 
 ## Dependencies
 
@@ -164,4 +164,4 @@ v0.14 Abmelden, Flags, Spalten
         → v0.18 Entwürfe, Inlines, Aktionen, Historie   umgesetzt
 ```
 
-The historical diagram is retained verbatim. v0.16 uses `AuthService` rather than duplicating CLI password rules. Audit records use `_ferrioxid_admin_audit`; template names remain fixed.
+The historical diagram is retained verbatim. v0.16 uses `AuthService` rather than duplicating CLI password rules. Audit records use `_fexu_admin_audit`; template names remain fixed.

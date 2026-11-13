@@ -4,24 +4,24 @@
 
 ## Responsibility
 
-`ferrioxid-core::validation` is the common rule kernel for form fields. Generated model checks now emit the same stable codes, with an optional numeric suffix, instead of English sentences.
+`fexu-core::validation` is the common rule kernel for form fields. Generated model checks now emit the same stable codes, with an optional numeric suffix, instead of English sentences.
 
 ## Crates and files
 
-- `crates/ferrioxid-core/src/validation.rs`
-- Caller: `crates/ferrioxid-forms/src/lib.rs`
-- Display catalog: `crates/ferrioxid-core/src/messages.rs`
-- Model macro: `crates/ferrioxid-macros/src/lib.rs`
+- `crates/fexu-core/src/validation.rs`
+- Caller: `crates/fexu-forms/src/lib.rs`
+- Display catalog: `crates/fexu-core/src/messages.rs`
+- Model macro: `crates/fexu-macros/src/lib.rs`
 
 ## Public API
 
-`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` and `is_http_url` return stable codes rather than localized sentences. `ferrioxid::forms::message` and `message_for` translate those codes. `FieldOverride` replaces one field and code. Placeholders such as `{min}` are replaced only from the supplied parameters. A parameter longer than 32 characters, or one that contains anything except ASCII letters, digits, space, `.`, `_` and `-`, is dropped. Unknown locales use English. An unknown code returns `missing message`.
+`text_code`, `parse_i64`, `parse_bool`, `parse_uuid`, `is_email` and `is_http_url` return stable codes rather than localized sentences. `fexu::forms::message` and `message_for` translate those codes. `FieldOverride` replaces one field and code. Placeholders such as `{min}` are replaced only from the supplied parameters. A parameter longer than 32 characters, or one that contains anything except ASCII letters, digits, space, `.`, `_` and `-`, is dropped. Unknown locales use English. An unknown code returns `missing message`.
 
 ## Data flow
 
 ```text
-FerrioxidModel-Makro → field:<name>: validation.<code>[:<zahl>]
-ferrioxid-forms → text_code / parse_* → Feldcode → message(locale, code)
+FexuModel-Makro → field:<name>: validation.<code>[:<zahl>]
+fexu-forms → text_code / parse_* → Feldcode → message(locale, code)
 HTML → localize_detail(locale, detail)
 JSON → problem_json behält detail und setzt code plus params
 ```
@@ -53,12 +53,12 @@ Rules only see the already decoded field value. They do not run SQL or shell com
 ## Example
 
 ```rust
-ferrioxid::core::text_code("a@b", true, None, Some(254), true, false);
+fexu::core::text_code("a@b", true, None, Some(254), true, false);
 ```
 
 ## Tests
 
-`ferrioxid-core` checks the codes. `ferrioxid-forms` checks the assignment to fields.
+`fexu-core` checks the codes. `fexu-forms` checks the assignment to fields.
 
 ## Limitations
 

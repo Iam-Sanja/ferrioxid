@@ -14,7 +14,7 @@ Keep the SeaORM 1.1 / SQLx 0.8 APIs and PostgreSQL driver. A root `[patch.crates
 
 The upstream SQLx [bound update](https://github.com/transact-rs/sqlx/commit/10462fa4414c6c7f1ed1d39bb31678e3b726878c) accepts the 0.39 series. This backport deliberately raises the lower bound as well, so an affected version cannot be selected. The published `sqlx-sqlite 0.9.0` manifest still requires `>=0.30.1, <0.38.0`; upgrading to SeaORM 2 / SQLx 0.9 alone would introduce API changes without resolving the advisory. The upstream development branch's bound change is not a published SQLx 0.8 security release.
 
-`ferrioxid-db` also requires `libsqlite3-sys ^0.39.1` with `bundled`. This propagates the safe minimum to every consumer and makes omitted root-level driver patches a dependency-resolution error. Cargo's single `links = "sqlite3"` requirement prevents simultaneously using a second, old SQLite binding. A direct pin alone cannot repair SQLx's incompatible constraint.
+`fexu-db` also requires `libsqlite3-sys ^0.39.1` with `bundled`. This propagates the safe minimum to every consumer and makes omitted root-level driver patches a dependency-resolution error. Cargo's single `links = "sqlite3"` requirement prevents simultaneously using a second, old SQLite binding. A direct pin alone cannot repair SQLx's incompatible constraint.
 
 SQLite bindings 0.39 require Rust 1.88 or newer; the full workspace is validated with the configured stable toolchain, not claimed to support Rust 1.88 as a whole. SeaORM and SQLx themselves remain unchanged. The bundled build requires a C compiler, as before. No system SQLite/SQLCipher substitution, version relabeling, build-environment bypass or audit ignore is part of this fix.
 
@@ -22,11 +22,11 @@ SQLite bindings 0.39 require Rust 1.88 or newer; the full workspace is validated
 
 Cargo honors `[patch]` only in the consuming workspace/project root. New API/fullstack projects therefore receive a patch pointing at the selected framework checkout. Existing projects are not edited automatically.
 
-For an existing independent project, add this to its root `Cargo.toml`, adjusting the path to this fixed Ferrioxid checkout:
+For an existing independent project, add this to its root `Cargo.toml`, adjusting the path to this fixed Fexu checkout:
 
 ```toml
 [patch.crates-io]
-sqlx-sqlite = { path = "../ferrioxid/vendor/sqlx-sqlite" }
+sqlx-sqlite = { path = "../fexu/vendor/sqlx-sqlite" }
 ```
 
 For a larger Cargo workspace, put it in that workspace's root manifest. Merge it with any existing patch table rather than adding a duplicate table. Then run:
@@ -66,7 +66,7 @@ Validated on Windows with Rust/Cargo 1.98.1 and PostgreSQL 16.15. Linux and Wind
 | SQLite regression | WAL reads, rollback, rows and history checksum preserved across reopen |
 | Existing database created with SQLite 3.49.1 | Two updated-engine migration runs preserved rows/history; `PRAGMA integrity_check` returned `ok` |
 | Consumer without the root patch | Expected SQLite `links`/version resolution failure, rather than vulnerable fallback |
-| CLI installation from the checkout | `cargo install --path crates/ferrioxid-cli --debug --locked` passed in an isolated install root |
+| CLI installation from the checkout | `cargo install --path crates/fexu-cli --debug --locked` passed in an isolated install root |
 | Vendor archive comparison | All 55 non-manifest files byte-identical; only the documented dependency stanza differs |
 | Current RustSec DB `899077d9d471b9fd3dbf4b2faea8ef26e83692e8` | Original lockfile reports SQLite + RSA; updated lockfile reports only the pre-existing optional RSA entry |
 | Existing RSA graph guard / audit gate | RSA absent on all enabled targets; existing gate passes with no new ignore and no advisory warnings |

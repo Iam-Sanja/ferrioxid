@@ -1,6 +1,6 @@
-use ferrioxid::apps::FerrioxidApplication;
-use ferrioxid::jobs::{enqueue_notice, JobPolicy, JobStatus, Queue, SystemClock};
-use ferrioxid::mail::Notice;
+use fexu::apps::FexuApplication;
+use fexu::jobs::{enqueue_notice, JobPolicy, JobStatus, Queue, SystemClock};
+use fexu::mail::Notice;
 use notes::jobs::{NotePulse, NoteRetryHandler};
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
@@ -18,7 +18,7 @@ fn worker_binary_starts_without_a_web_server() {
 
 #[test]
 fn duplicate_app_handlers_fail() {
-    let mut registry = ferrioxid::jobs::JobRegistry::new();
+    let mut registry = fexu::jobs::JobRegistry::new();
     notes::NotesApp.register_jobs(&mut registry).expect("once");
     let error = notes::NotesApp
         .register_jobs(&mut registry)
@@ -28,28 +28,26 @@ fn duplicate_app_handlers_fail() {
 
 #[tokio::test]
 async fn notes_worker_binary_runs_restarts_and_leaves_unknown_jobs() {
-    let root = temp_dir("ferrioxid-notes-worker");
+    let root = temp_dir("fexu-notes-worker");
     let path = root.join("jobs.sqlite");
     let url = sqlite_url(&path);
     std::fs::write(
-        root.join("ferrioxid.toml"),
+        root.join("fexu.toml"),
         format!(
             "migrations_dir = \"migrations\"\n[database]\nurl = \"{url}\"\n[jobs]\npoll_ms = 50\njitter = false\n[mail]\nbackend = \"memory\"\nfrom = \"noreply@example.com\"\npublic_origin = \"http://127.0.0.1:3000\"\n"
         ),
     )
     .expect("toml");
 
-    let db = ferrioxid::db::connect(&url).await.expect("sqlite");
+    let db = fexu::db::connect(&url).await.expect("sqlite");
     drop(db);
     let child = spawn(&root, &url);
     let (status, stderr) = wait_exit(child);
     assert_eq!(status.code(), Some(2), "{stderr}");
     assert!(stderr.contains("job.migration.missing"), "{stderr}");
-    let db = ferrioxid::db::connect(&url).await.expect("sqlite");
-    assert!(!ferrioxid::jobs::table_ready(&db).await.expect("ready"));
-    ferrioxid::jobs::apply_migrations(&db)
-        .await
-        .expect("migration");
+    let db = fexu::db::connect(&url).await.expect("sqlite");
+    assert!(!fexu::jobs::table_ready(&db).await.expect("ready"));
+    fexu::jobs::apply_migrations(&db).await.expect("migration");
     drop(db);
 
     let pulse = enqueue_pulse(&url, "bereit").await;
@@ -85,7 +83,7 @@ fn temp_dir(prefix: &str) -> PathBuf {
     let path = std::env::temp_dir().join(format!(
         "{prefix}-{}-{}",
         std::process::id(),
-        ferrioxid::uuid::Uuid::new_v4()
+        fexu::uuid::Uuid::new_v4()
     ));
     std::fs::create_dir_all(&path).expect("dir");
     path
@@ -100,9 +98,9 @@ fn sqlite_url(path: &Path) -> String {
 
 fn spawn(root: &Path, url: &str) -> Child {
     Command::new(env!("CARGO_BIN_EXE_worker"))
-        .env("FERRIOXID_PROJECT", root)
+        .env("FEXU_PROJECT", root)
         .env("DATABASE_URL", url)
-        .env_remove("FERRIOXID_SMTP_PASSWORD")
+        .env_remove("FEXU_SMTP_PASSWORD")
         .stdout(Stdio::null())
         .stderr(Stdio::piped())
         .spawn()
@@ -137,41 +135,41 @@ fn wait_exit(mut child: Child) -> (ExitStatus, String) {
     (status, stderr)
 }
 
-async fn enqueue_pulse(url: &str, label: &str) -> ferrioxid::uuid::Uuid {
+async fn enqueue_pulse(url: &str, label: &str) -> fexu::uuid::Uuid {
     let queue = queue(url).await;
     let outcome = queue
         .enqueue::<notes::jobs::NotePulseHandler>(
             &NotePulse {
                 label: label.to_owned(),
             },
-            ferrioxid::jobs::When::now(),
+            fexu::jobs::When::now(),
         )
         .await
         .expect("pulse");
-    let ferrioxid::jobs::EnqueueOutcome::Created(id) = outcome else {
+    let fexu::jobs::EnqueueOutcome::Created(id) = outcome else {
         panic!("pulse created");
     };
     id
 }
 
-async fn enqueue_retry(url: &str) -> ferrioxid::uuid::Uuid {
+async fn enqueue_retry(url: &str) -> fexu::uuid::Uuid {
     let queue = queue(url).await;
     let outcome = queue
         .enqueue::<NoteRetryHandler>(
             &NotePulse {
                 label: "erneut".into(),
             },
-            ferrioxid::jobs::When::now(),
+            fexu::jobs::When::now(),
         )
         .await
         .expect("retry");
-    let ferrioxid::jobs::EnqueueOutcome::Created(id) = outcome else {
+    let fexu::jobs::EnqueueOutcome::Created(id) = outcome else {
         panic!("retry created");
     };
     id
 }
 
-async fn enqueue_unknown(url: &str) -> ferrioxid::uuid::Uuid {
+async fn enqueue_unknown(url: &str) -> fexu::uuid::Uuid {
     let queue = queue(url).await;
     let outcome = queue
         .enqueue_json(
@@ -180,17 +178,17 @@ async fn enqueue_unknown(url: &str) -> ferrioxid::uuid::Uuid {
             &NotePulse {
                 label: "unbekannt".into(),
             },
-            ferrioxid::jobs::When::now(),
+            fexu::jobs::When::now(),
         )
         .await
         .expect("unknown");
-    let ferrioxid::jobs::EnqueueOutcome::Created(id) = outcome else {
+    let fexu::jobs::EnqueueOutcome::Created(id) = outcome else {
         panic!("unknown created");
     };
     id
 }
 
-async fn enqueue_mail(url: &str) -> ferrioxid::uuid::Uuid {
+async fn enqueue_mail(url: &str) -> fexu::uuid::Uuid {
     let queue = queue(url).await;
     let outcome = enqueue_notice(
         &queue,
@@ -198,11 +196,11 @@ async fn enqueue_mail(url: &str) -> ferrioxid::uuid::Uuid {
             to: "person@example.com".into(),
             locale: "de".into(),
         },
-        ferrioxid::jobs::When::now(),
+        fexu::jobs::When::now(),
     )
     .await
     .expect("mail");
-    let ferrioxid::jobs::EnqueueOutcome::Created(id) = outcome else {
+    let fexu::jobs::EnqueueOutcome::Created(id) = outcome else {
         panic!("mail created");
     };
     id
@@ -210,13 +208,13 @@ async fn enqueue_mail(url: &str) -> ferrioxid::uuid::Uuid {
 
 async fn queue(url: &str) -> Queue {
     Queue::new(
-        ferrioxid::db::connect(url).await.expect("sqlite"),
+        fexu::db::connect(url).await.expect("sqlite"),
         Arc::new(SystemClock),
         JobPolicy::default(),
     )
 }
 
-async fn fetch(url: &str, id: ferrioxid::uuid::Uuid) -> ferrioxid::jobs::JobRecord {
+async fn fetch(url: &str, id: fexu::uuid::Uuid) -> fexu::jobs::JobRecord {
     for _ in 0..20 {
         let queue = queue(url).await;
         match queue.get(id).await {
@@ -230,7 +228,7 @@ async fn fetch(url: &str, id: ferrioxid::uuid::Uuid) -> ferrioxid::jobs::JobReco
     panic!("Die Job-Zeile blieb gesperrt.");
 }
 
-async fn wait_for(url: &str, id: ferrioxid::uuid::Uuid, status: JobStatus, child: &mut Child) {
+async fn wait_for(url: &str, id: fexu::uuid::Uuid, status: JobStatus, child: &mut Child) {
     // CI machines can be busy running the rest of the workspace in parallel.
     // A deadline avoids turning slow worker startup into an arbitrary fixed
     // number of polls while keeping a bounded failure time.

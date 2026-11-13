@@ -8,15 +8,15 @@ This document describes the order of an HTTP request after supplementing forms, 
 
 ## Crates and files
 
-- Router construction: `crates/ferrioxid-api/src/lib.rs`, `App::merge`, `App::into_router`
-- Web integration: `crates/ferrioxid-api/src/web.rs`
-- Middleware: `crates/ferrioxid-middleware/src/lib.rs`
-- Pages: `crates/ferrioxid-api/src/pages.rs`
-- Auth: `crates/ferrioxid-auth/src/service.rs`
+- Router construction: `crates/fexu-api/src/lib.rs`, `App::merge`, `App::into_router`
+- Web integration: `crates/fexu-api/src/web.rs`
+- Middleware: `crates/fexu-middleware/src/lib.rs`
+- Pages: `crates/fexu-api/src/pages.rs`
+- Auth: `crates/fexu-auth/src/service.rs`
 
 ## Public API
 
-`App::merge` adds routes before `into_router` binds application state. `ferrioxid::web::prepare` then mounts static files when `[static] enabled` is true and applies standard middleware.
+`App::merge` adds routes before `into_router` binds application state. `fexu::web::prepare` then mounts static files when `[static] enabled` is true and applies standard middleware.
 
 ## Data flow
 
@@ -39,7 +39,7 @@ Auth and CSRF run in the handler. A middleware cannot skip it because it does no
 
 ## Configuration
 
-Static files and storage are in `ferrioxid.toml`. The body limit follows the upload size when `prepare` is used. myshop mounts static files and middleware explicitly because the workspace file omits static files.
+Static files and storage are in `fexu.toml`. The body limit follows the upload size when `prepare` is used. myshop mounts static files and middleware explicitly because the workspace file omits static files.
 
 ## Security
 
@@ -51,15 +51,15 @@ First the size is limited, then a separate request ID is generated. Logs see the
 
 ## Example
 
-A fullstack project from `ferrioxid new` calls `mount_pages_with` and then `ferrioxid::web::prepare`. `/contact` is merged before `into_router`. The cloned route map gives the project templates `url()`.
+A fullstack project from `fexu new` calls `mount_pages_with` and then `fexu::web::prepare`. `/contact` is merged before `into_router`. The cloned route map gives the project templates `url()`.
 
 ## Tests
 
-The middleware order is in `ferrioxid-middleware`. Auth, CSRF and CRUD tests remain the existing SQLite tests.
+The middleware order is in `fexu-middleware`. Auth, CSRF and CRUD tests remain the existing SQLite tests.
 
 ## Limitations
 
-myshop and generated projects differ in the attachment point: myshop knows the workspace file and mounts its own `static/`. `prepare` reads the discovered `ferrioxid.toml`.
+myshop and generated projects differ in the attachment point: myshop knows the workspace file and mounts its own `static/`. `prepare` reads the discovered `fexu.toml`.
 
 ## Extension
 

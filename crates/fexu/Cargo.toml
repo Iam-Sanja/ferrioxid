@@ -1,0 +1,41 @@
+[package]
+name = "fexu"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Experimental model-first web framework"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
+
+[dependencies]
+fexu-core.workspace = true
+fexu-macros.workspace = true
+fexu-db.workspace = true
+fexu-migrations.workspace = true
+fexu-api.workspace = true
+fexu-auth.workspace = true
+fexu-cache.workspace = true
+fexu-admin.workspace = true
+fexu-forms.workspace = true
+fexu-static.workspace = true
+fexu-storage.workspace = true
+fexu-middleware.workspace = true
+fexu-mail.workspace = true
+fexu-jobs.workspace = true
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+async-trait.workspace = true
+
+[dev-dependencies]
+axum.workspace = true
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
+[features]
+default = []
+admin-ui = ["fexu-admin/embedded-admin"]

@@ -5,38 +5,38 @@
 ## Create an empty project
 
 ```powershell
-ferrioxid new project Shop --ferrioxid-path D:\04_Projekte_Arbeit\Projekte\ferrioxid
+fexu new project Shop --fexu-path D:\04_Projekte_Arbeit\Projekte\fexu
 cd Shop
-ferrioxid migrate up
-ferrioxid dev
+fexu migrate up
+fexu dev
 ```
 
 The default is `--template fullstack`; `--template api` omits admin registration. Both create a runnable homepage, a named `project.ping` route at `/api/v1/ping`, authentication, static files and an empty media directory. Neither creates a business app, a `Product` model, business tables, seed data or an initial domain migration. `migrate up` applies the framework authentication and jobs migrations, then explicitly declared project/app migrations. It never resets a database. No user or default password is created.
 
 The directory/display name remains `Shop`. Its Rust package/import name is `shop`; `MyShop` becomes `my_shop` and `HTTPServer` becomes `http_server`. Names must start with an ASCII letter, contain only ASCII letters, digits or underscores, and fit within 48 characters. Rust keywords, Windows device names and reserved project directories are rejected.
 
-Crates are not published yet. `--ferrioxid-path` points to the framework checkout; without it the generator uses its build-time checkout. Create projects outside the framework workspace. Existing target directories are refused; newly generated files use exclusive creation.
+Crates are not published yet. `--fexu-path` points to the framework checkout; without it the generator uses its build-time checkout. Create projects outside the framework workspace. Existing target directories are refused; newly generated files use exclusive creation.
 
-Generated `main` calls `App::with_auth` and `into_router`. That router rejects POST, PUT, PATCH and DELETE when the configured session cookie or `ferrioxid_anonymous` is present and the CSRF proof does not match. Register those routes on `App` before `into_router`. A client with no session cookie, including `Authorization: Bearer`, is not blocked by this check. `allow_anonymous` still means a cookie-less request can write. The bearer value is not validated. See [csrf.md](csrf.md).
+Generated `main` calls `App::with_auth` and `into_router`. That router rejects POST, PUT, PATCH and DELETE when the configured session cookie or `fexu_anonymous` is present and the CSRF proof does not match. Register those routes on `App` before `into_router`. A client with no session cookie, including `Authorization: Bearer`, is not blocked by this check. `allow_anonymous` still means a cookie-less request can write. The bearer value is not validated. See [csrf.md](csrf.md).
 
 ## Project and app are different
 
-Global configuration lives in `ferrioxid.toml`, global startup/settings/URLs in `src/project/`, and explicit Rust app registration in `src/apps.rs`. Apps own models, routes, views, admin extensions, migrations, templates and static files. See [project-structure.md](project-structure.md).
+Global configuration lives in `fexu.toml`, global startup/settings/URLs in `src/project/`, and explicit Rust app registration in `src/apps.rs`. Apps own models, routes, views, admin extensions, migrations, templates and static files. See [project-structure.md](project-structure.md).
 
 ```powershell
-ferrioxid new app produkte
-ferrioxid generate model Customer --app produkte --timestamps
-ferrioxid migrate make initial --app produkte
-ferrioxid migrate up
-ferrioxid admin create-user --email admin@example.com --staff --superuser
-ferrioxid dev
+fexu new app produkte
+fexu generate model Customer --app produkte --timestamps
+fexu migrate make initial --app produkte
+fexu migrate up
+fexu admin create-user --email admin@example.com --staff --superuser
+fexu dev
 ```
 
 Model generation creates only the model requested by the developer. New models require authentication and their model permissions, including API-template models. Table/API names are explicit model attributes and are not automatically prefixed by app names. Choose distinct names across apps.
 
 ## Management commands
 
-A new project contains `src/project/management.rs` and `src/bin/ferrioxid-manage.rs`. `ferrioxid manage about` runs the compiled sample command. It does not open the database. Add further commands in that registry. The invocation rules and the myshop `seed-shop` command are in [management-commands.md](management-commands.md). Existing checkouts, including `examples/notes`, do not receive the binary until those files are added.
+A new project contains `src/project/management.rs` and `src/bin/fexu-manage.rs`. `fexu manage about` runs the compiled sample command. It does not open the database. Add further commands in that registry. The invocation rules and the myshop `seed-shop` command are in [management-commands.md](management-commands.md). Existing checkouts, including `examples/notes`, do not receive the binary until those files are added.
 
 ## Placement and templates
 
@@ -48,10 +48,10 @@ A new project contains `src/project/management.rs` and `src/bin/ferrioxid-manage
 
 | Old call | New call |
 |---|---|
-| `ferrioxid new Shop` | `ferrioxid new project Shop` |
-| `ferrioxid generate app produkte` | `ferrioxid new app produkte` |
-| `ferrioxid generate model Customer` in a new project | `ferrioxid generate model Customer --app produkte` |
-| `ferrioxid migrate make initial` for an app | `ferrioxid migrate make initial --app produkte` |
+| `fexu new Shop` | `fexu new project Shop` |
+| `fexu generate app produkte` | `fexu new app produkte` |
+| `fexu generate model Customer` in a new project | `fexu generate model Customer --app produkte` |
+| `fexu migrate make initial` for an app | `fexu migrate make initial --app produkte` |
 
 The first two old calls fail with actionable guidance and do not create files. Existing manifests without `project.layout_version` remain layout 1. Their startup, model generation and migration IDs keep working. `new app` refuses layout 1 rather than silently relocating code.
 
@@ -61,6 +61,6 @@ The internal template version is `0.25`; the Cargo version remains `0.1.0`. `upg
 
 ## Validation
 
-`crates/ferrioxid-cli/tests/generator.rs` exercises both templates outside the workspace, Rust package normalization, both app placements, local/shared templates, names and duplicates, legacy-command rejection, SQLite system-only initialization, app migrations, protected model APIs, HTTP startup, development startup and release builds. Existing projects and databases are never automatically restructured.
+`crates/fexu-cli/tests/generator.rs` exercises both templates outside the workspace, Rust package normalization, both app placements, local/shared templates, names and duplicates, legacy-command rejection, SQLite system-only initialization, app migrations, protected model APIs, HTTP startup, development startup and release builds. Existing projects and databases are never automatically restructured.
 
 SQLite builds use a bounded SQLx driver backport with patched bundled SQLite. New projects receive the required Cargo-root patch automatically; existing independent projects need an explicit root-manifest update and rebuild. See [SQLite security and consumer instructions](security/sqlite-rustsec-2026-0459.md).

@@ -1,6 +1,6 @@
-# Your first contribution to Ferrioxid
+# Your first contribution to Fexu
 
-Thanks for considering a contribution! Ferrioxid is an experimental Rust web framework. You can help without knowing the entire codebase.
+Thanks for considering a contribution! Fexu is an experimental Rust web framework. You can help without knowing the entire codebase.
 
 ## Start small
 
@@ -15,28 +15,28 @@ Browse [open issues](https://github.com/Iam-Sanja/ferrioxid/issues) and [good fi
 3. Build and run the SQLite example; no PostgreSQL service is needed for the initial setup.
 
 ```bash
-git clone https://github.com/YOUR-USERNAME/ferrioxid.git
-cd ferrioxid
+git clone https://github.com/YOUR-USERNAME/fexu.git
+cd fexu
 cargo build --workspace
-cargo run -p ferrioxid-cli -- migrate up
+cargo run -p fexu-cli -- migrate up
 cargo run -p myshop
 ```
 
 Test the running example at `http://127.0.0.1:3000/healthz`.
 
-Ferrioxid includes a local SQLx/SQLite patch. Keep the workspace's `[patch.crates-io]` configuration intact. Read [SQLite setup and consumer guidance](security/sqlite-rustsec-2026-0459.md) before copying workspace dependencies into a standalone project.
+Fexu includes a local SQLx/SQLite patch. Keep the workspace's `[patch.crates-io]` configuration intact. Read [SQLite setup and consumer guidance](security/sqlite-rustsec-2026-0459.md) before copying workspace dependencies into a standalone project.
 
 ## Find the relevant code
 
 | Task | Start here |
 |---|---|
-| Models, derives | `crates/ferrioxid-core/`, `crates/ferrioxid-macros/` |
-| Queries and database behavior | `crates/ferrioxid-db/` |
-| HTTP and routing | `crates/ferrioxid-api/` |
-| Authentication | `crates/ferrioxid-auth/` |
-| Admin pages | `crates/ferrioxid-admin/` |
-| CLI and generator | `crates/ferrioxid-cli/` |
-| Migrations, fixtures | `crates/ferrioxid-migrations/` |
+| Models, derives | `crates/fexu-core/`, `crates/fexu-macros/` |
+| Queries and database behavior | `crates/fexu-db/` |
+| HTTP and routing | `crates/fexu-api/` |
+| Authentication | `crates/fexu-auth/` |
+| Admin pages | `crates/fexu-admin/` |
+| CLI and generator | `crates/fexu-cli/` |
+| Migrations, fixtures | `crates/fexu-migrations/` |
 | Documentation | `docs/` |
 | Realistic example | `examples/myshop/` |
 

@@ -19,16 +19,16 @@ The waiting time in seconds is `min(300, 2^(attempt-1))`. The first failed attem
 ## Operator
 
 ```powershell
-ferrioxid jobs list
-ferrioxid jobs inspect <job-id>
-ferrioxid jobs retry <job-id> --yes
-ferrioxid jobs cancel <job-id> --yes
+fexu jobs list
+fexu jobs inspect <job-id>
+fexu jobs retry <job-id> --yes
+fexu jobs cancel <job-id> --yes
 ```
 
 `list` and `inspect` open SQLite with `mode=ro` and do not write. `retry` applies to `failed` and `cancelled`. It sets `pending`, `attempts = 0` and deletes lease and error code. `cancel` applies to `pending` and `retry`. A `running` job remains untouched and delivers `job.running`.
 
-Without `--yes`, the command exits with code 2 and leaves the database unchanged. Authorization relies on the local operator’s access, the same trust boundary as `ferrioxid migrate up`. There is no HTTP endpoint.
+Without `--yes`, the command exits with code 2 and leaves the database unchanged. Authorization relies on the local operator’s access, the same trust boundary as `fexu migrate up`. There is no HTTP endpoint.
 
 ## Intervals
 
-Only successful completion schedules the next interval or the next cron slot. A permanently failed recurring job creates no further rows. `ferrioxid jobs retry --yes` reopens the same row. Enqueuing twice with the same `schedule_key` returns `EnqueueOutcome::Existing` on the second call. Missed cron slots are not backfilled. Exhausted attempts and permanent errors are the dead-letter set (`status = failed`).
+Only successful completion schedules the next interval or the next cron slot. A permanently failed recurring job creates no further rows. `fexu jobs retry --yes` reopens the same row. Enqueuing twice with the same `schedule_key` returns `EnqueueOutcome::Existing` on the second call. Missed cron slots are not backfilled. Exhausted attempts and permanent errors are the dead-letter set (`status = failed`).

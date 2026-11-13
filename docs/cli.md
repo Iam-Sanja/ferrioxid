@@ -1,60 +1,60 @@
-# ferrioxid-cli – developer commands
+# fexu-cli – developer commands
 
-[Overview](index.md) · **Implemented file:** `crates/ferrioxid-cli/src/main.rs`.
+[Overview](index.md) · **Implemented file:** `crates/fexu-cli/src/main.rs`.
 
 Install the CLI from the framework checkout as shown in the [README](../README.md). Run project creation outside the framework workspace and subsequent commands inside the generated project.
 
 ## Actual Functionality (Implemented)
 
-`ferrioxid doctor` and `ferrioxid check` check tools, files, both migration areas, `settings.runtime` and the mail form. The runtime test does not open a connection. `settings.runtime` becomes `ERROR` when production and debug coincide, `FERRIOXID_DEBUG` is neither `true` nor `false`, or `BIND_ADDRESS` begins with `0.0.0.0`. `disabled` does not expect an SMTP server. `console` and `memory` remain local. `smtp` is not connected. If `FERRIOXID_SMTP_PASSWORD` is missing, the `mail.credentials` warning arises without showing the value. Details are available in [cli-doctor.md](cli-doctor.md) and [migration-diagnostics.md](migration-diagnostics.md). `ferrioxid upgrade` describes [project-upgrade.md](project-upgrade.md). Generator, templates and the development server are available in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) and [development-server.md](development-server.md).
+`fexu doctor` and `fexu check` check tools, files, both migration areas, `settings.runtime` and the mail form. The runtime test does not open a connection. `settings.runtime` becomes `ERROR` when production and debug coincide, `FEXU_DEBUG` is neither `true` nor `false`, or `BIND_ADDRESS` begins with `0.0.0.0`. `disabled` does not expect an SMTP server. `console` and `memory` remain local. `smtp` is not connected. If `FEXU_SMTP_PASSWORD` is missing, the `mail.credentials` warning arises without showing the value. Details are available in [cli-doctor.md](cli-doctor.md) and [migration-diagnostics.md](migration-diagnostics.md). `fexu upgrade` describes [project-upgrade.md](project-upgrade.md). Generator, templates and the development server are available in [project-generator.md](project-generator.md), [project-templates.md](project-templates.md) and [development-server.md](development-server.md).
 
 ```powershell
-ferrioxid new project Shop --template fullstack
+fexu new project Shop --template fullstack
 cd Shop
-ferrioxid new app shop
-ferrioxid doctor
-ferrioxid check
-ferrioxid dev
-ferrioxid build
-ferrioxid generate model Customer --app shop
-ferrioxid generate model Product --app shop --timestamps
-ferrioxid worker
-ferrioxid jobs list
-ferrioxid generate worker
-ferrioxid jobs inspect <id>
-ferrioxid jobs inspect <id> --show-payload
-ferrioxid migrate make <name> --app shop
-ferrioxid migrate up
-ferrioxid migrate status
-ferrioxid dumpdata --model products
-ferrioxid loaddata fixtures/catalog.json
-ferrioxid loaddata fixtures/catalog.json --dry-run
-ferrioxid loaddata fixtures/catalog.json --upsert
-ferrioxid loaddata fixtures/catalog.json --truncate --yes
-ferrioxid manage
-ferrioxid manage seed-shop
-ferrioxid manage about --name Shop
-ferrioxid check --strict
-ferrioxid upgrade --check
-ferrioxid upgrade --dry-run
-ferrioxid upgrade --yes
+fexu new app shop
+fexu doctor
+fexu check
+fexu dev
+fexu build
+fexu generate model Customer --app shop
+fexu generate model Product --app shop --timestamps
+fexu worker
+fexu jobs list
+fexu generate worker
+fexu jobs inspect <id>
+fexu jobs inspect <id> --show-payload
+fexu migrate make <name> --app shop
+fexu migrate up
+fexu migrate status
+fexu dumpdata --model products
+fexu loaddata fixtures/catalog.json
+fexu loaddata fixtures/catalog.json --dry-run
+fexu loaddata fixtures/catalog.json --upsert
+fexu loaddata fixtures/catalog.json --truncate --yes
+fexu manage
+fexu manage seed-shop
+fexu manage about --name Shop
+fexu check --strict
+fexu upgrade --check
+fexu upgrade --dry-run
+fexu upgrade --yes
 ```
 
-`migrate` reads `ferrioxid.toml` or the flags `--schema-file`, `--migrations-dir` and `--database-url`. The execution describes [migrations.md](migrations.md). `--bootstrap` belongs to the `myshop` binary, is legacy and does not perform a migration.
+`migrate` reads `fexu.toml` or the flags `--schema-file`, `--migrations-dir` and `--database-url`. The execution describes [migrations.md](migrations.md). `--bootstrap` belongs to the `myshop` binary, is legacy and does not perform a migration.
 
 ```powershell
-ferrioxid admin create-user --email admin@example.com --staff --superuser
-ferrioxid auth list-users
-ferrioxid auth create-role editor
-ferrioxid auth grant-permission notes.read --role editor
-ferrioxid auth assign-role --email admin@example.com --role editor
+fexu admin create-user --email admin@example.com --staff --superuser
+fexu auth list-users
+fexu auth create-role editor
+fexu auth grant-permission notes.read --role editor
+fexu auth assign-role --email admin@example.com --role editor
 ```
 
-`create-user` prompts for a password without echoing it and asks for confirmation. It accepts no password argument. `FERRIOXID_PASSWORD` can supply a password of at least 12 characters for automation; there is no default. `migrate up` applies auth migrations first. Auth commands that write data also create missing auth tables. `list-users` never prints hashes.
+`create-user` prompts for a password without echoing it and asks for confirmation. It accepts no password argument. `FEXU_PASSWORD` can supply a password of at least 12 characters for automation; there is no default. `migrate up` applies auth migrations first. Auth commands that write data also create missing auth tables. `list-users` never prints hashes.
 
-`generate worker` writes `src/bin/worker.rs` without overwriting an existing file. `jobs inspect` hides the payload unless `--show-payload` is supplied, which warns that it may contain personal data. Neither output includes the lease token. `ferrioxid worker` runs only the mail handler.
+`generate worker` writes `src/bin/worker.rs` without overwriting an existing file. `jobs inspect` hides the payload unless `--show-payload` is supplied, which warns that it may contain personal data. Neither output includes the lease token. `fexu worker` runs only the mail handler.
 
-`ferrioxid migrate plan` compares files, history and the live catalog without writing. Exit code `1` means a history conflict or live drift. A pending migration or a model that is ahead of the latest pending file is printed as a warning and does not by itself change the exit code. `ferrioxid migrate down` reverts the latest migration. `--app <name>` reverts the latest migration of that app. `--dry-run` writes nothing. Dropping a created table or column needs `--allow-destructive` and does not restore those rows. `ferrioxid dev` starts neither a worker nor Vite, and warns about pending migrations without applying them. Generator integration tests limit nested Cargo builds to two jobs after unrestricted release builds crashed rustc 1.98.1 on Windows. The product command `ferrioxid build` still performs a release build.
+`fexu migrate plan` compares files, history and the live catalog without writing. Exit code `1` means a history conflict or live drift. A pending migration or a model that is ahead of the latest pending file is printed as a warning and does not by itself change the exit code. `fexu migrate down` reverts the latest migration. `--app <name>` reverts the latest migration of that app. `--dry-run` writes nothing. Dropping a created table or column needs `--allow-destructive` and does not restore those rows. `fexu dev` starts neither a worker nor Vite, and warns about pending migrations without applying them. Generator integration tests limit nested Cargo builds to two jobs after unrestricted release builds crashed rustc 1.98.1 on Windows. The product command `fexu build` still performs a release build.
 
 Exit codes of the test: `0` without error, warnings included. `1` for conflicts, an unreadable existing database or a failed `cargo check`. `migrate status` also uses `1` if the SQLite file is missing and does not create it. `check --strict` uses `2` if only warnings remain. `upgrade` uses `1` for file conflicts and then does not write anything.
 
@@ -63,7 +63,7 @@ In layout 2, create an app before generating its models. Old implicit `new <name
 ## CLI structure
 
 ```text
-ferrioxid
+fexu
 ├─ new project <name>          Create an empty project
 ├─ new app <name>              Create and register a business app
 ├─ doctor                      Reale Umgebungsprüfung

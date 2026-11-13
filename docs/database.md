@@ -1,10 +1,10 @@
-# Ferrioxid-db – A repository layer for SQLite and PostgreSQL
+# Fexu-db – A repository layer for SQLite and PostgreSQL
 
-[Overview](index.md) · **Implemented files:** `crates/ferrioxid-db/src/lib.rs`, `crates/ferrioxid-db/src/query.rs`, `crates/ferrioxid-db/src/sql.rs`. The repository implementation generates `crates/ferrioxid-macros/src/lib.rs`.
+[Overview](index.md) · **Implemented files:** `crates/fexu-db/src/lib.rs`, `crates/fexu-db/src/query.rs`, `crates/fexu-db/src/sql.rs`. The repository implementation generates `crates/fexu-macros/src/lib.rs`.
 
 ## Auth tables (v0.7)
 
-`_ferrioxid_users`, `_ferrioxid_sessions`, `_ferrioxid_roles`, `_ferrioxid_permissions`, `_ferrioxid_user_roles` and `_ferrioxid_role_permissions` are in `ferrioxid-auth` and use SeaQuery on the same connection. They are not `FerrioxidModel` CRUD models so that `password_hash` does not appear as a REST resource. Time stamps are `i64`. UUID is the UUID type in SQLite Text and PostgreSQL. The introspection passes table names with prefix `_ferrioxid_`.
+`_fexu_users`, `_fexu_sessions`, `_fexu_roles`, `_fexu_permissions`, `_fexu_user_roles` and `_fexu_role_permissions` are in `fexu-auth` and use SeaQuery on the same connection. They are not `FexuModel` CRUD models so that `password_hash` does not appear as a REST resource. Time stamps are `i64`. UUID is the UUID type in SQLite Text and PostgreSQL. The introspection passes table names with prefix `_fexu_`.
 
 SQLite uses `max_connections(1)`. During a write transaction, no call may request a second connection from the same pool. `conclude` and the `*_in` methods are in [transactions.md](transactions.md).
 
@@ -17,18 +17,18 @@ SQLite uses `max_connections(1)`. During a write transaction, no call may reques
 
 ```rust
 #[async_trait::async_trait]
-pub trait ModelRepository: FerrioxidModel + Serialize + DeserializeOwned {
+pub trait ModelRepository: FexuModel + Serialize + DeserializeOwned {
     type Create: DeserializeOwned + Send;
     type Update: DeserializeOwned + Send;
-    async fn list(db: &DatabaseConnection) -> Result<ListPage<Self>, FerrioxidError>;
-    async fn get(db: &DatabaseConnection, id: uuid::Uuid) -> Result<Option<Self>, FerrioxidError>;
-    async fn create(db: &DatabaseConnection, input: Self::Create) -> Result<Self, FerrioxidError>;
-    async fn update(db: &DatabaseConnection, id: uuid::Uuid, input: Self::Update) -> Result<Self, FerrioxidError>;
-    async fn delete(db: &DatabaseConnection, id: uuid::Uuid) -> Result<DeleteOutcome, FerrioxidError>;
+    async fn list(db: &DatabaseConnection) -> Result<ListPage<Self>, FexuError>;
+    async fn get(db: &DatabaseConnection, id: uuid::Uuid) -> Result<Option<Self>, FexuError>;
+    async fn create(db: &DatabaseConnection, input: Self::Create) -> Result<Self, FexuError>;
+    async fn update(db: &DatabaseConnection, id: uuid::Uuid, input: Self::Update) -> Result<Self, FexuError>;
+    async fn delete(db: &DatabaseConnection, id: uuid::Uuid) -> Result<DeleteOutcome, FexuError>;
 }
 ```
 
-`ListPage<T>` contains `data: Vec<T>`, `limit: usize`, `truncated: bool`. `DeleteOutcome` is `Deleted` or `Missing`. Public methods provide the model, not `serde_json::Value`. The JSON image remains within `ferrioxid-db`.
+`ListPage<T>` contains `data: Vec<T>`, `limit: usize`, `truncated: bool`. `DeleteOutcome` is `Deleted` or `Missing`. Public methods provide the model, not `serde_json::Value`. The JSON image remains within `fexu-db`.
 
 ## Dialect and Types (Implemented)
 
@@ -56,7 +56,7 @@ SeaQuery binds values using PostgreSQL `$1`, `$2` or SQLite `?` placeholders. Id
 2. Generated `required`, Length and `min` test.
 3. UUID with `Uuid::new_v4()`.
 4. SeaQuery-`INSERT` with bound values and `RETURNING`.
-5. Internal deserialization to the model. Errors become `FerrioxidError::Database`.
+5. Internal deserialization to the model. Errors become `FexuError::Database`.
 
 ### Update
 
@@ -77,14 +77,14 @@ SQLite is the local standard. An installation and Docker are not necessary for t
 ```text
 sqlite://db.sqlite3?mode=rwc
 sqlite::memory:
-postgres://user:password@localhost:5432/ferrioxid
+postgres://user:password@localhost:5432/fexu
 ```
 
-`sqlite::memory:` is a separate database for each connection. Ferrioxid limits SQLite pools to one connection so that tests and the application see the same database. The file `db.sqlite3` is created in the working directory and is contained in `.gitignore`. PostgreSQL remains a supported backend and is dialed via `DATABASE_URL`. `compose.yaml` can optionally start the server. Bootstrap only runs `CREATE TABLE IF NOT EXISTS`, does not delete existing rows and does not change existing tables. This is not a migration engine.
+`sqlite::memory:` is a separate database for each connection. Fexu limits SQLite pools to one connection so that tests and the application see the same database. The file `db.sqlite3` is created in the working directory and is contained in `.gitignore`. PostgreSQL remains a supported backend and is dialed via `DATABASE_URL`. `compose.yaml` can optionally start the server. Bootstrap only runs `CREATE TABLE IF NOT EXISTS`, does not delete existing rows and does not change existing tables. This is not a migration engine.
 
 ## Error and security (Implemented)
 
-Deserialization errors and unknown SQL errors become `FerrioxidError::Database`. The HTTP layer then responds with 500 and a generic text. The database detail goes to the tracing log, not the answer. `DATABASE_URL` is not logged. `sqlx::ErrorKind::UniqueViolation` and `ForeignKeyViolation` are `Validation` and thus 422. SQLite reports `ON DELETE RESTRICT` as extended code `1811` with the fixed message `FOREIGN KEY constraint failed`. This will also be 422. Missing lines remain 404, unreleased routes 403. SQLite foreign keys are on. Models can generate unique indexes, secondary indexes and foreign keys. Relationship methods are in [relations.md](relations.md). `find_by_column` loads typed child lines. SQLite checks types weaker than PostgreSQL. Ferrioxid checks the supported values before writing in Rust.
+Deserialization errors and unknown SQL errors become `FexuError::Database`. The HTTP layer then responds with 500 and a generic text. The database detail goes to the tracing log, not the answer. `DATABASE_URL` is not logged. `sqlx::ErrorKind::UniqueViolation` and `ForeignKeyViolation` are `Validation` and thus 422. SQLite reports `ON DELETE RESTRICT` as extended code `1811` with the fixed message `FOREIGN KEY constraint failed`. This will also be 422. Missing lines remain 404, unreleased routes 403. SQLite foreign keys are on. Models can generate unique indexes, secondary indexes and foreign keys. Relationship methods are in [relations.md](relations.md). `find_by_column` loads typed child lines. SQLite checks types weaker than PostgreSQL. Fexu checks the supported values before writing in Rust.
 
 ## Composable queries
 
@@ -93,8 +93,8 @@ Deserialization errors and unknown SQL errors become `FerrioxidError::Database`.
 `list` and `list_scoped` are unchanged.
 
 ```rust
-use ferrioxid::core::QueryScope;
-use ferrioxid::db::{any_of, col, not, Direction, ModelQuery};
+use fexu::core::QueryScope;
+use fexu::db::{any_of, col, not, Direction, ModelQuery};
 
 // 1. Active products with stock greater than zero, ordered by price.
 let available = Product::query()
@@ -122,7 +122,7 @@ let matched = Product::query()
     .filter(not(col("name").is_null()))
     .scope(QueryScope::Equals {
         column: "category_id",
-        value: ferrioxid::core::ScopeValue::Uuid(category_id),
+        value: fexu::core::ScopeValue::Uuid(category_id),
     })
     .all(&db)
     .await?;
@@ -176,15 +176,15 @@ Ordering can list several columns. If `id` is absent, the query appends `id ASC`
 - `Select::aggregate` builds a grouped report. `group_by` accepts text, choice, bigint, uuid, date, time and datetime columns. Boolean, decimal and JSON columns are rejected. Measures are `count`, `count_column`, bigint `sum`, bigint `average`, and `min`/`max` of bigint, text, choice, date, time or datetime. `average` is `sum * 1_000_000 / count`, truncated toward zero to six decimal places. SQL `AVG` is not used, because SQLite returns a float and PostgreSQL returns numeric. `HAVING` accepts only integer measures and a bound `i64`. Ordering by `average` is rejected. The report returns at most 100 groups and has no offset. Filters, named filters and `QueryScope` stay in `WHERE`. Remaining group columns are a deterministic ascending tie-break. `character_length_eq` is a bound length check for text and choice only: PostgreSQL `char_length`, SQLite `length`. The length is 0..=200.
 - JSON path operators, arbitrary SQL expressions and MySQL are not part of this API.
 - MySQL is rejected.
-- SQLite behavior is covered by `cargo test -p ferrioxid-db`. PostgreSQL SQL generation is asserted in the same crate. `postgres_filters_and_pages_runtime` is `#[ignore]` and runs only with `DATABASE_URL` and a disposable PostgreSQL database. A local workspace run does not mark that test as passed.
+- SQLite behavior is covered by `cargo test -p fexu-db`. PostgreSQL SQL generation is asserted in the same crate. `postgres_filters_and_pages_runtime` is `#[ignore]` and runs only with `DATABASE_URL` and a disposable PostgreSQL database. A local workspace run does not mark that test as passed.
 
 ## Fixtures
 
-`ferrioxid dumpdata` and `ferrioxid loaddata` read and write versioned JSON through the schema snapshot. Decimal values travel as strings and are stored as the same 16-byte coefficient used by model inserts. The default load inserts new primary keys and rolls back the whole file when any row conflicts. Details, the confirmed `--truncate` flag and the cycle limit are in [fixtures.md](fixtures.md).
+`fexu dumpdata` and `fexu loaddata` read and write versioned JSON through the schema snapshot. Decimal values travel as strings and are stored as the same 16-byte coefficient used by model inserts. The default load inserts new primary keys and rolls back the whole file when any row conflicts. Details, the confirmed `--truncate` flag and the cycle limit are in [fixtures.md](fixtures.md).
 
 ## Filtered writes
 
-`Select::update_matching`, `delete_matching` and `lock_existing` are in `crates/ferrioxid-db/src/write.rs`. `ModelQuery::insert` is the typed insert. Values and arithmetic amounts are bound parameters. Column names must be model fields; a name such as `stock = 0; DROP TABLE` is rejected before SQL is built.
+`Select::update_matching`, `delete_matching` and `lock_existing` are in `crates/fexu-db/src/write.rs`. `ModelQuery::insert` is the typed insert. Values and arithmetic amounts are bound parameters. Column names must be model fields; a name such as `stock = 0; DROP TABLE` is rejected before SQL is built.
 
 `update_matching` and `delete_matching` refuse a query that has no filter, relation predicate or restricting scope. `update_all` and `delete_all` are the explicit forms for an intentional full-table write. `QueryScope::None` still matches nothing. The page limit does not cap a bulk delete.
 
@@ -212,10 +212,10 @@ Text, email and slug rules from `update_record` are not repeated here. `rows_aff
 
 ## UUID parameters
 
-`render_schema` stores a Ferrioxid UUID as SQLite `TEXT` and PostgreSQL `UUID`. Do not change that. A column that an application created as `BLOB` is different: `sea_orm::Value::Uuid` matches the bytes SQLite stored for a typed UUID, while `Value::String` of the hyphenated text does not. `Statement::from_sql_and_values` with `Value::Uuid` is the raw-SQL form. Prefer `Item::query()` so the column type comes from the model. `sqlite_uuid_text_does_not_match_a_blob_parameter` demonstrates the mismatch. Case-insensitive text search uses `LOWER`, which on SQLite folds ASCII only; `München` does not match `MÜNCHEN` there.
+`render_schema` stores a Fexu UUID as SQLite `TEXT` and PostgreSQL `UUID`. Do not change that. A column that an application created as `BLOB` is different: `sea_orm::Value::Uuid` matches the bytes SQLite stored for a typed UUID, while `Value::String` of the hyphenated text does not. `Statement::from_sql_and_values` with `Value::Uuid` is the raw-SQL form. Prefer `Item::query()` so the column type comes from the model. `sqlite_uuid_text_does_not_match_a_blob_parameter` demonstrates the mismatch. Case-insensitive text search uses `LOWER`, which on SQLite folds ASCII only; `München` does not match `MÜNCHEN` there.
 
 `QueryCounter` counts model queries on the current thread. Call `QueryCounter::record` after a direct statement you want included. Direct SeaORM calls and failed direct statements stay uncounted. Independent threads do not share the counter.
 
 ## Admin lists
 
-`query_admin_page` in `crates/ferrioxid-db/src/sql.rs` uses the same SeaQuery layer. Column names come from the descriptor and must be on the search allowlist. The search is `LOWER(column) LIKE ? ESCAPE '\'` on SQLite and `LOWER(column) LIKE $1 ESCAPE '\'` on PostgreSQL. The pattern is bound, not concatenated, and `%`, `_` and `\` in the term are literals. The pattern is folded in Rust with the same ASCII-versus-Unicode rule as `contains_ignore_case`. An empty search adds no predicate. Scope, count and the page window stay in force. The public list limit remains 100. The admin page is at most 100 lines, plus one line to detect `has_more`.
+`query_admin_page` in `crates/fexu-db/src/sql.rs` uses the same SeaQuery layer. Column names come from the descriptor and must be on the search allowlist. The search is `LOWER(column) LIKE ? ESCAPE '\'` on SQLite and `LOWER(column) LIKE $1 ESCAPE '\'` on PostgreSQL. The pattern is bound, not concatenated, and `%`, `_` and `\` in the term are literals. The pattern is folded in Rust with the same ASCII-versus-Unicode rule as `contains_ignore_case`. An empty search adds no predicate. Scope, count and the page window stay in force. The public list limit remains 100. The admin page is at most 100 lines, plus one line to detect `has_more`.

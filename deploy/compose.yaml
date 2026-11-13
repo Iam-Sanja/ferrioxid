@@ -2,13 +2,13 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_DB: ferrioxid_test_deploy
-      POSTGRES_USER: ferrioxid
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ferrioxid_dev_only}
+      POSTGRES_DB: fexu_test_deploy
+      POSTGRES_USER: fexu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fexu_dev_only}
     volumes:
-      - ferrioxid_deploy_pg:/var/lib/postgresql/data
+      - fexu_deploy_pg:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ferrioxid -d ferrioxid_test_deploy"]
+      test: ["CMD-SHELL", "pg_isready -U fexu -d fexu_test_deploy"]
       interval: 5s
       timeout: 3s
       retries: 10
@@ -20,13 +20,13 @@ services:
       context: ..
       dockerfile: deploy/Dockerfile
     environment:
-      DATABASE_URL: postgres://ferrioxid:${POSTGRES_PASSWORD:-ferrioxid_dev_only}@db:5432/ferrioxid_test_deploy
+      DATABASE_URL: postgres://fexu:${POSTGRES_PASSWORD:-fexu_dev_only}@db:5432/fexu_test_deploy
       BIND_ADDRESS: 0.0.0.0:8080
-      FERRIOXID_ENV: production
-      FERRIOXID_COOKIE_SECURE: "1"
-      FERRIOXID_CSRF_SECRET: ${FERRIOXID_CSRF_SECRET:?set 64 hex characters}
-      FERRIOXID_ALLOWED_ORIGINS: https://localhost:8443
-      FERRIOXID_LOG_FORMAT: json
+      FEXU_ENV: production
+      FEXU_COOKIE_SECURE: "1"
+      FEXU_CSRF_SECRET: ${FEXU_CSRF_SECRET:?set 64 hex characters}
+      FEXU_ALLOWED_ORIGINS: https://localhost:8443
+      FEXU_LOG_FORMAT: json
     depends_on:
       db:
         condition: service_healthy
@@ -55,4 +55,4 @@ networks:
     driver: bridge
 
 volumes:
-  ferrioxid_deploy_pg:
+  fexu_deploy_pg:

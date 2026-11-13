@@ -1,14 +1,14 @@
-//! Wiederverwendbare Notiz-App. Sie hängt nur an der öffentlichen Ferrioxid-API.
+//! Wiederverwendbare Notiz-App. Sie hängt nur an der öffentlichen Fexu-API.
 
 pub mod jobs;
 
 use axum::routing::get;
-use ferrioxid::apps::{AppConfig, AppError, FerrioxidApplication, Registration};
-use ferrioxid::urls::{UrlError, UrlSet};
+use fexu::apps::{AppConfig, AppError, FexuApplication, Registration};
+use fexu::urls::{UrlError, UrlSet};
 
 pub struct NotesApp;
 
-impl FerrioxidApplication for NotesApp {
+impl FexuApplication for NotesApp {
     fn config(&self) -> AppConfig {
         AppConfig::new("notes").label("Notizen").prefix("/notes")
     }
@@ -17,7 +17,7 @@ impl FerrioxidApplication for NotesApp {
         registry.routes(routes()?)
     }
 
-    fn register_jobs(&self, registry: &mut ferrioxid::jobs::JobRegistry) -> Result<(), AppError> {
+    fn register_jobs(&self, registry: &mut fexu::jobs::JobRegistry) -> Result<(), AppError> {
         jobs::register(registry, jobs::NotePulseHandler::new())
             .map_err(|error| AppError::new("job.handler", error.detail().to_owned()))?;
         jobs::register(registry, jobs::NoteRetryHandler)
@@ -30,5 +30,5 @@ pub fn routes() -> Result<UrlSet, UrlError> {
 }
 
 async fn list() -> axum::response::Response {
-    ferrioxid::views::json(&ferrioxid::serde_json::json!({"app": "notes"}))
+    fexu::views::json(&fexu::serde_json::json!({"app": "notes"}))
 }

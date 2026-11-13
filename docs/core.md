@@ -1,14 +1,14 @@
-# ferrioxid-core – contracts and model metadata
+# fexu-core – contracts and model metadata
 
-[Overview](index.md) · **Implemented file:** `crates/ferrioxid-core/src/lib.rs`.
+[Overview](index.md) · **Implemented file:** `crates/fexu-core/src/lib.rs`.
 
 ## Authentication (v0.7)
 
-`permission` is `None`, `"authenticated"` or a resource name. `requires_object_policy` marks models whose record access requires a registered `ObjectPolicy`. `FerrioxidError` includes `Denied(String)` and `Unauthorized(String)`; see [api.md](api.md) for HTTP mappings.
+`permission` is `None`, `"authenticated"` or a resource name. `requires_object_policy` marks models whose record access requires a registered `ObjectPolicy`. `FexuError` includes `Denied(String)` and `Unauthorized(String)`; see [api.md](api.md) for HTTP mappings.
 
 ## Responsibility
 
-`ferrioxid-core` contains the common contract types independent of HTTP and ORM. The Crate may **not** assume a dependency on `ferrioxid-api`, Axum or a specific database connection. Since v0.12, the form field rules are in `validation.rs`. The model macro does not call them yet. The description is in [forms-validation.md](forms-validation.md).
+`fexu-core` contains the common contract types independent of HTTP and ORM. The Crate may **not** assume a dependency on `fexu-api`, Axum or a specific database connection. Since v0.12, the form field rules are in `validation.rs`. The model macro does not call them yet. The description is in [forms-validation.md](forms-validation.md).
 
 ## Actual Public Types (Implemented)
 
@@ -40,13 +40,13 @@ pub struct TableConstraints {
     pub unique_groups: &'static [&'static [&'static str]],
     pub index_groups: &'static [&'static [&'static str]],
 }
-pub trait FerrioxidModel: Send + Sync + 'static {
+pub trait FexuModel: Send + Sync + 'static {
     fn descriptor() -> &'static ModelDescriptor;
     fn columns() -> &'static [ColumnSpec];
     fn constraints() -> &'static TableConstraints;
     fn schema_sql(kind: DatabaseKind) -> String;
 }
-pub enum FerrioxidError {
+pub enum FexuError {
     Validation(String),
     Forbidden,
     NotFound,
@@ -54,7 +54,7 @@ pub enum FerrioxidError {
 }
 ```
 
-The public-type excerpt above is abbreviated: `std::error::Error` is written in full in the source, and `FerrioxidError` also includes `Denied(String)` and `Unauthorized(String)` as described above. `FerrioxidError::database(error)` wraps compatible errors in `Database`.
+The public-type excerpt above is abbreviated: `std::error::Error` is written in full in the source, and `FexuError` also includes `Denied(String)` and `Unauthorized(String)` as described above. `FexuError::database(error)` wraps compatible errors in `Database`.
 
 ### Semantics
 
@@ -76,7 +76,7 @@ The public-type excerpt above is abbreviated: `std::error::Error` is written in 
 | `NotFound` | Record is missing | 404 |
 | `Database` |Database, query or data deserialization|500, internal detail only in the log|
 
-The conversion to HTTP takes place **not** in `ferrioxid-core`, but exclusively in `ferrioxid-api`; see [api.md](api.md).
+The conversion to HTTP takes place **not** in `fexu-core`, but exclusively in `fexu-api`; see [api.md](api.md).
 
 ## Draft extension (planned)
 
@@ -98,8 +98,8 @@ Design rules: column metadata remains the canonical representation. Generate SQL
 
 ## NotFound (Implemented)
 
-`FerrioxidError::NotFound` is the error for missing resources. The Axum adapters provide `404` with the same JSON format as for `Validation` and `Forbidden`.
+`FexuError::NotFound` is the error for missing resources. The Axum adapters provide `404` with the same JSON format as for `Validation` and `Forbidden`.
 
 ## Admin metadata
 
-`FerrioxidModel::admin_meta` provides `None` as standard. The macro overrides the method only at `admin = true`. `AdminModelMeta` and `AdminFieldMeta` are next to `ModelDescriptor` and do not change a column. Sensitive fields remain recognizable by the name and are removed from the admin API. Tests: `examples/myshop/tests/admin_http.rs`. Limit: the metadata describes the interface, not a second schema snapshot.
+`FexuModel::admin_meta` provides `None` as standard. The macro overrides the method only at `admin = true`. `AdminModelMeta` and `AdminFieldMeta` are next to `ModelDescriptor` and do not change a column. Sensitive fields remain recognizable by the name and are removed from the admin API. Tests: `examples/myshop/tests/admin_http.rs`. Limit: the metadata describes the interface, not a second schema snapshot.

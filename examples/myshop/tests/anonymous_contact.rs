@@ -3,8 +3,8 @@
 use axum::body::Bytes;
 use axum::extract::{Extension, State};
 use axum::http::{HeaderMap, HeaderValue, StatusCode};
-use ferrioxid::auth::{AppState, AuthConfig, AuthService};
-use ferrioxid::urls::UrlSet;
+use fexu::auth::{AppState, AuthConfig, AuthService};
+use fexu::urls::UrlSet;
 use http_body_util::BodyExt;
 use std::sync::Arc;
 
@@ -16,7 +16,7 @@ fn state(auth: AuthService) -> AppState {
     }
 }
 
-fn routes() -> Arc<ferrioxid::urls::RouteMap> {
+fn routes() -> Arc<fexu::urls::RouteMap> {
     let set = UrlSet::new()
         .route(
             "shop.thanks",
@@ -54,8 +54,8 @@ fn token_in(html: &str) -> String {
 
 #[tokio::test]
 async fn contact_rejects_missing_forged_and_rotated_tokens() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    fexu::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db, AuthConfig::development());
     let password = memory_fixture_password();
     auth.create_user("ada@example.com", &password, false, false)
@@ -73,7 +73,7 @@ async fn contact_rejects_missing_forged_and_rotated_tokens() {
         .to_str()
         .unwrap()
         .to_owned();
-    assert!(cookie.contains("ferrioxid_anonymous="));
+    assert!(cookie.contains("fexu_anonymous="));
     assert!(cookie.contains("HttpOnly"));
     assert!(cookie.contains("Path=/"));
     assert!(cookie.contains("SameSite=Lax"));
@@ -96,7 +96,7 @@ async fn contact_rejects_missing_forged_and_rotated_tokens() {
     let denied = String::from_utf8(denied.to_vec()).unwrap();
     assert!(!denied.contains(&csrf));
 
-    let forged_cookie = cookie_headers("ferrioxid_anonymous=forged-session-token");
+    let forged_cookie = cookie_headers("fexu_anonymous=forged-session-token");
     let forged = myshop::contact::submit(
         State(app.clone()),
         Extension(names.clone()),
@@ -137,7 +137,7 @@ async fn contact_rejects_missing_forged_and_rotated_tokens() {
     let mut user_headers = HeaderMap::new();
     user_headers.insert(
         axum::http::header::COOKIE,
-        HeaderValue::from_str(&format!("ferrioxid_session={}", logged_in.token)).unwrap(),
+        HeaderValue::from_str(&format!("fexu_session={}", logged_in.token)).unwrap(),
     );
     let rotated = myshop::contact::submit(
         State(app),
@@ -154,7 +154,7 @@ async fn contact_rejects_missing_forged_and_rotated_tokens() {
 
 #[tokio::test]
 async fn contact_post_without_auth_service_is_rejected() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
     let bare = AppState {
         db,
         auth: None,
@@ -190,7 +190,7 @@ async fn contact_post_without_auth_service_is_rejected() {
     let mut headers = HeaderMap::new();
     headers.insert(
         axum::http::header::COOKIE,
-        HeaderValue::from_static("ferrioxid_session=unchecked-session-token"),
+        HeaderValue::from_static("fexu_session=unchecked-session-token"),
     );
     let cookie_post =
         myshop::contact::submit(State(bare), Extension(routes()), headers, body).await;

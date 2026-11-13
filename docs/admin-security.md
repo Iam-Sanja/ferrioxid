@@ -25,7 +25,7 @@ An active superuser skips model permissions when the resource is set. If `admin_
 
 `GET /auth/csrf` requires a valid session. If present, Origin or Referer must be allowed. A missing origin is accepted without enabling CORS. The endpoint returns the same HMAC token without changing the session token or expiry, so other tabs remain valid. See [csrf.md](csrf.md).
 
-The HTML login additionally checks `ferrioxid_login_csrf` against the form field. That check still runs when `ferrioxid_anonymous` or `ferrioxid_session` is already present. The global cookie guard validates the login double-submit on `POST /admin/login` and does not accept the anonymous session token instead. The permitted origins follow the bind address and not a hardwired port 3000. The host header is not read for this. Logs contain the basic code, not the cookie and not the token.
+The HTML login additionally checks `fexu_login_csrf` against the form field. That check still runs when `fexu_anonymous` or `fexu_session` is already present. The global cookie guard validates the login double-submit on `POST /admin/login` and does not accept the anonymous session token instead. The permitted origins follow the bind address and not a hardwired port 3000. The host header is not read for this. Logs contain the basic code, not the cookie and not the token.
 
 The token is not in `localStorage` and not in the URL. The session cookie remains `HttpOnly`.
 

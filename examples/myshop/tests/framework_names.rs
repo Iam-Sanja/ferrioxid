@@ -1,6 +1,6 @@
 //! Fresh framework schemas. PostgreSQL requires an empty disposable database.
 
-use ferrioxid::sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
+use fexu::sea_orm::{ConnectionTrait, DatabaseBackend, DatabaseConnection, Statement};
 use std::collections::BTreeSet;
 
 async fn tables(db: &DatabaseConnection) -> BTreeSet<String> {
@@ -17,22 +17,26 @@ async fn tables(db: &DatabaseConnection) -> BTreeSet<String> {
         .collect()
 }
 
+fn retired_brand(value: &str) -> bool {
+    let bytes = value.to_ascii_lowercase().into_bytes();
+    let older = [102, 101, 114, 114, 117, 109];
+    let previous = [102, 101, 114, 114, 105, 111, 120, 105, 100];
+    bytes.windows(older.len()).any(|window| window == older)
+        || bytes
+            .windows(previous.len())
+            .any(|window| window == previous)
+}
+
 async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
     assert!(
         tables(db).await.is_empty(),
         "Use an empty disposable database"
     );
-    assert_eq!(
-        ferrioxid::auth::apply_migrations(db).await.unwrap().len(),
-        6
-    );
-    assert_eq!(
-        ferrioxid::jobs::apply_migrations(db).await.unwrap().len(),
-        2
-    );
+    assert_eq!(fexu::auth::apply_migrations(db).await.unwrap().len(), 6);
+    assert_eq!(fexu::jobs::apply_migrations(db).await.unwrap().len(), 2);
     let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
     assert_eq!(
-        ferrioxid::migrations::apply_directory(db, &migrations, false)
+        fexu::migrations::apply_directory(db, &migrations, false)
             .await
             .unwrap()
             .applied
@@ -41,25 +45,25 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
     );
     let names = tables(db).await;
     for name in [
-        "_ferrioxid_users",
-        "_ferrioxid_sessions",
-        "_ferrioxid_anonymous_sessions",
-        "_ferrioxid_roles",
-        "_ferrioxid_permissions",
-        "_ferrioxid_user_roles",
-        "_ferrioxid_role_permissions",
-        "_ferrioxid_admin_drafts",
-        "_ferrioxid_admin_audit",
-        "_ferrioxid_password_resets",
-        "_ferrioxid_password_reset_exchanges",
-        "_ferrioxid_mail_outbox",
-        "_ferrioxid_jobs",
-        "_ferrioxid_mfa_totp",
-        "_ferrioxid_recovery_codes",
-        "_ferrioxid_login_challenges",
-        "_ferrioxid_auth_migrations",
-        "_ferrioxid_job_migrations",
-        "_ferrioxid_migrations",
+        "_fexu_users",
+        "_fexu_sessions",
+        "_fexu_anonymous_sessions",
+        "_fexu_roles",
+        "_fexu_permissions",
+        "_fexu_user_roles",
+        "_fexu_role_permissions",
+        "_fexu_admin_drafts",
+        "_fexu_admin_audit",
+        "_fexu_password_resets",
+        "_fexu_password_reset_exchanges",
+        "_fexu_mail_outbox",
+        "_fexu_jobs",
+        "_fexu_mfa_totp",
+        "_fexu_recovery_codes",
+        "_fexu_login_challenges",
+        "_fexu_auth_migrations",
+        "_fexu_job_migrations",
+        "_fexu_migrations",
         "products",
         "categories",
         "internal_notes",
@@ -70,28 +74,20 @@ async fn initialize(db: &DatabaseConnection) -> BTreeSet<String> {
         assert!(names.contains(name), "missing table: {name}");
     }
     assert_eq!(names.len(), 25, "unexpected table in disposable database");
-    assert!(!names.iter().any(|name| name.contains("ferrum")));
-    assert!(ferrioxid::auth::apply_migrations(db)
+    assert!(!names.iter().any(|name| retired_brand(name)));
+    assert!(fexu::auth::apply_migrations(db).await.unwrap().is_empty());
+    assert!(fexu::jobs::apply_migrations(db).await.unwrap().is_empty());
+    assert!(fexu::migrations::apply_directory(db, &migrations, false)
         .await
         .unwrap()
+        .applied
         .is_empty());
-    assert!(ferrioxid::jobs::apply_migrations(db)
-        .await
-        .unwrap()
-        .is_empty());
-    assert!(
-        ferrioxid::migrations::apply_directory(db, &migrations, false)
-            .await
-            .unwrap()
-            .applied
-            .is_empty()
-    );
     names
 }
 
 #[tokio::test]
 async fn fresh_sqlite_initializes_auth_jobs_and_application() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
     initialize(&db).await;
 }
 
@@ -99,7 +95,7 @@ async fn fresh_sqlite_initializes_auth_jobs_and_application() {
 #[ignore = "requires DATABASE_URL pointing to an empty disposable PostgreSQL database"]
 async fn fresh_postgres_initializes_auth_jobs_and_application() {
     let url = std::env::var("DATABASE_URL").expect("disposable PostgreSQL DATABASE_URL");
-    let db = ferrioxid::db::connect(&url).await.unwrap();
+    let db = fexu::db::connect(&url).await.unwrap();
     let created = initialize(&db).await;
     // Drop only the verified tables created in the initially empty test database.
     for name in created {

@@ -1,5 +1,5 @@
 ---
-name: Ferrioxid
+name: Fexu
 description: Serverseitiger Admin für die Nachtschicht, hell und dunkel gleichwertig.
 colors:
   slate-door: "#0f172a"
@@ -96,7 +96,7 @@ components:
     width: "16rem"
 ---
 
-# Design System: Ferrioxid
+# Design System: Fexu
 
 ## Overview
 

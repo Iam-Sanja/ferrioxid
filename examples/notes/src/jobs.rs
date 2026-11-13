@@ -1,7 +1,7 @@
 //! Beispiel-Jobs. Die App registriert sie nur in dem Prozess, der den Worker startet.
 
-use ferrioxid::jobs::{JobContext, JobError, JobHandler};
-use ferrioxid::serde::{Deserialize, Serialize};
+use fexu::jobs::{JobContext, JobError, JobHandler};
+use fexu::serde::{Deserialize, Serialize};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 
@@ -29,7 +29,7 @@ impl Default for NotePulseHandler {
     }
 }
 
-#[ferrioxid::async_trait::async_trait]
+#[fexu::async_trait::async_trait]
 impl JobHandler for NotePulseHandler {
     const NAME: &'static str = "notes_pulse";
     const VERSION: u32 = 1;
@@ -46,7 +46,7 @@ impl JobHandler for NotePulseHandler {
 
 pub struct NoteRetryHandler;
 
-#[ferrioxid::async_trait::async_trait]
+#[fexu::async_trait::async_trait]
 impl JobHandler for NoteRetryHandler {
     const NAME: &'static str = "notes_retry";
     const VERSION: u32 = 1;
@@ -61,7 +61,7 @@ impl JobHandler for NoteRetryHandler {
 }
 
 pub fn register(
-    registry: &mut ferrioxid::jobs::JobRegistry,
+    registry: &mut fexu::jobs::JobRegistry,
     handler: impl JobHandler,
 ) -> Result<(), JobError> {
     registry.register(handler)

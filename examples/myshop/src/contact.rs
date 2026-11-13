@@ -4,12 +4,12 @@ use axum::body::Bytes;
 use axum::extract::{Extension, State};
 use axum::http::{header, HeaderMap, HeaderValue, Method, StatusCode};
 use axum::response::{Html, IntoResponse, Response};
-use ferrioxid::auth::AppState;
-use ferrioxid::forms::{
-    contact_widgets, message, render_fields, render_page, ContactForm, FerrioxidForm, FormErrors,
+use fexu::auth::AppState;
+use fexu::forms::{
+    contact_widgets, message, render_fields, render_page, ContactForm, FexuForm, FormErrors,
     FormValues,
 };
-use ferrioxid::views::{fail, redirect_to};
+use fexu::views::{fail, redirect_to};
 use std::sync::Arc;
 
 pub async fn show(State(state): State<AppState>, headers: HeaderMap) -> Response {
@@ -42,7 +42,7 @@ pub async fn thanks() -> Html<String> {
 
 pub async fn submit(
     State(state): State<AppState>,
-    Extension(routes): Extension<Arc<ferrioxid::urls::RouteMap>>,
+    Extension(routes): Extension<Arc<fexu::urls::RouteMap>>,
     headers: HeaderMap,
     body: Bytes,
 ) -> Response {

@@ -11,23 +11,23 @@ A custom page is served at `/admin/pages/{key}`. `key` must match `[a-z][a-z0-9_
 ```rust
 struct OrderReport;
 
-#[ferrioxid::async_trait::async_trait]
-impl ferrioxid::admin::ViewHandler for OrderReport {
+#[fexu::async_trait::async_trait]
+impl fexu::admin::ViewHandler for OrderReport {
     async fn handle(
         &self,
-        request: &ferrioxid::admin::ViewRequest<'_>,
-    ) -> Result<ferrioxid::admin::ViewPage, ferrioxid::admin::ExtensionError> {
+        request: &fexu::admin::ViewRequest<'_>,
+    ) -> Result<fexu::admin::ViewPage, fexu::admin::ExtensionError> {
         let listed = Order::list(request.db).await.map_err(|_| {
-            ferrioxid::admin::ExtensionError::new("extension.view", "orders could not be read")
+            fexu::admin::ExtensionError::new("extension.view", "orders could not be read")
         })?;
         let mut data = serde_json::Map::new();
         data.insert("rows".to_owned(), serde_json::json!(listed.data.len()));
-        Ok(ferrioxid::admin::ViewPage::new(data))
+        Ok(fexu::admin::ViewPage::new(data))
     }
 }
 ```
 
-Before calling `handle`, Ferrioxid checks the session, `is_staff` and `AuthService::holds` for the registered permission code. Superusers satisfy `holds` but still require `is_staff`. A POST without valid CSRF returns 403 without calling the handler. A page without `on_post` returns 405 for POST.
+Before calling `handle`, Fexu checks the session, `is_staff` and `AuthService::holds` for the registered permission code. Superusers satisfy `holds` but still require `is_staff`. A POST without valid CSRF returns 403 without calling the handler. A page without `on_post` returns 405 for POST.
 
 `ViewPage` provides data for the registered template. `notice` and `alert` are shortened and escaped by Tera. The template is chosen by the developer during registration, not the request.
 

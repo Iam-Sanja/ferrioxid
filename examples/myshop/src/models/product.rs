@@ -1,7 +1,7 @@
-use ferrioxid::prelude::*;
-use ferrioxid::FerrioxidChoice;
+use fexu::prelude::*;
+use fexu::FexuChoice;
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq, FerrioxidChoice)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, FexuChoice)]
 pub enum ProductStatus {
     #[choice(value = "draft", de = "Entwurf", en = "Draft")]
     Draft,
@@ -12,8 +12,8 @@ pub enum ProductStatus {
 }
 
 // v0.1: deliberately public for the local demo. Never expose real data this way.
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "products",
     api = "/api/v1/products",
     allow_anonymous = true,

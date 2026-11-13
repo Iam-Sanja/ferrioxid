@@ -1,13 +1,13 @@
 # OpenAPI 3.1
 
-[Overview](index.md) · **Implemented** in `crates/ferrioxid-api/src/openapi.rs`. The document is built from `ModelDescriptor`, `ColumnSpec`, `NumericBound`, `FieldContract` and `AdminFieldMeta`. It does not keep a second model description.
+[Overview](index.md) · **Implemented** in `crates/fexu-api/src/openapi.rs`. The document is built from `ModelDescriptor`, `ColumnSpec`, `NumericBound`, `FieldContract` and `AdminFieldMeta`. It does not keep a second model description.
 
 `App` publishes `GET /openapi.json` and, unless turned off, `GET /docs`. Admin routes are not included. `App::document` accepts an operation only when its path is already registered.
 
 ```rust
-let app = ferrioxid::App::new(db)
+let app = fexu::App::new(db)
     .register::<Product>()
-    .openapi(ferrioxid::OpenApiOptions {
+    .openapi(fexu::OpenApiOptions {
         enabled: true,
         json_path: "/openapi.json".to_owned(),
         ui_path: Some("/docs".to_owned()),
@@ -39,9 +39,9 @@ let document = client.get("/openapi.json").await?.json()?;
 assert_eq!(document["openapi"], "3.1.0");
 assert!(document["paths"].get("/admin").is_none());
 assert_eq!(
-    document["components"]["schemas"]["Offer"]["properties"]["price"]["x-ferrioxid-decimal"]["scale"],
+    document["components"]["schemas"]["Offer"]["properties"]["price"]["x-fexu-decimal"]["scale"],
     2
 );
 ```
 
-The executable copy is `crates/ferrioxid/tests/openapi_client.rs`.
+The executable copy is `crates/fexu/tests/openapi_client.rs`.

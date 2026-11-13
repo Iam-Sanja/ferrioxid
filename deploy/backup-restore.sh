@@ -1,21 +1,21 @@
 #!/bin/sh
-# Dump and restore one disposable database. Refuses any name without ferrioxid_test.
+# Dump and restore one disposable database. Refuses any name without fexu_test.
 set -eu
 if [ "${1:-}" = "" ] || [ "${2:-}" = "" ]; then
   echo "usage: backup-restore.sh SOURCE_URL TARGET_URL" >&2
   exit 2
 fi
 case "$1" in
-  *ferrioxid_test*) ;;
+  *fexu_test*) ;;
   *)
-    echo "refusing: source URL must contain ferrioxid_test" >&2
+    echo "refusing: source URL must contain fexu_test" >&2
     exit 2
     ;;
 esac
 case "$2" in
-  *ferrioxid_test*) ;;
+  *fexu_test*) ;;
   *)
-    echo "refusing: target URL must contain ferrioxid_test" >&2
+    echo "refusing: target URL must contain fexu_test" >&2
     exit 2
     ;;
 esac

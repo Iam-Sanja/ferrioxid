@@ -1,5 +1,5 @@
 {
-  "name": "ferrioxid-browser",
+  "name": "fexu-browser",
   "private": true,
   "scripts": {
     "test": "playwright test"

@@ -16,7 +16,7 @@
 | `POST`/`DELETE` | `/admin/api/directory/roles/{role}/permissions/{code}` | Grant or revoke a permission |
 | `POST`/`DELETE` | `/admin/api/directory/assignments` | Assign or revoke a role using the user's email |
 
-`GET /auth/me` remains the small `PublicUser` without roles. The roles are only in the directory response. They arise from `_ferrioxid_roles` and `_ferrioxid_user_roles` without reading the password hash.
+`GET /auth/me` remains the small `PublicUser` without roles. The roles are only in the directory response. They arise from `_fexu_roles` and `_fexu_user_roles` without reading the password hash.
 
 Your own deactivation and withdrawal of your own staff access answer 422. Changes to superusers and permission codes with `superuser` respond 403. There is no endpoint that makes a user a superuser.
 

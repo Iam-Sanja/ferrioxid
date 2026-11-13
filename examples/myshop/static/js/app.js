@@ -1,1 +1,1 @@
-document.documentElement.dataset.ferrioxidStatic = "ready";
+document.documentElement.dataset.fexuStatic = "ready";

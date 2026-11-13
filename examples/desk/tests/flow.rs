@@ -3,10 +3,10 @@ use std::path::PathBuf;
 use desk::models::{Address, Cart, Category, Line, Owner, Product};
 use desk::shop::{self, ADDRESS_LIMIT};
 use desk::{routes, stock_markup};
-use ferrioxid::core::{DatabaseKind, FerrioxidError, FerrioxidModel};
-use ferrioxid::db::{any_of, col, connect, kind_of, Direction, ModelQuery};
-use ferrioxid::migrations::{apply_directory, make_migration, RegisteredModel, SchemaSnapshot};
-use ferrioxid::sea_orm::{ConnectionTrait, DatabaseConnection, TransactionTrait};
+use fexu::core::{DatabaseKind, FexuError, FexuModel};
+use fexu::db::{any_of, col, connect, kind_of, Direction, ModelQuery};
+use fexu::migrations::{apply_directory, make_migration, RegisteredModel, SchemaSnapshot};
+use fexu::sea_orm::{ConnectionTrait, DatabaseConnection, TransactionTrait};
 use uuid::Uuid;
 
 fn fixed(value: u128) -> Uuid {
@@ -149,7 +149,7 @@ async fn cases(url: &str) {
     let created = shop::create_owner(&db, "Ada").await.expect("create owner");
     assert_eq!(created.name, "Ada");
     let rejected = shop::create_owner(&db, "").await.expect_err("empty name");
-    assert!(matches!(rejected, FerrioxidError::Validation(_)));
+    assert!(matches!(rejected, FexuError::Validation(_)));
 
     insert_owner(&db, owner_a, "A").await;
     insert_owner(&db, owner_b, "B").await;
@@ -315,7 +315,7 @@ async fn cases(url: &str) {
         .execute(&tx)
         .await
         .expect_err("duplicate cart");
-    assert!(matches!(conflict, FerrioxidError::Validation(_)));
+    assert!(matches!(conflict, FexuError::Validation(_)));
     tx.rollback().await.unwrap();
     let still = Line::query()
         .filter(col("id").eq(fixed(1_000)))
@@ -388,7 +388,7 @@ async fn cases(url: &str) {
         .execute(&db)
         .await
         .expect_err("addresses restrict the owner");
-    assert!(matches!(blocked, FerrioxidError::Validation(text) if text.contains("foreign key")));
+    assert!(matches!(blocked, FexuError::Validation(text) if text.contains("foreign key")));
 
     let injected = Product::query()
         .filter(col("id").eq(hemd))
@@ -397,14 +397,14 @@ async fn cases(url: &str) {
         .execute(&db)
         .await
         .expect_err("column name");
-    assert!(matches!(injected, FerrioxidError::Validation(_)));
+    assert!(matches!(injected, FexuError::Validation(_)));
     let unfiltered = Product::query()
         .update_matching()
         .set("active", false)
         .execute(&db)
         .await
         .expect_err("unfiltered");
-    assert!(matches!(unfiltered, FerrioxidError::Validation(_)));
+    assert!(matches!(unfiltered, FexuError::Validation(_)));
     let text_math = Product::query()
         .filter(col("id").eq(hemd))
         .update_matching()
@@ -412,13 +412,12 @@ async fn cases(url: &str) {
         .execute(&db)
         .await
         .expect_err("text arithmetic");
-    assert!(matches!(text_math, FerrioxidError::Validation(_)));
+    assert!(matches!(text_math, FexuError::Validation(_)));
 }
 
 #[tokio::test]
 async fn sqlite_same_operations() {
-    let path =
-        std::env::temp_dir().join(format!("ferrioxid-desk-{}.sqlite", Uuid::new_v4().simple()));
+    let path = std::env::temp_dir().join(format!("fexu-desk-{}.sqlite", Uuid::new_v4().simple()));
     let url = format!(
         "sqlite://{}?mode=rwc",
         path.display().to_string().replace('\\', "/")
@@ -431,7 +430,7 @@ async fn sqlite_same_operations() {
 #[ignore = "requires DATABASE_URL, CREATEDB, and an approved PostgreSQL test database"]
 async fn postgres_same_operations() {
     let admin = std::env::var("DATABASE_URL").expect("DATABASE_URL");
-    let disposable = ferrioxid::db::DisposablePostgres::create(&admin)
+    let disposable = fexu::db::DisposablePostgres::create(&admin)
         .await
         .expect("isolated postgres");
     cases(disposable.url()).await;

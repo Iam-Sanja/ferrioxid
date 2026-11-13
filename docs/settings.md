@@ -1,15 +1,15 @@
 # Settings
 
-[Overview](index.md) · Own values: [custom-settings.md](custom-settings.md) · **actual file:** `crates/ferrioxid-migrations/src/project.rs`.
+[Overview](index.md) · Own values: [custom-settings.md](custom-settings.md) · **actual file:** `crates/fexu-migrations/src/project.rs`.
 
 ## Purpose
 
-`ferrioxid.toml` is the project file written for new projects. A directory that contains only `ferrum.toml` is still loaded. A directory that contains both files is an error, and Ferrioxid does not choose either database URL. `.ferrum/project.json` remains the on-disk project marker. Database tables keep their existing `_ferrum_*` names and migration IDs.
+`fexu.toml` is the project file written for new projects. A directory that contains only `fexu.toml` is still loaded. A directory that contains both files is an error, and Fexu does not choose either database URL. `.fexu/project.json` remains the on-disk project marker. Database tables keep their existing `_fexu_*` names and migration IDs.
 
 ## Priority
 
 1. Built-in defaults if a key is missing.
-2. The value from `ferrioxid.toml`.
+2. The value from `fexu.toml`.
 3. A set environment variable replaces only the intended value.
 
 An unknown section or key remains an error. Exceptions are `[custom.<name>]`, described in [custom-settings.md](custom-settings.md), and `[app.<name>]`, described in [app-registry.md](app-registry.md). `[custom]` and `[app]` without names are errors. `[app.<name>]` declares a migration directory and does not load a rust code. App settings remain under `[custom.<name>]` and do not override framework keys.
@@ -17,8 +17,8 @@ An unknown section or key remains an error. Exceptions are `[custom.<name>]`, de
 ## Reading
 
 ```rust
-fn load() -> Result<ferrioxid::migrations::ProjectConfig, Box<dyn std::error::Error>> {
-    let settings = ferrioxid::migrations::Settings::discover(std::path::Path::new("."))?;
+fn load() -> Result<fexu::migrations::ProjectConfig, Box<dyn std::error::Error>> {
+    let settings = fexu::migrations::Settings::discover(std::path::Path::new("."))?;
     let project = settings.project();
     let _url = project.resolved_database_url();
     let _address = project.bind_address()?;
@@ -26,7 +26,7 @@ fn load() -> Result<ferrioxid::migrations::ProjectConfig, Box<dyn std::error::Er
 }
 ```
 
-`discover` searches `ferrioxid.toml` from the start directory upwards and calls `enforce_runtime`. `from_project` checks an already read `ProjectConfig` again. `project()` borrows the configuration. The generator writes the same sequence in `src/settings.rs`.
+`discover` searches `fexu.toml` from the start directory upwards and calls `enforce_runtime`. `from_project` checks an already read `ProjectConfig` again. `project()` borrows the configuration. The generator writes the same sequence in `src/settings.rs`.
 
 ## Sections
 
@@ -39,26 +39,26 @@ Existing sections remain `project`, `server`, `database`, `admin`, `auth`, `temp
 | Variable | Effect |
 |---|---|
 | `DATABASE_URL` |Replaces the file URL if it is not empty. The value does not appear in `Debug`|
-| `FERRIOXID_ENV=production` | Turn on the production mode. `FERRUM_ENV` is the legacy alias. Different values are an error. Any other or missing value remains development |
-| `FERRIOXID_DEBUG` | Only `true` or `false`. `FERRUM_DEBUG` is the legacy alias. Different values are an error and are not replaced by the file |
-| `FERRIOXID_SMTP_PASSWORD` | SMTP password. `FERRUM_SMTP_PASSWORD` is the legacy alias. It is not in `ferrioxid.toml` or `ferrum.toml` |
-| `FERRIOXID_CSRF_SECRET` | 64 hex characters in production. `FERRUM_CSRF_SECRET` is the legacy alias. The value is not logged |
-| `FERRIOXID_MFA_KEY` | 64 hex characters, 32 bytes, no prefix. Production requires it. There is no `FERRUM_` alias. Development uses `.ferrioxid/mfa.key` when the variable is unset. The value is not logged |
+| `FEXU_ENV=production` | Turns on production mode. Any other or missing value remains development |
+| `FEXU_DEBUG` | Only `true` or `false`. Invalid text is an error and is not replaced by the file |
+| `FEXU_SMTP_PASSWORD` | SMTP password. It is not stored in `fexu.toml` |
+| `FEXU_CSRF_SECRET` | 64 hex characters in production. The value is not logged |
+| `FEXU_MFA_KEY` | 64 hex characters, 32 bytes, no prefix. Production requires it. Development uses `.fexu/mfa.key` when the variable is unset. The value is not logged |
 | `BIND_ADDRESS` |Replaces `host:port`. A value starting with `0.0.0.0` is rejected|
-| `FERRIOXID_PUBLIC_ORIGIN` |Replaces `mail.public_origin` only when opening the mail service|
-| `FERRIOXID_SMTP_USERNAME` | SMTP user. `FERRUM_SMTP_USERNAME` is the legacy alias. If both are missing, the field remains empty |
-| `FERRIOXID_SESSION_HOURS` | Replaces the file when set. `FERRUM_SESSION_HOURS` is the legacy alias |
-| `FERRIOXID_IDLE_MINUTES` | Replaces the file when set. `FERRUM_IDLE_MINUTES` is the legacy alias |
-| `FERRIOXID_COOKIE_SECURE` | `1` or `true` sets `Secure` on `ferrioxid_session` and `ferrioxid_anonymous`. `FERRUM_COOKIE_SECURE` is the legacy alias. In production this is the default |
-| `FERRIOXID_ALLOWED_ORIGINS` | Comma-separated origins. `FERRUM_ALLOWED_ORIGINS` is the legacy alias. In production without this variable, the list is empty until `apply_bound_address` sets loopback |
-| `FERRIOXID_TRUST_PROXY` | `1` or `true` allows reading `X-Forwarded-For`. `FERRUM_TRUST_PROXY` is the legacy alias. Alone it trusts no peer |
-| `FERRIOXID_TRUSTED_PROXIES` | Comma-separated immediate peer addresses allowed to supply `X-Forwarded-For`. `FERRUM_TRUSTED_PROXIES` is the legacy alias. Empty means no peer is trusted. A `*` entry is ignored |
+| `FEXU_PUBLIC_ORIGIN` |Replaces `mail.public_origin` only when opening the mail service|
+| `FEXU_SMTP_USERNAME` | SMTP user. If it is missing, the field remains empty |
+| `FEXU_SESSION_HOURS` | Replaces the file when set |
+| `FEXU_IDLE_MINUTES` | Replaces the file when set |
+| `FEXU_COOKIE_SECURE` | `1` or `true` sets `Secure` on `fexu_session` and `fexu_anonymous`. In production this is the default |
+| `FEXU_ALLOWED_ORIGINS` | Comma-separated origins. In production without this variable, the list is empty until `apply_bound_address` sets loopback |
+| `FEXU_TRUST_PROXY` | `1` or `true` allows reading `X-Forwarded-For`. Alone it trusts no peer |
+| `FEXU_TRUSTED_PROXIES` | Comma-separated immediate peer addresses allowed to supply `X-Forwarded-For`. Empty means no peer is trusted. A `*` entry is ignored |
 
-A missing optional variable retains the file or default value. `DATABASE_URL` and `BIND_ADDRESS` have no `FERRUM_` alias. For every other `FERRIOXID_` variable listed above, the matching `FERRUM_` variable is accepted. If both are set to different values, Ferrioxid stops and does not print either value. A missing mandatory production specification remains an error: `FERRIOXID_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FERRIOXID_ENV=production`. Ferrioxid does not switch debug silently to `false` in this case.
+A missing optional variable retains the file or default value. `DATABASE_URL` and `BIND_ADDRESS` are not `FEXU_` settings. A missing mandatory production specification remains an error: `FEXU_DEBUG` with invalid text, `BIND_ADDRESS` on `0.0.0.0`, and `server.debug = true` together with `FEXU_ENV=production`. Fexu does not switch debug silently to `false` in this case.
 
 ## Development and production
 
-Development is the default. Generated projects set `debug = true` and bind to `127.0.0.1`. Production is selected only by `FERRIOXID_ENV=production`; `enforce_runtime` then rejects enabled debug mode. `ferrioxid check` and `ferrioxid doctor` use the same runtime validation without opening a database or SMTP connection for that check. Success is `OK settings.runtime`; failure is `ERROR settings.runtime` with exit code 1.
+Development is the default. Generated projects set `debug = true` and bind to `127.0.0.1`. Production is selected only by `FEXU_ENV=production`; `enforce_runtime` then rejects enabled debug mode. `fexu check` and `fexu doctor` use the same runtime validation without opening a database or SMTP connection for that check. Success is `OK settings.runtime`; failure is `ERROR settings.runtime` with exit code 1.
 
 ## Debug and logs
 
@@ -66,7 +66,7 @@ Development is the default. Generated projects set `debug = true` and bind to `1
 
 ## CLI
 
-`ferrioxid check` and `ferrioxid doctor` read the file, check the runtime rules and report a set `DATABASE_URL` without outputting it. A static test is not combined.
+`fexu check` and `fexu doctor` read the file, check the runtime rules and report a set `DATABASE_URL` without outputting it. A static test is not combined.
 
 ## Example
 

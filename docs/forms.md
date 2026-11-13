@@ -4,26 +4,26 @@
 
 ## Responsibility
 
-`ferrioxid-forms` checks URL-encoded input and provides a typed Rust object or field error. Forms are not bound to a database table. Contact, search and filter can thus be described without creating a `FerrioxidModel`.
+`fexu-forms` checks URL-encoded input and provides a typed Rust object or field error. Forms are not bound to a database table. Contact, search and filter can thus be described without creating a `FexuModel`.
 
 ## Crates and files
 
-- `crates/ferrioxid-forms/src/lib.rs`
-- Shared validation rules: `crates/ferrioxid-core/src/validation.rs`
+- `crates/fexu-forms/src/lib.rs`
+- Shared validation rules: `crates/fexu-core/src/validation.rs`
 - Example: `examples/myshop/src/contact.rs`
-- Generator: `crates/ferrioxid-cli/src/scaffold.rs`, function `contact_handlers`
+- Generator: `crates/fexu-cli/src/scaffold.rs`, function `contact_handlers`
 
-The facade exports the module as `ferrioxid::forms`.
+The facade exports the module as `fexu::forms`.
 
 ## Public API
 
-`FerrioxidForm::from_form` accepts `FormValues`; `ContactForm` is the supplied example. Helpers include `required_text`, `optional_text`, `required_i64`, `optional_i64`, `required_bool`, `optional_bool`, `required_uuid`, `optional_uuid`, `required_choice`, `optional_choice` and `required_postal`. `render_form` still accepts `InputSpec`. `render_fields` renders `Field` widgets: text, email, password, number, URL, checkbox, textarea and select. Labels, help, placeholders, the `required` attribute and field errors are escaped. `aria-describedby` points at `{name}-error` and `{name}-help` when those texts exist. A selected option is marked only when its value equals the current field value. Password values are not written back into the page. `message` maps stable codes to German and English text. `FormValues::parse_urlencoded` limits the body to 65536 bytes and rejects unknown fields through `reject_unknown`. `csrf_token` is allowed as a control field rather than form data.
+`FexuForm::from_form` accepts `FormValues`; `ContactForm` is the supplied example. Helpers include `required_text`, `optional_text`, `required_i64`, `optional_i64`, `required_bool`, `optional_bool`, `required_uuid`, `optional_uuid`, `required_choice`, `optional_choice` and `required_postal`. `render_form` still accepts `InputSpec`. `render_fields` renders `Field` widgets: text, email, password, number, URL, checkbox, textarea and select. Labels, help, placeholders, the `required` attribute and field errors are escaped. `aria-describedby` points at `{name}-error` and `{name}-help` when those texts exist. A selected option is marked only when its value equals the current field value. Password values are not written back into the page. `message` maps stable codes to German and English text. `FormValues::parse_urlencoded` limits the body to 65536 bytes and rejects unknown fields through `reject_unknown`. `csrf_token` is allowed as a control field rather than form data.
 
 `model_fields` builds fields from `ColumnSpec` and `AdminFieldMeta`, but only for names in the explicit allow-list. A name that is not a column, a duplicate, a primary key, or an admin field marked sensitive, readonly or hidden returns `FormSetupError` and creates no field. `bind_model` distinguishes `SubmitMode::Create`, `Replace` and `Patch`. Create and Replace require every required field and turn a missing optional field into `BoundValue::Null`. Patch keeps a missing key as `BoundValue::Unchanged`. Posted names outside the field list produce `validation.unknown_field`, including when a client adds a column the allow-list omitted. `choices` rejects values that are not in the supplied list with `validation.choice`.
 
 `FormValues::parse_urlencoded` and `FormValues::parse_json` both feed `bind_submission`. Duplicate keys are `validation.duplicate`. Names in the protected list are `validation.readonly` and are removed before binding, so a forged readonly or disabled field cannot overwrite the stored value. `apply_contracts` copies `min_length`, `max_length` and `format` from `FieldContract`. Lengths count Unicode scalar values. `render_relation_select` renders only the options the caller already limited with `QueryScope`. `inspect_upload` rejects traversal, size, a content type outside the policy, and image bytes that do not match PNG, JPEG, GIF or WebP. `plan_formset` counts creates, updates and deletes. The caller writes those rows in one database transaction and rolls the transaction back when validation fails.
 
-`#[derive(FerrioxidForm)]` with `#[form(model = Type)]` builds a form from the model allow-list. `bind_formset` accepts at most 100 rows named `{prefix}_{index}_{field}`. `store_upload` rejects `..`, slashes and NUL, then stores the bytes through `LocalStorage`. Numeric `min` and `max` come from the model column metadata. The HTML `required` attribute does not replace the server check.
+`#[derive(FexuForm)]` with `#[form(model = Type)]` builds a form from the model allow-list. `bind_formset` accepts at most 100 rows named `{prefix}_{index}_{field}`. `store_upload` rejects `..`, slashes and NUL, then stores the bytes through `LocalStorage`. Numeric `min` and `max` come from the model column metadata. The HTML `required` attribute does not replace the server check.
 
 ## Data flow
 
@@ -31,7 +31,7 @@ The handler reads the body, builds `FormValues` and calls `from_form`. Valid val
 
 ## Configuration
 
-Forms do not have their own `ferrioxid.toml` section. The maximum URL-encoded size is in `FormValues::parse_urlencoded`. Larger requests are previously rejected by the body limit middleware if `ferrioxid::web::prepare` or `ferrioxid::middleware::apply` is used.
+Forms do not have their own `fexu.toml` section. The maximum URL-encoded size is in `FormValues::parse_urlencoded`. Larger requests are previously rejected by the body limit middleware if `fexu::web::prepare` or `fexu::middleware::apply` is used.
 
 ## Security
 
@@ -46,12 +46,12 @@ Codes include `validation.required`, `validation.min_length`, `validation.max_le
 ## Example
 
 ```rust
-let values = ferrioxid::forms::FormValues::parse_urlencoded(&body).expect("form body");
-let form = ferrioxid::forms::ContactForm::from_form(&values).expect("contact");
+let values = fexu::forms::FormValues::parse_urlencoded(&body).expect("form body");
+let form = fexu::forms::ContactForm::from_form(&values).expect("contact");
 let admin = Product::admin_meta().map(|meta| meta.fields).unwrap_or(&[]);
-let fields = ferrioxid::forms::model_fields(Product::columns(), admin, &["title"]).expect("fields");
-let bound = ferrioxid::forms::bind_model(
-    ferrioxid::forms::SubmitMode::Replace,
+let fields = fexu::forms::model_fields(Product::columns(), admin, &["title"]).expect("fields");
+let bound = fexu::forms::bind_model(
+    fexu::forms::SubmitMode::Replace,
     &fields,
     &values,
     &[],
@@ -63,7 +63,7 @@ let _title = &bound[0].value;
 
 ## Tests
 
-`cargo test -p ferrioxid-forms`. Covered are mandatory fields, length, email, URL, number, UUID, optional fields, cross validation, unknown fields, escaping, select choices, postal codes, prefilled values, password suppression and the model allow-list.
+`cargo test -p fexu-forms`. Covered are mandatory fields, length, email, URL, number, UUID, optional fields, cross validation, unknown fields, escaping, select choices, postal codes, prefilled values, password suppression and the model allow-list.
 
 ## Limitations
 
@@ -71,4 +71,4 @@ File inputs use `enctype="multipart/form-data"`. The stored path still comes fro
 
 ## Extension
 
-A future derive macro can call the same functions from `ferrioxid-core`. File fields and formsets remain planned.
+A future derive macro can call the same functions from `fexu-core`. File fields and formsets remain planned.

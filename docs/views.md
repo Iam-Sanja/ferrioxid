@@ -1,19 +1,19 @@
 # Views
 
-[Overview](index.md) · Routes: [urls.md](urls.md) · **actual file:** `crates/ferrioxid-api/src/views.rs`.
+[Overview](index.md) · Routes: [urls.md](urls.md) · **actual file:** `crates/fexu-api/src/views.rs`.
 
 ## Purpose
 
-`ferrioxid::views` provides the answers that an application often needs: HTML, JSON, a local redirect and stable errors. The types remain Axum-`Response` and `HeaderMap`. Tera remains the template engine.
+`fexu::views` provides the answers that an application often needs: HTML, JSON, a local redirect and stable errors. The types remain Axum-`Response` and `HeaderMap`. Tera remains the template engine.
 
 `require_mutation(auth, headers, token)` checks a POST request via `AuthService::authenticate_csrf`. If the Auth service is missing, the answer is `401` and `auth.not_configured`. Anonymous forms use the same HMAC through `authenticate_browser_form`. That helper is separate because it does not return a user. `require_user` remains a GET test. The app registration does not grant any permission.
 
-## Django and Ferrioxid
+## Django and Fexu
 
-| Django | Ferrioxid |
+| Django | Fexu |
 |---|---|
 | `render(request, "home.html", context)` | `views::render(site, "home.html", context, debug)` |
-| `JsonResponse({"ok": True})` | `views::json(&ferrioxid::serde_json::json!({"ok": true}))` |
+| `JsonResponse({"ok": True})` | `views::json(&fexu::serde_json::json!({"ok": true}))` |
 | `redirect("/home")` | `views::redirect_to("/home")` |
 | `Http404` | `views::fail(..., StatusCode::NOT_FOUND, code, detail, debug)`. HTML uses `templates/errors/404.html` when `mount_pages` installed the project templates. |
 | `PermissionDenied` |`views::fail(..., StatusCode::FORBIDDEN, ...)` or `require_staff`|
@@ -22,7 +22,7 @@
 | `permission_required("app.view")` | `require_permission(..., "app.view")` |
 | `get_object_or_404` plus Policy |Existing repository and `require_object_read::<T, P>`|
 
-The correspondence is the task, not the syntax. A Ferrioxid view is an axum function. It gets the state as an argument and returns `Response`.
+The correspondence is the task, not the syntax. A Fexu view is an axum function. It gets the state as an argument and returns `Response`.
 
 ## HTML
 
@@ -30,15 +30,15 @@ The correspondence is the task, not the syntax. A Ferrioxid view is an axum func
 use std::sync::Arc;
 
 use axum::extract::Extension;
-use ferrioxid::migrations::ProjectConfig;
+use fexu::migrations::ProjectConfig;
 
 pub async fn home(
     Extension(settings): Extension<Arc<ProjectConfig>>,
 ) -> axum::response::Response {
-    let site = match ferrioxid::pages::Site::open(&settings.templates_directory()) {
+    let site = match fexu::pages::Site::open(&settings.templates_directory()) {
         Ok(site) => site,
         Err(_) => {
-            return ferrioxid::views::fail(
+            return fexu::views::fail(
                 &axum::http::HeaderMap::new(),
                 None,
                 axum::http::StatusCode::INTERNAL_SERVER_ERROR,
@@ -48,8 +48,8 @@ pub async fn home(
             )
         }
     };
-    let context = ferrioxid::pages::home_context(&settings);
-    ferrioxid::views::render(&site, "home.html", &context, settings.debug)
+    let context = fexu::pages::home_context(&settings);
+    fexu::views::render(&site, "home.html", &context, settings.debug)
 }
 ```
 
@@ -58,10 +58,10 @@ If the rendering fails, `render` responds with `view.template`. In production an
 ## JSON, redirects and forms
 
 ```rust
-fn answers() -> Result<axum::response::Response, ferrioxid::views::ViewError> {
-    let _response = ferrioxid::views::json(&ferrioxid::serde_json::json!({"ok": true}));
-    let target = ferrioxid::views::redirect_to("/home")?;
-    let _fields = ferrioxid::views::form_fields("name=Ada&city=Bern")?;
+fn answers() -> Result<axum::response::Response, fexu::views::ViewError> {
+    let _response = fexu::views::json(&fexu::serde_json::json!({"ok": true}));
+    let target = fexu::views::redirect_to("/home")?;
+    let _fields = fexu::views::form_fields("name=Ada&city=Bern")?;
     Ok(target)
 }
 ```
@@ -93,14 +93,14 @@ An `Accept-Language` value beginning with `en` selects the English heading; othe
 
 ```rust
 async fn account(
-    axum::extract::State(state): axum::extract::State<ferrioxid::auth::AppState>,
+    axum::extract::State(state): axum::extract::State<fexu::auth::AppState>,
     headers: axum::http::HeaderMap,
 ) -> axum::response::Response {
-    let user = match ferrioxid::views::require_user(state.auth.as_ref(), &headers).await {
+    let user = match fexu::views::require_user(state.auth.as_ref(), &headers).await {
         Ok(user) => user,
         Err(error) => return error.into_response(),
     };
-    ferrioxid::views::json(&ferrioxid::serde_json::json!({"email": user.email}))
+    fexu::views::json(&fexu::serde_json::json!({"email": user.email}))
 }
 ```
 
@@ -112,12 +112,12 @@ State-changing requests must pass `authenticate_csrf`. View helpers do not repla
 
 `page_window` accepts pages from 1 and a size from 1 to 100. `pagination_href` stays on one local path and rejects `scope`, `csrf` and `token` query keys. `require_scope` rejects `QueryScope::None` before a read. `scoped_list` and `scoped_get` pass that scope into the existing query functions. They do not build a scope from the request.
 
-`create_flash_table` creates `_ferrioxid_flashes`. `push_flash` stores one line, at most 240 characters, for a session id. `take_flashes` returns those rows and deletes them in the same transaction. A second take is empty. `render_flashes` escapes the text. `ferrioxid dev` does not create this table.
+`create_flash_table` creates `_fexu_flashes`. `push_flash` stores one line, at most 240 characters, for a session id. `take_flashes` returns those rows and deletes them in the same transaction. A second take is empty. `render_flashes` escapes the text. `fexu dev` does not create this table.
 
 ```rust
-ferrioxid::views::push_flash(&db, user.session_id, ferrioxid::views::FlashLevel::Success, "Saved").await?;
-let messages = ferrioxid::views::take_flashes(&db, user.session_id).await?;
-let html = ferrioxid::views::render_flashes(&messages);
+fexu::views::push_flash(&db, user.session_id, fexu::views::FlashLevel::Success, "Saved").await?;
+let messages = fexu::views::take_flashes(&db, user.session_id).await?;
+let html = fexu::views::render_flashes(&messages);
 ```
 
 ## Tests

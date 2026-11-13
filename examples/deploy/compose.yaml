@@ -5,13 +5,13 @@ services:
   postgres:
     image: postgres:16
     environment:
-      POSTGRES_USER: ferrioxid
+      POSTGRES_USER: fexu
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD outside the compose file}
-      POSTGRES_DB: ferrioxid
+      POSTGRES_DB: fexu
     volumes:
-      - ferrioxid-postgres:/var/lib/postgresql/data
+      - fexu-postgres:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ferrioxid -d ferrioxid"]
+      test: ["CMD-SHELL", "pg_isready -U fexu -d fexu"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -21,14 +21,14 @@ services:
       context: ../..
       dockerfile: examples/deploy/Dockerfile
     environment:
-      DATABASE_URL: postgres://ferrioxid:${POSTGRES_PASSWORD}@postgres:5432/ferrioxid
+      DATABASE_URL: postgres://fexu:${POSTGRES_PASSWORD}@postgres:5432/fexu
       BIND_ADDRESS: 0.0.0.0:3000
-      FERRIOXID_ALLOW_WILDCARD_BIND: "true"
-      FERRIOXID_ALLOWED_ORIGINS: https://shop.example
-      FERRIOXID_TRUST_PROXY: "true"
+      FEXU_ALLOW_WILDCARD_BIND: "true"
+      FEXU_ALLOWED_ORIGINS: https://shop.example
+      FEXU_TRUST_PROXY: "true"
       # Set this to the proxy container's address on this network. A name or * is not trusted.
-      FERRIOXID_TRUSTED_PROXIES: ${FERRIOXID_TRUSTED_PROXIES:-}
-      FERRIOXID_COOKIE_SECURE: "true"
+      FEXU_TRUSTED_PROXIES: ${FEXU_TRUSTED_PROXIES:-}
+      FEXU_COOKIE_SECURE: "true"
     depends_on:
       postgres:
         condition: service_healthy
@@ -45,4 +45,4 @@ services:
       - app
 
 volumes:
-  ferrioxid-postgres:
+  fexu-postgres:

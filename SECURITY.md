@@ -1,6 +1,6 @@
 # Security policy
 
-Ferrioxid is a pre-release framework. The Cargo version is `0.1.0`. There is no stable release and no commitment to provide security patches for older revisions.
+Fexu is a pre-release framework. The Cargo version is `0.1.0`. There is no stable release and no commitment to provide security patches for older revisions.
 
 ## Reporting a vulnerability
 
@@ -30,7 +30,7 @@ These notes describe the current design. They are not a promise that every deplo
 - **Sessions.** Sessions are server-side and use an HttpOnly cookie. CSRF protection applies to cookie-authenticated writes. Anonymous routes do not receive that cookie check.
 - **Password reset.** Reset tokens are not stored in background-job payloads. A reset message must not be placed on the job queue.
 - **Migrations.** The framework does not provide `migrate down`. Do not edit a migration that a real project has already applied. Tests must use a temporary or disposable database.
-- **Background jobs.** Delivery is at least once, not exactly once. `ferrioxid jobs inspect` hides payloads unless `--show-payload` is passed. A requested payload can still contain personal data. The lease token is not printed.
+- **Background jobs.** Delivery is at least once, not exactly once. `fexu jobs inspect` hides payloads unless `--show-payload` is passed. A requested payload can still contain personal data. The lease token is not printed.
 - **Bindings.** Generated projects and the example server bind to loopback by default. Do not publish a demo with anonymous model access on a public interface.
 
-The sample PostgreSQL password `ferrioxid_dev_only` in `.env.example` and `compose.yaml` is a local development default. It is not a production credential.
+The sample PostgreSQL password `fexu_dev_only` in `.env.example` and `compose.yaml` is a local development default. It is not a production credential.

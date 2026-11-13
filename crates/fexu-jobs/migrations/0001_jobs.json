@@ -1,0 +1,293 @@
+{
+  "format_version": 1,
+  "id": "0001_jobs",
+  "name": "jobs",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": []
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "_fexu_jobs",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "handler",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload_version",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "available_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "max_attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "next_attempt_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_owner",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_token",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "error_code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "finished_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "idempotency_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "interval_secs",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "schedule_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_jobs_idempotency_key",
+            "columns": [
+              "idempotency_key"
+            ]
+          },
+          {
+            "name": "uq__fexu_jobs_schedule_key",
+            "columns": [
+              "schedule_key"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__fexu_jobs_status_available_at",
+            "columns": [
+              "status",
+              "available_at"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_fexu_jobs",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "handler",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload_version",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "status",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "available_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "max_attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "next_attempt_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_owner",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_token",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "lease_expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "error_code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "finished_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "idempotency_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "interval_secs",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "schedule_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_jobs_idempotency_key",
+            "columns": [
+              "idempotency_key"
+            ]
+          },
+          {
+            "name": "uq__fexu_jobs_schedule_key",
+            "columns": [
+              "schedule_key"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__fexu_jobs_status_available_at",
+            "columns": [
+              "status",
+              "available_at"
+            ]
+          }
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "2e2b732962a9f11f0551ce3645c428d51d49bdda794e8c2a399a84bb147513fa"
+}

@@ -2,7 +2,7 @@
 
 [Overview](index.md)
 
-**Implemented** as an optional, process-local cache in `ferrioxid-cache`. The facade re-exports it as `ferrioxid::cache`. There is no Redis client and no required extra service. An in-process cache is not a distributed cache. Two `MemoryCache` values do not share entries.
+**Implemented** as an optional, process-local cache in `fexu-cache`. The facade re-exports it as `fexu::cache`. There is no Redis client and no required extra service. An in-process cache is not a distributed cache. Two `MemoryCache` values do not share entries.
 
 ## API
 
@@ -24,4 +24,4 @@ Stale data is the caller's problem. Set a TTL or call `invalidate_namespace` aft
 
 ## Tests
 
-`cargo test -p ferrioxid-cache` covers TTL, namespaces, version errors, memory bounds, separate instances, fragment invalidation and concurrent `get_or_set`.
+`cargo test -p fexu-cache` covers TTL, namespaces, version errors, memory bounds, separate instances, fragment invalidation and concurrent `get_or_set`.

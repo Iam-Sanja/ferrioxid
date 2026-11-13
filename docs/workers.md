@@ -2,36 +2,36 @@
 
 [Overview](index.md) · Jobs: [jobs.md](jobs.md) · Security: [job-security.md](job-security.md)
 
-**Implemented.** Milestone v0.27.1. `ferrioxid worker` does not start a web server and only runs the mail handler. `ferrioxid dev` does not start a worker. An installed app does not perform jobs through `App::install`. Application handlers start via `WorkerHost` in the project binary.
+**Implemented.** Milestone v0.27.1. `fexu worker` does not start a web server and only runs the mail handler. `fexu dev` does not start a worker. An installed app does not perform jobs through `App::install`. Application handlers start via `WorkerHost` in the project binary.
 
 ## Public launch API
 
 ```rust
-let project = ferrioxid::migrations::discover_project(&root)?;
-let mut host = ferrioxid::jobs::WorkerHost::from_project(&project)
-    .with_mail(ferrioxid::mail_for(&project));
+let project = fexu::migrations::discover_project(&root)?;
+let mut host = fexu::jobs::WorkerHost::from_project(&project)
+    .with_mail(fexu::mail_for(&project));
 NotesApp.register_jobs(host.registry_mut())?;
 host.run_until_ctrl_c()?;
 ```
 
-`WorkerHost::new` accepts a `WorkerConfig`; `from_project` reads `[jobs]` and the resolved database URL. `register` and `registry_mut` add handlers to the shared `JobRegistry`; duplicate `NAME` values return `job.handler`. `with_mail` adds `ferrioxid_mail_notice` if absent. `prepare` checks the SQLite file and `_ferrioxid_jobs`, then returns a `Worker`. `run_until_ctrl_c` creates the Tokio runtime and runs until Ctrl+C.
+`WorkerHost::new` accepts a `WorkerConfig`; `from_project` reads `[jobs]` and the resolved database URL. `register` and `registry_mut` add handlers to the shared `JobRegistry`; duplicate `NAME` values return `job.handler`. `with_mail` adds `fexu_mail_notice` if absent. `prepare` checks the SQLite file and `_fexu_jobs`, then returns a `Worker`. `run_until_ctrl_c` creates the Tokio runtime and runs until Ctrl+C.
 
 The API neither migrates the database nor mounts a router. A missing SQLite file returns `job.database` without creating a file. A missing jobs table returns `job.migration.missing`; `jobs.enabled = false` returns `job.disabled`.
 
 SQLite uses the existing pool with a connection. `effective_concurrency` is then 1, even if `[jobs].concurrency` is higher. For PostgreSQL, the upper limit remains 4. The loop claims this number successively on the same connection. Simultaneous workers are separate processes.
 
-`ferrioxid generate worker` writes `src/bin/worker.rs`. The file contains a compilable example `app_example`, which is replaced by `register_jobs` of its own app. An existing file is not overwritten. Windows and Linux use the same source code and `tokio::signal::ctrl_c`. A worker can also set up on `WorkerHost` by hand, without the generator.
+`fexu generate worker` writes `src/bin/worker.rs`. The file contains a compilable example `app_example`, which is replaced by `register_jobs` of its own app. An existing file is not overwritten. Windows and Linux use the same source code and `tokio::signal::ctrl_c`. A worker can also set up on `WorkerHost` by hand, without the generator.
 
 ## Start
 
 ```powershell
-ferrioxid worker
-ferrioxid worker --concurrency 2 --poll-ms 500
+fexu worker
+fexu worker --concurrency 2 --poll-ms 500
 ```
 
-The CLI worker only registers `ferrioxid_mail_notice`. Handlers of an app start `src/bin/worker.rs`. The CLI does not load any Rust code and no unknown Crate.
+The CLI worker only registers `fexu_mail_notice`. Handlers of an app start `src/bin/worker.rs`. The CLI does not load any Rust code and no unknown Crate.
 
-If the SQLite file is missing, it is not created. If `_ferrioxid_jobs` is missing, the process ends with Exitcode 2 and `job.migration.missing`. `jobs.enabled = false` also terminates the worker with Exitcode 2. A clean stop signal ends with 0. A database error ends with 1.
+If the SQLite file is missing, it is not created. If `_fexu_jobs` is missing, the process ends with Exitcode 2 and `job.migration.missing`. `jobs.enabled = false` also terminates the worker with Exitcode 2. A clean stop signal ends with 0. A database error ends with 1.
 
 Ctrl+C sets a stop flag on Windows and Linux. The worker does not claim a new job afterwards and ends the current execution. A handler is not rolled back in the middle of an external effect.
 
@@ -53,11 +53,11 @@ If the worker loses the lease, `finish_success` provides `Finish::LostLease`. Th
 
 Ctrl+C sets the stop flag between two claims. The current `run_once` runs until the result or until the timeout. The current effect is not rolled back.
 
-Delivery is at least once. An Exactly-once guarantee does not provide Ferrioxid. Two processes cannot have the same due job both as a valid claim. After an expired lease, a second run can repeat the same effect.
+Delivery is at least once. An Exactly-once guarantee does not provide Fexu. Two processes cannot have the same due job both as a valid claim. After an expired lease, a second run can repeat the same effect.
 
 ## Configuration
 
-`[jobs]` in `ferrioxid.toml` is optional.
+`[jobs]` in `fexu.toml` is optional.
 
 | Key | Default | Limit |
 |---|---|---|

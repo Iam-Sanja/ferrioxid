@@ -11,13 +11,13 @@ cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-A generated project starts with `ferrioxid dev` in the project directory. Windows and Linux use the same command. The server starts without automatic migration. First run `ferrioxid migrate up`. Generated applications do not bind to `0.0.0.0`. `myshop --bootstrap` does not change the file. The file `db.sqlite3` is in the working directory. An older bootstrap file without `_ferrioxid_migrations` is not taken over and not deleted.
+A generated project starts with `fexu dev` in the project directory. Windows and Linux use the same command. The server starts without automatic migration. First run `fexu migrate up`. Generated applications do not bind to `0.0.0.0`. `myshop --bootstrap` does not change the file. The file `db.sqlite3` is in the working directory. An older bootstrap file without `_fexu_migrations` is not taken over and not deleted.
 
-The admin does not need a node process. `cargo build` is sufficient. Put `FERRIOXID_CSRF_SECRET` and `FERRIOXID_MFA_KEY` into production. Each value is 64 hexadecimal characters. The MFA key is not derived from the CSRF secret. The `.ferrioxid/csrf.key` and `.ferrioxid/mfa.key` files are only local sources. Production should set `FERRIOXID_ENV=production` or `FERRIOXID_COOKIE_SECURE=1`, and `FERRIOXID_ALLOWED_ORIGINS` to the public `https` origins. A reverse proxy must forward `Origin` and `Referer` for cookie-authenticated unsafe requests. `FERRIOXID_TRUST_PROXY` only changes the login rate-limit client address. It does not add an origin and it does not turn off `Secure`. Do not log `Cookie`, `x-csrf-token`, or `Authorization`.
+The admin does not need a node process. `cargo build` is sufficient. Put `FEXU_CSRF_SECRET` and `FEXU_MFA_KEY` into production. Each value is 64 hexadecimal characters. The MFA key is not derived from the CSRF secret. The `.fexu/csrf.key` and `.fexu/mfa.key` files are only local sources. Production should set `FEXU_ENV=production` or `FEXU_COOKIE_SECURE=1`, and `FEXU_ALLOWED_ORIGINS` to the public `https` origins. A reverse proxy must forward `Origin` and `Referer` for cookie-authenticated unsafe requests. `FEXU_TRUST_PROXY` only changes the login rate-limit client address. It does not add an origin and it does not turn off `Secure`. Do not log `Cookie`, `x-csrf-token`, or `Authorization`.
 
-`ferrioxid check --deploy` is read-only. It reports debug, bind address, cookie `Secure`, the presence and shape of `FERRIOXID_CSRF_SECRET` without printing it, https origins, pending migrations, and the proxy flag. `FERRIOXID_TRUST_PROXY=1` fails this check on this branch because `X-Forwarded-For` would be trusted from every peer. A peer allow-list is pull request 97 and is not merged here. The check does not migrate.
+`fexu check --deploy` is read-only. It reports debug, bind address, cookie `Secure`, the presence and shape of `FEXU_CSRF_SECRET` without printing it, https origins, pending migrations, and the proxy flag. `FEXU_TRUST_PROXY=1` fails this check on this branch because `X-Forwarded-For` would be trusted from every peer. A peer allow-list is pull request 97 and is not merged here. The check does not migrate.
 
-`ferrioxid::serve` stops the process on Ctrl+C and, on Unix, on SIGTERM. `FERRIOXID_LOG_FORMAT=json` selects JSON logs. The access log records method, path, status, elapsed time and `x-request-id`. Query strings are not logged. An inbound `x-request-id` is kept only when it is 8 to 64 ASCII letters, digits or hyphens. OpenTelemetry is not bundled. `/healthz` does not touch the database. `/readyz` runs `SELECT 1` and does not migrate. `App::strict_migrations` refuses startup when migrations are pending and does not apply them.
+`fexu::serve` stops the process on Ctrl+C and, on Unix, on SIGTERM. `FEXU_LOG_FORMAT=json` selects JSON logs. The access log records method, path, status, elapsed time and `x-request-id`. Query strings are not logged. An inbound `x-request-id` is kept only when it is 8 to 64 ASCII letters, digits or hyphens. OpenTelemetry is not bundled. `/healthz` does not touch the database. `/readyz` runs `SELECT 1` and does not migrate. `App::strict_migrations` refuses startup when migrations are pending and does not apply them.
 
 A different `BIND_ADDRESS`, in particular `0.0.0.0:3000`, can make the service accessible on other networks. With the anonymous demo model, this is not an Internet deployment. Inside `deploy/compose.yaml` the app listens on `0.0.0.0` only on the Compose network. The published port is the proxy on `127.0.0.1:8443`. The database port is not published.
 
@@ -27,27 +27,27 @@ A different `BIND_ADDRESS`, in particular `0.0.0.0:3000`, can make the service a
 
 ```powershell
 docker compose up -d db
-$env:DATABASE_URL="postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid"
+$env:DATABASE_URL="postgres://fexu:fexu_dev_only@127.0.0.1:5432/fexu"
 cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
 
-The same registered application then speaks PostgreSQL. The handlers remain unchanged. Docker is an optional tool for this server, not the prerequisite for Ferrioxid.
+The same registered application then speaks PostgreSQL. The handlers remain unchanged. Docker is an optional tool for this server, not the prerequisite for Fexu.
 
 ## Production architecture (not a production deployment)
 
 `deploy/` is a local example: multi-stage image, non-root user, Caddy on `127.0.0.1:8443`, `/readyz`, graceful shutdown and a separate migration step. It was not booted when Docker was absent. It is not a production deployment. Still required before calling a host production:
 
 ```text
-TLS-Client → Reverse Proxy → Ferrioxid-App → PostgreSQL
+TLS-Client → Reverse Proxy → Fexu-App → PostgreSQL
                                   └→ Log-/Metrics-Ziel
 ```
 
 1. A separately managed PostgreSQL, not the unpublished example database.
-2. Forwarded headers only from trusted proxies. This branch rejects `FERRIOXID_TRUST_PROXY=1` in `check --deploy`.
+2. Forwarded headers only from trusted proxies. This branch rejects `FEXU_TRUST_PROXY=1` in `check --deploy`.
 3. HTTPS on the proxy, with session cookies and CSRF. The example uses Caddy's local issuer.
 4. Secrets from the operational environment, not from the image or the repository.
-5. Schema changes through `ferrioxid migrate up`, not at process start. `down` is not that step.
+5. Schema changes through `fexu migrate up`, not at process start. `down` is not that step.
 6. No productive `allow_anonymous=true` without a security review.
 7. Timeouts, connection limits and a metrics target. OpenTelemetry is not bundled.
 

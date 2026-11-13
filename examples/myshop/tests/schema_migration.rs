@@ -1,8 +1,8 @@
 //! `0001_initial.json` bleibt an das Produktmodell gebunden, das beim Anlegen dieser Datei galt.
 //! Das aktuelle Product hat `category_id` und wird durch `0002_categories_and_product_relations.json` abgebildet.
 
-use ferrioxid::core::FerrioxidModel;
-use ferrioxid::migrations::{
+use fexu::core::FexuModel;
+use fexu::migrations::{
     load_migration, make_migration, make_migration_with_backfills, plan_change,
     plan_change_with_backfills, seal, BackfillLiteral, ColumnBackfill, RegisteredModel,
     SchemaSnapshot,
@@ -16,10 +16,10 @@ use myshop::models::product::Product as LiveProduct;
 use myshop_schema::Product;
 
 mod myshop_schema {
-    use ferrioxid::prelude::*;
+    use fexu::prelude::*;
 
-    #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-    #[ferrioxid(table = "products", api = "/api/v1/products", allow_anonymous = true)]
+    #[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+    #[fexu(table = "products", api = "/api/v1/products", allow_anonymous = true)]
     pub struct Product {
         #[field(primary_key, auto)]
         pub id: Uuid,
@@ -105,7 +105,7 @@ fn events_migration_adds_date_time_columns_without_rewriting_history() {
             .unwrap()
             .logical_type
     };
-    use ferrioxid::migrations::LogicalType;
+    use fexu::migrations::LogicalType;
     assert_eq!(kind("event_date"), LogicalType::Date);
     assert_eq!(kind("start_time"), LogicalType::Time);
     assert_eq!(kind("created_at"), LogicalType::DateTime);
@@ -267,7 +267,7 @@ fn prices_and_status_are_added_without_rewriting_applied_history() {
         .iter()
         .find(|column| column.name == "price")
         .unwrap();
-    use ferrioxid::migrations::LogicalType;
+    use fexu::migrations::LogicalType;
     assert_eq!(price.logical_type, LogicalType::Decimal);
     assert_eq!(price.precision, Some(12));
     assert_eq!(price.scale, Some(2));
