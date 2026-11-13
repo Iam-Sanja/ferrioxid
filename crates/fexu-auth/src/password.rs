@@ -37,7 +37,26 @@ fn hasher() -> Result<Argon2<'static>, AuthError> {
 
 fn dummy_hash() -> &'static str {
     static DUMMY: OnceLock<String> = OnceLock::new();
-    DUMMY.get_or_init(|| hash_password("fexu-timing-placeholder").unwrap_or_else(|_| String::new()))
+    DUMMY.get_or_init(|| {
+        let mut bytes = [0u8; 32];
+        getrandom::getrandom(&mut bytes).expect("dummy password entropy");
+        let password: String = bytes.iter().map(|byte| format!("{byte:02x}")).collect();
+        hash_password(&password).expect("dummy password hash")
+    })
+}
+
+#[cfg(test)]
+pub(crate) fn ephemeral_password() -> String {
+    let mut bytes = [0u8; 16];
+    getrandom::getrandom(&mut bytes).expect("test entropy");
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
+}
+
+#[cfg(test)]
+pub(crate) fn ephemeral_weak_password() -> String {
+    let mut bytes = [0u8; 4];
+    getrandom::getrandom(&mut bytes).expect("test entropy");
+    bytes.iter().map(|byte| format!("{byte:02x}")).collect()
 }
 
 pub fn validate_new_password(password: &str) -> Result<(), AuthError> {
@@ -51,32 +70,54 @@ pub fn validate_new_password(password: &str) -> Result<(), AuthError> {
 
 #[cfg(test)]
 mod tests {
-    use super::{hash_password, validate_new_password, verify_password};
+    use super::{
+        dummy_hash, ephemeral_password, ephemeral_weak_password, hash_password,
+        validate_new_password, verify_against_dummy, verify_password,
+    };
 
     #[test]
     fn correct_and_wrong_passwords_use_different_salts() {
-        let first = hash_password("correct-horse-battery").expect("hash");
-        let second = hash_password("correct-horse-battery").expect("hash");
+        let password = ephemeral_password();
+        let wrong = ephemeral_password();
+        let first = hash_password(&password).expect("hash");
+        let second = hash_password(&password).expect("hash");
         assert_ne!(first, second);
         assert!(first.starts_with("$argon2id$"));
-        assert!(verify_password("correct-horse-battery", &first).unwrap());
-        assert!(!verify_password("wrong-horse-battery", &first).unwrap());
-        assert!(verify_password("correct-horse-battery", &second).unwrap());
+        assert!(first.contains("m=19456"));
+        assert!(verify_password(&password, &first).unwrap());
+        assert!(!verify_password(&wrong, &first).unwrap());
+        assert!(verify_password(&password, &second).unwrap());
     }
 
     #[test]
     fn invalid_hash_is_rejected() {
-        let error = verify_password("correct-horse-battery", "not-a-hash").unwrap_err();
+        let error = verify_password(&ephemeral_password(), "not-a-hash").unwrap_err();
         assert!(error.to_string().contains("invalid"));
     }
 
     #[test]
     fn password_change_replaces_the_hash() {
-        let current = hash_password("current-password-1").expect("hash");
-        validate_new_password("short").unwrap_err();
-        let updated = hash_password("updated-password-1").expect("hash");
-        assert!(verify_password("current-password-1", &current).unwrap());
-        assert!(!verify_password("current-password-1", &updated).unwrap());
-        assert!(verify_password("updated-password-1", &updated).unwrap());
+        let current_password = ephemeral_password();
+        let updated_password = ephemeral_password();
+        let current = hash_password(&current_password).expect("hash");
+        validate_new_password(&ephemeral_weak_password()).unwrap_err();
+        validate_new_password(&ephemeral_password()).unwrap();
+        let updated = hash_password(&updated_password).expect("hash");
+        assert!(verify_password(&current_password, &current).unwrap());
+        assert!(!verify_password(&current_password, &updated).unwrap());
+        assert!(verify_password(&updated_password, &updated).unwrap());
+    }
+
+    #[test]
+    fn dummy_hash_stays_one_argon2id_value() {
+        let first = dummy_hash();
+        let second = dummy_hash();
+        assert_eq!(first, second);
+        assert!(first.starts_with("$argon2id$"));
+        assert!(first.contains("m=19456,t=2,p=1"));
+        let password = ephemeral_password();
+        verify_against_dummy(&password);
+        verify_against_dummy(&ephemeral_password());
+        assert!(!verify_password(&password, first).unwrap());
     }
 }

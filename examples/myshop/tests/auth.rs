@@ -232,11 +232,15 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     let db = fexu::db::connect("sqlite::memory:").await.unwrap();
     fexu::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
+    let editor_password = uuid::Uuid::new_v4().simple().to_string();
+    let wrong_password = uuid::Uuid::new_v4().simple().to_string();
+    let root_password = uuid::Uuid::new_v4().simple().to_string();
+    let updated_password = uuid::Uuid::new_v4().simple().to_string();
     let editor = auth
-        .create_user("editor@example.com", "correct-horse-battery", false, false)
+        .create_user("editor@example.com", &editor_password, false, false)
         .await
         .unwrap();
-    auth.create_user("root@example.com", "superuser-password", true, true)
+    auth.create_user("root@example.com", &root_password, true, true)
         .await
         .unwrap();
     let app = fexu::App::new(db.clone())
@@ -278,7 +282,9 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     let unknown = call(
         "POST",
         "/auth/login".into(),
-        Some(r#"{"email":"missing@example.com","password":"correct-horse-battery"}"#.into()),
+        Some(format!(
+            r#"{{"email":"missing@example.com","password":"{editor_password}"}}"#
+        )),
         String::new(),
     )
     .await
@@ -286,7 +292,9 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     let wrong = call(
         "POST",
         "/auth/login".into(),
-        Some(r#"{"email":"editor@example.com","password":"wrong-password-1"}"#.into()),
+        Some(format!(
+            r#"{{"email":"editor@example.com","password":"{wrong_password}"}}"#
+        )),
         String::new(),
     )
     .await
@@ -298,7 +306,9 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     let login = call(
         "POST",
         "/auth/login".into(),
-        Some(r#"{"email":"editor@example.com","password":"correct-horse-battery"}"#.into()),
+        Some(format!(
+            r#"{{"email":"editor@example.com","password":"{editor_password}"}}"#
+        )),
         "Origin: http://127.0.0.1:3000\r\n".into(),
     )
     .await
@@ -457,7 +467,9 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     let root_login = call(
         "POST",
         "/auth/login".into(),
-        Some(r#"{"email":"root@example.com","password":"superuser-password"}"#.into()),
+        Some(format!(
+            r#"{{"email":"root@example.com","password":"{root_password}"}}"#
+        )),
         String::new(),
     )
     .await
@@ -597,10 +609,9 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     let changed = call(
         "POST",
         "/auth/change-password".into(),
-        Some(
-            r#"{"current_password":"correct-horse-battery","new_password":"updated-password-1"}"#
-                .into(),
-        ),
+        Some(format!(
+            r#"{{"current_password":"{editor_password}","new_password":"{updated_password}"}}"#
+        )),
         auth_headers(&cookie, &csrf, None),
     )
     .await
@@ -619,7 +630,9 @@ async fn sqlite_auth_http_permissions_and_csrf() {
     let relogin = call(
         "POST",
         "/auth/login".into(),
-        Some(r#"{"email":"editor@example.com","password":"updated-password-1"}"#.into()),
+        Some(format!(
+            r#"{{"email":"editor@example.com","password":"{updated_password}"}}"#
+        )),
         String::new(),
     )
     .await
@@ -700,19 +713,23 @@ async fn expired_session_cookie_is_rejected() {
     let mut config = AuthConfig::development();
     config.session_ttl_secs = 0;
     let auth = AuthService::new(db.clone(), config);
-    auth.create_user("short@example.com", "correct-horse-battery", false, false)
+    let password = uuid::Uuid::new_v4().simple().to_string();
+    auth.create_user("short@example.com", &password, false, false)
         .await
         .unwrap();
     let app = fexu::App::new(db).with_auth(auth);
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
+    let login_password = password.clone();
     let login = tokio::task::spawn_blocking(move || {
         http(
             port,
             "POST",
             "/auth/login",
-            Some(r#"{"email":"short@example.com","password":"correct-horse-battery"}"#),
+            Some(&format!(
+                r#"{{"email":"short@example.com","password":"{login_password}"}}"#
+            )),
             "",
         )
     })

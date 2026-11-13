@@ -190,10 +190,31 @@ async fn login_submit(
     let next =
         safe_next(form.get("next").map(String::as_str).unwrap_or("/admin")).unwrap_or("/admin");
     let anonymous = cookie(&headers, &auth.config().anonymous_cookie_name);
+    let Some(password) = form.get("password").map(String::as_str) else {
+        let token = login_token(&headers);
+        let mut response = page(
+            &registry,
+            "login.html",
+            &locale,
+            theme_of(&headers),
+            catalog(&locale)["login"].as_str().unwrap_or("Login"),
+            false,
+            false,
+            "",
+            "",
+            "/admin/login",
+            "",
+            &validation_text(&locale, "Invalid email or password"),
+            json!({ "login_csrf": token, "next": next, "email": form.get("email").cloned().unwrap_or_default() }),
+        );
+        *response.status_mut() = StatusCode::UNAUTHORIZED;
+        append_cookie(&mut response, &login_cookie(Some(auth.config()), &token));
+        return response;
+    };
     match auth
         .login_replacing(
             form.get("email").map(String::as_str).unwrap_or(""),
-            form.get("password").map(String::as_str).unwrap_or(""),
+            password,
             &auth.client_key(&headers, "html"),
             anonymous.as_deref(),
         )
@@ -4054,14 +4075,22 @@ async fn user_create(
             url: false,
         },
     );
-    let password = values.get("password").unwrap_or("");
-    let password_confirm = values.get("password_confirm").unwrap_or("");
     let active = required_bool(&values, "active");
     let staff = required_bool(&values, "staff");
     let roles = repeated(&body, "roles");
-    if email.is_err() || active.is_err() || staff.is_err() || password != password_confirm {
+    let Some(password) = values.get("password") else {
+        let text = catalog(&locale)["password_invalid"]
+            .as_str()
+            .unwrap_or("The password must contain 12 to 128 characters.")
+            .to_owned();
+        let mut draft = user_draft(&values, Some(roles.clone()));
+        draft.password_error = text.clone();
+        return user_form(&state, &headers, &registry, None, Some(draft), &text, "").await;
+    };
+    let password_confirm = values.get("password_confirm");
+    if email.is_err() || active.is_err() || staff.is_err() || password_confirm != Some(password) {
         let copy = catalog(&locale);
-        let message = if password != password_confirm {
+        let message = if password_confirm != Some(password) {
             copy["password_mismatch"]
                 .as_str()
                 .unwrap_or("The passwords do not match.")
@@ -4078,7 +4107,7 @@ async fn user_create(
         if email.is_err() {
             draft.email_error = message.to_owned();
         }
-        if password != password_confirm {
+        if password_confirm != Some(password) {
             draft.password_error = message.to_owned();
         }
         return user_form(&state, &headers, &registry, None, Some(draft), message, "").await;
@@ -4511,9 +4540,31 @@ async fn user_password(
         )
         .await;
     }
-    let password = values.get("password").unwrap_or("");
-    let password_confirm = values.get("password_confirm").unwrap_or("");
-    if password != password_confirm {
+    let Some(password) = values.get("password") else {
+        let text = catalog(&locale)["password_invalid"]
+            .as_str()
+            .unwrap_or("The password must contain 12 to 128 characters.")
+            .to_owned();
+        return user_form(
+            &state,
+            &headers,
+            &registry,
+            Some(id),
+            Some(UserDraft {
+                email: None,
+                active: None,
+                staff: None,
+                roles: None,
+                email_error: String::new(),
+                password_error: text.clone(),
+            }),
+            &text,
+            "",
+        )
+        .await;
+    };
+    let password_confirm = values.get("password_confirm");
+    if password_confirm != Some(password) {
         let text = catalog(&locale)["password_mismatch"]
             .as_str()
             .unwrap_or("The passwords do not match.")

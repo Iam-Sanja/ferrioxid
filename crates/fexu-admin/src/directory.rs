@@ -273,6 +273,10 @@ mod tests {
     use fexu_core::FexuError;
     use sea_orm::{ConnectionTrait, DatabaseBackend, Statement, Value as DbValue};
 
+    fn ephemeral_password() -> String {
+        uuid::Uuid::new_v4().simple().to_string()
+    }
+
     async fn service() -> AuthService {
         let db = fexu_db::connect("sqlite::memory:").await.expect("sqlite");
         fexu_auth::apply_migrations(&db).await.expect("migrate");
@@ -282,62 +286,65 @@ mod tests {
     #[tokio::test]
     async fn password_audit_commits_and_rolls_back_together() {
         let auth = service().await;
+        let current = ephemeral_password();
+        let replacement = ephemeral_password();
         let actor = auth
-            .create_user("root@example.com", "correct-horse-battery", true, true)
+            .create_user("root@example.com", &current, true, true)
             .await
             .unwrap();
         let target = auth
-            .create_user("person@example.com", "correct-horse-battery", true, false)
+            .create_user("person@example.com", &current, true, false)
             .await
             .unwrap();
         let old = auth
-            .login("person@example.com", "correct-horse-battery", "peer")
+            .login("person@example.com", &current, "peer")
             .await
             .unwrap();
         fail_next_insert();
-        let failed = reset_password(&auth, actor.id, target.id, "replacement-horse-battery").await;
+        let failed = reset_password(&auth, actor.id, target.id, &replacement).await;
         assert!(matches!(failed, Err(FexuError::Database(_))));
         auth.authenticate_token(&old.token)
             .await
             .expect("session remains");
-        auth.login("person@example.com", "correct-horse-battery", "peer")
+        auth.login("person@example.com", &current, "peer")
             .await
             .expect("old password");
         assert!(auth
-            .login("person@example.com", "replacement-horse-battery", "peer")
+            .login("person@example.com", &replacement, "peer")
             .await
             .is_err());
         let (events, _) = audit::page(auth.database(), None, 0).await.unwrap();
         assert!(events.is_empty());
 
-        reset_password(&auth, actor.id, target.id, "replacement-horse-battery")
+        reset_password(&auth, actor.id, target.id, &replacement)
             .await
             .unwrap();
         assert!(auth.authenticate_token(&old.token).await.is_err());
-        auth.login("person@example.com", "replacement-horse-battery", "peer")
+        auth.login("person@example.com", &replacement, "peer")
             .await
             .unwrap();
         let (events, _) = audit::page(auth.database(), None, 0).await.unwrap();
         assert_eq!(events.len(), 1);
         assert_eq!(events[0].action, "password_reset");
         assert!(events[0].operation_id.is_some());
-        assert!(!events[0].summary.contains("replacement"));
+        assert!(!events[0].summary.contains(&replacement));
         assert!(!events[0].summary.contains('$'));
     }
 
     #[tokio::test]
     async fn deactivation_and_roles_share_the_audit_transaction() {
         let auth = service().await;
+        let password = ephemeral_password();
         let actor = auth
-            .create_user("root@example.com", "correct-horse-battery", true, true)
+            .create_user("root@example.com", &password, true, true)
             .await
             .unwrap();
         let target = auth
-            .create_user("person@example.com", "correct-horse-battery", true, false)
+            .create_user("person@example.com", &password, true, false)
             .await
             .unwrap();
         let session = auth
-            .login("person@example.com", "correct-horse-battery", "peer")
+            .login("person@example.com", &password, "peer")
             .await
             .unwrap();
         fail_next_insert();
@@ -375,7 +382,7 @@ mod tests {
             Err(FexuError::Forbidden)
         ));
         assert!(matches!(
-            reset_password(&auth, actor.id, actor.id, "correct-horse-battery").await,
+            reset_password(&auth, actor.id, actor.id, &password).await,
             Err(FexuError::Forbidden)
         ));
     }
@@ -383,15 +390,17 @@ mod tests {
     #[tokio::test]
     async fn a_revoked_superuser_cannot_finish_the_open_transaction() {
         let auth = service().await;
+        let password = ephemeral_password();
+        let replacement = ephemeral_password();
         let actor = auth
-            .create_user("root@example.com", "correct-horse-battery", true, true)
+            .create_user("root@example.com", &password, true, true)
             .await
             .unwrap();
         let target = auth
-            .create_user("person@example.com", "correct-horse-battery", true, false)
+            .create_user("person@example.com", &password, true, false)
             .await
             .unwrap();
-        let hash = fexu_auth::hash_password("replacement-horse-battery").unwrap();
+        let hash = fexu_auth::hash_password(&replacement).unwrap();
         let tx = auth.begin().await.unwrap();
         tx.execute(Statement::from_sql_and_values(
             DatabaseBackend::Sqlite,
@@ -403,10 +412,10 @@ mod tests {
         let refused = super::apply_password(&auth, &tx, actor.id, target.id, &hash).await;
         assert!(matches!(refused, Err(FexuError::Forbidden)));
         tx.rollback().await.unwrap();
-        auth.login("person@example.com", "correct-horse-battery", "peer")
+        auth.login("person@example.com", &password, "peer")
             .await
             .unwrap();
-        auth.login("root@example.com", "correct-horse-battery", "peer")
+        auth.login("root@example.com", &password, "peer")
             .await
             .unwrap();
     }

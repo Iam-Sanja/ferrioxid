@@ -475,14 +475,18 @@ pub async fn submit_choose(
             Vec::new(),
         );
     };
+    let Some(password) = form.get("password").map(String::as_str) else {
+        return choose_again(&state, auth, locale, "weak");
+    };
+    let Some(password_confirm) = form.get("password_confirm").map(String::as_str) else {
+        return choose_again(&state, auth, locale, "mismatch");
+    };
     match complete_reset(
         auth,
         state.mail.as_ref(),
         &secret,
-        form.get("password").map(String::as_str).unwrap_or(""),
-        form.get("password_confirm")
-            .map(String::as_str)
-            .unwrap_or(""),
+        password,
+        password_confirm,
         locale,
     )
     .await

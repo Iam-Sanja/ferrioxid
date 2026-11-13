@@ -448,19 +448,19 @@ mod tests {
         let db = fexu_db::connect("sqlite::memory:").await.unwrap();
         fexu_auth::apply_migrations(&db).await.unwrap();
         let auth = AuthService::new(db.clone(), AuthConfig::development());
-        let password = "correct-horse-battery";
-        auth.create_user("ada@example.com", password, false, false)
+        let password = uuid::Uuid::new_v4().simple().to_string();
+        auth.create_user("ada@example.com", &password, false, false)
             .await
             .unwrap();
-        auth.create_user("grace@example.com", password, false, false)
+        auth.create_user("grace@example.com", &password, false, false)
             .await
             .unwrap();
         let ada = auth
-            .login("ada@example.com", password, "peer")
+            .login("ada@example.com", &password, "peer")
             .await
             .unwrap();
         let grace = auth
-            .login("grace@example.com", password, "peer")
+            .login("grace@example.com", &password, "peer")
             .await
             .unwrap();
         let root = std::env::temp_dir().join(format!("fexu-upload-{}", Uuid::new_v4()));

@@ -1,3 +1,4 @@
+use crate::password::ephemeral_password;
 use crate::{AuthConfig, AuthError, AuthService, Environment};
 use sea_orm::{ConnectionTrait, DatabaseBackend, Statement};
 
@@ -14,31 +15,31 @@ async fn service(config: AuthConfig) -> AuthService {
 #[tokio::test]
 async fn sessions_permissions_and_repeatable_migrations() {
     let auth = service(AuthConfig::development()).await;
-    let password = "correct-horse-battery";
+    let password = ephemeral_password();
     let user = auth
-        .create_user(" Admin@Example.com ", password, true, false)
+        .create_user(" Admin@Example.com ", &password, true, false)
         .await
         .expect("user");
     assert_eq!(user.email, "admin@example.com");
     assert!(user.is_staff);
     assert!(!user.is_superuser);
     let duplicate = auth
-        .create_user("admin@example.com", password, false, false)
+        .create_user("admin@example.com", &password, false, false)
         .await;
     assert!(matches!(duplicate, Err(AuthError::Validation(_))));
 
     assert!(matches!(
-        auth.login("missing@example.com", password, "peer").await,
+        auth.login("missing@example.com", &password, "peer").await,
         Err(AuthError::InvalidCredentials)
     ));
     assert!(matches!(
-        auth.login("admin@example.com", "wrong-password-1", "peer")
+        auth.login("admin@example.com", &ephemeral_password(), "peer")
             .await,
         Err(AuthError::InvalidCredentials)
     ));
 
     let issued = auth
-        .login("admin@example.com", password, "peer")
+        .login("admin@example.com", &password, "peer")
         .await
         .expect("login");
     assert!(issued.cookie.starts_with("fexu_session="));
@@ -123,11 +124,12 @@ async fn sessions_permissions_and_repeatable_migrations() {
         Err(AuthError::Forbidden)
     ));
 
-    auth.create_user("root@example.com", "superuser-password", true, true)
+    let root_password = ephemeral_password();
+    auth.create_user("root@example.com", &root_password, true, true)
         .await
         .unwrap();
     let root = auth
-        .login("root@example.com", "superuser-password", "root")
+        .login("root@example.com", &root_password, "root")
         .await
         .unwrap();
     let root_user = auth.authenticate_token(&root.token).await.unwrap();
@@ -147,7 +149,8 @@ async fn sessions_permissions_and_repeatable_migrations() {
     assert!(expiries.iter().all(|value| *value == expiries[0]));
 
     let rotated_user = auth.authenticate_token(&rotated.token).await.unwrap();
-    auth.change_password(&rotated_user, password, "updated-password-1")
+    let updated = ephemeral_password();
+    auth.change_password(&rotated_user, &password, &updated)
         .await
         .unwrap();
     assert!(matches!(
@@ -155,11 +158,11 @@ async fn sessions_permissions_and_repeatable_migrations() {
         Err(AuthError::Unauthenticated)
     ));
     assert!(matches!(
-        auth.login("admin@example.com", password, "peer").await,
+        auth.login("admin@example.com", &password, "peer").await,
         Err(AuthError::InvalidCredentials)
     ));
     let again = auth
-        .login("admin@example.com", "updated-password-1", "peer")
+        .login("admin@example.com", &updated, "peer")
         .await
         .unwrap();
     auth.set_user_active("admin@example.com", false)
@@ -170,8 +173,7 @@ async fn sessions_permissions_and_repeatable_migrations() {
         Err(AuthError::Unauthenticated)
     ));
     assert!(matches!(
-        auth.login("admin@example.com", "updated-password-1", "peer")
-            .await,
+        auth.login("admin@example.com", &updated, "peer").await,
         Err(AuthError::InvalidCredentials)
     ));
 
@@ -208,11 +210,12 @@ async fn expired_idle_and_secure_cookie() {
     let mut expired = AuthConfig::development();
     expired.session_ttl_secs = 0;
     let auth = service(expired).await;
-    auth.create_user("short@example.com", "correct-horse-battery", false, false)
+    let password = ephemeral_password();
+    auth.create_user("short@example.com", &password, false, false)
         .await
         .unwrap();
     let issued = auth
-        .login("short@example.com", "correct-horse-battery", "peer")
+        .login("short@example.com", &password, "peer")
         .await
         .unwrap();
     assert!(matches!(
@@ -227,11 +230,12 @@ async fn expired_idle_and_secure_cookie() {
     let mut idle = AuthConfig::development();
     idle.idle_timeout_secs = -1;
     let auth = service(idle).await;
-    auth.create_user("idle@example.com", "correct-horse-battery", false, false)
+    let password = ephemeral_password();
+    auth.create_user("idle@example.com", &password, false, false)
         .await
         .unwrap();
     let issued = auth
-        .login("idle@example.com", "correct-horse-battery", "peer")
+        .login("idle@example.com", &password, "peer")
         .await
         .unwrap();
     assert!(matches!(
@@ -243,11 +247,12 @@ async fn expired_idle_and_secure_cookie() {
     secure.environment = Environment::Production;
     secure.cookie_secure = true;
     let auth = service(secure).await;
-    auth.create_user("secure@example.com", "correct-horse-battery", false, false)
+    let password = ephemeral_password();
+    auth.create_user("secure@example.com", &password, false, false)
         .await
         .unwrap();
     let issued = auth
-        .login("secure@example.com", "correct-horse-battery", "peer")
+        .login("secure@example.com", &password, "peer")
         .await
         .unwrap();
     assert!(issued.cookie.contains("Secure"));
@@ -267,25 +272,24 @@ async fn login_rate_limit_and_proxy_header() {
     let mut config = AuthConfig::development();
     config.login_max_attempts = 2;
     let auth = service(config).await;
-    auth.create_user("limit@example.com", "correct-horse-battery", false, false)
+    let password = ephemeral_password();
+    let wrong = ephemeral_password();
+    auth.create_user("limit@example.com", &password, false, false)
         .await
         .unwrap();
     assert!(matches!(
-        auth.login("limit@example.com", "wrong-password-1", "10.0.0.1")
-            .await,
+        auth.login("limit@example.com", &wrong, "10.0.0.1").await,
         Err(AuthError::InvalidCredentials)
     ));
     assert!(matches!(
-        auth.login("limit@example.com", "wrong-password-1", "10.0.0.1")
-            .await,
+        auth.login("limit@example.com", &wrong, "10.0.0.1").await,
         Err(AuthError::InvalidCredentials)
     ));
     assert!(matches!(
-        auth.login("limit@example.com", "correct-horse-battery", "10.0.0.1")
-            .await,
+        auth.login("limit@example.com", &password, "10.0.0.1").await,
         Err(AuthError::RateLimited)
     ));
-    auth.login("limit@example.com", "correct-horse-battery", "10.0.0.2")
+    auth.login("limit@example.com", &password, "10.0.0.2")
         .await
         .unwrap();
 
