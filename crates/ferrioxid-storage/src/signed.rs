@@ -89,9 +89,10 @@ mod tests {
             open_download(key, &token, 1_700),
             Err(crate::StorageError::Expired)
         );
-        let mut forged = token.clone();
-        forged.pop();
-        forged.push('0');
+        let mut forged = token.clone().into_bytes();
+        let last = forged.len() - 1;
+        forged[last] = if forged[last] == b'0' { b'1' } else { b'0' };
+        let forged = String::from_utf8(forged).expect("hex");
         assert_eq!(
             open_download(key, &forged, 1_699),
             Err(crate::StorageError::NotFound)
