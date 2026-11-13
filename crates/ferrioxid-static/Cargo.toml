@@ -12,5 +12,5 @@ categories.workspace = true
 
 [dependencies]
 axum.workspace = true
-tokio.workspace = true
+tokio = { workspace = true, features = ["fs"] }
 sha2.workspace = true
