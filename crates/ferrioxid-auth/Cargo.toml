@@ -3,15 +3,18 @@ name = "ferrioxid-auth"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Sessions and passwords for the Ferrioxid framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [dependencies]
-ferrioxid-core = { path = "../ferrioxid-core" }
-ferrioxid-db = { path = "../ferrioxid-db" }
-ferrioxid-migrations = { path = "../ferrioxid-migrations" }
-ferrioxid-mail = { path = "../ferrioxid-mail" }
+ferrioxid-core.workspace = true
+ferrioxid-db.workspace = true
+ferrioxid-migrations.workspace = true
+ferrioxid-mail.workspace = true
 argon2.workspace = true
 axum.workspace = true
 sea-orm.workspace = true

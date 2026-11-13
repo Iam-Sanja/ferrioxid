@@ -3,13 +3,16 @@ name = "ferrioxid-migrations"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Schema migrations for the Ferrioxid framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [dependencies]
-ferrioxid-core = { path = "../ferrioxid-core" }
-ferrioxid-db = { path = "../ferrioxid-db" }
+ferrioxid-core.workspace = true
+ferrioxid-db.workspace = true
 chrono.workspace = true
 sea-orm.workspace = true
 sea-query-binder = { version = "0.7.0", default-features = false, features = ["sqlx-sqlite"] }

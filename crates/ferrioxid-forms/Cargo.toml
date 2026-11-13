@@ -3,13 +3,16 @@ name = "ferrioxid-forms"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Form types for the Ferrioxid framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [dependencies]
-ferrioxid-core = { path = "../ferrioxid-core" }
-ferrioxid-storage = { path = "../ferrioxid-storage" }
+ferrioxid-core.workspace = true
+ferrioxid-storage.workspace = true
 uuid.workspace = true
 chrono.workspace = true
 

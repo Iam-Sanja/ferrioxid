@@ -3,20 +3,23 @@ name = "ferrioxid-admin"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Server-rendered admin for the Ferrioxid framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [features]
 default = []
 embedded-admin = []
 
 [dependencies]
-ferrioxid-core = { path = "../ferrioxid-core" }
-ferrioxid-db = { path = "../ferrioxid-db" }
-ferrioxid-forms = { path = "../ferrioxid-forms" }
-ferrioxid-auth = { path = "../ferrioxid-auth" }
-ferrioxid-storage = { path = "../ferrioxid-storage" }
+ferrioxid-core.workspace = true
+ferrioxid-db.workspace = true
+ferrioxid-forms.workspace = true
+ferrioxid-auth.workspace = true
+ferrioxid-storage.workspace = true
 async-trait.workspace = true
 axum.workspace = true
 sea-orm.workspace = true

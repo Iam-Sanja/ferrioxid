@@ -3,24 +3,27 @@ name = "ferrioxid"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Experimental model-first web framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [dependencies]
-ferrioxid-core = { path = "../ferrioxid-core" }
-ferrioxid-macros = { path = "../ferrioxid-macros" }
-ferrioxid-db = { path = "../ferrioxid-db" }
-ferrioxid-migrations = { path = "../ferrioxid-migrations" }
-ferrioxid-api = { path = "../ferrioxid-api" }
-ferrioxid-auth = { path = "../ferrioxid-auth" }
-ferrioxid-admin = { path = "../ferrioxid-admin" }
-ferrioxid-forms = { path = "../ferrioxid-forms" }
-ferrioxid-static = { path = "../ferrioxid-static" }
-ferrioxid-storage = { path = "../ferrioxid-storage" }
-ferrioxid-middleware = { path = "../ferrioxid-middleware" }
-ferrioxid-mail = { path = "../ferrioxid-mail" }
-ferrioxid-jobs = { path = "../ferrioxid-jobs" }
+ferrioxid-core.workspace = true
+ferrioxid-macros.workspace = true
+ferrioxid-db.workspace = true
+ferrioxid-migrations.workspace = true
+ferrioxid-api.workspace = true
+ferrioxid-auth.workspace = true
+ferrioxid-admin.workspace = true
+ferrioxid-forms.workspace = true
+ferrioxid-static.workspace = true
+ferrioxid-storage.workspace = true
+ferrioxid-middleware.workspace = true
+ferrioxid-mail.workspace = true
+ferrioxid-jobs.workspace = true
 sea-orm.workspace = true
 serde.workspace = true
 serde_json.workspace = true

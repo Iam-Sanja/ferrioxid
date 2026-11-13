@@ -3,9 +3,12 @@ name = "ferrioxid-core"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
-description.workspace = true
+description = "Shared types for the Ferrioxid framework"
 repository.workspace = true
 homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
 
 [dependencies]
 serde_json.workspace = true
