@@ -20,17 +20,16 @@ Internal dependencies keep a path for workspace builds and `version = "0.1.0"` f
 
 Publish in this order. A crate is not publishable until every crate it depends on is already on crates.io.
 
-1. `ferrioxid-core`, `ferrioxid-macros`
-2. `ferrioxid-db` after `ferrioxid-core`
-3. `ferrioxid-static`, `ferrioxid-middleware`, `ferrioxid-mail`
-4. `ferrioxid-migrations` after `ferrioxid-db`
-5. `ferrioxid-auth` after migrations and mail
-6. `ferrioxid-storage` after auth, and `ferrioxid-jobs` after auth
-7. `ferrioxid-forms` after storage
-8. `ferrioxid-cli` after jobs
-9. `ferrioxid-admin` after forms
-10. `ferrioxid-api` after admin
-11. `ferrioxid`
+1. `ferrioxid-core`, `ferrioxid-macros`, `ferrioxid-cache`, `ferrioxid-static`, `ferrioxid-middleware`
+2. `ferrioxid-db` and `ferrioxid-mail` after `ferrioxid-core`
+3. `ferrioxid-migrations` after `ferrioxid-db`
+4. `ferrioxid-auth` after migrations and mail
+5. `ferrioxid-storage` after auth, and `ferrioxid-jobs` after auth
+6. `ferrioxid-forms` after storage
+7. `ferrioxid-cli` after jobs
+8. `ferrioxid-admin` after forms
+9. `ferrioxid-api` after admin
+10. `ferrioxid` after `ferrioxid-cache` and every crate above
 
 `ferrioxid-storage` uses `ferrioxid-db` only as a dev-dependency. `ferrioxid-jobs` uses `ferrioxid-auth` only as a dev-dependency. Verification still fetches those crates.
 
@@ -60,13 +59,26 @@ Compiler: `rustc 1.98.1` and `cargo 1.98.1` on Windows. Edition is 2021. `rust-t
 ## Release blockers
 
 - Do not run `cargo publish` without an explicit decision. Dry-run is not a publish.
-- Crates that depend on other Ferrioxid crates fail dry-run until those crates exist on crates.io, in the order above.
-- The root `[patch.crates-io]` replaces `sqlx-sqlite` with `vendor/sqlx-sqlite`. Cargo does not copy a workspace patch into a published member. A consumer of a published `ferrioxid-db` would resolve upstream `sqlx-sqlite` 0.8.6 and miss the bundled SQLite bound fix. Remove that blocker only when a published SQLx or SeaORM release accepts the patched binding, as `vendor/README.md` already says.
-- MSRV is not measured.
+- Crates that depend on other Ferrioxid crates fail dry-run until those crates exist on crates.io, in the order above. On this base `ferrioxid-mail` depends on `ferrioxid-core`, so its dry-run now stops for that reason even though an earlier tree without that dependency verified.
+- The SQLite patch below blocks publishing any crate whose graph includes `sqlx-sqlite`.
+- MSRV is not measured. `libsqlite3-sys` 0.39 requires Rust 1.88 or newer. That floor is not a measured minimum for the whole workspace.
 - The rename to Fexu is planned in [fexu-rename-plan.md](fexu-rename-plan.md) and was not performed. Publish the renamed crates once, not both names.
-- This branch contains the commits from pull request 102 and adds the packaging work. Merge 102 first, or merge this pull request only when 102's commits are accepted with it. Do not publish from either branch as part of that merge.
+- This branch is `work/release-readiness-final`, cut from `origin/main` at `26e79f2` (`#101` squashed). It cherry-picks only the three release commits from `work/release-readiness`. Pull requests #102 and #105 were not changed.
 
-## Dependencies on pull requests 97–100
+## SQLite patch for external users
+
+The root `[patch.crates-io]` stays. This branch does not replace `sqlx-sqlite`, SeaORM, or SQLx.
+
+A direct version bump is not sufficient. Published `sqlx-sqlite` 0.8.6 requires `libsqlite3-sys >=0.30.1, <0.38.0`. `ferrioxid-db` requires `libsqlite3-sys` 0.39.1 with `bundled`. Both packages use `links = "sqlite3"`, so Cargo refuses to build them together. A checkout without the root patch fails resolution. It does not fall back to the vulnerable binding. Published `sqlx-sqlite` 0.9.0 still requires `>=0.30.1, <0.38.0`, so SeaORM 2 and SQLx 0.9 do not select the fixed binding and would change APIs. The upstream bound change at `10462fa` is not a published SQLx 0.8 release. Details are in [sqlite-rustsec-2026-0459.md](security/sqlite-rustsec-2026-0459.md).
+
+Cargo applies `[patch]` only from the consuming workspace root. A published library cannot force that patch onto its users. The generator already writes the patch for a new project that points at this checkout. An existing project must add the same table itself.
+
+The release path is:
+
+1. Keep `vendor/sqlx-sqlite` and both patch stanzas until crates.io has a SQLx release that SeaORM can use and whose `sqlx-sqlite` accepts `libsqlite3-sys >=0.39.1, <0.40.0`.
+2. Do not publish `ferrioxid-db`, `ferrioxid`, or another crate whose graph includes `sqlx-sqlite` before that release. Users of such a publish would have to vendor this checkout or the build would fail.
+3. Remove the framework patch and the generator patch in the same change, then repeat the checks named in the SQLite security document: workspace tests, generated-project SQLite version, disposable PostgreSQL tests, and `cargo audit`. Keep the direct `libsqlite3-sys` 0.39.1 requirement until the upstream constraint enforces it.
+4. Do not publish a forked `sqlx-sqlite` from this branch. That would be a new crate name, a provenance review, and a dependency switch. It is not required for step 1 and it is not done here.
 
 ## Install
 
@@ -90,19 +102,13 @@ There is no previous crates.io release and no git tag that represents a publishe
 
 - It does not publish, tag or sign release artifacts.
 - It does not label the project 1.0 or production-ready.
-- It does not merge pull requests 97, 98, 99 or 100. Those branches are independent. See the dependency note below.
+- It does not revert the squash of pull request 101. Pull requests 97–100 are already in that squash.
 - It does not start the Compose stack when Docker is absent.
+- It does not replace the vendored SQLite driver.
 
 ## Dependencies on pull requests 97–100
 
-| PR | Branch | What this branch needs from it | What this branch does instead |
-|---|---|---|---|
-| 97 | `fix/runtime-security-docker` | Peer allow-list for `X-Forwarded-For`, embedded auth/job migrations | `check --deploy` fails when `FERRIOXID_TRUST_PROXY=1` because this branch trusts every peer. Migrations are still read from the existing files. |
-| 98 | `feat/orm-migrations-lifecycle` | Grouped reports, JSON columns, `migrate plan` | Not included. List filters use the existing `Select`. |
-| 99 | `feat/native-admin` | Per-record audit timeline | Not included. The Playwright test only opens `/admin/login`. |
-| 100 | `feat/developer-apps` | One project file and conflicting env aliases | Not included. `ferrioxid.toml` behavior stays as on main. |
-
-Do not merge those branches into this one to make the checks pass. The integration order is documented on the runtime branch, not here.
+Those four pull requests are already in `main` through the squash of pull request 101. This branch does not merge them again and does not revert them. `FERRIOXID_TRUSTED_PROXIES`, grouped migration planning, the audit timeline, and the project-file alias checks from that squash stay as `main` left them.
 
 ## PostgreSQL 18.6
 
@@ -142,23 +148,7 @@ Docker Compose was not started. Docker is not installed. Playwright was not laun
 
 ## Pull request 101
 
-Draft pull request 101 (`work/integration`) already combines pull requests 97–100. This branch does not contain those commits. `git merge-tree` against `origin/work/integration` reports content conflicts in:
-
-- `.github/workflows/ci.yml`
-- `CHANGELOG.md`
-- `crates/ferrioxid-macros/src/lib.rs`
-- `docs/index.md`
-- `docs/testing.md`
-
-Git can auto-merge other overlapping files, and those still need a semantic pass before anyone treats the result as correct:
-
-- `crates/ferrioxid-cli/src/diagnose.rs` still fails `check --deploy` when `FERRIOXID_TRUST_PROXY=1` and still says the peer list is unmerged. On pull request 101 the flag does nothing unless `FERRIOXID_TRUSTED_PROXIES` names the immediate peer.
-- `crates/ferrioxid-cli/src/main.rs` carries both `check --deploy` and the integration CLI commands.
-- `crates/ferrioxid-api/src/lib.rs` and `openapi.rs` carry the cursor contract and the smaller integration edits. OpenAPI has to be checked again after that merge.
-- `crates/ferrioxid-middleware/src/lib.rs`, `crates/ferrioxid-migrations/src/project.rs`, `crates/ferrioxid/tests/openapi_client.rs`, `examples/myshop/src/main.rs`, `Cargo.lock`, and the shared docs (`database.md`, `django-capability-matrix.md`) auto-merge today.
-- `deploy/` and `examples/deploy/` are different paths. A merge would keep both stacks.
-
-Resolve those conflicts on the integration branch. Do not copy pull request 101 into this branch to clear them.
+`origin/main` is `26e79f2`, the squash of pull request 101. This branch starts there. The conflict list from `work/release-readiness` described an older unmerged integration branch and does not apply to this head. `FERRIOXID_TRUSTED_PROXIES` and the `FERRUM_*` aliases from that squash stay in place.
 
 ## Security follow-up on work/integration (2026-11-13)
 

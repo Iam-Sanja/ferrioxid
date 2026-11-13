@@ -2,7 +2,7 @@
 
 This is a plan. No identifier in the repository was renamed for it. The crates in this branch stay `ferrioxid` and `ferrioxid-*`. Nothing has been published to crates.io, so the rename should happen before the first publish. A published crate name cannot be renamed in place.
 
-Checked from `work/release-readiness` on 2026-11-13. Pull request 101 is not part of this tree. Its `FERRUM_*` aliases are not implemented here.
+Checked from `work/release-readiness-final` on 2026-11-13. That branch starts at the squash of pull request 101, so `FERRUM_*` aliases and `FERRIOXID_TRUSTED_PROXIES` are already in the tree. Nothing here was renamed.
 
 ## Target names
 
@@ -13,7 +13,7 @@ Checked from `work/release-readiness` on 2026-11-13. Pull request 101 is not par
 | CLI crate | `ferrioxid-cli` | `fexu-cli` |
 | CLI binary and Clap command | `ferrioxid` | `fexu` |
 | Domain | none; homepage is the GitHub repository | `fexu.dev` |
-| Other crates | `ferrioxid-core`, `ferrioxid-macros`, `ferrioxid-db`, `ferrioxid-migrations`, `ferrioxid-auth`, `ferrioxid-admin`, `ferrioxid-api`, `ferrioxid-forms`, `ferrioxid-static`, `ferrioxid-storage`, `ferrioxid-middleware`, `ferrioxid-mail`, `ferrioxid-jobs` | The same suffixes on `fexu-` |
+| Other crates | `ferrioxid-core`, `ferrioxid-macros`, `ferrioxid-db`, `ferrioxid-migrations`, `ferrioxid-auth`, `ferrioxid-cache`, `ferrioxid-admin`, `ferrioxid-api`, `ferrioxid-forms`, `ferrioxid-static`, `ferrioxid-storage`, `ferrioxid-middleware`, `ferrioxid-mail`, `ferrioxid-jobs` | The same suffixes on `fexu-` |
 
 Rust library crate names become `fexu_core` and so on because Cargo turns hyphens into underscores. `use ferrioxid::` becomes `use fexu::`. Proc-macro derives stay on the facade crate unless a later design splits them.
 
@@ -87,7 +87,7 @@ A rename that only changes Rust identifiers and the binary name makes every gene
 3. Keep the CLI able to run as `ferrioxid` for one release after `fexu` exists. Scripts and `schema_command` values in existing project files call `ferrioxid`.
 4. Keep every `_ferrioxid_*` table name. New databases in that release still use those names. A later migration may copy history into `_fexu_*` tables, and it must be opt-in. Startup must not create a second history table and replay migrations.
 5. Keep the cookie names for that same release. Changing them logs every user out. Document the release in which the old cookies stop being read.
-6. Keep reading `FERRIOXID_*`. Add `FEXU_*` as the preferred name. If both are set and differ, fail without printing the values. Do not drop `FERRIOXID_*` in the same release that introduces `FEXU_*`.
+6. Keep reading `FERRIOXID_*` and the `FERRUM_*` aliases that pull request 101 already accepts. Add `FEXU_*` as the preferred name. If two aliases for the same setting differ, fail without printing the values. Do not drop `FERRIOXID_*` or `FERRUM_*` in the same release that introduces `FEXU_*`.
 7. Generated migration files store checksums. Do not rewrite the id or checksum of an embedded auth, job or admin migration as part of the rename.
 8. OpenAPI names the session cookie `ferrioxid_session`. Change that text only when the cookie name changes, and say so in the HTTP contract note.
 9. The generator should grow a flag or template version that writes `fexu` imports. Old output stays valid while the facade is still named `ferrioxid`, and new output waits until the crate rename is released. Do not make `ferrioxid new` emit `use fexu::` before crates.io has `fexu`.
@@ -113,7 +113,8 @@ The list is the area, not a permission to edit it now.
 - `crates/ferrioxid-auth/src/config.rs` and `recovery.rs`
 - `crates/ferrioxid-api/src/cookie_guard.rs` and `openapi.rs`
 - `crates/ferrioxid-admin` login cookie
+- `crates/ferrioxid-cache` has no Ferrioxid dependency today. Its package name still changes with the others.
 - `README.md`, `docs/`, `CHANGELOG.md`, `.github/workflows/ci.yml`
 - Deploy examples that mention the binary or `FERRIOXID_*`
 
-Pull request 101 adds `FERRUM_*` and `trusted_proxies`. Rebase the rename onto that branch before dropping any environment name, or the alias work and this plan will disagree.
+Pull request 101 is already squashed into `main`. The rename keeps that branch's `FERRUM_*` readers and `trusted_proxies`. It does not drop them while adding `FEXU_*`.
