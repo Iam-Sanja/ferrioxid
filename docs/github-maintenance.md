@@ -1,6 +1,6 @@
 # GitHub maintenance
 
-This page records repository settings, contributor workflow and CI maintenance for [Iam-Sanja/ferrioxid](https://github.com/Iam-Sanja/ferrioxid). Settings were checked through GitHub's API on **2026-11-08** against main at `5c9bd7c438179b53d02f36130871ac42f313ef5e`. They may change independently of Git; Markdown cannot enforce them.
+This page records repository settings, contributor workflow and CI maintenance for [Iam-Sanja/fexu-rs](https://github.com/Iam-Sanja/fexu-rs). Settings were checked through GitHub's API on **2026-11-08** against main at `5c9bd7c438179b53d02f36130871ac42f313ef5e`, when the repository was named `Iam-Sanja/ferrioxid`. They may change independently of Git; Markdown cannot enforce them.
 
 The repository is already **public**. Use the [public release security checklist](public-release-checklist.md) to distinguish completed configuration from unresolved historical-secret, licensing, policy and contributor-flow reviews. Public source availability does not imply a stable crates.io release: Cargo `0.1.0` remains pre-release; use the workspace/path dependency as documented in the [README](../README.md).
 
@@ -29,7 +29,7 @@ The former `.github/workflows/rust.yml` is historical; current instructions refe
 | Required checks | `Rust (ubuntu-latest)`, `Rust (windows-latest)`, `PostgreSQL`, `Cargo audit`; strict up-to-date policy, integration ID `15368` |
 | Approval counts | Zero required approving reviews; code-owner and last-push approval not required |
 | Main deletion / force pushes | Blocked by deletion and non-fast-forward rules |
-| Private Vulnerability Reporting | Enabled; [private report form](https://github.com/Iam-Sanja/ferrioxid/security/advisories/new) |
+| Private Vulnerability Reporting | Enabled; [private report form](https://github.com/Iam-Sanja/fexu-rs/security/advisories/new) |
 | Dependabot alerts / security updates | Alerts enabled; updates enabled and not paused |
 | Dependency graph completeness | Separate UI/data coverage review still open |
 | Secret Scanning / Push Protection | Both enabled |
@@ -47,7 +47,7 @@ The normal merge of main into a topic branch does not violate main's squash-only
 
 ## Repeatable verification
 
-Read these authenticated REST endpoints under `/repos/Iam-Sanja/ferrioxid`; follow pagination where the response is a list:
+Read these authenticated REST endpoints under `/repos/Iam-Sanja/fexu-rs`; follow pagination where the response is a list:
 
 | Endpoint | Evidence |
 | --- | --- |
@@ -66,7 +66,7 @@ An unavailable endpoint is not proof of enablement or disablement. The private-r
 
 ## Security and contributor boundaries
 
-Vulnerabilities go to the [private report form](https://github.com/Iam-Sanja/ferrioxid/security/advisories/new), not public issues, discussions or PRs. `SECURITY.md` still uses conditional wording about the feature; this snapshot supplies the verified route. A GitHub username alone is not proof of a private messaging channel. Finish the policy/contact review before treating every published contact instruction as tested.
+Vulnerabilities go to the [private report form](https://github.com/Iam-Sanja/fexu-rs/security/advisories/new), not public issues, discussions or PRs. `SECURITY.md` still uses conditional wording about the feature; this snapshot supplies the verified route. A GitHub username alone is not proof of a private messaging channel. Finish the policy/contact review before treating every published contact instruction as tested.
 
 Public visibility grants no write access. Fork PRs must not receive privileged credentials or run outsider-controlled code through `pull_request_target`. Review workflow edits, artifact handling and dependency updates deliberately. The read-only default and source-level SHA pins do not establish a repository-wide Actions allowlist. Review returning contributors as well as first-time contributors; inspect the current approval policy rather than assuming all external builds require approval.
 

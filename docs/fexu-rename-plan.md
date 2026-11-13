@@ -20,9 +20,7 @@ Nothing has been published to crates.io. Generated projects and their databases 
 | Cookies | `fexu_session`, `fexu_anonymous`, `fexu_login_csrf`, `fexu_reset`, `fexu_reset_csrf` |
 | Documentation host | `fexu.dev` |
 
-`fexu.dev` is the intended documentation host. This repository does not claim that the domain is registered or that it serves a site. The Cargo `repository` and `homepage` fields stay on `https://github.com/Iam-Sanja/ferrioxid` until that GitHub repository is renamed.
-
-The planned GitHub repository name is `fexu-rs`. The rename on GitHub is a separate step and has not been done.
+`fexu.dev` is the intended documentation host. This repository does not claim that the domain is registered or that it serves a site. The GitHub repository is [`Iam-Sanja/fexu-rs`](https://github.com/Iam-Sanja/fexu-rs). Cargo `repository` and `homepage` use that URL. GitHub redirects the previous repository URL.
 
 ## What was removed
 
@@ -36,14 +34,11 @@ Embedded auth and job migrations keep their IDs (`0001_auth_schema` through `000
 
 ## Tool
 
-`scripts/rename_to_fexu.py` performs the mechanical rename. A run without `--apply` only reports. A second `--apply` changes nothing. The script leaves this plan's historical companions, the CodeQL evidence, `vendor/`, and live `Iam-Sanja/ferrioxid` URLs untouched.
+`scripts/rename_to_fexu.py` finished the mechanical rename and is not a maintained command. Its last version remains in the Git history of the rename. Do not restore or run it: historical documents, local catalog names, and numbered pull-request, issue and commit links intentionally keep the old repository spelling.
 
-## Later GitHub rename
+## GitHub repository
 
-1. Confirm `main` contains this rename and the crates are still unpublished.
-2. Rename `Iam-Sanja/ferrioxid` to `fexu-rs` in GitHub settings. GitHub redirects the old repository URL.
-3. Update the Cargo `repository` and `homepage` fields, the README badges, and the workflow badge URLs to the new repository.
-4. Only then describe `fexu.dev` as a live site, and only after the domain actually serves the documentation.
+The repository was renamed from `Iam-Sanja/ferrioxid` to `Iam-Sanja/fexu-rs`. GitHub redirects the old URL. Numbered pull requests, issues, commits and the CodeQL snapshot keep the URLs written for that history. Describe `fexu.dev` as a live site only after the domain actually serves the documentation.
 
 ## Local PostgreSQL catalogs
 

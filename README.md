@@ -4,8 +4,8 @@
 
 A Django-inspired, experimental web framework built on **Axum**, **SeaORM**, and **Tera**. Define typed models, manage migrations, use SQLite or PostgreSQL, and work with a server-rendered admin — without requiring React, Vite, or Node.js for the admin.
 
-[![Rust CI](https://github.com/Iam-Sanja/ferrioxid/actions/workflows/ci.yml/badge.svg)](https://github.com/Iam-Sanja/ferrioxid/actions/workflows/ci.yml)
-[![Security audit](https://github.com/Iam-Sanja/ferrioxid/actions/workflows/security.yml/badge.svg)](https://github.com/Iam-Sanja/ferrioxid/actions/workflows/security.yml)
+[![Rust CI](https://github.com/Iam-Sanja/fexu-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/Iam-Sanja/fexu-rs/actions/workflows/ci.yml)
+[![Security audit](https://github.com/Iam-Sanja/fexu-rs/actions/workflows/security.yml/badge.svg)](https://github.com/Iam-Sanja/fexu-rs/actions/workflows/security.yml)
 ![Rust](https://img.shields.io/badge/language-Rust-CE422B?logo=rust&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-orange)
@@ -37,8 +37,8 @@ These features have **documented limitations**. In particular, public model rout
 Clone the repository and try the included MyShop example:
 
 ```bash
-git clone https://github.com/Iam-Sanja/ferrioxid.git
-cd fexu
+git clone https://github.com/Iam-Sanja/fexu-rs.git
+cd fexu-rs
 cargo run -p fexu-cli -- migrate up
 cargo run -p myshop
 ```
@@ -118,10 +118,10 @@ The in-review [framework completion pull request](https://github.com/Iam-Sanja/f
 
 **You don't need to know the whole framework to contribute.** Useful contributions include reproducible bug reports, smaller documentation fixes, tests, examples and focused feature improvements.
 
-- 🐛 [Report a bug](https://github.com/Iam-Sanja/ferrioxid/issues/new/choose) — include a minimal reproduction and your Rust/OS/database versions.
-- 💡 [Suggest an improvement](https://github.com/Iam-Sanja/ferrioxid/issues/new/choose) — explain the problem and the developer experience you want.
-- 💬 [Ask a question or share an idea](https://github.com/Iam-Sanja/ferrioxid/discussions) — discussions are welcome before you write code.
-- 🌱 [Find a first contribution](https://github.com/Iam-Sanja/ferrioxid/labels/good%20first%20issue) — or read the [first contribution guide](docs/first-contribution.md).
+- 🐛 [Report a bug](https://github.com/Iam-Sanja/fexu-rs/issues/new/choose) — include a minimal reproduction and your Rust/OS/database versions.
+- 💡 [Suggest an improvement](https://github.com/Iam-Sanja/fexu-rs/issues/new/choose) — explain the problem and the developer experience you want.
+- 💬 [Ask a question or share an idea](https://github.com/Iam-Sanja/fexu-rs/discussions) — discussions are welcome before you write code.
+- 🌱 [Find a first contribution](https://github.com/Iam-Sanja/fexu-rs/labels/good%20first%20issue) — or read the [first contribution guide](docs/first-contribution.md).
 - 🔧 [Open a pull request](CONTRIBUTING.md) — small, well-tested changes are welcome.
 
 Please use [private security reporting guidance](SECURITY.md) for vulnerabilities rather than opening a public issue. All participation follows the [Code of Conduct](CODE_OF_CONDUCT.md).

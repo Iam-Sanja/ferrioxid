@@ -1,6 +1,6 @@
 # Public release security and contributor setup
 
-This checklist records verified settings and remaining work for [Iam-Sanja/ferrioxid](https://github.com/Iam-Sanja/ferrioxid). The repository is already **public**. Checked items are evidence observed on **2026-11-08**, not a permanent security certification. Settings can change independently of Git. No repository setting was changed during this documentation update, and the separate historical `fexu` repository was not modified.
+This checklist records verified settings and remaining work for [Iam-Sanja/fexu-rs](https://github.com/Iam-Sanja/fexu-rs). The repository is already **public**. Checked items are evidence observed on **2026-11-08**, when the repository was named `Iam-Sanja/ferrioxid`, not a permanent security certification. Settings can change independently of Git. No repository setting was changed during this documentation update, and the separate historical `fexu` repository was not modified.
 
 Current source baseline: `main` at `5c9bd7c438179b53d02f36130871ac42f313ef5e`. See [GitHub maintenance](github-maintenance.md) for the settings snapshot and repeatable verification endpoints.
 
@@ -23,7 +23,7 @@ Repository API and effective branch-rule checks confirmed:
 
 - [x] Issues and Discussions enabled; [issue configuration](../.github/ISSUE_TEMPLATE/config.yml) disables blank issues and routes security reports to the policy. Having Discussions enabled does not prove it is actively moderated.
 - [x] Squash merge enabled; merge commits and rebase merge disabled; automatic head-branch deletion enabled. Normal merges of main into topic branches remain possible; the restriction applies to merging PRs into protected main.
-- [x] Active [protect-main ruleset](https://github.com/Iam-Sanja/ferrioxid/rules/26812021), ID `26812021`, applies to the default branch, currently `main`; no excluded refs or bypass actors. The API reports `main.protected=true` and the current user cannot bypass the ruleset.
+- [x] Active [protect-main ruleset](https://github.com/Iam-Sanja/fexu-rs/rules/26812021), ID `26812021`, applies to the default branch, currently `main`; no excluded refs or bypass actors. The API reports `main.protected=true` and the current user cannot bypass the ruleset.
 - [x] Require a PR, resolved review conversations and linear history; allow squash only into main. Block deletion and non-fast-forward pushes. Do not push directly to main or bypass these controls.
 - [x] Require the four exact GitHub Actions check names: **Rust (ubuntu-latest)**, **Rust (windows-latest)**, **PostgreSQL**, **Cargo audit**. Strict status-check policy requires the branch to be up to date. Each check is associated with GitHub Actions integration ID `15368`.
 - [x] Configure zero mandatory approving reviews, no mandatory code-owner review and no last-push approval, consistent with the current single-maintainer setup. This does not replace the maintainer's final review. Reassess approval requirements when an independent reviewer is available.
@@ -33,7 +33,7 @@ CodeQL is enabled but is **not** one of the four required check contexts. Review
 
 ## 3. Security features
 
-- [x] **Private Vulnerability Reporting** enabled (`GET /private-vulnerability-reporting` returns `enabled=true`). Report vulnerabilities using the [private advisory form](https://github.com/Iam-Sanja/ferrioxid/security/advisories/new), which may require sign-in. Do not post exploit details in public issues, discussions or PRs.
+- [x] **Private Vulnerability Reporting** enabled (`GET /private-vulnerability-reporting` returns `enabled=true`). Report vulnerabilities using the [private advisory form](https://github.com/Iam-Sanja/fexu-rs/security/advisories/new), which may require sign-in. Do not post exploit details in public issues, discussions or PRs.
 - [x] **Dependabot alerts** enabled (vulnerability-alerts endpoint returns HTTP 204); **security updates** enabled and not paused. The alert listing was accessible. This establishes alert availability, not perfect dependency coverage.
 - [x] Verify [Dependabot configuration](../.github/dependabot.yml): weekly Cargo and GitHub Actions updates. Configuration does not auto-merge updates or prove the timing of every scheduled run.
 - [ ] Independently verify the Dependency graph UI/data coverage, including any dependencies outside the Cargo lockfile and Actions configuration. Alert enablement alone is not a complete inventory audit.

@@ -4,7 +4,7 @@
 
 - The framework, crates, CLI, configuration, environment variables, cookies, project directory and internal tables use Fexu names only. `FERRIOXID_*`, `FERRUM_*`, `ferrioxid.toml`, `ferrum.toml` and the old cookies are not read.
 - Embedded auth and job migration IDs are unchanged. Table names inside those files are `_fexu_*`, and the checksums were recalculated. An existing database is not converted.
-- Nothing was published to crates.io. The GitHub repository is still `Iam-Sanja/ferrioxid`. The planned name `fexu-rs` and the host `fexu.dev` are not live. See [the rename record](docs/fexu-rename-plan.md).
+- Nothing was published to crates.io. The GitHub repository is [`Iam-Sanja/fexu-rs`](https://github.com/Iam-Sanja/fexu-rs). `fexu.dev` is not a live documentation site. See [the rename record](docs/fexu-rename-plan.md).
 
 ## Unreleased — Integration of pull requests #103, #102 and #104
 
