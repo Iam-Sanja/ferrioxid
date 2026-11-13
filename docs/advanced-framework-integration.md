@@ -200,7 +200,7 @@ PostgreSQL 18.6 auf `127.0.0.1` danach, nur über Wegwerfdatenbanken `ferrioxid_
 - TOTP und Recovery-Codes hängen am CSRF-Geheimnis. Details und der Folgeplan stehen in [auth-threat-model.md](auth-threat-model.md).
 - Issue #8 bleibt offen. `rsa 0.9.10` ist nur über `sqlx-mysql` im Lockfile. Der Abbau steht in [security-rsa.md](security-rsa.md). Die Ausnahme wird nicht erweitert.
 - Docker ist auf dieser Maschine nicht installiert. `deploy/compose.yaml` und `examples/deploy/compose.yaml` wurden nicht gestartet.
-- Playwright lief lokal nicht. Der Ubuntu-Job `Browser` ist der Nachweis, sobald GitHub ihn auf diesem Head ausführt.
+- Playwright lief lokal nicht. Der erste Browser-Job auf `febc241` scheiterte, weil `ubuntu-latest` Ubuntu 26.04 ist und Playwright Chromium dort nicht installiert. Der Job ist auf `ubuntu-24.04` festgelegt. Sein neuer Lauf ist der Nachweis.
 
 ## Rollback
 
