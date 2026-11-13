@@ -14,6 +14,7 @@ members = [
 [workspace.package]
 edition = "2021"
 license = "MIT"
+rust-version = "1.89.0"
 version = "0.1.0"
 description = "Experimental model-first web framework"
 repository = "https://github.com/Iam-Sanja/fexu-rs"

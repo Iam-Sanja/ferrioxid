@@ -2,6 +2,7 @@
 name = "fexu-cli"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 description = "Command line for the Fexu framework"
 repository.workspace = true
