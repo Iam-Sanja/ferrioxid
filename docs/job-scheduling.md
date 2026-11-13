@@ -22,7 +22,7 @@ Zones:
 
 ## Idempotency
 
-A cron row stores `cron_expression`, `cron_zone` and `schedule_key`. Success clears the current `schedule_key` and inserts the next row with idempotency key `recur:{schedule_key}:{next_at}`. A crash after the side effect and before the successor insert can run the handler again. That is at-least-once, not exactly-once.
+A cron row stores `cron_expression`, `cron_zone` and `schedule_key`. Caller keys are at most 80 characters. The generated idempotency key `recur:{schedule_key}:{next_at}` may be longer and is accepted up to 120 characters. Success clears the current `schedule_key` and inserts the next row with that key. A crash after the side effect and before the successor insert can run the handler again. Parallel workers claim a row with a conditional update. That is at-least-once, not exactly-once. A lost lease can be claimed again. The previous token cannot finish the job.
 
 ## Example
 
