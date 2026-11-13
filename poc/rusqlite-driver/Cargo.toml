@@ -1,0 +1,19 @@
+[workspace]
+# Separate workspace on purpose. The repository root still patches sqlx-sqlite
+# onto libsqlite3-sys 0.39.1. rusqlite 0.42 requires libsqlite3-sys 0.40.0.
+# Cargo allows only one sqlite3 link per graph, so this proof cannot be a
+# member of the Fexu workspace until the SQLx SQLite driver is no longer built.
+resolver = "2"
+
+[package]
+name = "fexu-rusqlite-poc"
+version = "0.0.0"
+edition = "2021"
+license = "MIT"
+publish = false
+description = "Proof that Fexu can run SQLite on rusqlite while PostgreSQL stays on SQLx"
+
+[dependencies]
+rusqlite = { version = "=0.42.0", features = ["bundled"] }
+sea-orm = { version = "=1.1.20", default-features = false, features = ["sqlx-postgres", "runtime-tokio-rustls"] }
+tokio = { version = "1", features = ["macros", "rt", "rt-multi-thread", "sync", "time"] }
