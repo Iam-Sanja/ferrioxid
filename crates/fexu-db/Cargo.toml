@@ -2,6 +2,7 @@
 name = "fexu-db"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 description = "Database access for the Fexu framework"
 repository.workspace = true

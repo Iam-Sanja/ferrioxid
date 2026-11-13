@@ -2,6 +2,7 @@
 name = "fexu-forms"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 description = "Form types for the Fexu framework"
 repository.workspace = true
