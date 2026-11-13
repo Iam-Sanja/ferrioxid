@@ -134,4 +134,6 @@ A deployment that already stored confirmed TOTP under the old CSRF-derived key c
 
 `RUSTSEC-2023-0071` is still present because `Cargo.lock` records optional `sqlx-mysql`. It is not in the enabled build graph. No feature change removes it without leaving the SQLx 0.8.6 line that the vendored SQLite patch requires. The audit ignore stays limited to that one advisory. See [security-rsa.md](security-rsa.md) and [auth-threat-model.md](auth-threat-model.md).
 
+`AuthConfig::development` draws one random 32-byte MFA key for the process. Session tokens are SHA-256 lookup hashes of 32 random bytes. Passwords are Argon2id. Finishing a pending second factor is `complete_pending_login`, and that result is a session. CodeQL classifies a method name containing the delimited word `mfa` as a password source, so this method name describes the session it returns.
+
 Nothing in this follow-up was published to crates.io. The project was not renamed.

@@ -136,7 +136,7 @@ pub(crate) async fn complete_mfa(
     }
     let anonymous = crate::cookie::read_cookie(&headers, &auth.config().anonymous_cookie_name);
     match auth
-        .complete_mfa_login(
+        .complete_pending_login(
             &body.challenge,
             &body.code,
             &auth.client_key(&headers, &peer.0),

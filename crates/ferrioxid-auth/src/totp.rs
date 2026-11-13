@@ -367,7 +367,9 @@ mod tests {
         accept_totp, legacy_mfa_key, legacy_reauth_proof, open, open_stored, recovery_format,
         recovery_hash, seal, seal_format, totp_code, RecoveryFormat, SealFormat,
     };
-    use argon2::password_hash::rand_core::{OsRng, RngCore};
+    use aes_gcm::aead::KeyInit;
+    use aes_gcm::Aes256Gcm;
+    use argon2::password_hash::rand_core::OsRng;
     use uuid::Uuid;
 
     #[test]
@@ -389,9 +391,8 @@ mod tests {
     #[test]
     fn sealed_secret_is_bound_to_the_user_and_codes_do_not_repeat() {
         let mut csrf_material = [0u8; 32];
-        let mut mfa = [0u8; 32];
-        OsRng.fill_bytes(&mut csrf_material);
-        OsRng.fill_bytes(&mut mfa);
+        getrandom::getrandom(&mut csrf_material).expect("csrf material");
+        let mfa: [u8; 32] = Aes256Gcm::generate_key(&mut OsRng).into();
         let legacy = legacy_mfa_key(&csrf_material);
         let user = Uuid::new_v4();
         let secret = b"12345678901234567890";

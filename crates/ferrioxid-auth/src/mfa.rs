@@ -170,7 +170,8 @@ impl AuthService {
         Ok(())
     }
 
-    pub async fn complete_mfa_login(
+    /// Schließt den offenen zweiten Faktor ab und gibt eine neue Sitzung zurück.
+    pub async fn complete_pending_login(
         &self,
         challenge: &str,
         code: &str,

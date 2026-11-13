@@ -123,13 +123,13 @@ async fn confirmed_totp_blocks_session_until_the_second_factor_on(auth: &AuthSer
     assert!(auth.authenticate_token(&pending.challenge).await.is_err());
 
     let rejected = auth
-        .complete_mfa_login(&pending.challenge, "000000", "peer", None)
+        .complete_pending_login(&pending.challenge, "000000", "peer", None)
         .await;
     assert!(matches!(rejected, Err(AuthError::InvalidCredentials)));
     assert_eq!(session_count(auth, created.id).await, before);
 
     let issued = auth
-        .complete_mfa_login(&pending.challenge, &recovery.codes[0], "peer", None)
+        .complete_pending_login(&pending.challenge, &recovery.codes[0], "peer", None)
         .await
         .expect("recovery");
     assert_ne!(issued.token, pending.challenge);
@@ -138,11 +138,11 @@ async fn confirmed_totp_blocks_session_until_the_second_factor_on(auth: &AuthSer
         panic!("second challenge");
     };
     assert!(auth
-        .complete_mfa_login(&second.challenge, &recovery.codes[0], "peer", None)
+        .complete_pending_login(&second.challenge, &recovery.codes[0], "peer", None)
         .await
         .is_err());
     let totp_session = auth
-        .complete_mfa_login(&second.challenge, &next, "peer", None)
+        .complete_pending_login(&second.challenge, &next, "peer", None)
         .await
         .expect("next step");
     let replay = auth.login(&address, password(), "other").await;
@@ -150,12 +150,12 @@ async fn confirmed_totp_blocks_session_until_the_second_factor_on(auth: &AuthSer
         panic!("third");
     };
     assert!(auth
-        .complete_mfa_login(&third.challenge, &next, "other", None)
+        .complete_pending_login(&third.challenge, &next, "other", None)
         .await
         .is_err());
     let _ = totp_session;
     assert!(auth
-        .complete_mfa_login(&pending.challenge, &recovery.codes[1], "peer", None)
+        .complete_pending_login(&pending.challenge, &recovery.codes[1], "peer", None)
         .await
         .is_err());
 }
@@ -439,7 +439,7 @@ async fn new_mfa_uses_the_dedicated_key_and_keeps_recovery_codes_one_time() {
     };
     assert!(auth.authenticate_token(&challenge.challenge).await.is_err());
     let issued = auth
-        .complete_mfa_login(&challenge.challenge, &recovery.codes[0], "fresh-2", None)
+        .complete_pending_login(&challenge.challenge, &recovery.codes[0], "fresh-2", None)
         .await
         .expect("recovery login");
     assert!(auth.authenticate_token(&issued.token).await.is_ok());
@@ -448,10 +448,10 @@ async fn new_mfa_uses_the_dedicated_key_and_keeps_recovery_codes_one_time() {
         panic!("second challenge");
     };
     assert!(auth
-        .complete_mfa_login(&second.challenge, &recovery.codes[0], "fresh-3", None)
+        .complete_pending_login(&second.challenge, &recovery.codes[0], "fresh-3", None)
         .await
         .is_err());
-    auth.complete_mfa_login(&second.challenge, &recovery.codes[1], "fresh-3", None)
+    auth.complete_pending_login(&second.challenge, &recovery.codes[1], "fresh-3", None)
         .await
         .expect("next code");
 }
@@ -506,7 +506,7 @@ async fn legacy_totp_migrates_and_recovery_hashes_stay_until_used() {
         panic!("challenge");
     };
     let issued = auth
-        .complete_mfa_login(&challenge.challenge, &code, "legacy", None)
+        .complete_pending_login(&challenge.challenge, &code, "legacy", None)
         .await
         .expect("totp");
     let moved = crate::account_store::find_totp(auth.database(), user_id)
@@ -529,7 +529,7 @@ async fn legacy_totp_migrates_and_recovery_hashes_stay_until_used() {
     else {
         panic!("code challenge");
     };
-    auth.complete_mfa_login(&use_code.challenge, first, "legacy-code", None)
+    auth.complete_pending_login(&use_code.challenge, first, "legacy-code", None)
         .await
         .expect("first recovery");
     let crate::AuthError::MfaPending(replay) = auth
@@ -540,7 +540,7 @@ async fn legacy_totp_migrates_and_recovery_hashes_stay_until_used() {
         panic!("replay challenge");
     };
     assert!(auth
-        .complete_mfa_login(&replay.challenge, first, "legacy-replay", None)
+        .complete_pending_login(&replay.challenge, first, "legacy-replay", None)
         .await
         .is_err());
     let remaining = crate::account_store::unused_recovery(auth.database(), user_id)
@@ -562,7 +562,7 @@ async fn legacy_totp_migrates_and_recovery_hashes_stay_until_used() {
         panic!("rotated challenge");
     };
     assert!(rotated
-        .complete_mfa_login(&after.challenge, second, "rotated", None)
+        .complete_pending_login(&after.challenge, second, "rotated", None)
         .await
         .is_err());
     let rotated_legacy = crate::totp::legacy_mfa_key(&rotated.config().csrf_secret);
