@@ -56,6 +56,21 @@ Compiler: `rustc 1.98.1` and `cargo 1.98.1` on Windows. Edition is 2021. `rust-t
 
 `--allow-dirty` was not used for the successful dry-runs. One earlier attempt stopped with "changes that were not yet committed" while the Tokio feature edit was uncommitted. That edit was committed, and the dry-run was repeated on a clean tree.
 
+## Re-check on work/release-readiness-final
+
+The same dry-run, without `--allow-dirty`, was repeated after the cherry-pick onto `26e79f2`. Upload was aborted in every successful run.
+
+| Crate | Result | Archive |
+|---|---|---|
+| `ferrioxid-core` | Verified | 12 files, 88.5KiB (25.0KiB compressed) |
+| `ferrioxid-macros` | Verified | 8 files, 113.4KiB (21.8KiB compressed) |
+| `ferrioxid-cache` | Verified | 11 files, 40.3KiB (12.2KiB compressed) |
+| `ferrioxid-static` | Verified | 6 files, 36.1KiB (12.1KiB compressed) |
+| `ferrioxid-middleware` | Verified | 6 files, 42.1KiB (13.6KiB compressed) |
+| `ferrioxid-mail` | Stopped. crates.io has no `ferrioxid-core` 0.1.0. | Not produced |
+
+`cargo metadata --locked` and `cargo check -p ferrioxid -p ferrioxid-cli -p ferrioxid-cache -p ferrioxid-static -p ferrioxid-mail` passed. The full workspace test suite was not repeated on this branch.
+
 ## Release blockers
 
 - Do not run `cargo publish` without an explicit decision. Dry-run is not a publish.
