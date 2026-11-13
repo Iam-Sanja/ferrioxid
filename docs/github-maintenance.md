@@ -115,6 +115,6 @@ cargo build --workspace --locked
 
 The PostgreSQL job runs all three integration tests against its disposable database. Its success does not prove the Ubuntu or Windows jobs passed. Branch rules require the exact four names above; if workflow names change, maintainers must review the corresponding ruleset contexts rather than removing checks to bypass failures.
 
-The unfiltered cargo-audit report can match optional lockfile packages. The sole existing `RUSTSEC-2023-0071` exception is tracked in [issue #8](https://github.com/Iam-Sanja/ferrioxid/issues/8), which remains open. The workflow must fail if RSA becomes reachable in the enabled workspace graph on any target, and every other advisory remains gated. Reassess the exception when features or SQLx change; never broaden it simply to obtain a green check.
+`cargo audit` has no advisory ignore. The workflow still fails if a workspace target enables a crate named `rsa`. Do not add an ignore to make that check pass. The old `RUSTSEC-2023-0071` ignore applied only while the `sqlx` facade kept optional `sqlx-mysql` in the lockfile.
 
 Current CI does not prove complete secret-history scanning, third-party asset licensing, successful fork moderation or safety of all production deployments. Follow the remaining checklist items and report validation limits explicitly. This documentation update changes no security setting, workflow permission, dependency exception or protection rule.

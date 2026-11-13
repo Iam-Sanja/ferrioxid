@@ -77,25 +77,16 @@ On that merged head, `cargo fmt --all -- --check`, `cargo clippy --workspace --a
 
 - Do not run `cargo publish` without an explicit decision. Dry-run is not a publish.
 - Crates that depend on other Fexu crates fail dry-run until those crates exist on crates.io, in the order above. On this base `fexu-mail` depends on `fexu-core`, so its dry-run now stops for that reason even though an earlier tree without that dependency verified.
-- The SQLite patch below blocks publishing any crate whose graph includes `sqlx-sqlite`.
-- MSRV is not measured. `libsqlite3-sys` 0.39 requires Rust 1.88 or newer. That floor is not a measured minimum for the whole workspace.
+- The SQLite patch described below was removed by the database driver. Publishing is no longer blocked by `vendor/sqlx-sqlite`. Crates that depend on unpublished Fexu crates still fail `cargo publish --dry-run`. See [database-driver.md](database-driver.md).
+- MSRV is not measured. `libsqlite3-sys` 0.40 is the SQLite binding now resolved. That crate's Rust requirement is not a measured minimum for the whole workspace.
 - The rename to Fexu is planned in [fexu-rename-plan.md](fexu-rename-plan.md) and was not performed. Publish the renamed crates once, not both names.
 - This branch is `work/release-readiness-final`. It started from `origin/main` at `26e79f2` (`#101` squashed), cherry-picks only the three release commits from `work/release-readiness`, and then merges `origin/main` through `5e7525c` (`#110`) and `2619268` (`#109`). Pull requests #102 and #105 were not changed.
 
-## SQLite patch for external users
+## SQLite for external users
 
-The root `[patch.crates-io]` stays. This branch does not replace `sqlx-sqlite`, SeaORM, or SQLx.
+The root `[patch.crates-io]` entry and `vendor/sqlx-sqlite` are gone. SQLite is rusqlite 0.42.0 with bundled `libsqlite3-sys` 0.40.0. The generator does not write a patch. Details are in [database-driver.md](database-driver.md) and [sqlite-rustsec-2026-0459.md](security/sqlite-rustsec-2026-0459.md).
 
-A direct version bump is not sufficient. Published `sqlx-sqlite` 0.8.6 requires `libsqlite3-sys` version `0.30.1`, which Cargo reads as `^0.30.1` (`>=0.30.1, <0.31.0`). `fexu-db` requires `libsqlite3-sys` 0.39.1 with `bundled`. Both packages use `links = "sqlite3"`, so Cargo refuses to build them together. A checkout without the root patch fails resolution. It does not fall back to the vulnerable binding. Published `sqlx-sqlite` 0.9.0 requires `>=0.30.1, <0.38.0`, so SeaORM 2.0.4 and SQLx 0.9.0 do not select the fixed binding and would change APIs. The upstream bound change at `10462fa` is on unpublished `main` / `release/0.9.1`, not a published SQLx 0.8 release. Details and the 2026-11-13 crates.io recheck are in [sqlite-rustsec-2026-0459.md](security/sqlite-rustsec-2026-0459.md).
-
-Cargo applies `[patch]` only from the consuming workspace root. A published library cannot force that patch onto its users. The generator already writes the patch for a new project that points at this checkout. An existing project must add the same table itself.
-
-The release path is:
-
-1. Keep `vendor/sqlx-sqlite` and both patch stanzas until crates.io has a SQLx release that SeaORM can use and whose `sqlx-sqlite` accepts `libsqlite3-sys >=0.39.1, <0.40.0`.
-2. Do not publish `fexu-db`, `fexu`, or another crate whose graph includes `sqlx-sqlite` before that release. Users of such a publish would have to vendor this checkout or the build would fail.
-3. Remove the framework patch and the generator patch in the same change, then repeat the checks named in the SQLite security document: workspace tests, generated-project SQLite version, disposable PostgreSQL tests, and `cargo audit`. Keep the direct `libsqlite3-sys` 0.39.1 requirement until the upstream constraint enforces it.
-4. Do not publish a forked `sqlx-sqlite` from this branch. That would be a new crate name, a provenance review, and a dependency switch. It is not required for step 1 and it is not done here.
+Published `sqlx-sqlite` 0.8.6 and 0.9.0 still require an older `libsqlite3-sys`. They cannot be added beside Fexu, because both bindings set `links = "sqlite3"`. Fexu does not publish a forked `sqlx-sqlite`.
 
 ## Install
 
@@ -121,7 +112,7 @@ There is no previous crates.io release and no git tag that represents a publishe
 - It does not label the project 1.0 or production-ready.
 - It does not revert the squash of pull request 101. Pull requests 97–100 are already in that squash.
 - It does not start the Compose stack when Docker is absent.
-- It does not replace the vendored SQLite driver.
+- The vendored SQLite driver was removed later by the database driver change. This section's earlier dry-run list was recorded while that vendor tree still existed.
 
 ## Dependencies on pull requests 97–100
 

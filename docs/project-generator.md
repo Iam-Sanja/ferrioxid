@@ -63,4 +63,4 @@ The internal template version is `0.25`; the Cargo version remains `0.1.0`. `upg
 
 `crates/fexu-cli/tests/generator.rs` exercises both templates outside the workspace, Rust package normalization, both app placements, local/shared templates, names and duplicates, legacy-command rejection, SQLite system-only initialization, app migrations, protected model APIs, HTTP startup, development startup and release builds. Existing projects and databases are never automatically restructured.
 
-SQLite builds use a bounded SQLx driver backport with patched bundled SQLite. New projects receive the required Cargo-root patch automatically; existing independent projects need an explicit root-manifest update and rebuild. See [SQLite security and consumer instructions](security/sqlite-rustsec-2026-0459.md).
+Generated projects depend on Fexu and do not receive a `[patch.crates-io]` entry. SQLite comes from rusqlite inside Fexu. See [the database driver note](database-driver.md).

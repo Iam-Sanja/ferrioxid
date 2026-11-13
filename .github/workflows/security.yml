@@ -35,25 +35,16 @@ jobs:
       - name: Install cargo-audit
         run: cargo install cargo-audit --version 0.22.2 --locked
 
-      # Cargo.lock includes SQLx's optional MySQL driver and its RSA crate even
-      # when Fexu enables only PostgreSQL/SQLite. Do not accept the exemption
-      # if RSA becomes reachable in any workspace build (all OS targets).
+      # The sqlx facade and its optional MySQL driver are not dependencies.
+      # Fail if a future change enables RSA anyway, and fail on every advisory.
       - name: Verify RSA is absent from the enabled dependency graph
         shell: bash
         run: |
           cargo tree --workspace --target all --prefix none --locked > "$RUNNER_TEMP/fexu-dependencies.txt"
           if grep -E '^rsa v[0-9]' "$RUNNER_TEMP/fexu-dependencies.txt"; then
-            echo "::error::RSA is enabled in the workspace dependency graph; reassess RUSTSEC-2023-0071 before allowing this build."
+            echo "::error::RSA is enabled in the workspace dependency graph."
             exit 1
           fi
 
-      - name: Audit Cargo.lock (unfiltered report)
-        continue-on-error: true
+      - name: Audit Cargo.lock
         run: cargo audit
-
-      # RUSTSEC-2023-0071 is a lockfile-only match through the optional
-      # sqlx-mysql driver, not enabled by Fexu. Gate other advisories as
-      # errors. Review/remove this exception if features or SQLx change.
-      # Tracking issue: https://github.com/Iam-Sanja/ferrioxid/issues/8
-      - name: Audit all other vulnerabilities
-        run: cargo audit --ignore RUSTSEC-2023-0071
