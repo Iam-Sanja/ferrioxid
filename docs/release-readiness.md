@@ -1,6 +1,6 @@
 # Release readiness
 
-Checked on 2026-11-12 from branch `work/api-quality`. Nothing in this branch was published to crates.io.
+Checked on 2026-11-12 from branch `work/api-quality` and extended on 2026-11-13 on `work/release-readiness`. Nothing was published to crates.io.
 
 ## Versions
 
@@ -14,27 +14,63 @@ Before 1.0, a new `0.1.x` may change Rust APIs, migration history and HTTP field
 
 ## Crate graph and publication order
 
-Publication has to follow the path dependencies. A later crate cannot be published before the crates it uses.
+Nothing in this branch was uploaded. `cargo publish --dry-run` aborts before the upload. Examples `myshop`, `notes` and `desk` stay `publish = false`.
 
-1. `ferrioxid-core`
-2. `ferrioxid-macros`
-3. `ferrioxid-db`
-4. `ferrioxid-static`, `ferrioxid-middleware`, `ferrioxid-storage`, `ferrioxid-mail`
-5. `ferrioxid-migrations`, `ferrioxid-forms`, `ferrioxid-jobs`, `ferrioxid-auth`
-6. `ferrioxid-admin`
-7. `ferrioxid-api`
-8. `ferrioxid`
-9. `ferrioxid-cli`
+Internal dependencies keep a path for workspace builds and `version = "0.1.0"` for the manifest Cargo writes into a package. The version matches `[workspace.package]`.
 
-`examples/myshop`, `examples/notes` and `examples/desk` are `publish = false`. They keep path dependencies.
+Publish in this order. A crate is not publishable until every crate it depends on is already on crates.io.
 
-Every framework crate still depends on its siblings with `path`. `cargo publish` from this workspace cannot succeed until those dependencies are version requirements for crates that already exist on crates.io. That rewrite is a release commit. It is not in this branch. `cargo package` was not treated as a green publish check for that reason.
+1. `ferrioxid-core`, `ferrioxid-macros`
+2. `ferrioxid-db` after `ferrioxid-core`
+3. `ferrioxid-static`, `ferrioxid-middleware`, `ferrioxid-mail`
+4. `ferrioxid-migrations` after `ferrioxid-db`
+5. `ferrioxid-auth` after migrations and mail
+6. `ferrioxid-storage` after auth, and `ferrioxid-jobs` after auth
+7. `ferrioxid-forms` after storage
+8. `ferrioxid-cli` after jobs
+9. `ferrioxid-admin` after forms
+10. `ferrioxid-api` after admin
+11. `ferrioxid`
 
-Workspace metadata now sets `description`, `repository` and `homepage`. License is MIT. There is no `rust-version` key. The toolchain file selects stable Rust. A minimum supported version was not measured here.
+`ferrioxid-storage` uses `ferrioxid-db` only as a dev-dependency. `ferrioxid-jobs` uses `ferrioxid-auth` only as a dev-dependency. Verification still fetches those crates.
+
+## Packaging and dry-run on 2026-11-13
+
+Compiler: `rustc 1.98.1` and `cargo 1.98.1` on Windows. Edition is 2021. `rust-toolchain.toml` selects stable. No `rust-version` key is set. A minimum supported version was not bisected, so 1.98.1 is the compiler that ran these checks, not a measured minimum. Linux packaging was not run. Pull request 102's CI covers the parent commits on Windows and Linux, not this packaging commit.
+
+`cargo package --list` included the crate sources, `README.md`, and for the admin crate the templates, `static/css/admin.css` and `static/js/admin.js`. One census invocation also passed `--allow-dirty` while the tree was already clean, so it did not change the file set. No `.env`, key or certificate was in those lists. `src/password.rs` and `migrations/0004_password_reset.json` are code and schema. They contain column names, not secret values. The SPDX license `MIT` is in each manifest. `LICENSE-MIT` stays at the repository root and is not copied into each crate archive.
+
+| Crate | `cargo publish --dry-run` | Archive |
+|---|---|---|
+| `ferrioxid-core` | Verified. Upload aborted because this was a dry run. | 12 files, 82.7KiB (23.6KiB compressed) |
+| `ferrioxid-macros` | Verified. Upload aborted. | 8 files, 111.5KiB (21.5KiB compressed) |
+| `ferrioxid-middleware` | Verified. Upload aborted. | 6 files, 37.5KiB (12.7KiB compressed) |
+| `ferrioxid-static` | First verify failed: `tokio::fs` is not in the workspace Tokio features, and an isolated package does not inherit features from other workspace members. After `features = ["fs"]` on that crate, verify passed and the upload was aborted. | 6 files, 36.1KiB (12.1KiB compressed) |
+| `ferrioxid-mail` | Passed after declaring Tokio `time`, which `tokio::time::timeout` needs in isolation. Upload aborted. | 12 files, 74.5KiB (21.6KiB compressed) |
+| `ferrioxid-db` | Failed before an archive existed. crates.io has no `ferrioxid-core` 0.1.0. | Not produced |
+| `ferrioxid-cli` | Failed the same way. crates.io has no `ferrioxid-auth` 0.1.0. | Not produced |
+| `myshop` | `cargo publish` refuses it because `publish` is not true. `cargo package` also stops because the example dependency is path-only. | Not produced |
+
+`ferrioxid-jobs` now declares Tokio `time` for the same isolation reason. Its dry-run cannot succeed until `ferrioxid-core`, `ferrioxid-db`, `ferrioxid-mail` and `ferrioxid-migrations` are on crates.io. That failure was not re-run after the mail result, because the missing crates are still the cause.
+
+`cargo install` from a packaged `ferrioxid-cli` archive was not possible: the dry-run never wrote that archive. Install from a checkout remains `cargo install --path crates/ferrioxid-cli`.
+
+`--allow-dirty` was not used for the successful dry-runs. One earlier attempt stopped with "changes that were not yet committed" while the Tokio feature edit was uncommitted. That edit was committed, and the dry-run was repeated on a clean tree.
+
+## Release blockers
+
+- Do not run `cargo publish` without an explicit decision. Dry-run is not a publish.
+- Crates that depend on other Ferrioxid crates fail dry-run until those crates exist on crates.io, in the order above.
+- The root `[patch.crates-io]` replaces `sqlx-sqlite` with `vendor/sqlx-sqlite`. Cargo does not copy a workspace patch into a published member. A consumer of a published `ferrioxid-db` would resolve upstream `sqlx-sqlite` 0.8.6 and miss the bundled SQLite bound fix. Remove that blocker only when a published SQLx or SeaORM release accepts the patched binding, as `vendor/README.md` already says.
+- MSRV is not measured.
+- The rename to Fexu is planned in [fexu-rename-plan.md](fexu-rename-plan.md) and was not performed. Publish the renamed crates once, not both names.
+- This branch contains the commits from pull request 102 and adds the packaging work. Merge 102 first, or merge this pull request only when 102's commits are accepted with it. Do not publish from either branch as part of that merge.
+
+## Dependencies on pull requests 97–100
 
 ## Install
 
-Until a crate is published, install from a checkout:
+Until a crate is published, install from a checkout. A dry-run of `ferrioxid-cli` does not produce an installable archive, because `ferrioxid-auth` is not on crates.io.
 
 ```powershell
 cargo install --path crates/ferrioxid-cli
