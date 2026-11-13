@@ -1389,6 +1389,7 @@ mod tests {
                     min_length: Some(5),
                     max_length: Some(40),
                     format: None,
+                    api_read: true,
                 },
                 FieldContract {
                     column: "sealed",
@@ -1398,6 +1399,7 @@ mod tests {
                     min_length: None,
                     max_length: None,
                     format: None,
+                    api_read: true,
                 },
             ];
             VALUE

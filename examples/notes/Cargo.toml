@@ -3,6 +3,10 @@ name = "notes"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
+publish = false
 
 [dependencies]
 ferrioxid = { path = "../../crates/ferrioxid" }

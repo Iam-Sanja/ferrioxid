@@ -42,6 +42,9 @@ enum Command {
         /// Warnings, pending migrations, and legacy projects result in exit code 2.
         #[arg(long)]
         strict: bool,
+        /// Read-only deployment checks. Does not migrate, write files, or print secret values.
+        #[arg(long)]
+        deploy: bool,
     },
     /// Inspects an existing project and writes at most one missing legacy manifest.
     Upgrade {
@@ -416,7 +419,7 @@ fn main() -> ExitCode {
             }
         }
         Command::Doctor => diagnose::doctor(),
-        Command::Check { strict } => diagnose::check(strict),
+        Command::Check { strict, deploy } => diagnose::check(strict, deploy),
         Command::Upgrade {
             check,
             dry_run,

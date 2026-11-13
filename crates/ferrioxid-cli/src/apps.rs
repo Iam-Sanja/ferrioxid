@@ -200,6 +200,7 @@ pub(crate) fn validate_app_name(name: &str) -> Result<(), String> {
                 | "api"
                 | "static"
                 | "healthz"
+                | "readyz"
                 | "uploads"
                 | "apps"
                 | "project"

@@ -680,7 +680,7 @@ fn validate_app_name(name: &str) -> Result<(), AppError> {
     if !ok
         || matches!(
             name,
-            "admin" | "auth" | "api" | "static" | "healthz" | "uploads"
+            "admin" | "auth" | "api" | "static" | "healthz" | "readyz" | "uploads"
         )
     {
         return Err(AppError::new(

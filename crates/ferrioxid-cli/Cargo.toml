@@ -3,6 +3,9 @@ name = "ferrioxid-cli"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
+description.workspace = true
+repository.workspace = true
+homepage.workspace = true
 
 [[bin]]
 name = "ferrioxid"

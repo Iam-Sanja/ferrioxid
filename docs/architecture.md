@@ -85,9 +85,9 @@ DELETE /api/v1/products/{id}
   → keine Zeile: HTTP 404
 
 GET /api/v1/products
-  → Product::list
-  → SELECT ... ORDER BY "id" LIMIT 101
-  → höchstens 100 Modelle, truncated als Boolean
+  → Product::query Keyset
+  → SELECT ... ORDER BY "id" LIMIT (limit + 1)
+  → JSON data, limit, next, has_more
 ```
 
 Route registration reads `allow_anonymous` and the configured permission policy. Models with neither public access nor an authorization policy receive only 403 handlers.

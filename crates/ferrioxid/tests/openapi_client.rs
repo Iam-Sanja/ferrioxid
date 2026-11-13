@@ -69,7 +69,15 @@ async fn document_describes_models_and_hides_unregistered_routes() {
     assert!(detail.get("delete").is_some());
     assert!(detail.get("put").is_none());
     let page = &document["components"]["schemas"]["OfferPage"];
-    assert_eq!(page["properties"]["limit"]["const"], 100);
+    assert_eq!(page["properties"]["limit"]["maximum"], 100);
+    assert!(page["properties"].get("has_more").is_some());
+    assert!(page["properties"].get("truncated").is_none());
+    let list = &document["paths"]["/api/v1/offers"]["get"]["parameters"];
+    assert!(list
+        .as_array()
+        .unwrap()
+        .iter()
+        .any(|item| item["name"] == "cursor"));
     let response = &document["components"]["schemas"]["Offer"]["properties"];
     assert_eq!(response["name"]["minLength"], 2);
     assert_eq!(response["name"]["maxLength"], 40);

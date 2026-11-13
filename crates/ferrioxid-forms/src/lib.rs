@@ -2031,6 +2031,7 @@ mod tests {
             min_length: Some(1),
             max_length: Some(1),
             format: None,
+            api_read: true,
         };
         let mut editable = fields.clone();
         apply_contracts(&mut editable, &[contract]);

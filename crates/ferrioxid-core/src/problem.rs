@@ -71,6 +71,8 @@ fn legacy_code(message: &str, has_field: bool) -> &'static str {
         "create policy rejected the record" => "policy.create_rejected",
         "sort field is not allowed" => "list.sort",
         "filter field is not allowed" => "list.filter",
+        "page size must be between 1 and 100" => "list.limit",
+        "keyset cursor is not valid" | "keyset cursor does not match the order" => "list.cursor",
         "search is not available" => "list.search",
         "you cannot deactivate your own account" => "directory.self_deactivate",
         "you cannot remove your own staff access" => "directory.self_staff",
@@ -78,6 +80,8 @@ fn legacy_code(message: &str, has_field: bool) -> &'static str {
         "relation options require a registered admin model without an object policy" => {
             "list.relation"
         }
+        _ if message.starts_with("keyset cannot order by ") => "list.sort",
+        _ if message.starts_with("keyset cursor") => "list.cursor",
         _ if has_field => "validation.field",
         _ => "request.failed",
     }

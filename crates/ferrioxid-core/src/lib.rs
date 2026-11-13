@@ -221,6 +221,8 @@ pub struct FieldContract {
     pub max_length: Option<u32>,
     /// `"slug"` or `"email"` when the field declares `format`.
     pub format: Option<&'static str>,
+    /// `false` omits the field from generated read JSON. Create and update stay on `in_create` and `in_update`.
+    pub api_read: bool,
 }
 
 pub trait FerrioxidModel: Send + Sync + 'static {

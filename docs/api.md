@@ -31,7 +31,8 @@ let router = ferrioxid::web::prepare(router, &settings);
 | Route | Code | Response |
 |---|---|---|
 | `GET /healthz` | 200 |`{"status":"ok"}`; no DB readiness test|
-| `GET /api/v1/products` | 200 | `{"data":[...],"limit":100,"truncated":false}` |
+| `GET /readyz` | 200 / 503 |`{"status":"ready"}` after `SELECT 1`, or problem JSON. This does not migrate.|
+| `GET /api/v1/products` | 200 | `{"data":[...],"limit":100,"next":null,"has_more":false}` |
 | `GET /api/v1/products/{id}` | 200 / 404 |Typed model / Ferrioxid problem JSON with unknown UUID|
 | `POST /api/v1/products` | 201 |created JSON model with server-side UUID|
 | `PATCH /api/v1/products/{id}` | 200 / 404 / 422 |updated model, missing UUID or validation|
@@ -40,7 +41,7 @@ let router = ferrioxid::web::prepare(router, &settings);
 |Validation error, unique or foreign key breach| 422 |Ferrioxid Problem JSON without SQL Text|
 | Database error | 500 | Generic response; internal details stay in the `tracing` log. |
 
-Authentication, sessions, role permissions and object policies are implemented through `ferrioxid-auth`. Bind an auth service and the required policies for protected models; see [auth.md](auth.md) and [query-scopes.md](query-scopes.md). Generated public REST lists still use the fixed 100-record limit rather than offset/cursor pagination or the admin list-filter interface. `/api/v1` is simply the path declared by a model, not a versioning engine. Axum itself rejects an invalid UUID path value.
+Authentication, sessions, role permissions and object policies are implemented through `ferrioxid-auth`. Bind an auth service and the required policies for protected models; see [auth.md](auth.md) and [query-scopes.md](query-scopes.md). Generated public REST lists use keyset pagination. `limit` defaults to 100 and cannot exceed 100. `cursor` is the opaque `next` token. `sort` accepts one allow-listed field, with a leading `-` for descending order, and `id` is the tie-break. `filter` may be repeated. The form is `field:eq:value`, `field:ne:value`, `field:gt:value`, `field:gte:value`, `field:lt:value`, `field:lte:value`, `field:contains:value`, `field:isnull` or `field:notnull`. Only admin-filterable fields that remain in the read serializer are accepted. Unknown sort or filter fields are 422. Offset is not accepted. `/api/v1` is the path a model declares. OpenAPI `info.version` is the HTTP contract `1`. The crate stays `0.1.0`. POST is not idempotent. PATCH is last-write-wins and does not return 409. Removed operations are deleted from the OpenAPI document. `Deprecation` and `Sunset` headers are not sent. Axum path values that are not UUIDs are 422 problem JSON with `validation.uuid`. Invalid JSON is the same problem document with `validation.invalid_type` or `validation.unknown_field`.
 
 ### Error contract (implemented)
 
@@ -54,16 +55,16 @@ Authentication, sessions, role permissions and object policies are implemented t
 
 If `allow_anonymous = true`, a request without a session cookie can be used without authentication. A request that sends the configured session cookie or `ferrioxid_anonymous` still needs a valid CSRF proof on POST, PUT, PATCH and DELETE. Only for locally bound demo processes. For real applications, no standard public CRUD endpoints without an Auth and Policy layer.
 
-## Planned API generator
+## Serializer and version notes
 
-1. Separate response DTOs if read and write view should no longer be the same model.
-2. Object/field policies before data access and response serialization.
-3. Conflict responses such as HTTP 409 for version conflicts. The current PATCH is Last-Write-Wins in a statement.
-4. Cursor-based pagination with stable ordering and enforced limits.
-5. Allowlists for sortable and filterable fields.
-6. Declare versioning explicitly and do not guess from path names.
-7. OpenAPI metadata is generated from the model derive. See [openapi.md](openapi.md). The generated list is still the fixed 100-row window.
-8. JSON error contract with structured validation details and RFC-9457 matching.
+1. `#[field(write_only)]` and `#[field(api_read = false)]` omit a column from read JSON. Names `password`, `password_hash`, `token`, `token_hash`, `secret`, `csrf_token` and `csrf_token_hash` are omitted unless `api_read = true`. Create and update DTOs still follow `in_create` and `in_update`.
+2. Object policies still filter with `QueryScope` before the page is read.
+3. PATCH remains last-write-wins. HTTP 409 is not produced.
+4. List routes use `Select::keyset`. Nullable and boolean sort fields are rejected.
+5. Sort and filter names come from the admin allow-list. `id` is always sortable.
+6. `info.version` is `1`. The path prefix is still declared by the model.
+7. OpenAPI 3.1 is generated from the same model metadata. See [openapi.md](openapi.md).
+8. Errors are `application/problem+json`, including invalid JSON and a non-UUID id.
 
 ## API acceptance tests
 
@@ -73,7 +74,8 @@ If `allow_anonymous = true`, a request without a session cookie can be used with
 - DELETE: 204 without body, then GET and re-DELETE make 404.
 - Private models: List, GET, PATCH and DELETE provide 403 with `title: Forbidden`.
 - POST with `name: ""` or whitespace-only input: 422.
-- GET with more than 100 records: 100 items and `truncated: true`.
+- GET with `limit=1` walks `next` while `has_more` is true. A finished page has `next: null`.
+- Unknown sort or filter fields, and a field marked `write_only` or named like a secret, are 422 and are absent from the read JSON.
 - Unreleased model: 403 with problem JSON.
 - DB error: no secrets in the answer.
 - GET `/healthz` is not misunderstood as a DB readiness test.
