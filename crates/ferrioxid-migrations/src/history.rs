@@ -30,7 +30,7 @@ pub async fn history_exists_in(
     table_exists(db, history_table).await
 }
 
-pub async fn table_exists(db: &DatabaseConnection, table: &str) -> Result<bool, MigrationError> {
+pub async fn table_exists(db: &impl ConnectionTrait, table: &str) -> Result<bool, MigrationError> {
     if !crate::snapshot::is_identifier(table) {
         return Err(MigrationError::new(format!(
             "Invalid table name `{table}`."
@@ -55,7 +55,7 @@ pub async fn table_exists(db: &DatabaseConnection, table: &str) -> Result<bool, 
 }
 
 pub async fn column_exists(
-    db: &DatabaseConnection,
+    db: &impl ConnectionTrait,
     table: &str,
     column: &str,
 ) -> Result<bool, MigrationError> {

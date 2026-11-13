@@ -436,7 +436,7 @@ pub async fn exercise(db: &DatabaseConnection) -> Result<(), String> {
             "sql null was stored as a json document: {sql_null}"
         ));
     }
-    if insert_record(
+    match insert_record(
         db,
         Note::descriptor().table,
         Note::columns(),
@@ -446,9 +446,14 @@ pub async fn exercise(db: &DatabaseConnection) -> Result<(), String> {
         ],
     )
     .await
-    .is_ok()
     {
-        return Err("invalid json was stored".into());
+        Ok(_) => return Err("invalid json was stored".into()),
+        Err(error) if error.to_string().contains("validation.json") => {}
+        Err(error) => {
+            return Err(format!(
+                "invalid json was not rejected before PostgreSQL saw it: {error}"
+            ))
+        }
     }
     if Note::query()
         .filter(col("body").eq(Bound::Text("{}".into())))

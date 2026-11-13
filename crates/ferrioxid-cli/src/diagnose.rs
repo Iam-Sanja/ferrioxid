@@ -573,13 +573,13 @@ fn migration_lines(project: &ProjectConfig, compare_schema: bool, deploy: bool) 
                     errors += 1;
                     report(
                         "ERROR",
-                        "job.migration.pending 0001_jobs The job migration has not been applied. This check is read-only.",
+                        "job.migration.pending The job migrations are not fully applied. This check is read-only.",
                     );
                 } else {
                     warnings += 1;
                     report(
                         "WARN",
-                        "job.migration.pending 0001_jobs The job migration has not been applied. Run ferrioxid migrate up. This check is read-only.",
+                        "job.migration.pending The job migrations are not fully applied. Run ferrioxid migrate up. This check is read-only.",
                     );
                 }
             }

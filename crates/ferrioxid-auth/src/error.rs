@@ -16,10 +16,28 @@ pub enum AuthError {
     OriginRejected,
     #[error("csrf token is missing or invalid")]
     CsrfRejected,
+    #[error("multi-factor authentication is required")]
+    MfaPending(PendingLogin),
     #[error("{0}")]
     Validation(String),
     #[error("database operation failed")]
     Database(String),
+}
+
+/// Einmaliger zweiter Schritt. Der Wert ist kein Sitzungstoken.
+pub struct PendingLogin {
+    pub challenge: String,
+    pub expires_at: i64,
+}
+
+impl std::fmt::Debug for PendingLogin {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("PendingLogin")
+            .field("challenge", &"[redacted]")
+            .field("expires_at", &self.expires_at)
+            .finish()
+    }
 }
 
 impl AuthError {
@@ -45,7 +63,7 @@ impl From<AuthError> for FerrioxidError {
             }
             AuthError::OriginRejected => FerrioxidError::Denied("origin is not allowed".into()),
             AuthError::Validation(message) => FerrioxidError::Validation(message),
-            AuthError::RateLimited | AuthError::Database(_) => {
+            AuthError::RateLimited | AuthError::Database(_) | AuthError::MfaPending(_) => {
                 FerrioxidError::Denied("request rejected".into())
             }
         }

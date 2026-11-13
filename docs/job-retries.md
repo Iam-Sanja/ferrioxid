@@ -31,4 +31,4 @@ Without `--yes`, the command exits with code 2 and leaves the database unchanged
 
 ## Intervals
 
-Only successful completion schedules the next interval. A permanently failed recurring job creates no further rows. `ferrioxid jobs retry --yes` reopens the same row. Enqueuing twice with the same `schedule_key` returns `EnqueueOutcome::Existing` on the second call.
+Only successful completion schedules the next interval or the next cron slot. A permanently failed recurring job creates no further rows. `ferrioxid jobs retry --yes` reopens the same row. Enqueuing twice with the same `schedule_key` returns `EnqueueOutcome::Existing` on the second call. Missed cron slots are not backfilled. Exhausted attempts and permanent errors are the dead-letter set (`status = failed`).

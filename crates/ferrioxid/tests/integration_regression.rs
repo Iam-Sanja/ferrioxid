@@ -39,15 +39,15 @@ async fn inspect_and_plan(url: &str) -> Result<(), String> {
     )
     .await
     .map_err(|error| error.0)?;
-    if pending.pending_auth() < 5 {
+    if pending.pending_auth() < 6 {
         return Err(format!(
             "expected pending auth, got {:?}",
             pending.auth.lines
         ));
     }
-    if pending.pending_jobs() != 1 {
+    if pending.pending_jobs() != 2 {
         return Err(format!(
-            "expected one pending job, got {:?}",
+            "expected two pending jobs, got {:?}",
             pending.jobs.lines
         ));
     }

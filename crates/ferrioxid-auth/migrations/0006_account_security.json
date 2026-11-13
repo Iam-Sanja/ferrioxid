@@ -1,0 +1,1852 @@
+{
+  "format_version": 1,
+  "id": "0006_account_security",
+  "name": "account_security",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "_ferrioxid_users",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "password_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "is_staff",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "is_superuser",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_login",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_users_email",
+            "columns": [
+              "email"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_roles_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_permissions_code",
+            "columns": [
+              "code"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_sessions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "csrf_token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_seen_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_sessions_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_sessions_user_id",
+            "columns": [
+              "user_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_sessions_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_user_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_user_roles_user_id_role_id",
+            "columns": [
+              "user_id",
+              "role_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_user_roles_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__ferrioxid_user_roles_role_id__ferrioxid_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_ferrioxid_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_role_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "permission_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_role_permissions_role_id_permission_id",
+            "columns": [
+              "role_id",
+              "permission_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_role_permissions_role_id__ferrioxid_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_ferrioxid_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__ferrioxid_role_permissions_permission_id__ferrioxid_permissions_id",
+            "columns": [
+              "permission_id"
+            ],
+            "referenced_table": "_ferrioxid_permissions",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_admin_drafts",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "session_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "model_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "record_id",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "purpose",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_admin_drafts_session_id",
+            "columns": [
+              "session_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_admin_drafts_session_id__ferrioxid_sessions_id",
+            "columns": [
+              "session_id"
+            ],
+            "referenced_table": "_ferrioxid_sessions",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_admin_audit",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "actor_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "model_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "record_id",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "action",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "outcome",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "summary",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "operation_id",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_admin_audit_created_at",
+            "columns": [
+              "created_at"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_password_resets",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "used_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_password_resets_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_password_resets_user_id",
+            "columns": [
+              "user_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_password_resets_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_password_reset_exchanges",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "reset_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "secret_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_password_reset_exchanges_secret_hash",
+            "columns": [
+              "secret_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_password_reset_exchanges_reset_id",
+            "columns": [
+              "reset_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_password_reset_exchanges_reset_id__ferrioxid_password_resets_id",
+            "columns": [
+              "reset_id"
+            ],
+            "referenced_table": "_ferrioxid_password_resets",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_mail_outbox",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "kind",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "recipient",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "reset_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "sent_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "failed_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "error_code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_mail_outbox_created_at",
+            "columns": [
+              "created_at"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_anonymous_sessions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "csrf_token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "state",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_seen_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_anonymous_sessions_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "_ferrioxid_users",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "password_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "is_staff",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "is_superuser",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_login",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_users_email",
+            "columns": [
+              "email"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_roles_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_permissions_code",
+            "columns": [
+              "code"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_sessions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "csrf_token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_seen_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_sessions_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_sessions_user_id",
+            "columns": [
+              "user_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_sessions_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_user_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_user_roles_user_id_role_id",
+            "columns": [
+              "user_id",
+              "role_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_user_roles_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__ferrioxid_user_roles_role_id__ferrioxid_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_ferrioxid_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_role_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "permission_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_role_permissions_role_id_permission_id",
+            "columns": [
+              "role_id",
+              "permission_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_role_permissions_role_id__ferrioxid_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_ferrioxid_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__ferrioxid_role_permissions_permission_id__ferrioxid_permissions_id",
+            "columns": [
+              "permission_id"
+            ],
+            "referenced_table": "_ferrioxid_permissions",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_admin_drafts",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "session_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "model_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "record_id",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "purpose",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "payload",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_admin_drafts_session_id",
+            "columns": [
+              "session_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_admin_drafts_session_id__ferrioxid_sessions_id",
+            "columns": [
+              "session_id"
+            ],
+            "referenced_table": "_ferrioxid_sessions",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_admin_audit",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "actor_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "model_key",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "record_id",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "action",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "outcome",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "summary",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "operation_id",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_admin_audit_created_at",
+            "columns": [
+              "created_at"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_password_resets",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "used_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_password_resets_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_password_resets_user_id",
+            "columns": [
+              "user_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_password_resets_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_password_reset_exchanges",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "reset_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "secret_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_password_reset_exchanges_secret_hash",
+            "columns": [
+              "secret_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_password_reset_exchanges_reset_id",
+            "columns": [
+              "reset_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_password_reset_exchanges_reset_id__ferrioxid_password_resets_id",
+            "columns": [
+              "reset_id"
+            ],
+            "referenced_table": "_ferrioxid_password_resets",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_mail_outbox",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "kind",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "recipient",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "reset_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "sent_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "failed_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "error_code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__ferrioxid_mail_outbox_created_at",
+            "columns": [
+              "created_at"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_anonymous_sessions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "csrf_token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "state",
+            "type": "string",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_seen_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_anonymous_sessions_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_mfa_totp",
+        "columns": [
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "nonce",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "ciphertext",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "confirmed_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_used_step",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_mfa_totp_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_recovery_codes",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "code_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "used_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_recovery_codes_code_hash",
+            "columns": [
+              "code_hash"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_recovery_codes_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_ferrioxid_login_challenges",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "consumed_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_login_challenges_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_login_challenges_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrioxid_login_challenges",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "consumed_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "attempts",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_login_challenges_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_login_challenges_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrioxid_mfa_totp",
+        "columns": [
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "nonce",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "ciphertext",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "confirmed_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_used_step",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_mfa_totp_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_ferrioxid_recovery_codes",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "code_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "used_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__ferrioxid_recovery_codes_code_hash",
+            "columns": [
+              "code_hash"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__ferrioxid_recovery_codes_user_id__ferrioxid_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_ferrioxid_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "b768d1aa2a836c9aa95ba733ff38fbf442c689e7bc70072c487c9ffd07956300"
+}

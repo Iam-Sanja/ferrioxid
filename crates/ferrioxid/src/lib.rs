@@ -9,6 +9,7 @@ pub use ferrioxid_api::{
     OpenApiOptions,
 };
 pub use ferrioxid_auth as auth;
+pub use ferrioxid_cache as cache;
 pub use ferrioxid_core as core;
 pub use ferrioxid_db as db;
 pub use ferrioxid_forms as forms;

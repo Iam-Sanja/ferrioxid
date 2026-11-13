@@ -6,7 +6,7 @@ use ferrioxid_migrations::{
     plan_change, seal, ColumnSnapshot, IndexSnapshot, LogicalType, MigrationFile, SchemaSnapshot,
     TableSnapshot, UniqueConstraintSnapshot,
 };
-use sea_orm::DatabaseConnection;
+use sea_orm::{ConnectionTrait, DatabaseConnection};
 use std::path::PathBuf;
 
 pub const JOBS: &str = "_ferrioxid_jobs";
@@ -16,14 +16,19 @@ pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
 }
 
-const EMBEDDED_MIGRATIONS: &[(&str, &str)] =
-    &[("0001_jobs", include_str!("../migrations/0001_jobs.json"))];
+const EMBEDDED_MIGRATIONS: &[(&str, &str)] = &[
+    ("0001_jobs", include_str!("../migrations/0001_jobs.json")),
+    (
+        "0002_job_schedule",
+        include_str!("../migrations/0002_job_schedule.json"),
+    ),
+];
 
 /// Job migrations compiled into the binary. Runtime does not open `CARGO_MANIFEST_DIR`.
 pub fn embedded_migrations() -> Result<Vec<ferrioxid_migrations::MigrationFile>, JobError> {
     ferrioxid_migrations::require_embedded_migrations(
         "ferrioxid-jobs",
-        &["0001_jobs"],
+        &["0001_jobs", "0002_job_schedule"],
         EMBEDDED_MIGRATIONS,
     )
     .map_err(|error| JobError::message("job.migration", error.to_string()))
@@ -71,8 +76,14 @@ pub async fn render_migration_status(db: &DatabaseConnection) -> Result<(String,
     Ok((format!("Job-Migrationen:\n{}", report.render()), current))
 }
 
-pub async fn table_ready(db: &DatabaseConnection) -> Result<bool, JobError> {
-    ferrioxid_migrations::table_exists(db, JOBS)
+pub async fn table_ready(db: &impl ConnectionTrait) -> Result<bool, JobError> {
+    let ready = ferrioxid_migrations::table_exists(db, JOBS)
+        .await
+        .map_err(|error| JobError::message("job.database", error.to_string()))?;
+    if !ready {
+        return Ok(false);
+    }
+    ferrioxid_migrations::column_exists(db, JOBS, "cron_expression")
         .await
         .map_err(|error| JobError::message("job.database", error.to_string()))
 }
@@ -168,6 +179,53 @@ fn ensure_test_migration() {
 }
 
 #[cfg(test)]
+fn ensure_schedule_migration() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let path = migrations_dir().join("0002_job_schedule.json");
+        if path.exists() {
+            return;
+        }
+        let file = schedule_migration_file().expect("schedule schema can be sealed");
+        ferrioxid_migrations::save_migration(&migrations_dir(), &file).expect("write migration");
+    });
+}
+
+#[cfg(test)]
+pub fn schedule_migration_file() -> Result<MigrationFile, JobError> {
+    let previous = ferrioxid_migrations::load_migration(&migrations_dir().join("0001_jobs.json"))
+        .map_err(|error| JobError::message("job.migration", error.to_string()))?;
+    let mut to = previous.to_snapshot.clone();
+    let table = to
+        .tables
+        .iter_mut()
+        .find(|table| table.name == JOBS)
+        .ok_or_else(|| JobError::message("job.migration", "Die Job-Tabelle fehlt."))?;
+    table
+        .columns
+        .push(column("cron_expression", LogicalType::String, false, true));
+    table
+        .columns
+        .push(column("cron_zone", LogicalType::String, false, true));
+    to.validate()
+        .map_err(|error| JobError::message("job.migration", error.to_string()))?;
+    let plan = plan_change(&previous.to_snapshot, &to)
+        .map_err(|error| JobError::message("job.migration", error.to_string()))?;
+    if let Some(reason) = &plan.refusal {
+        return Err(JobError::message("job.migration", reason.clone()));
+    }
+    seal(
+        "0002_job_schedule".to_owned(),
+        "job_schedule".to_owned(),
+        previous.to_snapshot,
+        to,
+        &plan,
+    )
+    .map_err(|error| JobError::message("job.migration", error.to_string()))
+}
+
+#[cfg(test)]
 mod tests {
     use super::{ensure_test_migration, migration_file, migrations_dir};
 
@@ -184,5 +242,16 @@ mod tests {
         assert_eq!(loaded.id, "0001_jobs");
         assert_eq!(loaded.checksum, file.checksum);
         assert!(format!("{loaded:?}").contains("_ferrioxid_jobs"));
+    }
+
+    #[test]
+    fn schedule_migration_is_sealed() {
+        super::ensure_schedule_migration();
+        let file = super::schedule_migration_file().expect("schedule schema can be sealed");
+        let path = migrations_dir().join("0002_job_schedule.json");
+        let loaded = ferrioxid_migrations::load_migration(&path).expect("load migration");
+        assert_eq!(loaded.id, "0002_job_schedule");
+        assert_eq!(loaded.checksum, file.checksum);
+        assert!(format!("{loaded:?}").contains("cron_expression"));
     }
 }

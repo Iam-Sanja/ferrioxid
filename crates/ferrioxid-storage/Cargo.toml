@@ -12,8 +12,10 @@ async-trait.workspace = true
 axum.workspace = true
 ferrioxid-auth = { path = "../ferrioxid-auth" }
 ferrioxid-core = { path = "../ferrioxid-core" }
+hmac = "0.12"
 serde.workspace = true
 serde_json.workspace = true
+sha2.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
 uuid.workspace = true

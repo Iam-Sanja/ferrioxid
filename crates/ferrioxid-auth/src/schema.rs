@@ -21,6 +21,9 @@ pub const ADMIN_AUDIT: &str = "_ferrioxid_admin_audit";
 pub const PASSWORD_RESETS: &str = "_ferrioxid_password_resets";
 pub const PASSWORD_RESET_EXCHANGES: &str = "_ferrioxid_password_reset_exchanges";
 pub const MAIL_OUTBOX: &str = "_ferrioxid_mail_outbox";
+pub const MFA_TOTP: &str = "_ferrioxid_mfa_totp";
+pub const RECOVERY_CODES: &str = "_ferrioxid_recovery_codes";
+pub const LOGIN_CHALLENGES: &str = "_ferrioxid_login_challenges";
 
 pub fn migrations_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations")
@@ -47,6 +50,10 @@ const EMBEDDED_MIGRATIONS: &[(&str, &str)] = &[
         "0005_anonymous_sessions",
         include_str!("../migrations/0005_anonymous_sessions.json"),
     ),
+    (
+        "0006_account_security",
+        include_str!("../migrations/0006_account_security.json"),
+    ),
 ];
 
 const EXPECTED_MIGRATIONS: &[&str] = &[
@@ -55,6 +62,7 @@ const EXPECTED_MIGRATIONS: &[&str] = &[
     "0003_audit_operation",
     "0004_password_reset",
     "0005_anonymous_sessions",
+    "0006_account_security",
 ];
 
 /// Auth migrations compiled into the binary. Runtime does not open `CARGO_MANIFEST_DIR`.
@@ -219,6 +227,102 @@ fn anonymous_migration_file() -> Result<MigrationFile, AuthError> {
         &plan,
     )
     .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
+#[cfg(test)]
+fn ensure_account_security_migration() {
+    use std::sync::Once;
+    static ONCE: Once = Once::new();
+    ONCE.call_once(|| {
+        let path = migrations_dir().join("0006_account_security.json");
+        if path.exists() {
+            return;
+        }
+        let file =
+            account_security_migration_file().expect("account security schema can be sealed");
+        ferrioxid_migrations::save_migration(&migrations_dir(), &file).expect("write migration");
+    });
+}
+
+#[cfg(test)]
+fn account_security_migration_file() -> Result<MigrationFile, AuthError> {
+    let previous = ferrioxid_migrations::load_migration(
+        &migrations_dir().join("0005_anonymous_sessions.json"),
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let mut to = previous.to_snapshot.clone();
+    to.tables.push(mfa_totp());
+    to.tables.push(recovery_codes());
+    to.tables.push(login_challenges());
+    to.validate()
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    let plan = plan_change(&previous.to_snapshot, &to)
+        .map_err(|error| AuthError::Validation(error.to_string()))?;
+    if let Some(reason) = &plan.refusal {
+        return Err(AuthError::Validation(reason.clone()));
+    }
+    seal(
+        "0006_account_security".to_owned(),
+        "account_security".to_owned(),
+        previous.to_snapshot,
+        to,
+        &plan,
+    )
+    .map_err(|error| AuthError::Validation(error.to_string()))
+}
+
+#[cfg(test)]
+fn mfa_totp() -> TableSnapshot {
+    table(
+        MFA_TOTP,
+        vec![
+            column("user_id", LogicalType::Uuid, true, false, None),
+            column("nonce", LogicalType::String, false, false, None),
+            column("ciphertext", LogicalType::String, false, false, None),
+            column("confirmed_at", LogicalType::I64, false, true, None),
+            column("created_at", LogicalType::I64, false, false, None),
+            column("last_used_step", LogicalType::I64, false, true, None),
+        ],
+        Vec::new(),
+        Vec::new(),
+        vec![foreign_key(MFA_TOTP, "user_id", USERS)],
+    )
+}
+
+#[cfg(test)]
+fn recovery_codes() -> TableSnapshot {
+    table(
+        RECOVERY_CODES,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("user_id", LogicalType::Uuid, false, false, None),
+            column("code_hash", LogicalType::String, false, false, None),
+            column("used_at", LogicalType::I64, false, true, None),
+            column("created_at", LogicalType::I64, false, false, None),
+        ],
+        vec![unique(RECOVERY_CODES, &["code_hash"])],
+        Vec::new(),
+        vec![foreign_key(RECOVERY_CODES, "user_id", USERS)],
+    )
+}
+
+#[cfg(test)]
+fn login_challenges() -> TableSnapshot {
+    table(
+        LOGIN_CHALLENGES,
+        vec![
+            column("id", LogicalType::Uuid, true, false, None),
+            column("user_id", LogicalType::Uuid, false, false, None),
+            column("token_hash", LogicalType::String, false, false, None),
+            column("expires_at", LogicalType::I64, false, false, None),
+            column("consumed_at", LogicalType::I64, false, true, None),
+            column("attempts", LogicalType::I64, false, false, None),
+            column("created_at", LogicalType::I64, false, false, None),
+        ],
+        vec![unique(LOGIN_CHALLENGES, &["token_hash"])],
+        Vec::new(),
+        vec![foreign_key(LOGIN_CHALLENGES, "user_id", USERS)],
+    )
 }
 
 #[cfg(test)]
@@ -630,13 +734,27 @@ mod tests {
             .any(|operation| format!("{operation:?}").contains("_ferrioxid_anonymous_sessions")));
     }
 
+    #[test]
+    fn account_security_migration_is_sealed() {
+        super::ensure_account_security_migration();
+        let file = super::account_security_migration_file().expect("account security migration");
+        let path = migrations_dir().join("0006_account_security.json");
+        let loaded = ferrioxid_migrations::load_migration(&path).expect("load migration");
+        assert_eq!(loaded.id, "0006_account_security");
+        assert_eq!(loaded.checksum, file.checksum);
+        assert!(loaded
+            .operations
+            .iter()
+            .any(|operation| format!("{operation:?}").contains("_ferrioxid_mfa_totp")));
+    }
+
     #[tokio::test]
     async fn embedded_migrations_run_without_the_source_directory() {
         let files = super::embedded_migrations().expect("embedded auth migrations");
-        assert_eq!(files.len(), 5);
+        assert_eq!(files.len(), 6);
         let db = ferrioxid_db::connect("sqlite::memory:").await.unwrap();
         let applied = super::apply_migrations(&db).await.unwrap();
-        assert_eq!(applied.len(), 5);
+        assert_eq!(applied.len(), 6);
         let again = super::apply_migrations(&db).await.unwrap();
         assert!(again.is_empty());
         let status = super::migration_status(&db).await.unwrap();

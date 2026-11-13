@@ -20,8 +20,8 @@ async fn readiness_reports_auth_jobs_and_an_absent_app_without_migrating() {
     )
     .await
     .unwrap();
-    assert!(report.pending_auth() >= 5, "{:?}", report.auth.lines);
-    assert_eq!(report.pending_jobs(), 1);
+    assert!(report.pending_auth() >= 6, "{:?}", report.auth.lines);
+    assert_eq!(report.pending_jobs(), 2);
     assert_eq!(report.pending_app(), 0);
     assert!(
         report.app.schema_note.contains("absent"),
@@ -65,17 +65,17 @@ async fn exercise(url: &str) -> Result<(), String> {
     let auth_applied = ferrioxid::auth::apply_migrations(&db)
         .await
         .map_err(|error| error.to_string())?;
-    if auth_applied.len() != 5 {
+    if auth_applied.len() != 6 {
         return Err(format!(
-            "expected 5 auth migrations, applied {auth_applied:?}"
+            "expected 6 auth migrations, applied {auth_applied:?}"
         ));
     }
     let jobs_applied = ferrioxid::jobs::apply_migrations(&db)
         .await
         .map_err(|error| format!("{} {}", error.code(), error.detail()))?;
-    if jobs_applied.len() != 1 {
+    if jobs_applied.len() != 2 {
         return Err(format!(
-            "expected 1 job migration, applied {jobs_applied:?}"
+            "expected 2 job migrations, applied {jobs_applied:?}"
         ));
     }
     let auth = AuthService::new(db.clone(), AuthConfig::development());

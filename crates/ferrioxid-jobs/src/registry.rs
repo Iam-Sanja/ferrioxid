@@ -14,6 +14,9 @@ pub struct JobContext {
     pub id: Uuid,
     pub attempt: u32,
     pub now: i64,
+    /// Stabiler Schlüssel des Eintrags, wenn der Erzeuger einen gesetzt hat.
+    /// Ein wiederholter Lauf sieht denselben Schlüssel. Das verhindert keine doppelte Wirkung.
+    pub idempotency_key: Option<String>,
 }
 
 #[async_trait]

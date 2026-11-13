@@ -772,11 +772,19 @@ pub async fn insert_record(
     columns: &[ColumnSpec],
     values: Vec<Value>,
 ) -> Result<Json, FerrioxidError> {
+    let mut prepared = Vec::with_capacity(values.len());
+    for (index, value) in values.into_iter().enumerate() {
+        let value = match columns.get(index) {
+            Some(column) => json_parameter(column, value)?,
+            None => value,
+        };
+        prepared.push(value);
+    }
     let mut query = Query::insert();
     query
         .into_table(Alias::new(table))
         .columns(columns.iter().map(|column| Alias::new(column.name)))
-        .values_panic(values.into_iter().map(Into::into))
+        .values_panic(prepared.into_iter().map(Into::into))
         .returning_all();
     let row = db
         .query_one({
@@ -802,6 +810,14 @@ pub async fn update_record(
             .await?
             .ok_or(FerrioxidError::NotFound);
     }
+    let mut prepared = Vec::with_capacity(changes.len());
+    for (name, value) in changes {
+        let value = match columns.iter().find(|column| column.name == name) {
+            Some(column) => json_parameter(column, value)?,
+            None => value,
+        };
+        prepared.push((name, value));
+    }
     let mut query = Query::update();
     query
         .table(Alias::new(table))
@@ -810,7 +826,7 @@ pub async fn update_record(
     if let Some(condition) = scope_condition(columns, scope)? {
         query.and_where(condition);
     }
-    for (name, value) in changes {
+    for (name, value) in prepared {
         query.value(Alias::new(name), value);
     }
     let row = db
@@ -882,6 +898,24 @@ where
             serde_json::from_value(json).map_err(FerrioxidError::database)
         })
         .collect()
+}
+
+fn json_parameter(column: &ColumnSpec, value: Value) -> Result<Value, FerrioxidError> {
+    if column.kind != ColumnKind::Json {
+        return Ok(value);
+    }
+    match value {
+        Value::Json(document) => Ok(Value::Json(document)),
+        Value::String(None) => Ok(Value::Json(None)),
+        Value::String(Some(text)) => {
+            let canonical = ferrioxid_core::canonical_json_text(text.as_str())
+                .map_err(|_| FerrioxidError::Validation("validation.json".into()))?;
+            let parsed = serde_json::from_str::<Json>(&canonical)
+                .map_err(|_| FerrioxidError::Validation("validation.json".into()))?;
+            Ok(Value::Json(Some(Box::new(parsed))))
+        }
+        _ => Err(FerrioxidError::Validation("validation.json".into())),
+    }
 }
 
 pub(crate) fn map_write(error: sea_orm::DbErr) -> FerrioxidError {

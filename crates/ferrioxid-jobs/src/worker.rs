@@ -39,6 +39,8 @@ impl Worker {
         &self.id
     }
 
+    /// Holt Jobs, bis `stop` gesetzt ist. Ein bereits geholter Handler läuft zu Ende
+    /// oder bis zu seinem Timeout. Danach wird nichts Neues mehr geholt.
     pub async fn run(&self, stop: &AtomicBool) -> Result<(), JobError> {
         self.queue.ready().await?;
         while !stop.load(Ordering::SeqCst) {
@@ -82,6 +84,7 @@ impl Worker {
             id: record.id,
             attempt: record.attempts,
             now,
+            idempotency_key: record.idempotency_key.clone(),
         };
         let timeout = self.registry.timeout_of(&record.handler);
         let outcome = tokio::time::timeout(timeout, self.registry.execute(&record, &ctx)).await;

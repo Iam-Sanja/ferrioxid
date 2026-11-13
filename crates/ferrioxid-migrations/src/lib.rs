@@ -33,7 +33,7 @@ pub use fixtures::{
     dump_fixture, fixture_to_json, load_fixture, parse_fixture, prepare_records, FixtureFile,
     FixtureRecord, LoadReport, LoadRequest, FIXTURE_VERSION,
 };
-pub use history::{history_exists, table_exists, AUTH_HISTORY_TABLE};
+pub use history::{column_exists, history_exists, table_exists, AUTH_HISTORY_TABLE};
 pub use inspect::{
     dev_notice, inspect_framework, inspect_migrations, inspect_migrations_with_packages,
     readonly_database_url, render_diagnosis, Diagnostic, DualReport, Level, MigrationScope,

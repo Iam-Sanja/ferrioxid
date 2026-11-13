@@ -51,6 +51,22 @@ pub fn mount(router: Router<AppState>) -> Router<AppState> {
             "/auth/password-reset/choose",
             get(crate::recovery::show_choose).post(crate::recovery::submit_choose),
         )
+        .route("/auth/mfa/enroll", post(crate::mfa_routes::enroll_totp))
+        .route("/auth/mfa/confirm", post(crate::mfa_routes::confirm_totp))
+        .route("/auth/mfa/disable", post(crate::mfa_routes::disable_totp))
+        .route("/auth/mfa/complete", post(crate::mfa_routes::complete_mfa))
+        .route(
+            "/auth/sessions/revoke",
+            post(crate::mfa_routes::revoke_session),
+        )
+        .route(
+            "/auth/reauthenticate",
+            post(crate::mfa_routes::reauthenticate),
+        )
+        .route(
+            "/auth/account/close",
+            post(crate::mfa_routes::close_account),
+        )
 }
 
 pub struct ClientIp(pub String);
@@ -108,6 +124,20 @@ async fn login(
             }
             response
         }
+        Err(crate::AuthError::MfaPending(pending)) => (
+            StatusCode::UNAUTHORIZED,
+            Json(json!({
+                "type": "about:blank",
+                "code": "auth.mfa_required",
+                "title": "Unauthorized",
+                "status": 401,
+                "detail": "Additional authentication is required",
+                "params": {},
+                "challenge": pending.challenge,
+                "expires_at": pending.expires_at
+            })),
+        )
+            .into_response(),
         Err(error) => auth_error(error),
     }
 }
@@ -282,7 +312,7 @@ async fn anonymous_logout(
         .map(|_| ())
 }
 
-fn append_cookie(response: &mut axum::response::Response, value: &str) {
+pub(crate) fn append_cookie(response: &mut axum::response::Response, value: &str) {
     if let Ok(header) = HeaderValue::from_str(value) {
         response
             .headers_mut()
@@ -290,7 +320,7 @@ fn append_cookie(response: &mut axum::response::Response, value: &str) {
     }
 }
 
-fn auth_error(error: AuthError) -> axum::response::Response {
+pub(crate) fn auth_error(error: AuthError) -> axum::response::Response {
     match error {
         AuthError::RateLimited => error_response(
             StatusCode::TOO_MANY_REQUESTS,
@@ -326,10 +356,15 @@ fn auth_error(error: AuthError) -> axum::response::Response {
             "Internal server error",
             "Database operation failed",
         ),
+        AuthError::MfaPending(_) => error_response(
+            StatusCode::UNAUTHORIZED,
+            "Unauthorized",
+            "Additional authentication is required",
+        ),
     }
 }
 
-fn error_response(
+pub(crate) fn error_response(
     status: StatusCode,
     title: &'static str,
     detail: &str,
