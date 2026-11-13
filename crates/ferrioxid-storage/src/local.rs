@@ -193,6 +193,10 @@ impl LocalStorage {
             let _ = std::fs::remove_file(&target);
             return Err(StorageError::Failed);
         }
+        if let Err(error) = ensure_regular_inside(&self.root, &target) {
+            let _ = std::fs::remove_file(&partial);
+            return Err(error);
+        }
         let stored = StoredFile {
             id,
             owner,
@@ -208,6 +212,10 @@ impl LocalStorage {
             let _ = std::fs::remove_file(&target);
             let _ = std::fs::remove_file(&meta_path);
             return Err(StorageError::Failed);
+        }
+        if let Err(error) = ensure_regular_inside(&self.root, &meta_path) {
+            let _ = std::fs::remove_file(&target);
+            return Err(error);
         }
         Ok(stored)
     }
@@ -429,6 +437,20 @@ impl Storage for LocalStorage {
             return Err(StorageError::NotFound);
         }
         Ok(stored)
+    }
+}
+
+fn ensure_regular_inside(root: &Path, path: &Path) -> Result<(), StorageError> {
+    if !regular_file(path) {
+        return Err(StorageError::Failed);
+    }
+    let root = canonicalize_existing(root)?;
+    let canonical = canonicalize_existing(path)?;
+    if canonical.starts_with(&root) {
+        Ok(())
+    } else {
+        let _ = std::fs::remove_file(path);
+        Err(StorageError::Failed)
     }
 }
 

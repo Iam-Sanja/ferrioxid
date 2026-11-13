@@ -346,4 +346,53 @@ mod tests {
             assert_eq!(calls.load(Ordering::SeqCst), 1);
         }
     }
+
+    #[tokio::test]
+    async fn parallel_reads_and_writes_release_bytes() {
+        let cache = Arc::new(open_cache(64, 4096));
+        let mut tasks = Vec::new();
+        for index in 0..16 {
+            let cache = cache.clone();
+            tasks.push(tokio::spawn(async move {
+                let key = format!("k{index}");
+                cache
+                    .set("hammer", &key, &format!("value-{index}"), None)
+                    .await
+                    .expect("set");
+                let loaded: Option<String> = cache.get("hammer", &key).await.expect("get");
+                assert!(loaded.is_some());
+                cache.delete("hammer", &key).await.expect("delete");
+            }));
+        }
+        for task in tasks {
+            task.await.expect("join");
+        }
+        cache
+            .invalidate_namespace("hammer")
+            .await
+            .expect("invalidate");
+        for index in 0..16 {
+            assert!(cache
+                .get::<String>("hammer", &format!("k{index}"))
+                .await
+                .expect("cleared")
+                .is_none());
+        }
+        let big = "x".repeat(2500);
+        cache
+            .set("hammer", "full", &big, None)
+            .await
+            .expect("fits after release");
+        cache.delete("hammer", "full").await.expect("free");
+        cache
+            .set("hammer", "full", &big, None)
+            .await
+            .expect("reused");
+        let other = open_cache(8, 4096);
+        assert!(other
+            .get::<String>("hammer", "full")
+            .await
+            .expect("isolated")
+            .is_none());
+    }
 }

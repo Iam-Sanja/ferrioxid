@@ -1464,7 +1464,7 @@ async fn postgres_job_claim_and_rollback() {
     let second = queue.database().begin().await.expect("second");
     let racing = queue.clone();
     let pending = tokio::spawn(async move {
-        racing
+        let outcome = racing
             .enqueue_json_on(
                 &second,
                 CountJob::NAME,
@@ -1477,14 +1477,99 @@ async fn postgres_job_claim_and_rollback() {
                     ..When::now()
                 },
             )
-            .await
+            .await;
+        let follow = racing
+            .enqueue_json_on(
+                &second,
+                CountJob::NAME,
+                1,
+                &Label {
+                    label: "follow".into(),
+                },
+                When {
+                    idempotency_key: Some("pg-race-follow".into()),
+                    ..When::now()
+                },
+            )
+            .await;
+        let committed = second.commit().await;
+        (outcome, follow, committed)
     });
     tokio::time::sleep(std::time::Duration::from_millis(200)).await;
     first.commit().await.expect("commit race");
-    match pending.await.expect("join race") {
-        Ok(EnqueueOutcome::Existing(_)) => {}
-        Err(error) => assert_eq!(error.code(), "job.conflict"),
-        Ok(EnqueueOutcome::Created(_)) => panic!("duplicate job became visible"),
+    let (outcome, follow, committed) = pending.await.expect("join race");
+    match outcome.expect("conflict stays inside the savepoint") {
+        EnqueueOutcome::Existing(_) => {}
+        EnqueueOutcome::Created(_) => panic!("duplicate job became visible"),
+    }
+    assert!(matches!(
+        follow.expect("same transaction stays usable"),
+        EnqueueOutcome::Created(_)
+    ));
+    committed.expect("commit follow");
+    let mut parallel_ids = Vec::new();
+    for index in 0..6 {
+        let created = queue
+            .enqueue_json(
+                "notes_parallel",
+                1,
+                &Label {
+                    label: format!("parallel-{index}"),
+                },
+                When {
+                    idempotency_key: Some(format!("pg-parallel-{index}")),
+                    ..When::now()
+                },
+            )
+            .await
+            .expect("parallel job");
+        let EnqueueOutcome::Created(id) = created else {
+            panic!("parallel created");
+        };
+        parallel_ids.push(id);
+    }
+    let mut workers = Vec::new();
+    for worker_index in 0..8 {
+        let queue = queue.clone();
+        workers.push(tokio::spawn(async move {
+            let mut claimed = Vec::new();
+            loop {
+                match queue
+                    .claim(
+                        &format!("pg-worker-{worker_index}"),
+                        &["notes_parallel"],
+                        60,
+                    )
+                    .await
+                {
+                    Ok(Some((record, token))) => {
+                        queue
+                            .finish_success(record.id, &token, &record)
+                            .await
+                            .expect("finish");
+                        claimed.push(record.id);
+                    }
+                    Ok(None) => break,
+                    Err(error) => panic!("claim failed: {}", error.code()),
+                }
+            }
+            claimed
+        }));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for worker in workers {
+        for id in worker.await.expect("worker join") {
+            assert!(seen.insert(id), "two workers finished the same job");
+        }
+    }
+    assert_eq!(seen.len(), parallel_ids.len());
+    for id in parallel_ids {
+        assert!(seen.contains(&id));
+        assert_eq!(
+            queue.get(id).await.expect("claimed").status,
+            JobStatus::Succeeded
+        );
+        assert_eq!(queue.get(id).await.expect("claimed").attempts, 1);
     }
     queue
         .enqueue_json(

@@ -716,9 +716,10 @@ impl Queue {
         Ok(rows)
     }
 
-    /// Schreibt in die Verbindung des Aufrufers. Ein Rollback entfernt den Job.
+    /// Schreibt in die Verbindung des Aufrufers. Ein Rollback des Aufrufers entfernt den Job.
     /// Sichtbare Jobs bleiben at-least-once. Die Methode beginnt keine eigene Transaktion.
-    /// Ein eindeutiger Konflikt bricht die Transaktion des Aufrufers ab. Der Aufrufer rollt zurück.
+    /// Ein eindeutiger Konflikt rollt nur auf einen Sicherungspunkt zurück. Die Transaktion
+    /// des Aufrufers bleibt benutzbar. Der Aufrufer entscheidet über Commit oder Rollback.
     pub async fn enqueue_json_on(
         &self,
         db: &impl ConnectionTrait,
@@ -752,7 +753,8 @@ impl Queue {
             }
         }
         let id = Uuid::new_v4();
-        insert_job(
+        savepoint(db, "SAVEPOINT ferrioxid_job_insert").await?;
+        let inserted = insert_job(
             db,
             &NewJob {
                 id,
@@ -769,7 +771,25 @@ impl Queue {
                 cron_zone: planned.cron_zone.as_deref(),
             },
         )
-        .await?;
+        .await;
+        if let Err(error) = inserted {
+            savepoint(db, "ROLLBACK TO SAVEPOINT ferrioxid_job_insert").await?;
+            savepoint(db, "RELEASE SAVEPOINT ferrioxid_job_insert").await?;
+            if error.code() == "job.conflict" {
+                if let Some(key) = planned.idempotency.as_deref() {
+                    if let Some(existing) = find_by_column(db, "idempotency_key", key).await? {
+                        return Ok(EnqueueOutcome::Existing(existing.id));
+                    }
+                }
+                if let Some(key) = planned.schedule_key.as_deref() {
+                    if let Some(existing) = find_by_column(db, "schedule_key", key).await? {
+                        return Ok(EnqueueOutcome::Existing(existing.id));
+                    }
+                }
+            }
+            return Err(error);
+        }
+        savepoint(db, "RELEASE SAVEPOINT ferrioxid_job_insert").await?;
         Ok(EnqueueOutcome::Created(id))
     }
 }
@@ -866,6 +886,13 @@ async fn conditional_status(
     } else {
         Ok(Finish::LostLease)
     }
+}
+
+async fn savepoint(db: &impl ConnectionTrait, sql: &str) -> Result<(), JobError> {
+    db.execute(Statement::from_string(db.get_database_backend(), sql))
+        .await
+        .map(|_| ())
+        .map_err(database)
 }
 
 async fn insert_job(db: &impl ConnectionTrait, job: &NewJob<'_>) -> Result<(), JobError> {
