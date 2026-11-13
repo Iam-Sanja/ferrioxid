@@ -1,26 +1,24 @@
-use ferrioxid::jobs::{
+use fexu::jobs::{
     enqueue_notice, Clock, EnqueueOutcome, JobPolicy, JobRegistry, JobStatus, ManualClock, Queue,
     When, Worker,
 };
-use ferrioxid::mail::{MailService, Notice};
+use fexu::mail::{MailService, Notice};
 use notes::jobs::{register, NotePulse, NotePulseHandler};
 use std::sync::Arc;
 
 #[tokio::test]
 async fn notes_runs_immediate_delayed_recurring_and_mail_jobs() {
     let path = std::env::temp_dir().join(format!(
-        "ferrioxid-notes-jobs-{}-{}.sqlite",
+        "fexu-notes-jobs-{}-{}.sqlite",
         std::process::id(),
-        ferrioxid::uuid::Uuid::new_v4()
+        fexu::uuid::Uuid::new_v4()
     ));
     let url = format!(
         "sqlite://{}?mode=rwc",
         path.to_string_lossy().replace('\\', "/")
     );
-    let db = ferrioxid::db::connect(&url).await.expect("sqlite");
-    ferrioxid::jobs::apply_migrations(&db)
-        .await
-        .expect("migration");
+    let db = fexu::db::connect(&url).await.expect("sqlite");
+    fexu::jobs::apply_migrations(&db).await.expect("migration");
     let clock = ManualClock::new(1_800_000_000);
     let queue = Queue::new(db, Arc::new(clock.clone()), JobPolicy::default());
     let handler = NotePulseHandler::new();
@@ -29,7 +27,7 @@ async fn notes_runs_immediate_delayed_recurring_and_mail_jobs() {
     register(&mut registry, handler).expect("register");
     let (mail, inbox) = MailService::memory("noreply@example.com", "http://127.0.0.1:3000");
     registry
-        .register(ferrioxid::jobs::MailNoticeHandler::new(mail))
+        .register(fexu::jobs::MailNoticeHandler::new(mail))
         .expect("mail");
     let runner = Worker::new(queue.clone(), registry, 60, 50, 1);
 
@@ -94,8 +92,8 @@ async fn notes_accepts_a_weekday_cron_and_a_process_local_cache() {
     let when = When::cron("notes-morning", "0 9 * * 1-5", "europe/berlin").expect("cron");
     assert_eq!(when.cron_zone.as_deref(), Some("europe/berlin"));
     assert!(When::cron("notes-morning", "0 9 * * 1-5", "America/New_York").is_err());
-    let cache = ferrioxid::cache::TypedCache::new(
-        ferrioxid::cache::MemoryCache::new(ferrioxid::cache::MemoryLimits {
+    let cache = fexu::cache::TypedCache::new(
+        fexu::cache::MemoryCache::new(fexu::cache::MemoryLimits {
             max_entries: 8,
             max_bytes: 4096,
         })
@@ -105,8 +103,8 @@ async fn notes_accepts_a_weekday_cron_and_a_process_local_cache() {
     cache.set("notes", "home", &"ok", None).await.expect("set");
     let value: Option<String> = cache.get("notes", "home").await.expect("get");
     assert_eq!(value.as_deref(), Some("ok"));
-    let other = ferrioxid::cache::TypedCache::new(
-        ferrioxid::cache::MemoryCache::new(ferrioxid::cache::MemoryLimits {
+    let other = fexu::cache::TypedCache::new(
+        fexu::cache::MemoryCache::new(fexu::cache::MemoryLimits {
             max_entries: 8,
             max_bytes: 4096,
         })
@@ -117,7 +115,7 @@ async fn notes_accepts_a_weekday_cron_and_a_process_local_cache() {
     assert!(missing.is_none());
 }
 
-async fn created(queue: &Queue, label: &str, when: When) -> ferrioxid::uuid::Uuid {
+async fn created(queue: &Queue, label: &str, when: When) -> fexu::uuid::Uuid {
     match queue
         .enqueue::<NotePulseHandler>(
             &NotePulse {

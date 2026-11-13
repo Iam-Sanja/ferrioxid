@@ -4,19 +4,19 @@
 
 ## Purpose
 
-`ferrioxid-admin` exposes registered models under `/admin/api`, checks permissions and serves the native HTML interface. It reuses the existing ORM and authentication implementation.
+`fexu-admin` exposes registered models under `/admin/api`, checks permissions and serves the native HTML interface. It reuses the existing ORM and authentication implementation.
 
 ## Files
 
 | File | Responsibility |
 |---|---|
-| `crates/ferrioxid-admin/src/lib.rs` | `mount` |
-| `crates/ferrioxid-admin/src/registry.rs` | `AdminRegistry`, adapters for `ModelRepository` |
-| `crates/ferrioxid-admin/src/http.rs` | Routes, schema and directory API |
-| `crates/ferrioxid-admin/src/assets.rs` |File delivery, path verification|
-| `crates/ferrioxid-db/src/sql.rs` | Parameterized list queries |
+| `crates/fexu-admin/src/lib.rs` | `mount` |
+| `crates/fexu-admin/src/registry.rs` | `AdminRegistry`, adapters for `ModelRepository` |
+| `crates/fexu-admin/src/http.rs` | Routes, schema and directory API |
+| `crates/fexu-admin/src/assets.rs` |File delivery, path verification|
+| `crates/fexu-db/src/sql.rs` | Parameterized list queries |
 
-The crate depends on `ferrioxid-core`, `ferrioxid-db` and `ferrioxid-auth`, not `ferrioxid-api`. `ferrioxid-api` calls `ferrioxid_admin::mount`.
+The crate depends on `fexu-core`, `fexu-db` and `fexu-auth`, not `fexu-api`. `fexu-api` calls `fexu_admin::mount`.
 
 ## Interface
 

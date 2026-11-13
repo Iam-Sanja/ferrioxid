@@ -1,4 +1,4 @@
-# Ferrioxid Roadmap – Status and Next Phases
+# Fexu Roadmap – Status and Next Phases
 
 [Overview](index.md) · [Django 6.1 capability matrix](django-capability-matrix.md) · Admin comparison: [admin-django-parity.md](admin-django-parity.md) · UX backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
 
@@ -32,9 +32,9 @@ In the long term, the admin should cover the relevant functions of the Django ad
 | v0.22 | Completed |Public admin extension: Pages, actions, filters, widgets, templates|No second admin engine. PostgreSQL runtime untested. The rustc crash remains unexplained|
 | v0.23 | Completed |Email service, self-service password reset, typed notes|No delivery guarantee. No admin notification center. PostgreSQL runtime untested|
 | v0.24 | Completed | Typed settings, `[custom.*]`, `UrlSet`, view helpers and project layout | `require_user` does not check CSRF; API projects retain HTML homepages |
-| v0.25 | Completed |`App::install`, App Migrations, Tera-`url`, App Templates and Static Files, `ferrioxid generate app`|`merge` of a raw router does not see names. PostgreSQL runtime untested|
+| v0.25 | Completed |`App::install`, App Migrations, Tera-`url`, App Templates and Static Files, `fexu generate app`|`merge` of a raw router does not see names. PostgreSQL runtime untested|
 | v0.27 | Completed |Persistent queue, lease, limited retries, worker, ordinary mail jobs|Cron is missing. Reset tokens remain outside the queue. PostgreSQL runtime untested|
-| v0.27.1 | Completed | `WorkerHost`, `ferrioxid generate worker`, app handlers and hidden job payloads | CLI workers do not load application code; no exactly-once guarantee |
+| v0.27.1 | Completed | `WorkerHost`, `fexu generate worker`, app handlers and hidden job payloads | CLI workers do not load application code; no exactly-once guarantee |
 | v0.26 | Completed | Validated app startup, Rust/TOML migration matching, flat field groups and managed timestamps | Soft delete remains planned |
 | v0.28 | Completed | Admin navigation grouped by app, model links and permission-aware visibility | See [admin-navigation.md](admin-navigation.md) for limits |
 
@@ -59,7 +59,7 @@ Those three are **In PR**. SQLite tests passed. `postgres_keyset_annotations_and
 
 ## Decimal fields and typed choices
 
-`Decimal` and `FerrioxidChoice` are described in [models.md](models.md). myshop migration `0006_prices_and_status` adds a precise product price, `ProductStatus`, and optional `Order.state`. This is not a new version milestone. PR #61 is merged. The rows are **Partial**. Local tests cover SQLite. `postgres_decimal_and_choice_roundtrip` passed in the PostgreSQL CI job on `6d79283`.
+`Decimal` and `FexuChoice` are described in [models.md](models.md). myshop migration `0006_prices_and_status` adds a precise product price, `ProductStatus`, and optional `Order.state`. This is not a new version milestone. PR #61 is merged. The rows are **Partial**. Local tests cover SQLite. `postgres_decimal_and_choice_roundtrip` passed in the PostgreSQL CI job on `6d79283`.
 
 ## Fixtures
 
@@ -67,7 +67,7 @@ Those three are **In PR**. SQLite tests passed. `postgres_keyset_annotations_and
 
 ## Management commands
 
-Project commands live in the compiled `ferrioxid-manage` binary. `ferrioxid manage` only checks the command name and starts that binary with separate arguments. The contract is in [management-commands.md](management-commands.md). myshop's `seed-shop` upserts `fixtures/catalog.json` and can be run again without adding rows. This is not a new version milestone. PR #61 is merged. The row is **Partial**. The sample command was exercised on SQLite. It was not run against PostgreSQL locally.
+Project commands live in the compiled `fexu-manage` binary. `fexu manage` only checks the command name and starts that binary with separate arguments. The contract is in [management-commands.md](management-commands.md). myshop's `seed-shop` upserts `fixtures/catalog.json` and can be run again without adding rows. This is not a new version milestone. PR #61 is merged. The row is **Partial**. The sample command was exercised on SQLite. It was not run against PostgreSQL locally.
 
 ## Open after v0.27.1
 
@@ -80,13 +80,13 @@ Project commands live in the compiled `ferrioxid-manage` binary. `ferrioxid mana
 
 - Soft Delete, including queries, restores, audits and foreign keys.
 - `merge` of a raw router does not see route names.
-- The CLI does not load app Rust into its own process. `ferrioxid manage` starts the project's compiled binary. See [management-commands.md](management-commands.md).
+- The CLI does not load app Rust into its own process. `fexu manage` starts the project's compiled binary. See [management-commands.md](management-commands.md).
 
 ## Open after v0.25
 
 - `require_user` continues to authenticate with GET. Mutations use `require_mutation`.
-- Since v0.26, the process start compares both lists. The CLI remains with `ferrioxid.toml`.
-- `ferrioxid new` does not yet generate `src/apps/`.
+- Since v0.26, the process start compares both lists. The CLI remains with `fexu.toml`.
+- `fexu new` does not yet generate `src/apps/`.
 
 ## Open after v0.24
 
@@ -140,7 +140,7 @@ Tested on 2026-11-07: Impeccable is below `.cursor/skills/impeccable/` and has b
 | Skill |Used only after testing|Do not do|
 |---|---|---|
 | Impeccable |Design criticism, audit, layout and fine-tuning of the native admin in v0.15|External installation without consent, decorative alterations without functional gain|
-| Cloudflare Security Audit |Targeted testing of CSRF, XSS, sessions and file access before v0.16 and v0.18|Blind adoption of findings without comparison with the Ferrioxid code|
+| Cloudflare Security Audit |Targeted testing of CSRF, XSS, sessions and file access before v0.16 and v0.18|Blind adoption of findings without comparison with the Fexu code|
 | ub-mode |Architectural boundaries and tests for directory and audit|New frameworks or a second CRUD engine|
 | Ponytail |Complexity in `html.rs` and lower the metadata if a phase grows otherwise|Remove behaviour requiring removal|
 

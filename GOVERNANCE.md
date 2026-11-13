@@ -1,6 +1,6 @@
 # Governance
 
-Ferrioxid is maintained primarily by one developer, GitHub account `@Iam-Sanja`. There is no foundation, steering committee, or separate organization.
+Fexu is maintained primarily by one developer, GitHub account `@Iam-Sanja`. There is no foundation, steering committee, or separate organization.
 
 ## Maintainer
 

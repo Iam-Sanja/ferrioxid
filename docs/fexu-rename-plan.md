@@ -1,120 +1,63 @@
-# Ferrioxid to Fexu rename plan
+# Fexu rename
 
-This is a plan. No identifier in the repository was renamed for it. The crates in this branch stay `ferrioxid` and `ferrioxid-*`. Nothing has been published to crates.io, so the rename should happen before the first publish. A published crate name cannot be renamed in place.
+The framework is Fexu. This checkout no longer reads Ferrioxid or Ferrum names.
 
-Checked from `work/release-readiness-final` on 2026-11-13. That branch starts at the squash of pull request 101, so `FERRUM_*` aliases and `FERRIOXID_TRUSTED_PROXIES` are already in the tree. Nothing here was renamed.
+Nothing has been published to crates.io. Generated projects and their databases do not need to keep working under the old names, so this rename does not add a second configuration file, a second environment prefix, old cookie names, or a migration of existing production databases.
 
-## Target names
+## Names
 
-| Item | Today | Target |
-|---|---|---|
-| GitHub repository | `Iam-Sanja/ferrioxid` | `fexu-rs` under an owner that is chosen at rename time |
-| Main crate | `ferrioxid` | `fexu` |
-| CLI crate | `ferrioxid-cli` | `fexu-cli` |
-| CLI binary and Clap command | `ferrioxid` | `fexu` |
-| Domain | none; homepage is the GitHub repository | `fexu.dev` |
-| Other crates | `ferrioxid-core`, `ferrioxid-macros`, `ferrioxid-db`, `ferrioxid-migrations`, `ferrioxid-auth`, `ferrioxid-cache`, `ferrioxid-admin`, `ferrioxid-api`, `ferrioxid-forms`, `ferrioxid-static`, `ferrioxid-storage`, `ferrioxid-middleware`, `ferrioxid-mail`, `ferrioxid-jobs` | The same suffixes on `fexu-` |
-
-Rust library crate names become `fexu_core` and so on because Cargo turns hyphens into underscores. `use ferrioxid::` becomes `use fexu::`. Proc-macro derives stay on the facade crate unless a later design splits them.
-
-Examples `myshop`, `notes` and `desk` are `publish = false`. Their package names can stay. Their dependency on the facade changes with the facade name.
-
-## Do this before crates.io
-
-Publish the renamed crates once. Do not publish `ferrioxid-*` 0.1.0 and then add `fexu-*` as a second line. Two published names would leave generated projects and the SQLite patch instructions pointing at a name that the project no longer builds.
-
-The workspace `[patch.crates-io]` for `sqlx-sqlite` does not travel inside a published crate. That blocker is in [release-readiness.md](release-readiness.md) and is independent of the rename.
-
-## What a generated project contains today
-
-`ferrioxid new` writes:
-
-- `ferrioxid.toml`
-- `.ferrioxid/` for local metadata and `csrf.key`
-- `Cargo.toml` with `ferrioxid = { path = ... }` and a `[patch.crates-io]` entry for the vendored SQLite driver
-- Rust sources that call `ferrioxid::prelude`, `ferrioxid::migrations`, `ferrioxid::apps`, `ferrioxid::urls`, `ferrioxid::views` and `ferrioxid::with_timestamps!`
-- `.env.example` comments that name `FERRIOXID_CSRF_SECRET`, `FERRIOXID_PASSWORD`, `FERRIOXID_SMTP_PASSWORD` and `FERRIOXID_PUBLIC_ORIGIN`
-
-An existing project also has a database. The framework creates these names itself and does not rewrite them on startup:
-
-| Name | Role |
+| Item | Name |
 |---|---|
-| `_ferrioxid_migrations` | Application migration history |
-| `_ferrioxid_auth_migrations` | Embedded auth history |
-| `_ferrioxid_job_migrations` | Embedded job history |
-| `_ferrioxid_users`, `_ferrioxid_sessions`, `_ferrioxid_roles`, `_ferrioxid_permissions`, `_ferrioxid_user_roles`, `_ferrioxid_role_permissions` | Auth tables |
-| `_ferrioxid_password_resets` | Password reset |
-| `_ferrioxid_jobs` | Job queue |
-| `_ferrioxid_admin_audit`, `_ferrioxid_admin_drafts` | Admin journal and drafts |
-| `_ferrioxid_mail_outbox` | Mail outbox |
+| Framework | Fexu |
+| Main crate | `fexu` |
+| CLI crate and binary | `fexu-cli`, command `fexu` |
+| Other crates | `fexu-core`, `fexu-macros`, `fexu-db`, `fexu-migrations`, `fexu-auth`, `fexu-cache`, `fexu-admin`, `fexu-api`, `fexu-forms`, `fexu-static`, `fexu-storage`, `fexu-middleware`, `fexu-mail`, `fexu-jobs` |
+| Rust imports | `fexu`, `fexu_core`, and the same pattern for the other crates |
+| Project file | `fexu.toml` |
+| Local directory | `.fexu/` |
+| Environment | `FEXU_*` |
+| Internal tables | `_fexu_*` |
+| Cookies | `fexu_session`, `fexu_anonymous`, `fexu_login_csrf`, `fexu_reset`, `fexu_reset_csrf` |
+| Documentation host | `fexu.dev` |
 
-Cookies set by this branch:
+`fexu.dev` is the intended documentation host. This repository does not claim that the domain is registered or that it serves a site. The Cargo `repository` and `homepage` fields stay on `https://github.com/Iam-Sanja/ferrioxid` until that GitHub repository is renamed.
 
-- `ferrioxid_session`
-- `ferrioxid_anonymous`
-- `ferrioxid_login_csrf`
-- `ferrioxid_reset`
-- `ferrioxid_reset_csrf`
+The planned GitHub repository name is `fexu-rs`. The rename on GitHub is a separate step and has not been done.
 
-Environment variables read by this branch, not by pull request 101:
+## What was removed
 
-- `FERRIOXID_ENV`
-- `FERRIOXID_DEBUG`
-- `FERRIOXID_COOKIE_SECURE`
-- `FERRIOXID_ALLOWED_ORIGINS`
-- `FERRIOXID_TRUST_PROXY`
-- `FERRIOXID_CSRF_SECRET`
-- `FERRIOXID_SESSION_HOURS`
-- `FERRIOXID_IDLE_MINUTES`
-- `FERRIOXID_PASSWORD`
-- `FERRIOXID_SMTP_PASSWORD`
-- `FERRIOXID_PUBLIC_ORIGIN`
-- `FERRIOXID_LOCALE`
-- `FERRIOXID_SCHEMA_FILE`
-- `FERRIOXID_CHECK_SKIP_CARGO`
-- `FERRIOXID_CHECK_SKIP_SCHEMA`
-- `FERRIOXID_LOG_FORMAT`
-- `FERRIOXID_MIGRATIONS_DOWN_DATABASE_URL`
+`FERRIOXID_*`, `FERRUM_*`, `ferrioxid.toml`, `ferrum.toml`, `.ferrioxid/`, `_ferrioxid_*`, and the `ferrioxid_*` cookies are not read. A project that still has those names does not start as a Fexu project. Create `fexu.toml` and set `FEXU_*`. New databases use `_fexu_*` tables only. Fexu does not copy an old database.
 
-`DATABASE_URL` and `BIND_ADDRESS` are not framework-branded. Leave them.
+`DATABASE_URL` and `BIND_ADDRESS` are unchanged. They are not framework brand names.
 
-## Compatibility rules
+## Migration files
 
-A rename that only changes Rust identifiers and the binary name makes every generated project fail to compile, and a rename of the history tables makes `migrate` treat an existing database as empty. Neither may happen silently.
+Embedded auth and job migrations keep their IDs (`0001_auth_schema` through `0006_account_security`, `0001_jobs`, `0002_job_schedule`). Table names inside those files are `_fexu_*`. Their checksums are recalculated from the canonical body so the file, the checksum, and the embedded list describe the same migration. Applied history in an old database is not rewritten and is not a supported upgrade.
 
-1. Keep reading `ferrioxid.toml`. Accept `fexu.toml` only when `ferrioxid.toml` is absent. If both exist, stop with an error and do not guess.
-2. Keep reading `.ferrioxid/`. Do not move `csrf.key` automatically. A later explicit command can copy it.
-3. Keep the CLI able to run as `ferrioxid` for one release after `fexu` exists. Scripts and `schema_command` values in existing project files call `ferrioxid`.
-4. Keep every `_ferrioxid_*` table name. New databases in that release still use those names. A later migration may copy history into `_fexu_*` tables, and it must be opt-in. Startup must not create a second history table and replay migrations.
-5. Keep the cookie names for that same release. Changing them logs every user out. Document the release in which the old cookies stop being read.
-6. Keep reading `FERRIOXID_*` and the `FERRUM_*` aliases that pull request 101 already accepts. Add `FEXU_*` as the preferred name. If two aliases for the same setting differ, fail without printing the values. Do not drop `FERRIOXID_*` or `FERRUM_*` in the same release that introduces `FEXU_*`.
-7. Generated migration files store checksums. Do not rewrite the id or checksum of an embedded auth, job or admin migration as part of the rename.
-8. OpenAPI names the session cookie `ferrioxid_session`. Change that text only when the cookie name changes, and say so in the HTTP contract note.
-9. The generator should grow a flag or template version that writes `fexu` imports. Old output stays valid while the facade is still named `ferrioxid`, and new output waits until the crate rename is released. Do not make `ferrioxid new` emit `use fexu::` before crates.io has `fexu`.
-10. Dependency detection in `ferrioxid_migrations::ferrioxid_dependency` must recognize both package names during the transition. A project that still says `ferrioxid = "0.1"` must not be reported as having no framework dependency.
+## Tool
 
-## Order of work
+`scripts/rename_to_fexu.py` performs the mechanical rename. A run without `--apply` only reports. A second `--apply` changes nothing. The script leaves this plan's historical companions, the CodeQL evidence, `vendor/`, and live `Iam-Sanja/ferrioxid` URLs untouched.
 
-1. Finish publish blockers that are not the name: SQLite patch, unpublished internal crates, and the isolated Tokio features.
-2. Add the compatibility readers above while the packages are still called Ferrioxid. Tests must use an existing generated tree and an existing SQLite file with `_ferrioxid_migrations` and show that no second history table appears.
-3. Rename the Rust crates, imports, binary, repository fields and docs in one commit series. Leave table names, cookie names and `FERRIOXID_*` readers in place.
-4. Publish `fexu` and `fexu-*` at the version chosen for that release. Do not also publish the old names.
-5. Point `fexu.dev` and the GitHub repository at that release. Keep the old repository as a redirect or a note, not as a second crate source.
-6. Only in a later release, stop reading `ferrioxid.toml`, `FERRIOXID_*` and the `ferrioxid` binary. Table renames stay a separate, explicit migration.
+## Later GitHub rename
 
-## Files the rename series will touch
+1. Confirm `main` contains this rename and the crates are still unpublished.
+2. Rename `Iam-Sanja/ferrioxid` to `fexu-rs` in GitHub settings. GitHub redirects the old repository URL.
+3. Update the Cargo `repository` and `homepage` fields, the README badges, and the workflow badge URLs to the new repository.
+4. Only then describe `fexu.dev` as a live site, and only after the domain actually serves the documentation.
 
-The list is the area, not a permission to edit it now.
+## Local PostgreSQL catalogs
 
-- Root and member `Cargo.toml` files, `Cargo.lock`, `rust-toolchain.toml` is unchanged
-- `crates/ferrioxid/src/lib.rs` and every `use ferrioxid` / `use ferrioxid_*` in crates, examples and the CLI generator
-- `crates/ferrioxid-cli/src/main.rs` command name, `scaffold.rs`, `models.rs`, `apps.rs`
-- `crates/ferrioxid-migrations/src/project.rs` and `history.rs`
-- `crates/ferrioxid-auth/src/config.rs` and `recovery.rs`
-- `crates/ferrioxid-api/src/cookie_guard.rs` and `openapi.rs`
-- `crates/ferrioxid-admin` login cookie
-- `crates/ferrioxid-cache` has no Ferrioxid dependency today. Its package name still changes with the others.
-- `README.md`, `docs/`, `CHANGELOG.md`, `.github/workflows/ci.yml`
-- Deploy examples that mention the binary or `FERRIOXID_*`
+This rename does not create, rename, migrate, or delete local PostgreSQL databases. Disposable tests create only names that start with `fexu_test_` and drop only those names. The GitHub Actions database is ephemeral and uses `fexu` there.
 
-Pull request 101 is already squashed into `main`. The rename keeps that branch's `FERRUM_*` readers and `trusted_proxies`. It does not drop them while adding `FEXU_*`.
+Existing local catalogs stay under their previous names. Do not point an in-place migration test at them, and do not drop them:
+
+- `ferrioxid` (15 public tables)
+- `ferrioxid_migrations_down_test` (1 public table)
+- `ferrioxid_test_services_anon_20261112233529`
+- `ferrioxid_test_services_auth_20261112233529`
+- `ferrioxid_test_services_jobs_20261112233529`
+- `ferrioxid_test_services_names_20261112233529`
+- `ferrioxid_test_reliability_20261113030821`
+- `ferrioxid_test_reliability_final_20261113105605`
+
+Older notes in this repository that mention those catalogs under the new brand were rewritten by the mechanical pass. The catalogs on disk were not.

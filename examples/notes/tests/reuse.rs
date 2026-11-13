@@ -1,14 +1,14 @@
 use axum::body::Body;
 use axum::routing::get;
-use ferrioxid::apps::{AppConfig, AppError, FerrioxidApplication, Registration};
-use ferrioxid::urls::UrlSet;
+use fexu::apps::{AppConfig, AppError, FexuApplication, Registration};
+use fexu::urls::UrlSet;
 use http_body_util::BodyExt;
 use notes::NotesApp;
 use tower::ServiceExt;
 
 struct TagsApp;
 
-impl FerrioxidApplication for TagsApp {
+impl FexuApplication for TagsApp {
     fn config(&self) -> AppConfig {
         AppConfig::new("tags")
             .prefix("/tags")
@@ -21,13 +21,13 @@ impl FerrioxidApplication for TagsApp {
 }
 
 async fn tags() -> axum::response::Response {
-    ferrioxid::views::json(&ferrioxid::serde_json::json!({"app": "tags"}))
+    fexu::views::json(&fexu::serde_json::json!({"app": "tags"}))
 }
 
 #[tokio::test]
 async fn two_apps_share_the_router_without_a_migration() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    let app = ferrioxid::App::new(db)
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    let app = fexu::App::new(db)
         .install(NotesApp)
         .unwrap()
         .install(TagsApp)

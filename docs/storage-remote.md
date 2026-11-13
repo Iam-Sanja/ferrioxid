@@ -2,7 +2,7 @@
 
 [Overview](index.md) · Local storage: [storage.md](storage.md)
 
-**Not a client.** `prepare_s3` checks an `https://` endpoint, a region and a bucket name. It does not open a socket. `credentials_from_env` reads the two environment names stored on the plan at call time. The names are `FERRIOXID_S3_ACCESS_KEY` and `FERRIOXID_S3_SECRET_KEY` when the application chooses those constants. Credentials are not compiled into the binary. `Debug` for `S3Credentials` prints `[redacted]`.
+**Not a client.** `prepare_s3` checks an `https://` endpoint, a region and a bucket name. It does not open a socket. `credentials_from_env` reads the two environment names stored on the plan at call time. The names are `FEXU_S3_ACCESS_KEY` and `FEXU_S3_SECRET_KEY` when the application chooses those constants. Credentials are not compiled into the binary. `Debug` for `S3Credentials` prints `[redacted]`.
 
 There is no success path that pretends an upload reached a bucket. Callers that need bytes today use `LocalStorage`.
 

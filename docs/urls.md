@@ -1,12 +1,12 @@
 # URLs
 
-[Overview](index.md) · Integration: [routing.md](routing.md) · Views: [views.md](views.md) · **Implemented file:** `crates/ferrioxid-api/src/urls.rs`.
+[Overview](index.md) · Integration: [routing.md](routing.md) · Views: [views.md](views.md) · **Implemented file:** `crates/fexu-api/src/urls.rs`.
 
 ## Purpose
 
 `UrlSet` collects Axum routes and stable names. Axum remains the router. There is no second routing engine. Names have the form `bereich.name`, for example `shop.list` or `site.home`.
 
-This corresponds conceptually to Django’s `urls.py` and `reverse`. Ferrioxid does not hide `Router<AppState>`.
+This corresponds conceptually to Django’s `urls.py` and `reverse`. Fexu does not hide `Router<AppState>`.
 
 An app mounts your `UrlSet` via `Registration::routes`. The namespace must be the app name. An already occupied path, also a model path, is `url.duplicate`. `App::merge` of a raw router does not see these names.
 
@@ -22,7 +22,7 @@ Tera HTML-escapes the result, so `/` appears as `&#x2F;` in the markup and remai
 
 ```rust
 use axum::routing::get;
-use ferrioxid::urls::{UrlError, UrlSet};
+use fexu::urls::{UrlError, UrlSet};
 
 pub fn routes() -> Result<UrlSet, UrlError> {
     let shop = UrlSet::new().route("shop.detail", "/{id}", get(detail))?;
@@ -32,11 +32,11 @@ pub fn routes() -> Result<UrlSet, UrlError> {
 }
 
 async fn list() -> axum::response::Response {
-    ferrioxid::views::json(&ferrioxid::serde_json::json!({"ok": true}))
+    fexu::views::json(&fexu::serde_json::json!({"ok": true}))
 }
 
 async fn detail() -> axum::response::Response {
-    ferrioxid::views::json(&ferrioxid::serde_json::json!({"ok": true}))
+    fexu::views::json(&fexu::serde_json::json!({"ok": true}))
 }
 ```
 
@@ -45,7 +45,7 @@ async fn detail() -> axum::response::Response {
 The application passes the result to `App::urls`:
 
 ```rust
-let app = ferrioxid::App::new(db)
+let app = fexu::App::new(db)
     .with_settings(settings.clone())
     .urls(routes()?)?;
 ```
@@ -54,21 +54,21 @@ let app = ferrioxid::App::new(db)
 
 ## Name resolution
 
-After `into_router`, the route map is available as `Extension<Arc<ferrioxid::urls::RouteMap>>`.
+After `into_router`, the route map is available as `Extension<Arc<fexu::urls::RouteMap>>`.
 
 ```rust
 use std::sync::Arc;
 
 use axum::extract::Extension;
-use ferrioxid::urls::RouteMap;
+use fexu::urls::RouteMap;
 
 async fn go(Extension(names): Extension<Arc<RouteMap>>) -> axum::response::Response {
     match names.path("shop.detail", &[("id", "sku-1")]) {
-        Ok(path) => match ferrioxid::views::redirect_to(&path) {
+        Ok(path) => match fexu::views::redirect_to(&path) {
             Ok(response) => response,
             Err(error) => error.into_response(),
         },
-        Err(error) => ferrioxid::views::fail(
+        Err(error) => fexu::views::fail(
             &axum::http::HeaderMap::new(),
             None,
             axum::http::StatusCode::INTERNAL_SERVER_ERROR,

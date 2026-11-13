@@ -4,11 +4,11 @@
 
 ## Source
 
-The Rust struct remains the source of truth. `#[field(...)]` and `#[ferrioxid(...)]` generate metadata in `ColumnSpec` and `TableConstraints`. `SchemaSnapshot::from_registered` checks rules across models. The derive macro cannot inspect other files and does not claim to validate foreign models.
+The Rust struct remains the source of truth. `#[field(...)]` and `#[fexu(...)]` generate metadata in `ColumnSpec` and `TableConstraints`. `SchemaSnapshot::from_registered` checks rules across models. The derive macro cannot inspect other files and does not claim to validate foreign models.
 
 ```rust
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(table = "categories", api = "/api/v1/categories", allow_anonymous = true)]
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(table = "categories", api = "/api/v1/categories", allow_anonymous = true)]
 pub struct Category {
     #[field(primary_key, auto)]
     pub id: Uuid,
@@ -17,8 +17,8 @@ pub struct Category {
     pub name: String,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "products",
     api = "/api/v1/products",
     allow_anonymous = true,
@@ -52,13 +52,13 @@ A primary key already generates a unique index. `unique` or `index` on the same 
 
 ## NULL in unique constraints
 
-SQLite and PostgreSQL use their standard SQL behavior: unique indexes allow multiple `NULL` values because `NULL` values are not considered equal. Ferrioxid does not use `NULLS NOT DISTINCT`. Duplicate non-null values are rejected.
+SQLite and PostgreSQL use their standard SQL behavior: unique indexes allow multiple `NULL` values because `NULL` values are not considered equal. Fexu does not use `NULLS NOT DISTINCT`. Duplicate non-null values are rejected.
 
 ## SQL
 
 Unique constraints are implemented as explicitly named unique indexes, not just Rust validation checks.
 
-In `CREATE TABLE`, Ferrioxid writes the columns and the foreign keys into the table statement. Unique indexes and secondary indexes follow as separate `CREATE UNIQUE INDEX` and `CREATE INDEX` statements. This keeps the name visible in `sqlite_master` and `DROP INDEX` removes it.
+In `CREATE TABLE`, Fexu writes the columns and the foreign keys into the table statement. Unique indexes and secondary indexes follow as separate `CREATE UNIQUE INDEX` and `CREATE INDEX` statements. This keeps the name visible in `sqlite_master` and `DROP INDEX` removes it.
 
 A new nullable column can carry a foreign key in the same migration:
 
@@ -112,11 +112,11 @@ In the database, each affected unique or secondary index is dropped and recreate
 
 |Non-compliance| Mapping |
 |---|---|
-| `UniqueViolation` | `FerrioxidError::Validation("unique constraint violated")` |
-| `ForeignKeyViolation` | `FerrioxidError::Validation("foreign key constraint violated")` |
+| `UniqueViolation` | `FexuError::Validation("unique constraint violated")` |
+| `ForeignKeyViolation` | `FexuError::Validation("foreign key constraint violated")` |
 |SQLite code `1811` with fixed message `FOREIGN KEY constraint failed`|Same foreign key validation|
 
-SQLite implements `ON DELETE RESTRICT` internally with `RAISE`, producing extended code `1811` (`SQLITE_CONSTRAINT_TRIGGER`) rather than `787`. Ferrioxid matches the fixed message from that implementation, not arbitrary error text. Other database errors remain `FerrioxidError::Database` and become HTTP 500 without exposing SQL.
+SQLite implements `ON DELETE RESTRICT` internally with `RAISE`, producing extended code `1811` (`SQLITE_CONSTRAINT_TRIGGER`) rather than `787`. Fexu matches the fixed message from that implementation, not arbitrary error text. Other database errors remain `FexuError::Database` and become HTTP 500 without exposing SQL.
 
 ## SQLite table rebuild
 

@@ -4,7 +4,7 @@
 
 ## Purpose
 
-`crates/ferrioxid-admin/static/css/admin.css` is the only stylesheet, served at `/admin/assets/admin.css`. The native admin uses neither a CDN nor Tailwind. `.hierarchy` is a wrapping link list using the existing spacing tokens. Browser keyboard automation remains unreliable; date-input checks therefore verify the HTML labels, `for` attributes and native input types. There is no JavaScript keyboard handler.
+`crates/fexu-admin/static/css/admin.css` is the only stylesheet, served at `/admin/assets/admin.css`. The native admin uses neither a CDN nor Tailwind. `.hierarchy` is a wrapping link list using the existing spacing tokens. Browser keyboard automation remains unreliable; date-input checks therefore verify the HTML labels, `for` attributes and native input types. There is no JavaScript keyboard handler.
 
 `DESIGN.md` calls the visual direction “The Night Shift”: light and dark are two lighting conditions for the same workspace. This page describes the tokens actually used by the code.
 

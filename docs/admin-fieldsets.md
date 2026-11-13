@@ -9,7 +9,7 @@ Without `admin_fieldset`, the form remains a single unnamed group.
 A model declares the sections. Each visible field names exactly one of them.
 
 ```rust
-#[ferrioxid(
+#[fexu(
     admin = true,
     admin_fieldset = "Allgemein|Name und Kategorie",
     admin_fieldset = "Preis und Verfügbarkeit",

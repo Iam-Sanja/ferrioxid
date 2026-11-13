@@ -1,6 +1,6 @@
 # Translation review
 
-All 28 protected-source entries from the initial translation pass have been translated and reviewed. No entries remain open. At that point, code fences, Rust identifiers, CLI argument names, legacy configuration keys, database names and migration IDs were retained. The later [legacy-name removal](ferrum-legacy-removal.md) intentionally updates configuration, environment, cookie and table names, including examples. The README setup commands were corrected separately to create a standalone project outside the framework workspace.
+All 28 protected-source entries from the initial translation pass have been translated and reviewed. No entries remain open. At that point, code fences, Rust identifiers, CLI argument names, legacy configuration keys, database names and migration IDs were retained. The later [name removal](ferrum-legacy-removal.md) intentionally updates configuration, environment, cookie and table names, including examples. The README setup commands were corrected separately to create a standalone project outside the framework workspace.
 
 | Entry | Reviewed page | Resolution |
 |---|---|---|

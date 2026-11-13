@@ -10,12 +10,12 @@ The foreign key selection is its own GET page. The draft keeps the remaining, no
 
 ## Storage
 
-The table is `_ferrioxid_admin_drafts`, created by `crates/ferrioxid-auth/migrations/0002_admin_journal.json`.
+The table is `_fexu_admin_drafts`, created by `crates/fexu-auth/migrations/0002_admin_journal.json`.
 
 | Column | Contents |
 |---|---|
 | `id` |Random UUID|
-| `session_id` |Text UUID of the session, foreign key on `_ferrioxid_sessions.id` with `ON DELETE CASCADE`|
+| `session_id` |Text UUID of the session, foreign key on `_fexu_sessions.id` with `ON DELETE CASCADE`|
 | `user_id` |Text UUID of the user|
 | `model_key` |Registered model key|
 | `record_id` |Empty when created, otherwise the record ID|
@@ -39,4 +39,4 @@ Excluded values are password fields, names containing `password`, `token`, `secr
 
 The final POST rechecks fields, relations and policies. A draft never grants permission to write.
 
-Code: `crates/ferrioxid-admin/src/drafts.rs`, handler in `html.rs`. Test: `admin_v018_drafts_inlines_bulk_and_audit`.
+Code: `crates/fexu-admin/src/drafts.rs`, handler in `html.rs`. Test: `admin_v018_drafts_inlines_bulk_and_audit`.

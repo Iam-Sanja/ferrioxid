@@ -4,7 +4,7 @@
 
 ## Purpose
 
-`myshop` demonstrates the public Ferrioxid APIs through the same facade used by other applications. It enables `admin-ui`. Use `ferrioxid new project` for an independent project; see [project-generator.md](project-generator.md). Products and categories have anonymous demo routes without object policies; create policies are covered separately in `auth.rs` and `admin_http.rs`. The example serves `/`, `/static/css/app.css` and a `/contact` form that validates without sending email. Uploads require a session. `ferrioxid-middleware` supplies request IDs and security headers.
+`myshop` demonstrates the public Fexu APIs through the same facade used by other applications. It enables `admin-ui`. Use `fexu new project` for an independent project; see [project-generator.md](project-generator.md). Products and categories have anonymous demo routes without object policies; create policies are covered separately in `auth.rs` and `admin_http.rs`. The example serves `/`, `/static/css/app.css` and a `/contact` form that validates without sending email. Uploads require a session. `fexu-middleware` supplies request IDs and security headers.
 
 ## Model (Implemented)
 
@@ -13,18 +13,18 @@
 ## Start with SQLite (Implemented)
 
 ```powershell
-cargo run -p ferrioxid-cli -- migrate up
+cargo run -p fexu-cli -- migrate up
 cargo run -p myshop
 ```
 
-The commands belong in the workspace root, because there is `ferrioxid.toml`. Without `DATABASE_URL`, CLI and myshop use `sqlite://db.sqlite3?mode=rwc` in the working directory. `0001_initial.json` creates `products` and remains unchanged. `0002_categories_and_product_relations.json` creates `categories`, adds the nullable `category_id` with Foreign Key and creates `ix_products_name`. The server starts on `127.0.0.1:3000` if `BIND_ADDRESS` is not set and does not migrate itself. User creates `ferrioxid admin create-user`. Login, cookie, `/auth/me`, protected access, roles and logout shows `examples/myshop/tests/auth.rs`.
+The commands belong in the workspace root, because there is `fexu.toml`. Without `DATABASE_URL`, CLI and myshop use `sqlite://db.sqlite3?mode=rwc` in the working directory. `0001_initial.json` creates `products` and remains unchanged. `0002_categories_and_product_relations.json` creates `categories`, adds the nullable `category_id` with Foreign Key and creates `ix_products_name`. The server starts on `127.0.0.1:3000` if `BIND_ADDRESS` is not set and does not migrate itself. User creates `fexu admin create-user`. Login, cookie, `/auth/me`, protected access, roles and logout shows `examples/myshop/tests/auth.rs`.
 
 `cargo run -p myshop -- --bootstrap` aborts without deleting files, creating tables or writing history. `cargo run -p myshop -- --print-schema` outputs all registered models for `schema_command`.
 
 PostgreSQL is optional:
 
 ```powershell
-$env:DATABASE_URL="postgres://ferrioxid:ferrioxid_dev_only@127.0.0.1:5432/ferrioxid"
+$env:DATABASE_URL="postgres://fexu:fexu_dev_only@127.0.0.1:5432/fexu"
 cargo run -p myshop -- --bootstrap
 cargo run -p myshop
 ```
@@ -44,7 +44,7 @@ POST answers 201 with UUID and `active: true`. GET answers 200 with `data`, `lim
 
 - No production-ready shop application.
 - The admin and login are implemented, but product and category CRUD APIs are intentionally public. Relationship methods do not create nested HTTP routes.
-- Schema changes come from `ferrioxid migrate`, not `--bootstrap`. An older `products` table without history is not marked at start. If your schema fits the migration chain and the chain does not contain a deletion or type change, `ferrioxid migrate baseline --confirm` can only write the history. Without `--confirm`, the file remains unchanged.
+- Schema changes come from `fexu migrate`, not `--bootstrap`. An older `products` table without history is not marked at start. If your schema fits the migration chain and the chain does not contain a deletion or type change, `fexu migrate baseline --confirm` can only write the history. Without `--confirm`, the file remains unchanged.
 - `allow_anonymous=true` does not operate publicly.
 
 ## Tests

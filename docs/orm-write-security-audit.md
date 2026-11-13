@@ -61,7 +61,7 @@ Mit Besitzer A und B und je zwei Zeilen, ausgeführt auf SQLite und PostgreSQL 1
 
 ## Filter- und SQL-Injection-Sicherheit
 
-Der Spaltenname `name; DROP TABLE ferrioxid_write_notes` wird abgelehnt. Der Wert `x'; DROP TABLE ferrioxid_write_notes; --` wird als Text gespeichert. Die Tabelle hat danach weiterhin vier Zeilen. Der Primärschlüssel kann nicht gesetzt werden. Ein wiederholtes Anlegen derselben Id ist eine Unique-Validierung. Das Löschen einer Elternzeile mit Kind ist eine Fremdschlüssel-Validierung, einschließlich SQLSTATE 23001 auf PostgreSQL.
+Der Spaltenname `name; DROP TABLE fexu_write_notes` wird abgelehnt. Der Wert `x'; DROP TABLE fexu_write_notes; --` wird als Text gespeichert. Die Tabelle hat danach weiterhin vier Zeilen. Der Primärschlüssel kann nicht gesetzt werden. Ein wiederholtes Anlegen derselben Id ist eine Unique-Validierung. Das Löschen einer Elternzeile mit Kind ist eine Fremdschlüssel-Validierung, einschließlich SQLSTATE 23001 auf PostgreSQL.
 
 ## Validierung und Hooks
 
@@ -73,8 +73,8 @@ Ein Sammelupdate läuft als eine Anweisung. Er lädt die Zeilen nicht einzeln un
 
 ## Geänderte Dateien
 
-- `crates/ferrioxid-db/src/write.rs`
-- `crates/ferrioxid-db/src/query.rs`
+- `crates/fexu-db/src/write.rs`
+- `crates/fexu-db/src/query.rs`
 - `.github/workflows/ci.yml`
 - `docs/database.md`
 - `docs/postgres-portability-v2.md`
@@ -94,12 +94,12 @@ Die vorhandenen `sqlite_shop_cases` und `postgres_shop_cases` sind nach der Sper
 
 ## PostgreSQL-18.6-Testergebnisse
 
-Auf `127.0.0.1:5432` mit der Rolle `ferrioxid` und einer Wegwerfdatenbank `ferrioxid_test_` plus 32 Hexzeichen:
+Auf `127.0.0.1:5432` mit der Rolle `fexu` und einer Wegwerfdatenbank `fexu_test_` plus 32 Hexzeichen:
 
 - `postgres_write_security` bestanden
 - `postgres_shop_cases` bestanden
 
-`ferrioxid` und `ferrioxid_migrations_down_test` wurden nicht beschrieben. Danach war keine `ferrioxid_test_*`-Datenbank mehr vorhanden. Die älteren PostgreSQL-Laufzeittests dieses Branches sind in diesem Audit nicht wiederholt worden.
+`fexu` und `fexu_migrations_down_test` wurden nicht beschrieben. Danach war keine `fexu_test_*`-Datenbank mehr vorhanden. Die älteren PostgreSQL-Laufzeittests dieses Branches sind in diesem Audit nicht wiederholt worden.
 
 ## PostgreSQL-16-CI
 

@@ -2,17 +2,17 @@
 
 [Overview](index.md) · Worker: [workers.md](workers.md) · Retries: [job-retries.md](job-retries.md) · Mail: [job-mail-integration.md](job-mail-integration.md)
 
-**Implemented.** Milestone v0.27.1. Cargo version `0.1.0`. The queue is in `crates/ferrioxid-jobs`. There is no redis and no second database engine.
+**Implemented.** Milestone v0.27.1. Cargo version `0.1.0`. The queue is in `crates/fexu-jobs`. There is no redis and no second database engine.
 
 ## Delivery
 
-Jobs use **at-least-once** execution: a handler may receive the same job more than once. Ferrioxid provides no exactly-once guarantee. SMTP and other external effects cannot participate in the job’s database transaction. SMTP acceptance does not confirm inbox delivery.
+Jobs use **at-least-once** execution: a handler may receive the same job more than once. Fexu provides no exactly-once guarantee. SMTP and other external effects cannot participate in the job’s database transaction. SMTP acceptance does not confirm inbox delivery.
 
 ## Public API
 
 ```rust
-use ferrioxid::jobs::{JobContext, JobError, JobHandler, JobRegistry, Queue, When};
-use ferrioxid::serde::{Deserialize, Serialize};
+use fexu::jobs::{JobContext, JobError, JobHandler, JobRegistry, Queue, When};
+use fexu::serde::{Deserialize, Serialize};
 
 #[derive(Serialize, Deserialize)]
 #[serde(deny_unknown_fields)]
@@ -20,7 +20,7 @@ struct Pulse { label: String }
 
 struct PulseHandler;
 
-#[ferrioxid::async_trait::async_trait]
+#[fexu::async_trait::async_trait]
 impl JobHandler for PulseHandler {
     const NAME: &'static str = "notes_pulse";
     const VERSION: u32 = 1;
@@ -43,7 +43,7 @@ queue.enqueue::<PulseHandler>(&Pulse { label: "wieder".into() }, When::every("no
 
 `JobRegistry` belongs to the process that builds the worker. There is no global registry and no reloading of programs. `NAME` consists of lower case, numerals and underscores. `VERSION` starts at 1. The payload is a JSON object, maximum 16 KiB. Keys such as `password`, `token`, `secret` and `reset_url` are rejected.
 
-`When::now` is due immediately. `When::at` sets `available_at` as a Unix second in UTC. `When::every` carries an interval of 1 to 2 592 000 seconds and a `schedule_key`. `When::cron` stores a five-field expression and a zone. See [job-scheduling.md](job-scheduling.md). Delivery stays at-least-once. `ferrioxid::jobs::DELIVERY` is `"at-least-once"`. There is no exactly-once claim.
+`When::now` is due immediately. `When::at` sets `available_at` as a Unix second in UTC. `When::every` carries an interval of 1 to 2 592 000 seconds and a `schedule_key`. `When::cron` stores a five-field expression and a zone. See [job-scheduling.md](job-scheduling.md). Delivery stays at-least-once. `fexu::jobs::DELIVERY` is `"at-least-once"`. There is no exactly-once claim.
 
 ## Status
 
@@ -60,7 +60,7 @@ Workers claim due `pending` and `retry` jobs, and may reclaim `running` jobs who
 
 ## Schema
 
-The migration `crates/ferrioxid-jobs/migrations/0001_jobs.json` creates `_ferrioxid_jobs`. `0002_job_schedule.json` adds the nullable columns `cron_expression` and `cron_zone`. History stays in `_ferrioxid_job_migrations`. `table_ready` requires both the table and `cron_expression`. Auth migrations `0001` to `0005` remain unchanged; account security is `0006_account_security`. `ferrioxid migrate up` applies the job migrations; workers and `ferrioxid dev` do not.
+The migration `crates/fexu-jobs/migrations/0001_jobs.json` creates `_fexu_jobs`. `0002_job_schedule.json` adds the nullable columns `cron_expression` and `cron_zone`. History stays in `_fexu_job_migrations`. `table_ready` requires both the table and `cron_expression`. Auth migrations `0001` to `0005` remain unchanged; account security is `0006_account_security`. `fexu migrate up` applies the job migrations; workers and `fexu dev` do not.
 
 Timestamps are UTC Unix seconds. Reusing an `idempotency_key` returns the existing job. A `schedule_key` belongs to one row at a time and transfers to the next scheduled job after success. Missed intervals are skipped to avoid a backlog when a worker has been stopped.
 
@@ -71,11 +71,11 @@ The example with Instant, Delay, Interval and Mail Job is in `examples/notes`. `
 ## Procedure in a project
 
 1. Defining the job. One type implements `JobHandler` with `NAME`, `VERSION` and a JSON object as a payload.
-2. Register handlers. The app implements `FerrioxidApplication::register_jobs`. `App::install` does not call this method.
-3. Enqueue a job from the web process with `queue.enqueue::<Handler>(...)`. First create `_ferrioxid_jobs` with `ferrioxid migrate up`.
-4. Starting the worker. `ferrioxid generate worker` creates `src/bin/worker.rs` if the file is missing. The process loads `ferrioxid.toml`, connects the configured database and calls `WorkerHost::run_until_ctrl_c`. `ferrioxid dev` does not start it.
-5. Inspect status with `ferrioxid jobs list` or `ferrioxid jobs inspect <id>`. Output includes the handler, version, attempt count, timestamps and error code. Payloads remain hidden unless `--show-payload` is supplied.
-6. Handle failures with `JobError::retry` or `JobError::permanent`. Operators can use `ferrioxid jobs retry <id> --yes` or `ferrioxid jobs cancel <id> --yes` for eligible states.
+2. Register handlers. The app implements `FexuApplication::register_jobs`. `App::install` does not call this method.
+3. Enqueue a job from the web process with `queue.enqueue::<Handler>(...)`. First create `_fexu_jobs` with `fexu migrate up`.
+4. Starting the worker. `fexu generate worker` creates `src/bin/worker.rs` if the file is missing. The process loads `fexu.toml`, connects the configured database and calls `WorkerHost::run_until_ctrl_c`. `fexu dev` does not start it.
+5. Inspect status with `fexu jobs list` or `fexu jobs inspect <id>`. Output includes the handler, version, attempt count, timestamps and error code. Payloads remain hidden unless `--show-payload` is supplied.
+6. Handle failures with `JobError::retry` or `JobError::permanent`. Operators can use `fexu jobs retry <id> --yes` or `fexu jobs cancel <id> --yes` for eligible states.
 
 An unknown handler remains `pending` and does not increase `attempts`. If the migration is missing, the worker ends with `job.migration.missing` and Exitcode 2.
 

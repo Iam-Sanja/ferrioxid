@@ -10,14 +10,14 @@ Permissions are enforced on the server and reloaded on each request. Role and pe
 
 A user can have several roles, and each role can grant several permissions. Codes use the form `ressource.aktion` (resource and action), with actions `read`, `create`, `update` or `delete`.
 
-`authorize` checks the tables `_ferrioxid_user_roles`, `_ferrioxid_role_permissions` and `_ferrioxid_permissions` on each call.
+`authorize` checks the tables `_fexu_user_roles`, `_fexu_role_permissions` and `_fexu_permissions` on each call.
 
 ## Responsible files
 
-- `crates/ferrioxid-auth/src/service.rs`
-- `crates/ferrioxid-auth/src/store.rs`
-- `crates/ferrioxid-macros/src/lib.rs` for `permissions`
-- `crates/ferrioxid-api/src/lib.rs` for assigning HTTP method to action
+- `crates/fexu-auth/src/service.rs`
+- `crates/fexu-auth/src/store.rs`
+- `crates/fexu-macros/src/lib.rs` for `permissions`
+- `crates/fexu-api/src/lib.rs` for assigning HTTP method to action
 
 ## Public API
 
@@ -35,17 +35,17 @@ The CLI provides the same steps: `auth create-role`, `auth grant-permission`, `a
 
 | Table | Contents |
 |---|---|
-| `_ferrioxid_roles` | `id`, unique `name` |
-| `_ferrioxid_permissions` | `id`, unique `code` |
-| `_ferrioxid_user_roles` |own UUID, `user_id`, `role_id`, uniquely as a pair|
-| `_ferrioxid_role_permissions` |own UUID, `role_id`, `permission_id`, uniquely as a pair|
+| `_fexu_roles` | `id`, unique `name` |
+| `_fexu_permissions` | `id`, unique `code` |
+| `_fexu_user_roles` |own UUID, `user_id`, `role_id`, uniquely as a pair|
+| `_fexu_role_permissions` |own UUID, `role_id`, `permission_id`, uniquely as a pair|
 
 Foreign Keys delete assignments via `CASCADE`.
 
 ## Model attribute
 
 ```rust
-#[ferrioxid(table = "internal_notes", api = "/api/v1/internal_notes", permissions = "notes")]
+#[fexu(table = "internal_notes", api = "/api/v1/internal_notes", permissions = "notes")]
 ```
 
 | Attribute | Effect |
@@ -72,9 +72,9 @@ Missing permissions are HTTP 403 `Access denied`. A missing session is HTTP 401 
 ## Example
 
 ```powershell
-cargo run -p ferrioxid-cli -- auth create-role editor
-cargo run -p ferrioxid-cli -- auth grant-permission notes.read --role editor
-cargo run -p ferrioxid-cli -- auth assign-role --email editor@example.com --role editor
+cargo run -p fexu-cli -- auth create-role editor
+cargo run -p fexu-cli -- auth grant-permission notes.read --role editor
+cargo run -p fexu-cli -- auth assign-role --email editor@example.com --role editor
 ```
 
 myshop protects `InternalNote` with `permissions = "notes"`. `Product` and `Category` remain `allow_anonymous = true` and are demo endpoints.

@@ -4,11 +4,11 @@
 
 ## Purpose
 
-An object rule is designed to restrict lists in the database. Ferrioxid does not load all lines to filter them in the process.
+An object rule is designed to restrict lists in the database. Fexu does not load all lines to filter them in the process.
 
 ## Architecture
 
-`QueryScope` is located in `ferrioxid-core` so that database, API and admin use the same representation.
+`QueryScope` is located in `fexu-core` so that database, API and admin use the same representation.
 
 ```rust
 pub enum QueryScope {
@@ -22,14 +22,14 @@ pub enum QueryScope {
 
 ## Responsible file
 
-- `crates/ferrioxid-core/src/lib.rs`
-- `crates/ferrioxid-auth/src/policy.rs`
-- `crates/ferrioxid-db/src/sql.rs`
-- `crates/ferrioxid-db/src/query.rs`
-- `crates/ferrioxid-macros/src/lib.rs`
-- `crates/ferrioxid-api/src/lib.rs`
-- `crates/ferrioxid-admin/src/registry.rs`
-- `crates/ferrioxid-admin/src/http.rs`
+- `crates/fexu-core/src/lib.rs`
+- `crates/fexu-auth/src/policy.rs`
+- `crates/fexu-db/src/sql.rs`
+- `crates/fexu-db/src/query.rs`
+- `crates/fexu-macros/src/lib.rs`
+- `crates/fexu-api/src/lib.rs`
+- `crates/fexu-admin/src/registry.rs`
+- `crates/fexu-admin/src/http.rs`
 
 ## Public APIs
 

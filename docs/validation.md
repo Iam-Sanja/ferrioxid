@@ -1,6 +1,6 @@
 # Validation – Rules, Types and Errors
 
-[Overview](index.md) · **Implemented:** Rule generation in `crates/ferrioxid-macros/src/lib.rs`; error in `crates/ferrioxid-core/src/lib.rs`.
+[Overview](index.md) · **Implemented:** Rule generation in `crates/fexu-macros/src/lib.rs`; error in `crates/fexu-core/src/lib.rs`.
 
 ## Current Rules (Implemented)
 
@@ -22,7 +22,7 @@ Generated model validators check required fields, string length, `min` and expli
 
 ### PATCH null semantics
 
-`ferrioxid::db::PatchField<T>` stands on any changeable update field, with `#[serde(default)]`.
+`fexu::db::PatchField<T>` stands on any changeable update field, with `#[serde(default)]`.
 
 | JSON | State | `NOT NULL` column | Nullable column (`Option<T>`) |
 |---|---|---|---|

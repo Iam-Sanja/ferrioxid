@@ -1,4 +1,4 @@
-use ferrioxid::db::PatchField;
+use fexu::db::PatchField;
 use myshop::models::product::ProductUpdate;
 
 #[test]
@@ -13,7 +13,7 @@ fn generated_update_default_marks_every_field_missing() {
 
 #[test]
 fn generated_update_default_matches_empty_json_patch() {
-    let parsed: ProductUpdate = ferrioxid::serde_json::from_str("{}").unwrap();
+    let parsed: ProductUpdate = fexu::serde_json::from_str("{}").unwrap();
 
     assert!(matches!(parsed.name, PatchField::Missing));
     assert!(matches!(parsed.price_cents, PatchField::Missing));
@@ -23,7 +23,7 @@ fn generated_update_default_matches_empty_json_patch() {
 
 #[test]
 fn json_null_still_differs_from_missing_for_optional_fields() {
-    let patch: ProductUpdate = ferrioxid::serde_json::from_str(r#"{"category_id":null}"#).unwrap();
+    let patch: ProductUpdate = fexu::serde_json::from_str(r#"{"category_id":null}"#).unwrap();
     assert!(matches!(patch.category_id, PatchField::Null));
     assert!(matches!(patch.name, PatchField::Missing));
 }

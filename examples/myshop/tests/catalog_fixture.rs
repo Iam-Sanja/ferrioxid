@@ -1,7 +1,7 @@
 //! Reproducible category and product rows, including a failed import.
 
-use ferrioxid::core::FerrioxidModel;
-use ferrioxid::migrations::{
+use fexu::core::FexuModel;
+use fexu::migrations::{
     apply_directory, dump_fixture, load_fixture, parse_fixture, LoadRequest, RegisteredModel,
     SchemaSnapshot,
 };
@@ -16,7 +16,7 @@ struct TempDatabase {
 impl TempDatabase {
     fn new() -> Self {
         let path = std::env::temp_dir().join(format!(
-            "ferrioxid-catalog-{}-{}.sqlite3",
+            "fexu-catalog-{}-{}.sqlite3",
             std::process::id(),
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
@@ -56,7 +56,7 @@ fn catalog_schema() -> SchemaSnapshot {
     .expect("catalog schema")
 }
 
-async fn load_catalog(db: &ferrioxid::sea_orm::DatabaseConnection, request: &LoadRequest) {
+async fn load_catalog(db: &fexu::sea_orm::DatabaseConnection, request: &LoadRequest) {
     let text = std::fs::read_to_string(
         Path::new(env!("CARGO_MANIFEST_DIR")).join("fixtures/catalog.json"),
     )
@@ -72,7 +72,7 @@ async fn catalog_fixture_roundtrips_and_a_conflict_rolls_back() {
     let file = TempDatabase::new();
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations");
     {
-        let db = ferrioxid::db::connect(&file.url()).await.unwrap();
+        let db = fexu::db::connect(&file.url()).await.unwrap();
         apply_directory(&db, &directory, false).await.unwrap();
         load_catalog(&db, &LoadRequest::default()).await;
         let duplicate = load_fixture(
@@ -98,7 +98,7 @@ async fn catalog_fixture_roundtrips_and_a_conflict_rolls_back() {
 
         let conflict = parse_fixture(
             r#"{
-              "ferrioxid": 1,
+              "fexu": 1,
               "records": [
                 {
                   "model": "categories",
@@ -147,7 +147,7 @@ async fn catalog_fixture_roundtrips_and_a_conflict_rolls_back() {
             .all(|record| record.pk != "44444444-4444-4444-8444-444444444444"));
     }
 
-    let db = ferrioxid::db::connect(&file.url()).await.unwrap();
+    let db = fexu::db::connect(&file.url()).await.unwrap();
     let dumped = dump_fixture(&db, &catalog_schema(), None).await.unwrap();
     assert_eq!(dumped.records.len(), 3);
     assert_eq!(

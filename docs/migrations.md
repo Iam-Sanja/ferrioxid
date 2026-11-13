@@ -1,12 +1,12 @@
 # Migration engine
 
-[Overview](index.md) · **Implemented:** `crates/ferrioxid-migrations/`. **Not** the legacy command `myshop --bootstrap`. Date types: [date-time-migrations.md](date-time-migrations.md). Auth `0003_audit_operation` complements `operation_id`. myshop `0005_orders` complements `orders` and `order_lines`. `0001` through `0004` and Auth `0001`/`0002` remain unchanged.
+[Overview](index.md) · **Implemented:** `crates/fexu-migrations/`. **Not** the legacy command `myshop --bootstrap`. Date types: [date-time-migrations.md](date-time-migrations.md). Auth `0003_audit_operation` complements `operation_id`. myshop `0005_orders` complements `orders` and `order_lines`. `0001` through `0004` and Auth `0001`/`0002` remain unchanged.
 
 ## 1. Architecture
 
 ```text
 Rust-Modelle
-  → FerrioxidModel / ColumnSpec
+  → FexuModel / ColumnSpec
   → explizite Registrierung
   → SchemaSnapshot
   → Diff
@@ -16,35 +16,35 @@ Rust-Modelle
        → PostgreSQL
 ```
 
-The engine does not parse Rust source and depends on neither Axum nor the admin frontend. CRUD and migrations share the type mappings in `crates/ferrioxid-db/src/sql.rs`.
+The engine does not parse Rust source and depends on neither Axum nor the admin frontend. CRUD and migrations share the type mappings in `crates/fexu-db/src/sql.rs`.
 
 Row import and export are fixtures, not migrations. A fixture never changes a table and never rewrites an applied migration checksum. See [fixtures.md](fixtures.md).
 
 App packages use the same migration-history table. An entry is namespaced as `shop:0001_initial`, while the file ID remains `0001_initial`; see [app-migrations.md](app-migrations.md). Existing unqualified history rows are not rewritten. Startup compares `registry.migrations` with `[app.<name>]`; the CLI reads only the TOML declaration and reports that limit. A field group creates no table on its own: its fields appear in `columns()` of concrete models and therefore in schema diffs.
 
-Auth files are in `crates/ferrioxid-auth/migrations/` and write the history `_ferrioxid_auth_migrations`. `ferrioxid migrate up` applies this directory before the application files. The application history remains `_ferrioxid_migrations`. As a result, `0001_auth_schema` does not collide with `0001_initial`. The server start does not migrate. `0001_initial.json` remains unchanged.
+Auth files are in `crates/fexu-auth/migrations/` and write the history `_fexu_auth_migrations`. `fexu migrate up` applies this directory before the application files. The application history remains `_fexu_migrations`. As a result, `0001_auth_schema` does not collide with `0001_initial`. The server start does not migrate. `0001_initial.json` remains unchanged.
 
 | Responsibility |File|
 |---|---|
-|Snapshot and Validation| `crates/ferrioxid-migrations/src/snapshot.rs` |
-|Diff and risk| `crates/ferrioxid-migrations/src/diff.rs` |
-|File format and checksum| `crates/ferrioxid-migrations/src/store.rs` |
-| History table | `crates/ferrioxid-migrations/src/history.rs` |
-|Implementation| `crates/ferrioxid-migrations/src/runner.rs` |
-| Snapshot simulation | `crates/ferrioxid-migrations/src/simulate.rs` |
-|SQLite conversion and PostgreSQL-ALTER| `crates/ferrioxid-migrations/src/rebuild.rs` |
-| SQLite introspection | `crates/ferrioxid-migrations/src/introspection.rs` |
-| Baseline | `crates/ferrioxid-migrations/src/baseline.rs` |
-|`ferrioxid.toml` and Schema command| `crates/ferrioxid-migrations/src/project.rs` |
-| CLI | `crates/ferrioxid-cli/src/main.rs` |
-|myshop registration| `examples/myshop/src/main.rs`, `ferrioxid.toml` |
-| DDL | `crates/ferrioxid-db/src/sql.rs` |
+|Snapshot and Validation| `crates/fexu-migrations/src/snapshot.rs` |
+|Diff and risk| `crates/fexu-migrations/src/diff.rs` |
+|File format and checksum| `crates/fexu-migrations/src/store.rs` |
+| History table | `crates/fexu-migrations/src/history.rs` |
+|Implementation| `crates/fexu-migrations/src/runner.rs` |
+| Snapshot simulation | `crates/fexu-migrations/src/simulate.rs` |
+|SQLite conversion and PostgreSQL-ALTER| `crates/fexu-migrations/src/rebuild.rs` |
+| SQLite introspection | `crates/fexu-migrations/src/introspection.rs` |
+| Baseline | `crates/fexu-migrations/src/baseline.rs` |
+|`fexu.toml` and Schema command| `crates/fexu-migrations/src/project.rs` |
+| CLI | `crates/fexu-cli/src/main.rs` |
+|myshop registration| `examples/myshop/src/main.rs`, `fexu.toml` |
+| DDL | `crates/fexu-db/src/sql.rs` |
 
 `ColumnSpec` and `TableConstraints` remain the model metadata. Snapshots convert them into logical types, unique constraints, indexes and foreign keys. SQL is rendered for a specific `DatabaseKind`. Single-column foreign keys are supported; changing a foreign key on an existing column remains blocked. See [constraints.md](constraints.md).
 
 ## 2. Registration
 
-`ferrioxid.toml` in the project or an overarching directory:
+`fexu.toml` in the project or an overarching directory:
 
 ```toml
 migrations_dir = "examples/myshop/migrations"
@@ -115,8 +115,8 @@ The same schemas shall be considered as unchanged even if only the column order 
 First change the model to the new name. After that, in the workspace root:
 
 ```powershell
-cargo run -p ferrioxid-cli -- migrate rename-column --table products --from name --to title
-cargo run -p ferrioxid-cli -- migrate rename-table --from products --to items
+cargo run -p fexu-cli -- migrate rename-column --table products --from name --to title
+cargo run -p fexu-cli -- migrate rename-table --from products --to items
 ```
 
 The CLI loads the registered schema. One operation must fully explain this schema from the last migration target. Further deviations result in no file being written. The following `migrate make` will then see no change.
@@ -135,10 +135,10 @@ A renaming does not copy the table. If a unique index or a secondary index is at
 A file not yet applied may be edited. Thereafter:
 
 ```powershell
-cargo run -p ferrioxid-cli -- migrate reseal migrations\0002_rename_title.json
+cargo run -p fexu-cli -- migrate reseal migrations\0002_rename_title.json
 ```
 
-`reseal` checks that the operations generate the target snapshot, rewrites the checksum and refuses the file if its ID is already in `_ferrioxid_migrations`. An applied file with changed checksum stops `migrate up`.
+`reseal` checks that the operations generate the target snapshot, rewrites the checksum and refuses the file if its ID is already in `_fexu_migrations`. An applied file with changed checksum stops `migrate up`.
 
 ## 5. File format
 
@@ -154,7 +154,7 @@ The first migration must start from an empty schema. Each subsequent migration m
 
 ## 6. History
 
-Table `_ferrioxid_migrations`:
+Table `_fexu_migrations`:
 
 | Column | Meaning |
 |---|---|
@@ -165,28 +165,28 @@ Table `_ferrioxid_migrations`:
 
 The row is written in the same transaction as the schema change. If the migration fails, there is neither the schema change nor the history entry. There is no stored error status. An applied ID is not executed again. A missing file or a different checksum stops `migrate up`.
 
-A history entry does not guarantee that no one has changed the schema from the outside afterwards. `ferrioxid migrate status` compares the history with the files and the model snapshot. `ferrioxid migrate plan` additionally reads the live SQLite or PostgreSQL catalog and compares it with the last applied migration target. The plan opens a read-only URL when the CLI can make one, and the library function itself does not create or alter objects.
+A history entry does not guarantee that no one has changed the schema from the outside afterwards. `fexu migrate status` compares the history with the files and the model snapshot. `fexu migrate plan` additionally reads the live SQLite or PostgreSQL catalog and compares it with the last applied migration target. The plan opens a read-only URL when the CLI can make one, and the library function itself does not create or alter objects.
 
 ## 7. CLI
 
 From the workspace root:
 
 ```powershell
-cargo run -p ferrioxid-cli -- migrate make add_note
-cargo run -p ferrioxid-cli -- migrate up
-cargo run -p ferrioxid-cli -- migrate status
-cargo run -p ferrioxid-cli -- migrate plan
-cargo run -p ferrioxid-cli -- migrate rename-column --table products --from name --to title
-cargo run -p ferrioxid-cli -- migrate rename-table --from products --to items
-cargo run -p ferrioxid-cli -- migrate reseal pfad\zur\datei.json
-cargo run -p ferrioxid-cli -- migrate baseline
-cargo run -p ferrioxid-cli -- migrate baseline --confirm
+cargo run -p fexu-cli -- migrate make add_note
+cargo run -p fexu-cli -- migrate up
+cargo run -p fexu-cli -- migrate status
+cargo run -p fexu-cli -- migrate plan
+cargo run -p fexu-cli -- migrate rename-column --table products --from name --to title
+cargo run -p fexu-cli -- migrate rename-table --from products --to items
+cargo run -p fexu-cli -- migrate reseal pfad\zur\datei.json
+cargo run -p fexu-cli -- migrate baseline
+cargo run -p fexu-cli -- migrate baseline --confirm
 ```
 
-The installed binary is called `ferrioxid`. `make` does not create a file without a schema change. Risky deletions are in the file and only run with:
+The installed binary is called `fexu`. `make` does not create a file without a schema change. Risky deletions are in the file and only run with:
 
 ```powershell
-cargo run -p ferrioxid-cli -- migrate up --allow-destructive
+cargo run -p fexu-cli -- migrate up --allow-destructive
 ```
 
 `status` shows backend, auth migrations and app migrations separately, applied or pending, checksums and conflicts. If the model schema could be loaded, it indicates whether it fits the last app migration target. Pending migrations leave the command successful. Checksum, unknown IDs and sequence errors terminate it with Exitcode 1. The diagnosis opens SQLite with `mode=ro` and does not create a missing file. The database URL is not output. `--database-url` and `--migrations-dir` overwrite project and environment. Without URL, `DATABASE_URL` applies, otherwise `sqlite://db.sqlite3?mode=rwc` in the working directory. The joint report is published in [migration-diagnostics.md](migration-diagnostics.md).
@@ -207,7 +207,7 @@ SQLite implements `string` ↔ `i64` conversions and changes to nullability or B
 2. A view that belongs to the table aborts the rebuild before DDL. Indexes and unique constraints are recreated from the target snapshot. Trigger SQL is read from `sqlite_master` and executed again after the rename. The runner suspends foreign-key enforcement on the connection that owns the transaction. `PRAGMA defer_foreign_keys = ON` covers the table swap, and `foreign_key_check` must be empty before commit.
 3. If restricted to `NOT NULL`, count the existing `NULL` values. If the number is greater than 0, it is aborted. No substitute value is used.
 4. Read and validate the affected column in Rust. Preserve `NULL`. Values must match the logical type; Booleans must be `0` or `1`. Converting `i64` to `string` uses decimal notation. Converting `string` to `i64` requires an exact round trip through `i64::to_string`, rejecting `01`, `+1`, `1.0`, `-0` and empty text. A successful SQL `CAST` alone is insufficient.
-5. Create `ferrioxid_rebuild_<tabelle>` with the target schema.
+5. Create `fexu_rebuild_<tabelle>` with the target schema.
 6. `INSERT INTO ... SELECT` copies the remaining columns. Only the tested type change is used as `CAST`. `name` is not guessed as `title`.
 7. Compare `COUNT(*)` from source and copy.
 8. Delete the old table and rename the copy to the old name.
@@ -245,18 +245,18 @@ Before executing SQL, the runner checks checksums, ordering and whether each ope
 - Table `products` without history: cancellation, no deletion, no marking as migrated.
 - Empty database: cancellation, reference to `migrate make` and `migrate up`.
 
-`App::bootstrap_schema` remains a test assistant for empty databases without history. If `_ferrioxid_migrations` exists, this function does not create anything. It is not a migration and does not recognize schema drift.
+`App::bootstrap_schema` remains a test assistant for empty databases without history. If `_fexu_migrations` exists, this function does not create anything. It is not a migration and does not recognize schema drift.
 
 The HTTP server does not migrate at startup.
 
 ### Transition of an old SQLite file
 
-`ferrioxid migrate baseline` handles a SQLite file whose schema already corresponds to the last migration destination. The command does not change a table or a row. Without `--confirm`, no history is written, and the process ends with an error that mentions the successful verification and the missing confirmation.
+`fexu migrate baseline` handles a SQLite file whose schema already corresponds to the last migration destination. The command does not change a table or a row. Without `--confirm`, no history is written, and the process ends with an error that mentions the successful verification and the missing confirmation.
 
 Procedure:
 
 1. Open connection. PostgreSQL is rejected.
-2. Inspect the schema through `sqlite_master`, `PRAGMA table_info`, `PRAGMA index_list`, `PRAGMA index_info` and `PRAGMA foreign_key_list`. Ignore `_ferrioxid_migrations`, `sqlite_%` and the primary-key autoindex.
+2. Inspect the schema through `sqlite_master`, `PRAGMA table_info`, `PRAGMA index_list`, `PRAGMA index_info` and `PRAGMA foreign_key_list`. Ignore `_fexu_migrations`, `sqlite_%` and the primary-key autoindex.
 3. Existing history entries reject the baseline.
 4. The migration chain must be consistent from the empty schema.
 5. Reject the entire chain if any file contains `drop_table`, `drop_column`, `drop_index`, `drop_unique_constraint`, `drop_foreign_key`, `add_foreign_key` or an `alter_column` that changes logical type. The final live schema cannot prove that these historical operations occurred; manual migration is required.

@@ -4,14 +4,14 @@
 
 ## Implemented
 
-The public extension API is in `ferrioxid::admin` and uses the same `AdminRegistry` as the models. There is no second admin engine or global registration. The myshop example is in `examples/myshop/src/admin.rs`.
+The public extension API is in `fexu::admin` and uses the same `AdminRegistry` as the models. There is no second admin engine or global registration. The myshop example is in `examples/myshop/src/admin.rs`.
 
 `seal` validates pages, filters, widgets and custom actions against the registered models. If the registry is not sealed, custom-page requests return an error rather than running an unvalidated extension.
 
 ## Example
 
 ```rust
-use ferrioxid::admin::{AdminFilter, AdminRegistry, AdminView, AdminWidget, FilterOption};
+use fexu::admin::{AdminFilter, AdminRegistry, AdminView, AdminWidget, FilterOption};
 use std::sync::Arc;
 
 const STATUS: &[FilterOption] = &[
@@ -35,7 +35,7 @@ let registry = AdminRegistry::new()
             .on_post(OrderReport),
     )?
     .try_action(
-        ferrioxid::admin::AdminAction::custom(
+        fexu::admin::AdminAction::custom(
             "orders",
             "mark_processed",
             Arc::new(MarkProcessed),
@@ -55,7 +55,7 @@ let registry = AdminRegistry::new()
 
 ## Limitations
 
-- The namespace is `ferrioxid::admin`, not `ferrioxid::prelude`.
+- The namespace is `fexu::admin`, not `fexu::prelude`.
 - A custom action requires the model permission `update`. A page uses a complete permission code such as `orders.read`.
 - Templates cannot replace `base.html`.
 - A widget does not open a hidden or sensitive field and does not replace a foreign key select.

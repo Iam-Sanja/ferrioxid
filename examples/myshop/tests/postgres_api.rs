@@ -2,14 +2,14 @@
 //! SQLite: cargo test -p myshop --test postgres_api sqlite_http_roundtrip
 //! PostgreSQL: cargo test -p myshop --test postgres_api -- --ignored
 
-use ferrioxid::db::ModelRepository;
-use ferrioxid::prelude::*;
+use fexu::db::ModelRepository;
+use fexu::prelude::*;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize, Debug)]
-#[ferrioxid(
-    table = "ferrioxid_v01_integration_products",
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize, Debug)]
+#[fexu(
+    table = "fexu_v01_integration_products",
     api = "/api/v1/products",
     allow_anonymous = true
 )]
@@ -24,9 +24,9 @@ struct TestProduct {
     active: bool,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
-    table = "ferrioxid_v01_required_only",
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
+    table = "fexu_v01_required_only",
     api = "/api/v1/required_only",
     allow_anonymous = true
 )]
@@ -37,11 +37,8 @@ struct RequiredOnly {
     name: String,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
-    table = "ferrioxid_v01_private_products",
-    api = "/api/v1/private_products"
-)]
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(table = "fexu_v01_private_products", api = "/api/v1/private_products")]
 struct PrivateProduct {
     #[field(primary_key, auto)]
     id: Uuid,
@@ -49,9 +46,9 @@ struct PrivateProduct {
     name: String,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
-    table = "ferrioxid_v01_notes",
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
+    table = "fexu_v01_notes",
     api = "/api/v1/notes",
     allow_anonymous = true
 )]
@@ -63,8 +60,8 @@ struct NoteItem {
     note: Option<String>,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(table = "ferrioxid_v01_locked", api = "/api/v1/locked")]
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(table = "fexu_v01_locked", api = "/api/v1/locked")]
 struct LockedItem {
     #[field(primary_key, auto)]
     id: Uuid,
@@ -198,11 +195,11 @@ async fn postgres_http_roundtrip() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 async fn run_http_roundtrip(url: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let db = ferrioxid::db::connect(url).await?;
+    let db = fexu::db::connect(url).await?;
     if url.starts_with("sqlite:") {
-        use ferrioxid::sea_orm::ConnectionTrait;
+        use fexu::sea_orm::ConnectionTrait;
         let row = db
-            .query_one(ferrioxid::sea_orm::Statement::from_string(
+            .query_one(fexu::sea_orm::Statement::from_string(
                 db.get_database_backend(),
                 "PRAGMA foreign_keys",
             ))
@@ -212,28 +209,28 @@ async fn run_http_roundtrip(url: &str) -> Result<(), Box<dyn std::error::Error>>
         assert_eq!(enabled, 1);
     }
     // Dedicated test table. This test must run against a disposable development database.
-    use ferrioxid::sea_orm::ConnectionTrait;
-    db.execute(ferrioxid::sea_orm::Statement::from_string(
+    use fexu::sea_orm::ConnectionTrait;
+    db.execute(fexu::sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "DROP TABLE IF EXISTS \"ferrioxid_v01_integration_products\"",
+        "DROP TABLE IF EXISTS \"fexu_v01_integration_products\"",
     ))
     .await?;
-    db.execute(ferrioxid::sea_orm::Statement::from_string(
+    db.execute(fexu::sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "DROP TABLE IF EXISTS \"ferrioxid_v01_required_only\"",
+        "DROP TABLE IF EXISTS \"fexu_v01_required_only\"",
     ))
     .await?;
-    db.execute(ferrioxid::sea_orm::Statement::from_string(
+    db.execute(fexu::sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "DROP TABLE IF EXISTS \"ferrioxid_v01_private_products\"",
+        "DROP TABLE IF EXISTS \"fexu_v01_private_products\"",
     ))
     .await?;
-    db.execute(ferrioxid::sea_orm::Statement::from_string(
+    db.execute(fexu::sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "DROP TABLE IF EXISTS \"ferrioxid_v01_notes\"",
+        "DROP TABLE IF EXISTS \"fexu_v01_notes\"",
     ))
     .await?;
-    let app = ferrioxid::App::new(db.clone())
+    let app = fexu::App::new(db.clone())
         .register::<TestProduct>()
         .register::<RequiredOnly>()
         .register::<PrivateProduct>()
@@ -501,24 +498,24 @@ async fn run_http_roundtrip(url: &str) -> Result<(), Box<dyn std::error::Error>>
     assert_eq!(list["data"].as_array().unwrap().len(), 100);
 
     server.abort();
-    db.execute(ferrioxid::sea_orm::Statement::from_string(
+    db.execute(fexu::sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "DROP TABLE IF EXISTS \"ferrioxid_v01_required_only\"",
+        "DROP TABLE IF EXISTS \"fexu_v01_required_only\"",
     ))
     .await?;
-    db.execute(ferrioxid::sea_orm::Statement::from_string(
+    db.execute(fexu::sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "DROP TABLE IF EXISTS \"ferrioxid_v01_integration_products\"",
+        "DROP TABLE IF EXISTS \"fexu_v01_integration_products\"",
     ))
     .await?;
-    db.execute(ferrioxid::sea_orm::Statement::from_string(
+    db.execute(fexu::sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "DROP TABLE IF EXISTS \"ferrioxid_v01_private_products\"",
+        "DROP TABLE IF EXISTS \"fexu_v01_private_products\"",
     ))
     .await?;
-    db.execute(ferrioxid::sea_orm::Statement::from_string(
+    db.execute(fexu::sea_orm::Statement::from_string(
         db.get_database_backend(),
-        "DROP TABLE IF EXISTS \"ferrioxid_v01_notes\"",
+        "DROP TABLE IF EXISTS \"fexu_v01_notes\"",
     ))
     .await?;
     Ok(())
@@ -537,15 +534,13 @@ fn column_definition(sql: &str, column: &str) -> String {
 
 #[test]
 fn boolean_default_is_emitted_into_postgres_schema() {
-    let sql = <TestProduct as ferrioxid::core::FerrioxidModel>::schema_sql(
-        ferrioxid::core::DatabaseKind::Postgres,
-    );
+    let sql =
+        <TestProduct as fexu::core::FexuModel>::schema_sql(fexu::core::DatabaseKind::Postgres);
     let active = column_definition(&sql, "active");
     assert!(active.contains("not null"), "{active}");
     assert!(active.contains("true"), "{active}");
-    let sqlite = <TestProduct as ferrioxid::core::FerrioxidModel>::schema_sql(
-        ferrioxid::core::DatabaseKind::Sqlite,
-    );
+    let sqlite =
+        <TestProduct as fexu::core::FexuModel>::schema_sql(fexu::core::DatabaseKind::Sqlite);
     let sqlite_active = column_definition(&sqlite, "active");
     assert!(sqlite_active.contains("integer"), "{sqlite_active}");
     assert!(sqlite_active.contains("default 1"), "{sqlite_active}");
@@ -553,7 +548,7 @@ fn boolean_default_is_emitted_into_postgres_schema() {
 
 #[test]
 fn patch_dto_distinguishes_missing_null_value_and_rejects_readonly_fields() {
-    use ferrioxid::db::PatchField;
+    use fexu::db::PatchField;
 
     let missing: TestProductUpdate = serde_json::from_str("{}").unwrap();
     assert_eq!(missing.name, PatchField::Missing);
@@ -581,9 +576,7 @@ fn patch_dto_distinguishes_missing_null_value_and_rejects_readonly_fields() {
     assert_eq!(note.title, PatchField::Missing);
     let valued: NoteItemUpdate = serde_json::from_str(r#"{"note":"hello"}"#).unwrap();
     assert_eq!(valued.note, PatchField::Value("hello".to_owned()));
-    let sql = <NoteItem as ferrioxid::core::FerrioxidModel>::schema_sql(
-        ferrioxid::core::DatabaseKind::Postgres,
-    );
+    let sql = <NoteItem as fexu::core::FexuModel>::schema_sql(fexu::core::DatabaseKind::Postgres);
     let note = column_definition(&sql, "note");
     assert!(note.contains("text"), "{note}");
     assert!(!note.contains("not null"), "{note}");

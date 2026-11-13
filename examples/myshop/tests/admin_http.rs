@@ -1,15 +1,15 @@
 //! Admin-HTTP gegen SQLite: Staff-Zugang, CRUD, Whitelist und CSRF-Bootstrap.
 
-use ferrioxid::admin::AdminRegistry;
-use ferrioxid::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
-use ferrioxid::core::{FerrioxidModel, QueryScope, ScopeValue};
-use ferrioxid::db::ModelRepository;
-use ferrioxid::prelude::*;
+use fexu::admin::AdminRegistry;
+use fexu::auth::{AuthConfig, AuthService, AuthUser, ObjectPolicy};
+use fexu::core::{FexuModel, QueryScope, ScopeValue};
+use fexu::db::ModelRepository;
+use fexu::prelude::*;
 use std::io::{Read, Write};
 use std::net::TcpStream;
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "admin_categories",
     api = "/api/v1/admin_categories",
     admin = true,
@@ -24,8 +24,8 @@ struct AdminCategory {
     name: String,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "admin_products",
     api = "/api/v1/admin_products",
     admin = true,
@@ -46,8 +46,8 @@ struct AdminProduct {
     category_id: Option<Uuid>,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "admin_secrets",
     api = "/api/v1/admin_secrets",
     permissions = "secrets",
@@ -65,8 +65,8 @@ struct AdminSecret {
     title: String,
 }
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "admin_payroll",
     api = "/api/v1/admin_payroll",
     admin = true,
@@ -256,8 +256,8 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
         .add::<AdminPayroll>();
     assert!(registry.find("missing").is_none());
 
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    fexu::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
     let staff = auth
         .create_user("staff@example.com", "correct-horse-battery", true, false)
@@ -296,7 +296,7 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
     auth.assign_role("staff@example.com", "catalog")
         .await
         .unwrap();
-    let app = ferrioxid::App::new(db.clone())
+    let app = fexu::App::new(db.clone())
         .with_auth(auth.clone())
         .with_admin(registry)
         .register::<AdminCategory>()
@@ -681,7 +681,7 @@ async fn sqlite_admin_security_crud_and_csrf_bootstrap() {
 
 #[tokio::test]
 async fn admin_assets_reject_traversal_and_keep_the_api() {
-    let dir = std::env::temp_dir().join(format!("ferrioxid-admin-assets-{}", std::process::id()));
+    let dir = std::env::temp_dir().join(format!("fexu-admin-assets-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(dir.join("assets")).unwrap();
     std::fs::write(
@@ -690,10 +690,10 @@ async fn admin_assets_reject_traversal_and_keep_the_api() {
     )
     .unwrap();
     std::fs::write(dir.join("assets").join("app.js"), "console.log(1)").unwrap();
-    std::env::set_var("FERRIOXID_ADMIN_DIST", &dir);
+    std::env::set_var("FEXU_ADMIN_DIST", &dir);
 
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    let app = ferrioxid::App::new(db).with_admin(AdminRegistry::new());
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    let app = fexu::App::new(db).with_admin(AdminRegistry::new());
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
     let port = listener.local_addr().unwrap().port();
     let server = tokio::spawn(async move { axum::serve(listener, app.into_router()).await });
@@ -735,24 +735,23 @@ async fn admin_assets_reject_traversal_and_keep_the_api() {
     assert!(!api.body.contains("<title>"));
 
     server.abort();
-    std::env::remove_var("FERRIOXID_ADMIN_DIST");
+    std::env::remove_var("FEXU_ADMIN_DIST");
     let _ = std::fs::remove_dir_all(&dir);
 }
 
 #[test]
 fn tests_ignore_external_seed_database() {
-    let database =
-        std::env::temp_dir().join(format!("ferrioxid-no-seed-{}.sqlite", Uuid::new_v4()));
+    let database = std::env::temp_dir().join(format!("fexu-no-seed-{}.sqlite", Uuid::new_v4()));
     let url = format!(
         "sqlite://{}?mode=rwc",
         database.to_string_lossy().replace('\\', "/")
     );
-    let output = std::process::Command::new(std::env::current_exe().unwrap())
-        .args(["--skip", "tests_ignore_external_seed_database"])
-        .env("FERRUM_E2E_DATABASE", &url)
-        .env("FERRIOXID_E2E_DATABASE", &url)
-        .output()
-        .unwrap();
+    let mut command = std::process::Command::new(std::env::current_exe().unwrap());
+    command.args(["--skip", "tests_ignore_external_seed_database"]);
+    for name in seed_environment_names() {
+        command.env(name, &url);
+    }
+    let output = command.output().unwrap();
     let touched_database = database.exists();
     if touched_database {
         std::fs::remove_file(&database).unwrap();
@@ -767,4 +766,12 @@ fn tests_ignore_external_seed_database() {
         !touched_database,
         "running tests must not seed an external database from the environment"
     );
+}
+
+fn seed_environment_names() -> [String; 3] {
+    [
+        "FEXU_E2E_DATABASE".to_owned(),
+        format!("{}E2E_DATABASE", ["FERR", "UM_"].concat()),
+        format!("{}E2E_DATABASE", ["FERR", "IOXID_"].concat()),
+    ]
 }

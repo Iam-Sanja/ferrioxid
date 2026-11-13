@@ -1,0 +1,674 @@
+{
+  "format_version": 1,
+  "id": "0001_auth_schema",
+  "name": "auth_schema",
+  "from_snapshot": {
+    "format_version": 1,
+    "tables": []
+  },
+  "to_snapshot": {
+    "format_version": 1,
+    "tables": [
+      {
+        "name": "_fexu_users",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "password_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "is_staff",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "is_superuser",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_login",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_users_email",
+            "columns": [
+              "email"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_fexu_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_roles_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_fexu_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_permissions_code",
+            "columns": [
+              "code"
+            ]
+          }
+        ]
+      },
+      {
+        "name": "_fexu_sessions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "csrf_token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_seen_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_sessions_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__fexu_sessions_user_id",
+            "columns": [
+              "user_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__fexu_sessions_user_id__fexu_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_fexu_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_fexu_user_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_user_roles_user_id_role_id",
+            "columns": [
+              "user_id",
+              "role_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__fexu_user_roles_user_id__fexu_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_fexu_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__fexu_user_roles_role_id__fexu_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_fexu_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      },
+      {
+        "name": "_fexu_role_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "permission_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_role_permissions_role_id_permission_id",
+            "columns": [
+              "role_id",
+              "permission_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__fexu_role_permissions_role_id__fexu_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_fexu_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__fexu_role_permissions_permission_id__fexu_permissions_id",
+            "columns": [
+              "permission_id"
+            ],
+            "referenced_table": "_fexu_permissions",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    ]
+  },
+  "operations": [
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_fexu_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "code",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_permissions_code",
+            "columns": [
+              "code"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_fexu_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "name",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_roles_name",
+            "columns": [
+              "name"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_fexu_role_permissions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "permission_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_role_permissions_role_id_permission_id",
+            "columns": [
+              "role_id",
+              "permission_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__fexu_role_permissions_role_id__fexu_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_fexu_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__fexu_role_permissions_permission_id__fexu_permissions_id",
+            "columns": [
+              "permission_id"
+            ],
+            "referenced_table": "_fexu_permissions",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_fexu_users",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "email",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "password_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "is_active",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": true
+          },
+          {
+            "name": "is_staff",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "is_superuser",
+            "type": "bool",
+            "primary_key": false,
+            "nullable": false,
+            "default": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "updated_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_login",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_users_email",
+            "columns": [
+              "email"
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_fexu_sessions",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "csrf_token_hash",
+            "type": "string",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "created_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "expires_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "last_seen_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "revoked_at",
+            "type": "i64",
+            "primary_key": false,
+            "nullable": true
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_sessions_token_hash",
+            "columns": [
+              "token_hash"
+            ]
+          }
+        ],
+        "indexes": [
+          {
+            "name": "ix__fexu_sessions_user_id",
+            "columns": [
+              "user_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__fexu_sessions_user_id__fexu_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_fexu_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    },
+    {
+      "type": "create_table",
+      "table": {
+        "name": "_fexu_user_roles",
+        "columns": [
+          {
+            "name": "id",
+            "type": "uuid",
+            "primary_key": true,
+            "nullable": false
+          },
+          {
+            "name": "user_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          },
+          {
+            "name": "role_id",
+            "type": "uuid",
+            "primary_key": false,
+            "nullable": false
+          }
+        ],
+        "unique_constraints": [
+          {
+            "name": "uq__fexu_user_roles_user_id_role_id",
+            "columns": [
+              "user_id",
+              "role_id"
+            ]
+          }
+        ],
+        "foreign_keys": [
+          {
+            "name": "fk__fexu_user_roles_user_id__fexu_users_id",
+            "columns": [
+              "user_id"
+            ],
+            "referenced_table": "_fexu_users",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          },
+          {
+            "name": "fk__fexu_user_roles_role_id__fexu_roles_id",
+            "columns": [
+              "role_id"
+            ],
+            "referenced_table": "_fexu_roles",
+            "referenced_columns": [
+              "id"
+            ],
+            "on_delete": "cascade",
+            "on_update": "no_action"
+          }
+        ]
+      }
+    }
+  ],
+  "risks": [],
+  "checksum": "e1ba4cbd6cbcfd096e38ef64264b8ef1d80c5b763310df33679d1ca9b2528434"
+}

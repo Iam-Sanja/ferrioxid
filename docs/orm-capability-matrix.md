@@ -2,9 +2,9 @@
 
 Stand: 12.11.2026, Branch `feat/orm-migrations-lifecycle` auf `main` `53a95aa`.
 
-Die Tabelle beschreibt die öffentliche Ferrioxid-API für gewöhnliche Modelloperationen. SeaQuery bleibt im Framework. Anwendungs- und Geschäftslogik für die genannten Standardfälle braucht keine selbst geschriebenen SQL-Texte. Die Angaben sind an den Tests dieses Branch festgemacht, nicht an einer Produktionsfreigabe.
+Die Tabelle beschreibt die öffentliche Fexu-API für gewöhnliche Modelloperationen. SeaQuery bleibt im Framework. Anwendungs- und Geschäftslogik für die genannten Standardfälle braucht keine selbst geschriebenen SQL-Texte. Die Angaben sind an den Tests dieses Branch festgemacht, nicht an einer Produktionsfreigabe.
 
-`SQLite getestet` bezieht sich auf die normale Workspace-Suite, einschließlich `write::tests::sqlite_shop_cases` und `examples/desk` `sqlite_same_operations`. `PostgreSQL getestet` bezieht sich auf den lokalen Lauf gegen PostgreSQL 18.6 mit isolierten Datenbanken `ferrioxid_test_` plus 32 Hexzeichen. Die PostgreSQL-16-CI enthält dieselben ignorierten Tests in `.github/workflows/ci.yml` und ist durch diesen Branch nicht ausgeführt worden.
+`SQLite getestet` bezieht sich auf die normale Workspace-Suite, einschließlich `write::tests::sqlite_shop_cases` und `examples/desk` `sqlite_same_operations`. `PostgreSQL getestet` bezieht sich auf den lokalen Lauf gegen PostgreSQL 18.6 mit isolierten Datenbanken `fexu_test_` plus 32 Hexzeichen. Die PostgreSQL-16-CI enthält dieselben ignorierten Tests in `.github/workflows/ci.yml` und ist durch diesen Branch nicht ausgeführt worden.
 
 | Fähigkeit | Stand | SQLite getestet | PostgreSQL getestet |
 |---|---|---|---|

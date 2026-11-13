@@ -2,7 +2,7 @@
 
 [Overview](index.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · Legacy: [legacy-projects.md](legacy-projects.md)
 
-**Implemented:** `crates/ferrioxid-migrations/src/manifest.rs`, stored in `.ferrioxid/project.json`. The Cargo version remains `0.1.0`; the independent current template version is `0.24`. The preserved JSON example below shows the older `0.21` manifest format, which remains readable.
+**Implemented:** `crates/fexu-migrations/src/manifest.rs`, stored in `.fexu/project.json`. The Cargo version remains `0.1.0`; the independent current template version is `0.24`. The preserved JSON example below shows the older `0.21` manifest format, which remains readable.
 
 ## Schema
 
@@ -30,11 +30,11 @@ The manifest itself is not in `files`. An SHA-256 applies only to the recorded c
 
 ## Generation
 
-`ferrioxid new` writes a manifest after generating all API or fullstack project files. The manifest is not required at runtime. Generated projects currently use a local Ferrioxid path dependency.
+`fexu new` writes a manifest after generating all API or fullstack project files. The manifest is not required at runtime. Generated projects currently use a local Fexu path dependency.
 
 ## Legacy
 
-If the file is missing, the project is not faulty. `ferrioxid upgrade --yes` then creates exactly this manifest:
+If the file is missing, the project is not faulty. `fexu upgrade --yes` then creates exactly this manifest:
 
 ```json
 {

@@ -1,13 +1,13 @@
-//! Projektbefehle für myshop. Die Ferrioxid-CLI führt diesen Code nicht aus.
+//! Projektbefehle für myshop. Die Fexu-CLI führt diesen Code nicht aus.
 
 use std::path::{Component, Path, PathBuf};
 
-use ferrioxid::async_trait::async_trait;
-use ferrioxid::core::FerrioxidModel;
-use ferrioxid::management::{
+use fexu::async_trait::async_trait;
+use fexu::core::FexuModel;
+use fexu::management::{
     ArgSpec, CommandError, CommandSpec, Invocation, ManagementCommand, Registry,
 };
-use ferrioxid::migrations::{
+use fexu::migrations::{
     apply_directory, discover_project, load_fixture, parse_fixture, LoadRequest, ProjectConfig,
     RegisteredModel, SchemaSnapshot,
 };

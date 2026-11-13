@@ -17,9 +17,9 @@ registry.action(AdminAction {
 });
 ```
 
-`ferrioxid::admin` exports `AdminAction` and `ActionOperation`. `AdminRegistry::try_action` attaches the entry to the same registry. There is no second model list.
+`fexu::admin` exports `AdminAction` and `ActionOperation`. `AdminRegistry::try_action` attaches the entry to the same registry. There is no second model list.
 
-An action is not a model attribute and not a column. `#[field]` and `#[ferrioxid]` describe stored data. `try_action` registers a named operation that runs against a selection of existing rows. The HTTP form posts `action=mark_shipped`; it does not add a `mark_shipped` field to the model.
+An action is not a model attribute and not a column. `#[field]` and `#[fexu]` describe stored data. `try_action` registers a named operation that runs against a selection of existing rows. The HTTP form posts `action=mark_shipped`; it does not add a `mark_shipped` field to the model.
 
 ## Rules
 
@@ -41,12 +41,12 @@ Both operations run in the transaction described in [admin-bulk-actions.md](admi
 ```rust
 struct MarkShipped;
 
-#[ferrioxid::async_trait::async_trait]
-impl ferrioxid::admin::ActionHandler for MarkShipped {
+#[fexu::async_trait::async_trait]
+impl fexu::admin::ActionHandler for MarkShipped {
     async fn apply(
         &self,
-        context: &mut ferrioxid::admin::ActionContext,
-    ) -> Result<(), ferrioxid::admin::ActionError> {
+        context: &mut fexu::admin::ActionContext,
+    ) -> Result<(), fexu::admin::ActionError> {
         for id in context.ids() {
             context.set_text(id, "status", "shipped")?;
         }
@@ -55,10 +55,10 @@ impl ferrioxid::admin::ActionHandler for MarkShipped {
 }
 
 registry.try_action(
-    ferrioxid::admin::AdminAction::custom("orders", "mark_shipped", std::sync::Arc::new(MarkShipped))
+    fexu::admin::AdminAction::custom("orders", "mark_shipped", std::sync::Arc::new(MarkShipped))
         .labels("Als versendet markieren", "Mark shipped")
         .writes(&["status"]),
 )?;
 ```
 
-`examples/myshop/src/admin.rs` registers `mark_processed` in the same way. The HTTP parameter selects a registered action by name. Before invoking it, Ferrioxid checks `update` permission, the selection limit, query scope and object policy. `set_text`, `set_integer` and `set_bool` accept only IDs from that selection and columns declared in `writes`. The handler does not open a connection: `update_in` writes in the same transaction as the audit. Any error rolls back all changes. `Delete` and `SetBool` remain available as built-in operations.
+`examples/myshop/src/admin.rs` registers `mark_processed` in the same way. The HTTP parameter selects a registered action by name. Before invoking it, Fexu checks `update` permission, the selection limit, query scope and object policy. `set_text`, `set_integer` and `set_bool` accept only IDs from that selection and columns declared in `writes`. The handler does not open a connection: `update_in` writes in the same transaction as the audit. Any error rolls back all changes. `Delete` and `SetBool` remain available as built-in operations.

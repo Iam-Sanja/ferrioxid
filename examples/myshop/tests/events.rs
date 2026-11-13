@@ -1,15 +1,15 @@
 //! Datum, Uhrzeit und UTC-Zeitpunkt: Migration, Roundtrip, Sortierung, Bereich und abgelehnte Typänderung.
 
-use ferrioxid::chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
-use ferrioxid::core::{FerrioxidModel, QueryScope};
-use ferrioxid::db::{date_buckets, query_admin_page, AdminPageRequest, ModelRepository};
-use ferrioxid::migrations::{apply_directory, plan_change, LogicalType, SchemaSnapshot};
+use fexu::chrono::{NaiveDate, NaiveTime, TimeZone, Utc};
+use fexu::core::{FexuModel, QueryScope};
+use fexu::db::{date_buckets, query_admin_page, AdminPageRequest, ModelRepository};
+use fexu::migrations::{apply_directory, plan_change, LogicalType, SchemaSnapshot};
 use myshop::models::event::{Event, EventCreate};
 use std::path::PathBuf;
 
 #[tokio::test]
 async fn sqlite_event_roundtrip_sort_filter_and_blocked_conversion() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations");
     apply_directory(&db, &directory, false).await.unwrap();
     let morning = Event::create(
@@ -60,7 +60,7 @@ async fn sqlite_event_roundtrip_sort_filter_and_blocked_conversion() {
             descending: false,
             equal_filters: &[(
                 "event_date",
-                ferrioxid::sea_orm::Value::from(NaiveDate::from_ymd_opt(2026, 11, 7).unwrap()),
+                fexu::sea_orm::Value::from(NaiveDate::from_ymd_opt(2026, 11, 7).unwrap()),
             )],
             bounds: &[],
             offset: 0,
@@ -99,7 +99,7 @@ async fn sqlite_event_roundtrip_sort_filter_and_blocked_conversion() {
         Err(error) => assert!(error.to_string().contains("validation.date")),
         Ok(_) => panic!("invalid date was accepted"),
     }
-    let mut changed = SchemaSnapshot::from_registered(&[ferrioxid::migrations::RegisteredModel {
+    let mut changed = SchemaSnapshot::from_registered(&[fexu::migrations::RegisteredModel {
         table: Event::descriptor().table,
         columns: Event::columns(),
         constraints: Event::constraints(),
@@ -111,7 +111,7 @@ async fn sqlite_event_roundtrip_sort_filter_and_blocked_conversion() {
         .find(|column| column.name == "event_date")
         .unwrap()
         .logical_type = LogicalType::String;
-    let current = SchemaSnapshot::from_registered(&[ferrioxid::migrations::RegisteredModel {
+    let current = SchemaSnapshot::from_registered(&[fexu::migrations::RegisteredModel {
         table: Event::descriptor().table,
         columns: Event::columns(),
         constraints: Event::constraints(),
@@ -123,7 +123,7 @@ async fn sqlite_event_roundtrip_sort_filter_and_blocked_conversion() {
 
 #[tokio::test]
 async fn boundaries_optional_fields_patch_and_utc_ranges() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
     let directory = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("migrations");
     apply_directory(&db, &directory, false).await.unwrap();
     let leap = serde_json::from_value::<EventCreate>(serde_json::json!({
@@ -178,16 +178,12 @@ async fn boundaries_optional_fields_patch_and_utc_ranges() {
                 (
                     "created_at",
                     true,
-                    ferrioxid::sea_orm::Value::from(
-                        Utc.with_ymd_and_hms(2026, 11, 7, 0, 0, 0).unwrap(),
-                    ),
+                    fexu::sea_orm::Value::from(Utc.with_ymd_and_hms(2026, 11, 7, 0, 0, 0).unwrap()),
                 ),
                 (
                     "created_at",
                     false,
-                    ferrioxid::sea_orm::Value::from(
-                        Utc.with_ymd_and_hms(2026, 11, 8, 0, 0, 0).unwrap(),
-                    ),
+                    fexu::sea_orm::Value::from(Utc.with_ymd_and_hms(2026, 11, 8, 0, 0, 0).unwrap()),
                 ),
             ],
             offset: 0,
@@ -230,7 +226,7 @@ async fn boundaries_optional_fields_patch_and_utc_ranges() {
         &[(
             "event_date",
             true,
-            ferrioxid::sea_orm::Value::from(NaiveDate::from_ymd_opt(2026, 11, 1).unwrap()),
+            fexu::sea_orm::Value::from(NaiveDate::from_ymd_opt(2026, 11, 1).unwrap()),
         )],
         &QueryScope::All,
     )

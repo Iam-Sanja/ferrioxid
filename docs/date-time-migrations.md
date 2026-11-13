@@ -13,7 +13,7 @@ SQLite stores canonical strings, so sorting and prefix filters follow ISO orderi
 
 ## New columns
 
-A new nullable or mandatory column is created via `ferrioxid migrate make`. myshop attaches `events` as `migrations/0004_events.json` to `0003_internal_notes`. The files `0001_initial.json`, `0002_categories_and_product_relations.json`, `0003_internal_notes.json` and `crates/ferrioxid-auth/migrations/0002_admin_journal.json` are unchanged.
+A new nullable or mandatory column is created via `fexu migrate make`. myshop attaches `events` as `migrations/0004_events.json` to `0003_internal_notes`. The files `0001_initial.json`, `0002_categories_and_product_relations.json`, `0003_internal_notes.json` and `crates/fexu-auth/migrations/0002_admin_journal.json` are unchanged.
 
 ## Blocked conversion
 

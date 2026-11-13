@@ -1,10 +1,10 @@
 # Routing
 
-[Overview](index.md) · Names: [urls.md](urls.md) · **Implemented files:** `crates/ferrioxid-api/src/lib.rs`, `crates/ferrioxid-api/src/urls.rs`, `crates/ferrioxid-auth/src/routes.rs`.
+[Overview](index.md) · Names: [urls.md](urls.md) · **Implemented files:** `crates/fexu-api/src/lib.rs`, `crates/fexu-api/src/urls.rs`, `crates/fexu-auth/src/routes.rs`.
 
 ## Purpose
 
-The application code groups routes into Rust modules. Ferrioxid binds them to the same `AppState` and the same middleware as Admin, Auth and the model API. There is no second router.
+The application code groups routes into Rust modules. Fexu binds them to the same `AppState` and the same middleware as Admin, Auth and the model API. There is no second router.
 
 ## Status
 
@@ -18,8 +18,8 @@ A handler who reads settings therefore needs `with_settings`. Without this call,
 
 ```rust
 let names = app.route_names().clone();
-let router = ferrioxid::pages::mount_pages_with(app.into_router(), &settings, &names)?;
-let router = ferrioxid::web::prepare(router, &settings);
+let router = fexu::pages::mount_pages_with(app.into_router(), &settings, &names)?;
+let router = fexu::web::prepare(router, &settings);
 ```
 
 ## Conflicts
@@ -30,7 +30,7 @@ let router = ferrioxid::web::prepare(router, &settings);
 
 ## Access
 
-Views do not receive admin permissions through registration. `allow_anonymous`, model permissions and `ObjectPolicy` remain with `register` and `register_policy`. Custom pages call `ferrioxid::views::require_user`, `require_staff`, `require_permission` or `require_object_read`. There is no second auth middleware.
+Views do not receive admin permissions through registration. `allow_anonymous`, model permissions and `ObjectPolicy` remain with `register` and `register_policy`. Custom pages call `fexu::views::require_user`, `require_staff`, `require_permission` or `require_object_read`. There is no second auth middleware.
 
 ## Unknown paths
 

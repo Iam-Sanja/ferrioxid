@@ -4,13 +4,13 @@
 
 ## Responsibility
 
-`ferrioxid-storage` stores bytes under a root that the application sets. The client filename never becomes the path.
+`fexu-storage` stores bytes under a root that the application sets. The client filename never becomes the path.
 
 ## Crates and files
 
-- Trait and types: `crates/ferrioxid-storage/src/lib.rs`
-- Local backend: `crates/ferrioxid-storage/src/local.rs`
-- HTTP, only after explicit attachment: `crates/ferrioxid-storage/src/http.rs`
+- Trait and types: `crates/fexu-storage/src/lib.rs`
+- Local backend: `crates/fexu-storage/src/local.rs`
+- HTTP, only after explicit attachment: `crates/fexu-storage/src/http.rs`
 
 ## Public API
 
@@ -31,7 +31,7 @@ directory = "media"
 max_upload_size_mb = 10
 ```
 
-`backend` only accepts `local`. `directory` is relative without `..`. The size is between 1 and 100 MiB. `ferrioxid::web::prepare` sets the body limit at least to this size. myshop opens `examples/myshop/media` with 1 MiB and the allowlist `text/plain`, `image/png`, `image/jpeg`, `application/pdf`.
+`backend` only accepts `local`. `directory` is relative without `..`. The size is between 1 and 100 MiB. `fexu::web::prepare` sets the body limit at least to this size. myshop opens `examples/myshop/media` with 1 MiB and the allowlist `text/plain`, `image/png`, `image/jpeg`, `application/pdf`.
 
 ## Security
 
@@ -50,7 +50,7 @@ let (_meta, bytes) = storage.read(user_id, stored.id).await?;
 
 ## Tests
 
-`cargo test -p ferrioxid-storage` stores, reads, deletes, isolates owners, rejects size, HTML and path names, and checks anonymous and third-party HTTP accesses.
+`cargo test -p fexu-storage` stores, reads, deletes, isolates owners, rejects size, HTML and path names, and checks anonymous and third-party HTTP accesses.
 
 ## Image checks
 

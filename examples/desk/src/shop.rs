@@ -5,16 +5,16 @@
 //! statement changes every matching row. A later failure can roll that
 //! statement back only when the caller opened a transaction.
 
-use ferrioxid::core::{FerrioxidError, QueryScope, ScopeValue};
-use ferrioxid::db::{col, Aggregate, Direction, ModelQuery, ModelRepository, Related, WriteResult};
-use ferrioxid::prelude::*;
-use ferrioxid::sea_orm::{ConnectionTrait, DatabaseConnection, TransactionTrait};
+use fexu::core::{FexuError, QueryScope, ScopeValue};
+use fexu::db::{col, Aggregate, Direction, ModelQuery, ModelRepository, Related, WriteResult};
+use fexu::prelude::*;
+use fexu::sea_orm::{ConnectionTrait, DatabaseConnection, TransactionTrait};
 
 use crate::models::{Address, Cart, Category, Line, Owner, OwnerCreate, Product};
 
 pub const ADDRESS_LIMIT: i64 = 20;
 
-pub async fn search_products<C>(db: &C, term: &str) -> Result<Vec<Product>, FerrioxidError>
+pub async fn search_products<C>(db: &C, term: &str) -> Result<Vec<Product>, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -25,7 +25,7 @@ where
         .await
 }
 
-pub async fn products_in_category<C>(db: &C, category: &str) -> Result<Vec<Product>, FerrioxidError>
+pub async fn products_in_category<C>(db: &C, category: &str) -> Result<Vec<Product>, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -39,10 +39,7 @@ where
         .await
 }
 
-pub async fn product_page<C>(
-    db: &C,
-    limit: u64,
-) -> Result<ferrioxid::db::QueryPage<Product>, FerrioxidError>
+pub async fn product_page<C>(db: &C, limit: u64) -> Result<fexu::db::QueryPage<Product>, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -53,7 +50,7 @@ where
         .await
 }
 
-pub async fn owner_quantity<C>(db: &C, owner: Uuid) -> Result<i64, FerrioxidError>
+pub async fn owner_quantity<C>(db: &C, owner: Uuid) -> Result<i64, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -75,7 +72,7 @@ pub async fn take_stock<C>(
     product: Uuid,
     price_cents: i64,
     quantity: i64,
-) -> Result<WriteResult, FerrioxidError>
+) -> Result<WriteResult, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -90,7 +87,7 @@ where
         .await
 }
 
-pub async fn delete_lines<C>(db: &C, owner: Uuid) -> Result<WriteResult, FerrioxidError>
+pub async fn delete_lines<C>(db: &C, owner: Uuid) -> Result<WriteResult, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -104,11 +101,7 @@ where
         .await
 }
 
-pub async fn mark_lines_moved<C>(
-    db: &C,
-    owner: Uuid,
-    cart: Uuid,
-) -> Result<WriteResult, FerrioxidError>
+pub async fn mark_lines_moved<C>(db: &C, owner: Uuid, cart: Uuid) -> Result<WriteResult, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -124,7 +117,7 @@ where
         .await
 }
 
-pub async fn open_cart<C>(db: &C, id: Uuid, owner: Uuid) -> Result<WriteResult, FerrioxidError>
+pub async fn open_cart<C>(db: &C, id: Uuid, owner: Uuid) -> Result<WriteResult, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -141,23 +134,23 @@ pub async fn add_address(
     owner: Uuid,
     id: Uuid,
     label: &str,
-) -> Result<WriteResult, FerrioxidError> {
-    let tx = db.begin().await.map_err(FerrioxidError::database)?;
+) -> Result<WriteResult, FexuError> {
+    let tx = db.begin().await.map_err(FexuError::database)?;
     let locked = Owner::query()
         .filter(col("id").eq(owner))
         .lock_existing(&tx)
         .await?;
     if locked.rows != 1 {
-        tx.rollback().await.map_err(FerrioxidError::database)?;
-        return Err(FerrioxidError::Validation("owner is missing".into()));
+        tx.rollback().await.map_err(FexuError::database)?;
+        return Err(FexuError::Validation("owner is missing".into()));
     }
     let count = Address::query()
         .filter(col("owner_id").eq(owner))
         .count(&tx)
         .await?;
     if count >= ADDRESS_LIMIT {
-        tx.rollback().await.map_err(FerrioxidError::database)?;
-        return Err(FerrioxidError::Validation("address limit reached".into()));
+        tx.rollback().await.map_err(FexuError::database)?;
+        return Err(FexuError::Validation("address limit reached".into()));
     }
     let written = Address::insert()
         .value("id", id)
@@ -165,11 +158,11 @@ pub async fn add_address(
         .value("label", label)
         .execute(&tx)
         .await?;
-    tx.commit().await.map_err(FerrioxidError::database)?;
+    tx.commit().await.map_err(FexuError::database)?;
     Ok(written)
 }
 
-pub async fn load_product<C>(db: &C, id: Uuid) -> Result<Option<Product>, FerrioxidError>
+pub async fn load_product<C>(db: &C, id: Uuid) -> Result<Option<Product>, FexuError>
 where
     C: ConnectionTrait,
 {
@@ -181,7 +174,7 @@ where
         .next())
 }
 
-pub async fn create_owner(db: &DatabaseConnection, name: &str) -> Result<Owner, FerrioxidError> {
+pub async fn create_owner(db: &DatabaseConnection, name: &str) -> Result<Owner, FexuError> {
     Owner::create(
         db,
         OwnerCreate {

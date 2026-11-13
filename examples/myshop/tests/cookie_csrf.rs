@@ -2,8 +2,8 @@
 
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
-use ferrioxid::auth::{AppState, AuthConfig, AuthService};
-use ferrioxid::App;
+use fexu::auth::{AppState, AuthConfig, AuthService};
+use fexu::App;
 use http_body_util::BodyExt;
 use myshop::models::product::Product;
 use tower::ServiceExt;
@@ -71,10 +71,10 @@ fn pair(set_cookie: &str) -> String {
 
 #[tokio::test]
 async fn cookie_writes_require_csrf_before_the_handler() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    fexu::auth::apply_migrations(&db).await.unwrap();
     let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
-    ferrioxid::migrations::apply_directory(&db, &migrations, false)
+    fexu::migrations::apply_directory(&db, &migrations, false)
         .await
         .unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
@@ -86,7 +86,7 @@ async fn cookie_writes_require_csrf_before_the_handler() {
         .login("ada@example.com", &password, "127.0.0.1")
         .await
         .unwrap();
-    let session = format!("ferrioxid_session={}", issued.token);
+    let session = format!("fexu_session={}", issued.token);
     let anonymous = auth
         .ensure_anonymous_session(&axum::http::HeaderMap::new())
         .await
@@ -186,7 +186,7 @@ async fn cookie_writes_require_csrf_before_the_handler() {
         &app,
         "POST",
         "/probe",
-        Some("ferrioxid_locale=de"),
+        Some("fexu_locale=de"),
         None,
         None,
         Some("application/json"),
@@ -198,7 +198,7 @@ async fn cookie_writes_require_csrf_before_the_handler() {
         &app,
         "POST",
         "/probe",
-        Some("ferrioxid_login_csrf=abc"),
+        Some("fexu_login_csrf=abc"),
         None,
         None,
         Some("application/json"),
@@ -375,7 +375,7 @@ async fn cookie_writes_require_csrf_before_the_handler() {
         &bare,
         "POST",
         "/probe",
-        Some("ferrioxid_session=unchecked"),
+        Some("fexu_session=unchecked"),
         None,
         None,
         Some("application/json"),
@@ -506,8 +506,8 @@ fn encode_component(value: &str) -> String {
 
 #[tokio::test]
 async fn admin_login_accepts_login_csrf_while_an_anonymous_session_exists() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    fexu::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
     let password = memory_fixture_password();
     auth.create_user("ada@example.com", &password, true, false)
@@ -515,20 +515,19 @@ async fn admin_login_accepts_login_csrf_while_an_anonymous_session_exists() {
         .unwrap();
     let app = App::new(db)
         .with_auth(auth.clone())
-        .with_admin(ferrioxid::admin::AdminRegistry::new())
+        .with_admin(fexu::admin::AdminRegistry::new())
         .merge(shop_routes())
         .into_router();
 
     let shop = exchange(&app, "GET", "/shop", None, None, "").await;
     assert_eq!(shop.status, StatusCode::OK);
-    let anonymous = cookie_named(&shop.cookies, "ferrioxid_anonymous").expect("anonymous cookie");
+    let anonymous = cookie_named(&shop.cookies, "fexu_anonymous").expect("anonymous cookie");
     let anonymous_pair = cookie_pair(anonymous);
     let anonymous_token = anonymous_pair.split_once('=').unwrap().1.to_owned();
 
     let login_page = exchange(&app, "GET", "/admin/login", Some(&anonymous_pair), None, "").await;
     assert_eq!(login_page.status, StatusCode::OK, "{}", login_page.body);
-    let login_cookie =
-        cookie_named(&login_page.cookies, "ferrioxid_login_csrf").expect("login csrf");
+    let login_cookie = cookie_named(&login_page.cookies, "fexu_login_csrf").expect("login csrf");
     let login_pair = cookie_pair(login_cookie);
     let login_token = form_token(&login_page.body);
     assert_eq!(login_pair.split_once('=').unwrap().1, login_token);
@@ -572,7 +571,7 @@ async fn admin_login_accepts_login_csrf_while_an_anonymous_session_exists() {
         .await
         .unwrap();
     let both = format!(
-        "ferrioxid_session={}; {anonymous_pair}; {login_pair}",
+        "fexu_session={}; {anonymous_pair}; {login_pair}",
         prior.token
     );
     let body = encode_form(&[
@@ -596,9 +595,9 @@ async fn admin_login_accepts_login_csrf_while_an_anonymous_session_exists() {
         "{}",
         logged_in.body
     );
-    let session = cookie_named(&logged_in.cookies, "ferrioxid_session").expect("session");
+    let session = cookie_named(&logged_in.cookies, "fexu_session").expect("session");
     assert!(!cookie_pair(session).ends_with('='));
-    let cleared = cookie_named(&logged_in.cookies, "ferrioxid_anonymous").expect("clear anonymous");
+    let cleared = cookie_named(&logged_in.cookies, "fexu_anonymous").expect("clear anonymous");
     assert!(cleared.contains("Max-Age=0"), "{cleared}");
     assert!(auth.read_anonymous_state(&anonymous_token).await.is_err());
 
@@ -646,8 +645,8 @@ async fn admin_login_accepts_login_csrf_while_an_anonymous_session_exists() {
 
 #[tokio::test]
 async fn browser_routes_reject_cookieless_and_bearer_writes() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    fexu::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
     let anonymous = auth
         .ensure_anonymous_session(&axum::http::HeaderMap::new())
@@ -670,7 +669,7 @@ async fn browser_routes_reject_cookieless_and_bearer_writes() {
         )
         .layer(axum::middleware::from_fn_with_state(
             state.clone(),
-            ferrioxid::require_browser,
+            fexu::require_browser,
         ))
         .with_state(state);
 
@@ -742,8 +741,8 @@ async fn browser_routes_reject_cookieless_and_bearer_writes() {
 
 #[tokio::test]
 async fn direct_admin_login_survives_require_browser_writes_from_a_fresh_jar() {
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    ferrioxid::auth::apply_migrations(&db).await.unwrap();
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    fexu::auth::apply_migrations(&db).await.unwrap();
     let mut config = AuthConfig::development();
     config.allowed_origins = vec![
         "http://127.0.0.1:3000".to_owned(),
@@ -758,7 +757,7 @@ async fn direct_admin_login_survives_require_browser_writes_from_a_fresh_jar() {
         .unwrap();
     let app = App::new(db)
         .with_auth(auth)
-        .with_admin(ferrioxid::admin::AdminRegistry::new())
+        .with_admin(fexu::admin::AdminRegistry::new())
         .require_browser_writes()
         .into_router();
 
@@ -773,7 +772,7 @@ async fn direct_admin_login_survives_require_browser_writes_from_a_fresh_jar() {
 
     let page = exchange(&app, "GET", "/admin/login", None, None, "").await;
     assert_eq!(page.status, StatusCode::OK, "{}", page.body);
-    let login_cookie = cookie_named(&page.cookies, "ferrioxid_login_csrf").expect("login csrf");
+    let login_cookie = cookie_named(&page.cookies, "fexu_login_csrf").expect("login csrf");
     let login_pair = cookie_pair(login_cookie);
     let token = form_token(&page.body);
     assert_eq!(login_pair.split_once('=').unwrap().1, token);
@@ -851,7 +850,7 @@ async fn direct_admin_login_survives_require_browser_writes_from_a_fresh_jar() {
     )
     .await;
     assert_eq!(lan, StatusCode::SEE_OTHER);
-    let invalid_session = format!("ferrioxid_session=not-a-live-session; {login_pair}");
+    let invalid_session = format!("fexu_session=not-a-live-session; {login_pair}");
     assert_eq!(
         post_login(
             &app,

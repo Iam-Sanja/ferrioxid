@@ -1,6 +1,6 @@
 # Public release security and contributor setup
 
-This checklist records verified settings and remaining work for [Iam-Sanja/ferrioxid](https://github.com/Iam-Sanja/ferrioxid). The repository is already **public**. Checked items are evidence observed on **2026-11-08**, not a permanent security certification. Settings can change independently of Git. No repository setting was changed during this documentation update, and the separate historical `ferrum` repository was not modified.
+This checklist records verified settings and remaining work for [Iam-Sanja/ferrioxid](https://github.com/Iam-Sanja/ferrioxid). The repository is already **public**. Checked items are evidence observed on **2026-11-08**, not a permanent security certification. Settings can change independently of Git. No repository setting was changed during this documentation update, and the separate historical `fexu` repository was not modified.
 
 Current source baseline: `main` at `5c9bd7c438179b53d02f36130871ac42f313ef5e`. See [GitHub maintenance](github-maintenance.md) for the settings snapshot and repeatable verification endpoints.
 
@@ -14,7 +14,7 @@ Current source baseline: `main` at `5c9bd7c438179b53d02f36130871ac42f313ef5e`. S
 - [ ] Complete the license/third-party asset review, including fonts, screenshots, templates, JS/CSS and copied examples. The MIT file's presence does not establish permission for every asset.
 - [ ] Finish policy-text and contact-route review. `CONTRIBUTING.md` still describes product documentation as German and lists only two of the three PostgreSQL integration tests; `SECURITY.md` still describes Private Vulnerability Reporting conditionally. Use the verified reporting route below. The Code of Conduct has no published reporting email; verify a usable private contact route.
 - [ ] Review repository/environment Actions secrets, variables, collaborators and installed apps for necessity and scope. Do not expose credentials to untrusted code. This documentation review did not inventory secret values or certify all environments.
-- [x] Verify current development defaults and naming: generated projects use `ferrioxid.toml`, `.ferrioxid/`, `FERRIOXID_*` and `_ferrioxid_*`; local demo credentials are not production defaults. See [the breaking-change record](ferrum-legacy-removal.md).
+- [x] Verify current development defaults and naming: generated projects use `fexu.toml`, `.fexu/`, `FEXU_*` and `_fexu_*`; local demo credentials are not production defaults. See [the earlier name cleanup](ferrum-legacy-removal.md).
 - [ ] Review previously publicized workflow logs/artifacts and any earlier disclosure. Publication has already happened; remaining review is incident-prevention/remediation work, not a claim that a pre-publication audit was completed.
 
 ## 2. Repository and main-branch protection
@@ -57,12 +57,12 @@ Releases require an intentional version/tag, successful checks, changelog and mi
 
 ## 5. Merged security and naming work
 
-- [x] [PR #27](https://github.com/Iam-Sanja/ferrioxid/pull/27) merged as `d48dbecc731b2b83f9529cf74bd13d187ee6f82c`: the external database test-seeder is deleted. The regression `tests_ignore_external_seed_database` checks both `FERRUM_E2E_DATABASE` and `FERRIOXID_E2E_DATABASE`; the old name is a negative security test, not a runtime alias.
-- [x] [PR #25](https://github.com/Iam-Sanja/ferrioxid/pull/25) merged as `5c9bd7c438179b53d02f36130871ac42f313ef5e`: Ferrioxid-only configuration/schema names, generated-project secret exclusions and the seeder deletion are present on main. No compatibility alias or automatic data conversion was introduced.
+- [x] [PR #27](https://github.com/Iam-Sanja/ferrioxid/pull/27) merged as `d48dbecc731b2b83f9529cf74bd13d187ee6f82c`: the external database test-seeder is deleted. The regression `tests_ignore_external_seed_database` sets `FEXU_E2E_DATABASE` and the retired environment names. Those retired names are a negative security test, not a runtime alias.
+- [x] [PR #25](https://github.com/Iam-Sanja/ferrioxid/pull/25) merged as `5c9bd7c438179b53d02f36130871ac42f313ef5e`: Fexu-only configuration/schema names, generated-project secret exclusions and the seeder deletion are present on main. No compatibility alias or automatic data conversion was introduced.
 - [x] PR #25's final head `eb3389ffc3169d433b0604168ae23699f2eb3f96` passed Ubuntu, Windows, PostgreSQL, Cargo Audit and CodeQL before merge. The recorded local validation passed 180 Rust tests plus all three PostgreSQL integration tests. The five built-in migration seals and both generated project builds passed. These are pinned historical results, not a claim about future commits.
 - [ ] If an earlier external-seeder run touched a reused database, inspect the known privileged account, revoke sessions and replace compromised credentials as described in the [security review](security/codeql-review.md). Code deletion does not repair previously seeded databases. No operator database audit is claimed here.
 
-The schema/configuration rename intentionally requires fresh databases. Existing migration histories and checksums must not be silently reused. Current instructions use Ferrioxid names; historical audit records, mapping tables, original license attribution and negative tests may retain Ferrum names with their original meaning.
+The schema/configuration rename intentionally requires fresh databases. Existing migration histories and checksums must not be silently reused. Current instructions use Fexu names. Historical audit records, mapping tables, original license attribution and negative tests may still spell the retired names.
 
 ## 6. Verification and ongoing work
 

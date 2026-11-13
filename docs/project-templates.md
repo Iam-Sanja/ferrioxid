@@ -10,13 +10,13 @@
 Both use SQLite by default, support PostgreSQL, serve static assets and require no Node.js. Neither creates business models, business migrations, seeded data or users. Fullstack adds admin branding from project settings; admin access remains protected. Mail is disabled by default. Bind defaults to `127.0.0.1:3000`; existing production/secret validation remains enforced.
 
 ```powershell
-ferrioxid new project Shop --template api --apps-dir apps
+fexu new project Shop --template api --apps-dir apps
 cd Shop
-ferrioxid new app customers
-ferrioxid generate model Customer --app customers
-ferrioxid migrate make initial --app customers
-ferrioxid migrate up
-ferrioxid dev
+fexu new app customers
+fexu generate model Customer --app customers
+fexu migrate make initial --app customers
+fexu migrate up
+fexu dev
 ```
 
 New API/fullstack models require their declared model permissions. They do not grant staff status or anonymous access. Apps do not automatically namespace SQL table/API names; review attributes before applying migrations.

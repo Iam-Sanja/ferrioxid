@@ -1,6 +1,6 @@
 # Error codes
 
-[Overview](index.md) · **Implemented file:** `crates/ferrioxid-core/src/problem.rs`.
+[Overview](index.md) · **Implemented file:** `crates/fexu-core/src/problem.rs`.
 
 ## Contract
 
@@ -69,4 +69,4 @@ Clients can map stable codes to localized messages and use `detail` as a fallbac
 
 ## Tests
 
-`crates/ferrioxid-core/src/problem.rs` checks the same login error, field prefix and suppressed SQL. The existing Auth and Admin tests continue to read `detail`.
+`crates/fexu-core/src/problem.rs` checks the same login error, field prefix and suppressed SQL. The existing Auth and Admin tests continue to read `detail`.

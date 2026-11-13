@@ -1,0 +1,19 @@
+[package]
+name = "fexu-macros"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Derive macros for Fexu models"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
+
+[lib]
+proc-macro = true
+
+[dependencies]
+syn = { version = "3", features = ["full"] }
+quote = "1"
+proc-macro2 = "1"

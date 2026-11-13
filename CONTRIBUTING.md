@@ -1,6 +1,6 @@
-# Contributing to Ferrioxid
+# Contributing to Fexu
 
-Ferrioxid is a pre-release Rust full-stack web framework. The current name is Ferrioxid. Workspace crates keep names such as `ferrioxid`, `ferrioxid-api`, and `ferrioxid-cli`. The Cargo version is `0.1.0`. Milestone labels such as v0.27.1 describe internal progress. They are not Cargo releases and they are not an installable crate named `ferrioxid`.
+Fexu is a pre-release Rust full-stack web framework. The current name is Fexu. Workspace crates keep names such as `fexu`, `fexu-api`, and `fexu-cli`. The Cargo version is `0.1.0`. Milestone labels such as v0.27.1 describe internal progress. They are not Cargo releases and they are not an installable crate named `fexu`.
 
 Product documentation in `docs/` is currently written in German. New repository policy, GitHub templates, and contributor instructions are written in English.
 
@@ -49,15 +49,15 @@ cargo build --workspace
 
 | Path | Role |
 |---|---|
-| `crates/ferrioxid` | Public framework facade |
-| `crates/ferrioxid-api` | HTTP application, routes, views, and app registry |
-| `crates/ferrioxid-cli` | `ferrioxid` developer command |
-| `crates/ferrioxid-db` | SeaORM connection and SQL |
-| `crates/ferrioxid-migrations` | Project settings and migrations |
-| `crates/ferrioxid-auth` | Accounts, sessions, and password reset |
-| `crates/ferrioxid-admin` | Server-rendered admin |
-| `crates/ferrioxid-jobs` | Persistent background jobs |
-| `crates/ferrioxid-mail` | Mail delivery |
+| `crates/fexu` | Public framework facade |
+| `crates/fexu-api` | HTTP application, routes, views, and app registry |
+| `crates/fexu-cli` | `fexu` developer command |
+| `crates/fexu-db` | SeaORM connection and SQL |
+| `crates/fexu-migrations` | Project settings and migrations |
+| `crates/fexu-auth` | Accounts, sessions, and password reset |
+| `crates/fexu-admin` | Server-rendered admin |
+| `crates/fexu-jobs` | Persistent background jobs |
+| `crates/fexu-mail` | Mail delivery |
 | `examples/myshop` | Worked example application |
 | `examples/notes` | Small application and worker example |
 | `docs/` | Product documentation, currently German |
@@ -114,8 +114,8 @@ Follow [SECURITY.md](SECURITY.md). Do not publish exploit details in an issue or
 ## Database migrations
 
 - Add a new migration file. Do not edit a migration that has already been applied in a real project.
-- `ferrioxid migrate down` is not implemented. Do not document it as available.
-- `ferrioxid migrate up` applies migrations. It is not a database reset.
+- `fexu migrate down` is not implemented. Do not document it as available.
+- `fexu migrate up` applies migrations. It is not a database reset.
 - Tests must use temporary SQLite files or an explicitly disposable PostgreSQL database.
 - Do not point tests or examples at a developer's real database.
 - Existing generated projects must keep working. A contribution that changes scaffold output needs a compatibility note.
@@ -126,13 +126,13 @@ Preserve public crate names and the Cargo version unless the maintainer accepts 
 
 ## Getting started with the CLI
 
-The commands below match the current `ferrioxid-cli` binary. They are not a published install of a crate named `ferrioxid`.
+The commands below match the current `fexu-cli` binary. They are not a published install of a crate named `fexu`.
 
 ```bash
-cargo run -p ferrioxid-cli -- new demo --template fullstack --ferrioxid-path .
-cargo run -p ferrioxid-cli -- migrate up
-cargo run -p ferrioxid-cli -- doctor
-cargo run -p ferrioxid-cli -- dev
+cargo run -p fexu-cli -- new demo --template fullstack --fexu-path .
+cargo run -p fexu-cli -- migrate up
+cargo run -p fexu-cli -- doctor
+cargo run -p fexu-cli -- dev
 ```
 
-`ferrioxid dev` does not apply migrations and does not start a background worker. Create an admin user with `ferrioxid admin create-user`. The password is prompted. There is no default password.
+`fexu dev` does not apply migrations and does not start a background worker. Create an admin user with `fexu admin create-user`. The password is prompted. There is no default password.

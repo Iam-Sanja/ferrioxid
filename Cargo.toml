@@ -2,11 +2,11 @@
 resolver = "2"
 exclude = ["vendor/sqlx-sqlite"]
 members = [
-  "crates/ferrioxid", "crates/ferrioxid-core", "crates/ferrioxid-macros",
-  "crates/ferrioxid-db", "crates/ferrioxid-api", "crates/ferrioxid-cli",
-  "crates/ferrioxid-migrations", "crates/ferrioxid-auth", "crates/ferrioxid-cache", "crates/ferrioxid-admin",
-  "crates/ferrioxid-forms", "crates/ferrioxid-static", "crates/ferrioxid-storage",
-  "crates/ferrioxid-middleware", "crates/ferrioxid-mail", "crates/ferrioxid-jobs",
+  "crates/fexu", "crates/fexu-core", "crates/fexu-macros",
+  "crates/fexu-db", "crates/fexu-api", "crates/fexu-cli",
+  "crates/fexu-migrations", "crates/fexu-auth", "crates/fexu-cache", "crates/fexu-admin",
+  "crates/fexu-forms", "crates/fexu-static", "crates/fexu-storage",
+  "crates/fexu-middleware", "crates/fexu-mail", "crates/fexu-jobs",
   "examples/myshop",
   "examples/notes",
   "examples/desk"
@@ -45,22 +45,22 @@ argon2 = "0.5"
 rpassword = "7"
 
 # Path keeps workspace builds. The version is what cargo package writes into a published manifest.
-ferrioxid = { path = "crates/ferrioxid", version = "0.1.0" }
-ferrioxid-admin = { path = "crates/ferrioxid-admin", version = "0.1.0" }
-ferrioxid-api = { path = "crates/ferrioxid-api", version = "0.1.0" }
-ferrioxid-auth = { path = "crates/ferrioxid-auth", version = "0.1.0" }
-ferrioxid-cache = { path = "crates/ferrioxid-cache", version = "0.1.0" }
-ferrioxid-cli = { path = "crates/ferrioxid-cli", version = "0.1.0" }
-ferrioxid-core = { path = "crates/ferrioxid-core", version = "0.1.0" }
-ferrioxid-db = { path = "crates/ferrioxid-db", version = "0.1.0" }
-ferrioxid-forms = { path = "crates/ferrioxid-forms", version = "0.1.0" }
-ferrioxid-jobs = { path = "crates/ferrioxid-jobs", version = "0.1.0" }
-ferrioxid-macros = { path = "crates/ferrioxid-macros", version = "0.1.0" }
-ferrioxid-mail = { path = "crates/ferrioxid-mail", version = "0.1.0" }
-ferrioxid-middleware = { path = "crates/ferrioxid-middleware", version = "0.1.0" }
-ferrioxid-migrations = { path = "crates/ferrioxid-migrations", version = "0.1.0" }
-ferrioxid-static = { path = "crates/ferrioxid-static", version = "0.1.0" }
-ferrioxid-storage = { path = "crates/ferrioxid-storage", version = "0.1.0" }
+fexu = { path = "crates/fexu", version = "0.1.0" }
+fexu-admin = { path = "crates/fexu-admin", version = "0.1.0" }
+fexu-api = { path = "crates/fexu-api", version = "0.1.0" }
+fexu-auth = { path = "crates/fexu-auth", version = "0.1.0" }
+fexu-cache = { path = "crates/fexu-cache", version = "0.1.0" }
+fexu-cli = { path = "crates/fexu-cli", version = "0.1.0" }
+fexu-core = { path = "crates/fexu-core", version = "0.1.0" }
+fexu-db = { path = "crates/fexu-db", version = "0.1.0" }
+fexu-forms = { path = "crates/fexu-forms", version = "0.1.0" }
+fexu-jobs = { path = "crates/fexu-jobs", version = "0.1.0" }
+fexu-macros = { path = "crates/fexu-macros", version = "0.1.0" }
+fexu-mail = { path = "crates/fexu-mail", version = "0.1.0" }
+fexu-middleware = { path = "crates/fexu-middleware", version = "0.1.0" }
+fexu-migrations = { path = "crates/fexu-migrations", version = "0.1.0" }
+fexu-static = { path = "crates/fexu-static", version = "0.1.0" }
+fexu-storage = { path = "crates/fexu-storage", version = "0.1.0" }
 
 # Backport the upstream SQLite bound fix without replacing SeaORM/SQLx APIs.
 [patch.crates-io]

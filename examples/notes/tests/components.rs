@@ -1,23 +1,23 @@
 use axum::body::Body;
 use axum::http::StatusCode;
-use ferrioxid::core::{FerrioxidModel, HasTimestamps};
-use ferrioxid::migrations::{plan_change, RegisteredModel, SchemaSnapshot};
-use ferrioxid::prelude::*;
+use fexu::core::{FexuModel, HasTimestamps};
+use fexu::migrations::{plan_change, RegisteredModel, SchemaSnapshot};
+use fexu::prelude::*;
 use http_body_util::BodyExt;
 use tower::ServiceExt;
 
-ferrioxid::model_fields! {
+fexu::model_fields! {
     pub struct AuditStamp {
         #[field(managed = "created")]
-        pub created_at: ferrioxid::chrono::DateTime<ferrioxid::chrono::Utc>,
+        pub created_at: fexu::chrono::DateTime<fexu::chrono::Utc>,
         #[field(managed = "updated")]
-        pub updated_at: ferrioxid::chrono::DateTime<ferrioxid::chrono::Utc>,
+        pub updated_at: fexu::chrono::DateTime<fexu::chrono::Utc>,
     }
 }
 
-ferrioxid_fields_AuditStamp! {
-    #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-    #[ferrioxid(
+fexu_fields_AuditStamp! {
+    #[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+    #[fexu(
         table = "products",
         api = "/api/v1/products",
         allow_anonymous = true,
@@ -34,9 +34,9 @@ ferrioxid_fields_AuditStamp! {
     }
 }
 
-ferrioxid::with_timestamps! {
-    #[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-    #[ferrioxid(
+fexu::with_timestamps! {
+    #[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+    #[fexu(
         table = "categories",
         api = "/api/v1/categories",
         allow_anonymous = true,
@@ -104,19 +104,19 @@ async fn two_models_share_flat_timestamps_and_reject_client_values() {
     assert!(rendered.contains("categories"));
     assert!(rendered.contains("created_at"));
 
-    let first = ferrioxid::chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
+    let first = fexu::chrono::DateTime::parse_from_rfc3339("2026-01-01T00:00:00Z")
         .unwrap()
         .with_timezone(&Utc);
-    let second = ferrioxid::chrono::DateTime::parse_from_rfc3339("2026-01-02T00:00:00Z")
+    let second = fexu::chrono::DateTime::parse_from_rfc3339("2026-01-02T00:00:00Z")
         .unwrap()
         .with_timezone(&Utc);
-    ferrioxid::core::set_test_clock(Some(first));
-    let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
-    let app = ferrioxid::App::new(db)
+    fexu::core::set_test_clock(Some(first));
+    let db = fexu::db::connect("sqlite::memory:").await.unwrap();
+    let app = fexu::App::new(db)
         .register::<Product>()
         .register::<Category>();
     app.bootstrap_schema().await.unwrap();
-    let rejected = ferrioxid::serde_json::from_str::<ProductCreate>(
+    let rejected = fexu::serde_json::from_str::<ProductCreate>(
         r#"{"name":"red-chair","created_at":"2020-01-01T00:00:00Z"}"#,
     );
     assert!(rejected.is_err());
@@ -146,11 +146,11 @@ async fn two_models_share_flat_timestamps_and_reject_client_values() {
         .unwrap();
     assert_eq!(response.status(), StatusCode::CREATED);
     let body = response.into_body().collect().await.unwrap().to_bytes();
-    let created_row: Product = ferrioxid::serde_json::from_slice(&body).unwrap();
+    let created_row: Product = fexu::serde_json::from_slice(&body).unwrap();
     assert_eq!(created_row.created_at(), first);
     assert_eq!(created_row.updated_at(), first);
     assert!(!body.windows(12).any(|window| window == b"\"timestamps\""));
-    ferrioxid::core::set_test_clock(Some(second));
+    fexu::core::set_test_clock(Some(second));
     let patched = router
         .oneshot(
             axum::http::Request::patch(format!("/api/v1/products/{}", created_row.id))
@@ -162,8 +162,8 @@ async fn two_models_share_flat_timestamps_and_reject_client_values() {
         .unwrap();
     assert_eq!(patched.status(), StatusCode::OK);
     let body = patched.into_body().collect().await.unwrap().to_bytes();
-    let updated: Product = ferrioxid::serde_json::from_slice(&body).unwrap();
+    let updated: Product = fexu::serde_json::from_slice(&body).unwrap();
     assert_eq!(updated.created_at(), first);
     assert_eq!(updated.updated_at(), second);
-    ferrioxid::core::set_test_clock(None);
+    fexu::core::set_test_clock(None);
 }

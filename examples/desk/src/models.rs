@@ -1,10 +1,10 @@
 //! Desk models. The migration snapshot is built from these definitions.
 
-use ferrioxid::prelude::*;
-use ferrioxid::serde::{Deserialize, Serialize};
+use fexu::prelude::*;
+use fexu::serde::{Deserialize, Serialize};
 
-#[derive(Debug, Clone, PartialEq, Eq, FerrioxidModel, Serialize, Deserialize)]
-#[ferrioxid(table = "desk_owners")]
+#[derive(Debug, Clone, PartialEq, Eq, FexuModel, Serialize, Deserialize)]
+#[fexu(table = "desk_owners")]
 pub struct Owner {
     #[field(primary_key, auto)]
     pub id: Uuid,
@@ -12,8 +12,8 @@ pub struct Owner {
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FerrioxidModel, Serialize, Deserialize)]
-#[ferrioxid(table = "desk_categories")]
+#[derive(Debug, Clone, PartialEq, Eq, FexuModel, Serialize, Deserialize)]
+#[fexu(table = "desk_categories")]
 pub struct Category {
     #[field(primary_key, auto)]
     pub id: Uuid,
@@ -21,8 +21,8 @@ pub struct Category {
     pub name: String,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FerrioxidModel, Serialize, Deserialize)]
-#[ferrioxid(table = "desk_products")]
+#[derive(Debug, Clone, PartialEq, Eq, FexuModel, Serialize, Deserialize)]
+#[fexu(table = "desk_products")]
 pub struct Product {
     #[field(primary_key, auto)]
     pub id: Uuid,
@@ -38,8 +38,8 @@ pub struct Product {
     pub category_id: Option<Uuid>,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FerrioxidModel, Serialize, Deserialize)]
-#[ferrioxid(table = "desk_carts")]
+#[derive(Debug, Clone, PartialEq, Eq, FexuModel, Serialize, Deserialize)]
+#[fexu(table = "desk_carts")]
 pub struct Cart {
     #[field(primary_key, auto)]
     pub id: Uuid,
@@ -47,8 +47,8 @@ pub struct Cart {
     pub owner_id: Uuid,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FerrioxidModel, Serialize, Deserialize)]
-#[ferrioxid(table = "desk_lines")]
+#[derive(Debug, Clone, PartialEq, Eq, FexuModel, Serialize, Deserialize)]
+#[fexu(table = "desk_lines")]
 pub struct Line {
     #[field(primary_key, auto)]
     pub id: Uuid,
@@ -63,8 +63,8 @@ pub struct Line {
     pub moved: bool,
 }
 
-#[derive(Debug, Clone, PartialEq, Eq, FerrioxidModel, Serialize, Deserialize)]
-#[ferrioxid(table = "desk_addresses")]
+#[derive(Debug, Clone, PartialEq, Eq, FexuModel, Serialize, Deserialize)]
+#[fexu(table = "desk_addresses")]
 pub struct Address {
     #[field(primary_key, auto)]
     pub id: Uuid,

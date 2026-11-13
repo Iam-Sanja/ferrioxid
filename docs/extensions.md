@@ -1,6 +1,6 @@
 # Extensibility and plugins – design (NOT implemented)
 
-[Overview](index.md) · **Planned:** a general plugin-hook API. There is no `ferrioxid-plugins` crate or dynamic plugin engine. Typed apps, admin extensions, storage backends and job handlers already have the specific APIs described in their own guides.
+[Overview](index.md) · **Planned:** a general plugin-hook API. There is no `fexu-plugins` crate or dynamic plugin engine. Typed apps, admin extensions, storage backends and job handlers already have the specific APIs described in their own guides.
 
 ## Objective and design decision
 
@@ -23,7 +23,7 @@
 2. Select a specific extension case (e.g. Custom Route).
 3. Define the smallest suitable trait, with an understandable lifecycle.
 4. Failure handling and tracing.
-5. Testing that an extension works with **only** the public Ferrioxid crate.
+5. Testing that an extension works with **only** the public Fexu crate.
 
 ## Not in the MVP
 

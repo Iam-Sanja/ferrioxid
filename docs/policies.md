@@ -24,13 +24,13 @@ The rule runs after the session and authorization check. An active superuser ski
 
 ## Responsible files
 
-- `crates/ferrioxid-auth/src/policy.rs`
-- `crates/ferrioxid-api/src/lib.rs`
-- `crates/ferrioxid-macros/src/lib.rs`
+- `crates/fexu-auth/src/policy.rs`
+- `crates/fexu-api/src/lib.rs`
+- `crates/fexu-macros/src/lib.rs`
 
 ## Public API
 
-`ferrioxid::auth::ObjectPolicy` and `App::register_policy`.
+`fexu::auth::ObjectPolicy` and `App::register_policy`.
 
 For GET, PATCH and DELETE, the handler loads the record. If the rule fails, the answer is 404, even if the line exists. Thus, the interface does not confirm the identifier.
 
@@ -62,17 +62,17 @@ Lists, counts and writes use `QueryScope`. The default is `None`, allowing no ro
 ```rust
 struct OwnerPolicy;
 
-impl ferrioxid::auth::ObjectPolicy<SecretNote> for OwnerPolicy {
-    fn can_read(user: &ferrioxid::auth::AuthUser, object: &SecretNote) -> bool {
+impl fexu::auth::ObjectPolicy<SecretNote> for OwnerPolicy {
+    fn can_read(user: &fexu::auth::AuthUser, object: &SecretNote) -> bool {
         object.owner == user.id.to_string()
     }
-    fn can_update(user: &ferrioxid::auth::AuthUser, object: &SecretNote) -> bool {
+    fn can_update(user: &fexu::auth::AuthUser, object: &SecretNote) -> bool {
         object.owner == user.id.to_string()
     }
-    fn can_delete(user: &ferrioxid::auth::AuthUser, object: &SecretNote) -> bool {
+    fn can_delete(user: &fexu::auth::AuthUser, object: &SecretNote) -> bool {
         object.owner == user.id.to_string()
     }
-    fn can_create(user: &ferrioxid::auth::AuthUser, input: &SecretNoteCreate) -> bool {
+    fn can_create(user: &fexu::auth::AuthUser, input: &SecretNoteCreate) -> bool {
         input.owner == user.id.to_string()
     }
 }

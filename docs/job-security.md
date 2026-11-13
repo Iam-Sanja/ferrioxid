@@ -10,8 +10,8 @@
 - A different payload version ends as `failed` with `job.version`.
 - No JSON object, an unknown field at `deny_unknown_fields` and more than 16 KiB end before or upon execution as `job.payload.invalid` or `job.payload.large`.
 - Secret keys are not stored.
-- Error texts and tracing call codes, not the payload and not `FERRIOXID_SMTP_PASSWORD`.
-- A handler code with spaces, capitals or `password=` becomes `job.error`. In `_ferrioxid_jobs.error_code` is this code, not the detailed text.
+- Error texts and tracing call codes, not the payload and not `FEXU_SMTP_PASSWORD`.
+- A handler code with spaces, capitals or `password=` becomes `job.error`. In `_fexu_jobs.error_code` is this code, not the detailed text.
 - `JobError::message` withholds a message if it contains `password`, `secret`, `token`, `authorization`, `cookie` or `reset_url`.
 - SQL identifiers come from fixed column names. Search columns are only `idempotency_key` and `schedule_key`. Values are bound.
 - There is no way to turn a job line into a shell command.
@@ -20,8 +20,8 @@
 - Two workers do not get the same due job as a valid claim.
 - Reading CLI commands do not create an SQLite file or a history.
 
-`ferrioxid jobs inspect <id>` shows status, handler, version, attempts, timestamps and error code. Its preserved localized placeholder is `payload [redigiert, N Bytes]` (“redacted”). `--show-payload` prints the stored JSON and warns on stderr with `job.payload.visible`. This explicitly requested payload may contain email addresses or other personal data stored by the handler. Neither output includes the lease token.
+`fexu jobs inspect <id>` shows status, handler, version, attempts, timestamps and error code. Its preserved localized placeholder is `payload [redigiert, N Bytes]` (“redacted”). `--show-payload` prints the stored JSON and warns on stderr with `job.payload.visible`. This explicitly requested payload may contain email addresses or other personal data stored by the handler. Neither output includes the lease token.
 
 Ordinary logs and tracing do not write the payload. The CLI worker and the application worker do not output them.
 
-The tests are in `crates/ferrioxid-jobs/src/tests.rs` and `examples/notes/tests/jobs.rs`.
+The tests are in `crates/fexu-jobs/src/tests.rs` and `examples/notes/tests/jobs.rs`.

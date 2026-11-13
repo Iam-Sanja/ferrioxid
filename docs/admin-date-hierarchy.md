@@ -3,7 +3,7 @@
 **Milestone:** v0.19.
 
 ```rust
-#[ferrioxid(admin = true, admin_date_hierarchy = "event_date")]
+#[fexu(admin = true, admin_date_hierarchy = "event_date")]
 ```
 
 The field must be a visible `NaiveDate` or `DateTime<Utc>`. `NaiveTime` is not allowed.

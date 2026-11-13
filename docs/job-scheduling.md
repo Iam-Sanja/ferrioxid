@@ -2,7 +2,7 @@
 
 [Overview](index.md) · Jobs: [jobs.md](jobs.md)
 
-**Implemented** for UTC, a fixed offset, and `europe/berlin`. Other IANA zones are rejected. Ferrioxid does not load the IANA database and does not silently fall back to UTC.
+**Implemented** for UTC, a fixed offset, and `europe/berlin`. Other IANA zones are rejected. Fexu does not load the IANA database and does not silently fall back to UTC.
 
 ## Expressions
 
@@ -27,7 +27,7 @@ A cron row stores `cron_expression`, `cron_zone` and `schedule_key`. Caller keys
 ## Example
 
 ```rust
-let when = ferrioxid::jobs::When::cron("notes-morning", "0 9 * * 1-5", "europe/berlin")?;
+let when = fexu::jobs::When::cron("notes-morning", "0 9 * * 1-5", "europe/berlin")?;
 queue.enqueue::<NotePulseHandler>(&pulse, when).await?;
 ```
 

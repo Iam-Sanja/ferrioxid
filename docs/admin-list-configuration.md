@@ -6,7 +6,7 @@
 
 The list reads the same `AdminFieldMeta` and `AdminModelMeta` values as the form and JSON API. There is no second configuration.
 
-| Django concept | Ferrioxid attribute | Effect |
+| Django concept | Fexu attribute | Effect |
 |---|---|---|
 | `list_display` | `#[admin(list_display)]` |columns in struct order. `id` always remains a column. Without marking: first visible text field, otherwise another visible field, plus `id`|
 | `list_display_links` | `#[admin(list_link)]` |These columns link to the detail. `list_link` requires `list_display`, except for `id`. Without marking, the first listed column that is not `id` links, otherwise `id`|

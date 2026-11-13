@@ -1,0 +1,19 @@
+[package]
+name = "fexu-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Shared types for the Fexu framework"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
+
+[dependencies]
+serde_json.workspace = true
+serde.workspace = true
+thiserror.workspace = true
+uuid.workspace = true
+chrono.workspace = true
+rust_decimal.workspace = true

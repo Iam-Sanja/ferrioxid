@@ -1,0 +1,36 @@
+[package]
+name = "fexu-api"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "HTTP runtime for the Fexu framework"
+repository.workspace = true
+homepage.workspace = true
+keywords.workspace = true
+readme.workspace = true
+categories.workspace = true
+
+[dependencies]
+fexu-core.workspace = true
+fexu-auth.workspace = true
+fexu-jobs.workspace = true
+fexu-mail.workspace = true
+fexu-admin.workspace = true
+fexu-db.workspace = true
+fexu-migrations.workspace = true
+fexu-static.workspace = true
+fexu-middleware.workspace = true
+axum.workspace = true
+tera.workspace = true
+sea-orm.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+tracing.workspace = true
+uuid.workspace = true
+http-body-util = "0.1"
+tower = { version = "0.5", features = ["util"] }
+
+[dev-dependencies]
+tokio = { workspace = true }
+tower = { version = "0.5", features = ["util"] }

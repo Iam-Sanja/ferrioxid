@@ -4,12 +4,12 @@
 
 ## Responsibility
 
-`ferrioxid-static` provides CSS, JavaScript, images and fonts from an explicitly configured directory. Embedded admin assets under `/admin` remain separate.
+`fexu-static` provides CSS, JavaScript, images and fonts from an explicitly configured directory. Embedded admin assets under `/admin` remain separate.
 
 ## Crates and files
 
-- `crates/ferrioxid-static/src/lib.rs`
-- Install: `ferrioxid::web::prepare` in `crates/ferrioxid-api/src/web.rs`
+- `crates/fexu-static/src/lib.rs`
+- Install: `fexu::web::prepare` in `crates/fexu-api/src/web.rs`
 - Example: `examples/myshop/static/`
 - Generator: `static/css/app.css` and `static/js/app.js`
 
@@ -43,11 +43,11 @@ Missing, hidden or escaping paths return 404. Unknown file extensions return 415
 
 ## Example
 
-After mounting with `ferrioxid::static_files::mount(router, StaticOptions::new("static"))`, request `GET /static/css/app.css`.
+After mounting with `fexu::static_files::mount(router, StaticOptions::new("static"))`, request `GET /static/css/app.css`.
 
 ## Tests
 
-`cargo test -p ferrioxid-static` checks CSS, JavaScript, PNG, MIME, 404, Cache, ETag, Traversal, hidden files and, if Windows is allowed to create the symlink, a symlink to the outside.
+`cargo test -p fexu-static` checks CSS, JavaScript, PNG, MIME, 404, Cache, ETag, Traversal, hidden files and, if Windows is allowed to create the symlink, a symlink to the outside.
 
 ## Limitations
 

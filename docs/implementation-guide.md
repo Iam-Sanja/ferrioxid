@@ -4,7 +4,7 @@
 
 ## 1. First understand the existing code
 
-Read `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md), [i18n.md](i18n.md), [error-codes.md](error-codes.md) and [testing.md](testing.md), in that order, before changing the relevant crate. **Do not claim a feature is complete based on a planned-design document.** Auth tables use `apply_directory_with_history` and `_ferrioxid_auth_migrations`. Do not edit `0001_initial.json`. v0.12 adds forms, static files, local storage and middleware. Upload metadata remains in sidecar JSON to preserve migration checksums. Do not describe S3 or virus scanning as implemented.
+Read `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macros.md](macros.md), [database.md](database.md), [api.md](api.md), [auth.md](auth.md), [csrf.md](csrf.md), [query-scopes.md](query-scopes.md), [i18n.md](i18n.md), [error-codes.md](error-codes.md) and [testing.md](testing.md), in that order, before changing the relevant crate. **Do not claim a feature is complete based on a planned-design document.** Auth tables use `apply_directory_with_history` and `_fexu_auth_migrations`. Do not edit `0001_initial.json`. v0.12 adds forms, static files, local storage and middleware. Upload metadata remains in sidecar JSON to preserve migration checksums. Do not describe S3 or virus scanning as implemented.
 
 ## 2. Respect for module boundaries
 
@@ -13,7 +13,7 @@ Read `Cargo.toml`, [architecture.md](architecture.md), [core.md](core.md), [macr
 - DB: connections, type-safe repositories and database errors; no HTTP status codes.
 - API: Axum router, DTO extractor, HTTP response, no new model syntax.
 - CLI: Commands and orchestration, not double ORM logic.
-- Example: only public Ferrioxid facade, no special internal code.
+- Example: only public Fexu facade, no special internal code.
 
 ## 3. Required workflow for each change
 
@@ -75,4 +75,4 @@ An admin order that only extends the roadmap does not change handlers and templa
 
 ## 8. Current focus
 
-SQLite is the default local database; PostgreSQL remains supported through `DATABASE_URL`. Add column mappings in `crates/ferrioxid-db/src/sql.rs` and migration rules in `crates/ferrioxid-migrations`. A SQLite rebuild must validate affected values before conversion and roll back the entire transaction on error. Existing-column foreign keys are not rebuilt. Authentication exists; the admin was added in v0.8 and has used server-rendered HTML since v0.13, as described in [admin-native.md](admin-native.md). v0.9 adds `can_create`, the `admin-ui` feature and `new`, `dev`, `doctor`, `check`, `generate model` and `build`. v0.10 adds settings and Tera pages. The Cargo version remains `0.1.0`. Implement many-to-many or eager loading only when explicitly requested; the roadmap is not authorization. See [constraints.md](constraints.md) and [relations.md](relations.md).
+SQLite is the default local database; PostgreSQL remains supported through `DATABASE_URL`. Add column mappings in `crates/fexu-db/src/sql.rs` and migration rules in `crates/fexu-migrations`. A SQLite rebuild must validate affected values before conversion and roll back the entire transaction on error. Existing-column foreign keys are not rebuilt. Authentication exists; the admin was added in v0.8 and has used server-rendered HTML since v0.13, as described in [admin-native.md](admin-native.md). v0.9 adds `can_create`, the `admin-ui` feature and `new`, `dev`, `doctor`, `check`, `generate model` and `build`. v0.10 adds settings and Tera pages. The Cargo version remains `0.1.0`. Implement many-to-many or eager loading only when explicitly requested; the roadmap is not authorization. See [constraints.md](constraints.md) and [relations.md](relations.md).

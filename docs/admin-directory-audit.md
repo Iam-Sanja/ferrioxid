@@ -4,7 +4,7 @@
 
 **Milestone:** v0.20. The Cargo version remains `0.1.0`.
 
-The HTML and JSON directory endpoints call the same functions in `ferrioxid-admin`. Auth changes, session revocation and the audit entry share one transaction. If auditing fails, the previous authentication state is preserved.
+The HTML and JSON directory endpoints call the same functions in `fexu-admin`. Auth changes, session revocation and the audit entry share one transaction. If auditing fails, the previous authentication state is preserved.
 
 ## Workflow
 
@@ -32,7 +32,7 @@ The CLI methods `create_user`, `assign_role`, `grant_permission` and `set_user_a
 
 ## Migration
 
-`crates/ferrioxid-auth/migrations/0003_audit_operation.json` attaches the nullable column `operation_id` to `_ferrioxid_admin_audit`. `0001_auth_schema` and `0002_admin_journal` remain unchanged. Older lines read `operation_id` as empty. The history shows the first eight characters when a value exists.
+`crates/fexu-auth/migrations/0003_audit_operation.json` attaches the nullable column `operation_id` to `_fexu_admin_audit`. `0001_auth_schema` and `0002_admin_journal` remain unchanged. Older lines read `operation_id` as empty. The history shows the first eight characters when a value exists.
 
 ## JSON
 

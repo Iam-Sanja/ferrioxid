@@ -4,12 +4,12 @@
 
 ## Responsibility
 
-`ferrioxid-middleware` applies Tower layers to an Axum router. It does not authenticate users and it does not authorize a request. Cookie-write CSRF is installed by `App::into_router` in `ferrioxid-api`, before `with_state`, so generated projects and `allow_anonymous` routes receive it without a handler calling `guard_cookie_write`. This crate does not create an anonymous session and does not reject a cookie-less POST.
+`fexu-middleware` applies Tower layers to an Axum router. It does not authenticate users and it does not authorize a request. Cookie-write CSRF is installed by `App::into_router` in `fexu-api`, before `with_state`, so generated projects and `allow_anonymous` routes receive it without a handler calling `guard_cookie_write`. This crate does not create an anonymous session and does not reject a cookie-less POST.
 
 ## Crates and files
 
-- `crates/ferrioxid-middleware/src/lib.rs`
-- Application: `ferrioxid::web::prepare` and `examples/myshop/src/main.rs`
+- `crates/fexu-middleware/src/lib.rs`
+- Application: `fexu::web::prepare` and `examples/myshop/src/main.rs`
 
 ## Public API
 
@@ -33,7 +33,7 @@ Tower runs the last layer added first. `apply` is therefore attached in this ord
 
 The log contains method, path, status, duration and request ID. Query, cookies, `Authorization`, CSRF, passwords and multipart content are not written. Response headers are `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY` and `Referrer-Policy: no-referrer`. A content security policy is not set so that the admin does not break. Neither this crate nor the cookie-CSRF layer replaces an authorization check. A cookie-less `allow_anonymous` write remains public.
 
-The `x-ferrioxid-trace-order` header is a test probe and does not affect routing.
+The `x-fexu-trace-order` header is a test probe and does not affect routing.
 
 ## Error cases
 
@@ -42,16 +42,16 @@ A body above the limit is 413 before the route runs. A request ID that could not
 ## Example
 
 ```rust
-let router = ferrioxid::middleware::apply(router, ferrioxid::middleware::Standard::default());
+let router = fexu::middleware::apply(router, fexu::middleware::Standard::default());
 ```
 
 ## Tests
 
-`cargo test -p ferrioxid-middleware` checks the request ID, the security headers, the order `request_id,access_log,security_headers`, the body limit and that query and cookie are not in the response stream of the log path.
+`cargo test -p fexu-middleware` checks the request ID, the security headers, the order `request_id,access_log,security_headers`, the body limit and that query and cookie are not in the response stream of the log path.
 
 ## Limitations
 
-Standard Axum and Tower layers can supplement the built-in middleware. There is no declarative middleware list in `ferrioxid.toml`. Logging uses `tracing` without an additional text-filtering pass.
+Standard Axum and Tower layers can supplement the built-in middleware. There is no declarative middleware list in `fexu.toml`. Logging uses `tracing` without an additional text-filtering pass.
 
 ## Extension
 

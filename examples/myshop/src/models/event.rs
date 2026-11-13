@@ -1,7 +1,7 @@
-use ferrioxid::prelude::*;
+use fexu::prelude::*;
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "events",
     api = "/api/v1/events",
     admin = true,

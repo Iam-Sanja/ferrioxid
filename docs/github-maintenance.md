@@ -13,7 +13,7 @@ The repository is already **public**. Use the [public release security checklist
 - [Issue forms](../.github/ISSUE_TEMPLATE/config.yml) disallow blank issues and link to the security policy; the [PR template](../.github/pull_request_template.md) requests validation and security considerations.
 - [CONTRIBUTING](../CONTRIBUTING.md), [SECURITY](../SECURITY.md), [Code of Conduct](../CODE_OF_CONDUCT.md), [Governance](../GOVERNANCE.md) and [MIT license](../LICENSE-MIT) are present. Presence is not a complete accuracy, third-party-license or usable-contact audit. Known stale contributor/security wording is listed in the [open checklist tasks](public-release-checklist.md#1-publication-and-historical-exposure).
 
-The former `.github/workflows/rust.yml` is historical; current instructions refer to `ci.yml` and `security.yml`. Current framework setup uses `ferrioxid.toml`, `.ferrioxid/`, `FERRIOXID_*` and `_ferrioxid_*`; see [legacy-name removal](ferrum-legacy-removal.md) for historical mappings and the intentional fresh-database requirement.
+The former `.github/workflows/rust.yml` is historical; current instructions refer to `ci.yml` and `security.yml`. Current framework setup uses `fexu.toml`, `.fexu/`, `FEXU_*` and `_fexu_*`; see [the earlier name cleanup](ferrum-legacy-removal.md) for historical mappings and the intentional fresh-database requirement.
 
 ## Verified settings snapshot
 
@@ -74,7 +74,7 @@ Public visibility grants no write access. Fork PRs must not receive privileged c
 
 ## Integrated security and naming changes
 
-[PR #27](https://github.com/Iam-Sanja/ferrioxid/pull/27) removed the environment-selected external database seeder. [PR #25](https://github.com/Iam-Sanja/ferrioxid/pull/25) preserved that removal and its regression for both historical/current environment names while completing the Ferrioxid rename. Both are merged into the source baseline above. Do not restore known privileged fixture credentials in a persistent database. Reused databases touched by an earlier seeder need operator review; removing code cannot revoke existing accounts or sessions.
+[PR #27](https://github.com/Iam-Sanja/ferrioxid/pull/27) removed the environment-selected external database seeder. [PR #25](https://github.com/Iam-Sanja/ferrioxid/pull/25) preserved that removal and its regression for both historical/current environment names while completing the Fexu rename. Both are merged into the source baseline above. Do not restore known privileged fixture credentials in a persistent database. Reused databases touched by an earlier seeder need operator review; removing code cannot revoke existing accounts or sessions.
 
 The [CodeQL review](security/codeql-review.md) and [94-alert ledger](security/codeql-alerts.csv) are pinned historical evidence with per-alert reasoning, including the PR #25 follow-up for false positive #95. They must not be interpreted as a current count, blanket suppression list or complete secrets audit. PR #25's final head passed the four required checks and CodeQL; each new PR still needs results for its own latest head.
 

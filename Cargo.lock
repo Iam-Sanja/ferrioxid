@@ -630,7 +630,7 @@ name = "desk"
 version = "0.1.0"
 dependencies = [
  "axum",
- "ferrioxid",
+ "fexu",
  "serde",
  "tera",
  "tokio",
@@ -753,26 +753,26 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "da7c62ceae207dd37ea5b845da6a0696c799f85e97da1ab5b7910be3c1c80223"
 
 [[package]]
-name = "ferrioxid"
+name = "fexu"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
  "chrono",
- "ferrioxid-admin",
- "ferrioxid-api",
- "ferrioxid-auth",
- "ferrioxid-cache",
- "ferrioxid-core",
- "ferrioxid-db",
- "ferrioxid-forms",
- "ferrioxid-jobs",
- "ferrioxid-macros",
- "ferrioxid-mail",
- "ferrioxid-middleware",
- "ferrioxid-migrations",
- "ferrioxid-static",
- "ferrioxid-storage",
+ "fexu-admin",
+ "fexu-api",
+ "fexu-auth",
+ "fexu-cache",
+ "fexu-core",
+ "fexu-db",
+ "fexu-forms",
+ "fexu-jobs",
+ "fexu-macros",
+ "fexu-mail",
+ "fexu-middleware",
+ "fexu-migrations",
+ "fexu-static",
+ "fexu-storage",
  "sea-orm",
  "serde",
  "serde_json",
@@ -781,17 +781,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-admin"
+name = "fexu-admin"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
  "chrono",
- "ferrioxid-auth",
- "ferrioxid-core",
- "ferrioxid-db",
- "ferrioxid-forms",
- "ferrioxid-storage",
+ "fexu-auth",
+ "fexu-core",
+ "fexu-db",
+ "fexu-forms",
+ "fexu-storage",
  "sea-orm",
  "serde",
  "serde_json",
@@ -802,19 +802,19 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-api"
+name = "fexu-api"
 version = "0.1.0"
 dependencies = [
  "axum",
- "ferrioxid-admin",
- "ferrioxid-auth",
- "ferrioxid-core",
- "ferrioxid-db",
- "ferrioxid-jobs",
- "ferrioxid-mail",
- "ferrioxid-middleware",
- "ferrioxid-migrations",
- "ferrioxid-static",
+ "fexu-admin",
+ "fexu-auth",
+ "fexu-core",
+ "fexu-db",
+ "fexu-jobs",
+ "fexu-mail",
+ "fexu-middleware",
+ "fexu-migrations",
+ "fexu-static",
  "http-body-util",
  "sea-orm",
  "serde",
@@ -827,17 +827,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-auth"
+name = "fexu-auth"
 version = "0.1.0"
 dependencies = [
  "aes-gcm",
  "argon2",
  "async-trait",
  "axum",
- "ferrioxid-core",
- "ferrioxid-db",
- "ferrioxid-mail",
- "ferrioxid-migrations",
+ "fexu-core",
+ "fexu-db",
+ "fexu-mail",
+ "fexu-migrations",
  "getrandom 0.2.17",
  "hmac",
  "http-body-util",
@@ -854,7 +854,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-cache"
+name = "fexu-cache"
 version = "0.1.0"
 dependencies = [
  "async-trait",
@@ -865,17 +865,17 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-cli"
+name = "fexu-cli"
 version = "0.1.0"
 dependencies = [
  "clap",
  "ctrlc",
- "ferrioxid-auth",
- "ferrioxid-core",
- "ferrioxid-db",
- "ferrioxid-jobs",
- "ferrioxid-mail",
- "ferrioxid-migrations",
+ "fexu-auth",
+ "fexu-core",
+ "fexu-db",
+ "fexu-jobs",
+ "fexu-mail",
+ "fexu-migrations",
  "notify",
  "rpassword",
  "sea-orm",
@@ -885,7 +885,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-core"
+name = "fexu-core"
 version = "0.1.0"
 dependencies = [
  "chrono",
@@ -897,12 +897,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-db"
+name = "fexu-db"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "ferrioxid-core",
+ "fexu-core",
  "libsqlite3-sys",
  "sea-orm",
  "serde",
@@ -912,28 +912,28 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-forms"
+name = "fexu-forms"
 version = "0.1.0"
 dependencies = [
  "chrono",
- "ferrioxid-core",
- "ferrioxid-storage",
+ "fexu-core",
+ "fexu-storage",
  "serde_json",
  "tokio",
  "uuid",
 ]
 
 [[package]]
-name = "ferrioxid-jobs"
+name = "fexu-jobs"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "ferrioxid-auth",
- "ferrioxid-core",
- "ferrioxid-db",
- "ferrioxid-mail",
- "ferrioxid-migrations",
+ "fexu-auth",
+ "fexu-core",
+ "fexu-db",
+ "fexu-mail",
+ "fexu-migrations",
  "sea-orm",
  "serde",
  "serde_json",
@@ -944,7 +944,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-macros"
+name = "fexu-macros"
 version = "0.1.0"
 dependencies = [
  "proc-macro2",
@@ -953,11 +953,11 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-mail"
+name = "fexu-mail"
 version = "0.1.0"
 dependencies = [
  "async-trait",
- "ferrioxid-core",
+ "fexu-core",
  "lettre",
  "tera",
  "thiserror",
@@ -966,7 +966,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-middleware"
+name = "fexu-middleware"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -977,13 +977,13 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-migrations"
+name = "fexu-migrations"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "chrono",
- "ferrioxid-core",
- "ferrioxid-db",
+ "fexu-core",
+ "fexu-db",
  "sea-orm",
  "sea-query-binder",
  "serde",
@@ -995,7 +995,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-static"
+name = "fexu-static"
 version = "0.1.0"
 dependencies = [
  "axum",
@@ -1004,14 +1004,14 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferrioxid-storage"
+name = "fexu-storage"
 version = "0.1.0"
 dependencies = [
  "async-trait",
  "axum",
- "ferrioxid-auth",
- "ferrioxid-core",
- "ferrioxid-db",
+ "fexu-auth",
+ "fexu-core",
+ "fexu-db",
  "hmac",
  "serde",
  "serde_json",
@@ -1778,7 +1778,7 @@ version = "0.1.0"
 dependencies = [
  "axum",
  "chrono",
- "ferrioxid",
+ "fexu",
  "http-body-util",
  "serde",
  "serde_json",
@@ -1816,7 +1816,7 @@ name = "notes"
 version = "0.1.0"
 dependencies = [
  "axum",
- "ferrioxid",
+ "fexu",
  "http-body-util",
  "serde",
  "tokio",

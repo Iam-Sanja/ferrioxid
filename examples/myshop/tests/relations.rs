@@ -1,8 +1,8 @@
 //! Typisierte Belongs-To- und Has-Many-Beziehungen auf einer temporären SQLite-Datei.
 
-use ferrioxid::core::FerrioxidModel;
-use ferrioxid::db::ModelRepository;
-use ferrioxid::migrations::{
+use fexu::core::FexuModel;
+use fexu::db::ModelRepository;
+use fexu::migrations::{
     apply_directory, make_migration, RegisteredModel, SchemaSnapshot, FORMAT_VERSION,
 };
 use myshop::models::category::{Category, CategoryCreate};
@@ -18,7 +18,7 @@ fn temp_dir() -> PathBuf {
         .duration_since(UNIX_EPOCH)
         .unwrap_or_default()
         .as_nanos();
-    let path = std::env::temp_dir().join(format!("ferrioxid-relations-{nanos}-{tick}"));
+    let path = std::env::temp_dir().join(format!("fexu-relations-{nanos}-{tick}"));
     std::fs::create_dir_all(&path).unwrap();
     path
 }
@@ -49,7 +49,7 @@ async fn category_and_product_relations_are_typed() {
             .to_string_lossy()
             .replace('\\', "/")
     );
-    let db = ferrioxid::db::connect(&url).await.unwrap();
+    let db = fexu::db::connect(&url).await.unwrap();
     apply_directory(&db, &migrations, false).await.unwrap();
 
     let books = Category::create(
@@ -69,7 +69,7 @@ async fn category_and_product_relations_are_typed() {
     .await;
     assert!(matches!(
         duplicate,
-        Err(ferrioxid::core::FerrioxidError::Validation(message)) if message.contains("unique")
+        Err(fexu::core::FexuError::Validation(message)) if message.contains("unique")
     ));
 
     let laptop = Product::create(
@@ -77,7 +77,7 @@ async fn category_and_product_relations_are_typed() {
         ProductCreate {
             name: "Laptop".to_owned(),
             price_cents: 1000,
-            price: ferrioxid::core::parse_decimal("10.00", 12, 2).unwrap(),
+            price: fexu::core::parse_decimal("10.00", 12, 2).unwrap(),
             status: myshop::models::product::ProductStatus::Active,
             active: None,
             category_id: Some(books.id),
@@ -90,7 +90,7 @@ async fn category_and_product_relations_are_typed() {
         ProductCreate {
             name: "Orphan".to_owned(),
             price_cents: 1,
-            price: ferrioxid::core::parse_decimal("0.01", 12, 2).unwrap(),
+            price: fexu::core::parse_decimal("0.01", 12, 2).unwrap(),
             status: myshop::models::product::ProductStatus::Draft,
             active: None,
             category_id: None,
@@ -103,16 +103,16 @@ async fn category_and_product_relations_are_typed() {
         ProductCreate {
             name: "Ghost".to_owned(),
             price_cents: 1,
-            price: ferrioxid::core::parse_decimal("0.01", 12, 2).unwrap(),
+            price: fexu::core::parse_decimal("0.01", 12, 2).unwrap(),
             status: myshop::models::product::ProductStatus::Draft,
             active: None,
-            category_id: Some(ferrioxid::uuid::Uuid::nil()),
+            category_id: Some(fexu::uuid::Uuid::nil()),
         },
     )
     .await;
     assert!(matches!(
         invalid,
-        Err(ferrioxid::core::FerrioxidError::Validation(message)) if message.contains("foreign key")
+        Err(fexu::core::FexuError::Validation(message)) if message.contains("foreign key")
     ));
 
     let loaded = laptop.category(&db).await.unwrap().unwrap();
@@ -136,7 +136,7 @@ async fn category_and_product_relations_are_typed() {
     let blocked = Category::delete(&db, books.id).await;
     assert!(matches!(
         blocked,
-        Err(ferrioxid::core::FerrioxidError::Validation(message)) if message.contains("foreign key")
+        Err(fexu::core::FexuError::Validation(message)) if message.contains("foreign key")
     ));
 }
 
@@ -150,7 +150,7 @@ async fn checked_in_migrations_add_the_category_foreign_key() {
             .to_string_lossy()
             .replace('\\', "/")
     );
-    let db = ferrioxid::db::connect(&url).await.unwrap();
+    let db = fexu::db::connect(&url).await.unwrap();
     let migrations = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("migrations");
     let report = apply_directory(&db, &migrations, false).await.unwrap();
     assert_eq!(
@@ -177,7 +177,7 @@ async fn checked_in_migrations_add_the_category_foreign_key() {
         ProductCreate {
             name: "Hammer".to_owned(),
             price_cents: 2500,
-            price: ferrioxid::core::parse_decimal("25.00", 12, 2).unwrap(),
+            price: fexu::core::parse_decimal("25.00", 12, 2).unwrap(),
             status: myshop::models::product::ProductStatus::Active,
             active: Some(true),
             category_id: Some(category.id),

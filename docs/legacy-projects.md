@@ -2,11 +2,11 @@
 
 [Overview](index.md) · Upgrade: [project-upgrade.md](project-upgrade.md) · Diagnostics: [migration-diagnostics.md](migration-diagnostics.md)
 
-A project without `.ferrioxid/project.json` is a legacy project. That is not a mistake. `ferrioxid check` reports `project.template.legacy` as a warning. Without `--strict`, the exit code remains 0.
+A project without `.fexu/project.json` is a legacy project. That is not a mistake. `fexu check` reports `project.template.legacy` as a warning. Without `--strict`, the exit code remains 0.
 
 ## Detection
 
-Ferrioxid reads `Cargo.toml` as text.
+Fexu reads `Cargo.toml` as text.
 
 - `path = "…"` is `project.dependency.path`. Relative paths, `D:/…` and `D:\…` remain.
 - `git = "…"` is `project.dependency.git`.
@@ -20,16 +20,16 @@ The `admin-ui` compatibility feature can remain enabled.
 Diagnostics use `DATABASE_URL` or `database.url`. SQLite is opened read-only and only if its file already exists. Pending auth migrations appear as `migration.auth.pending`. Apply them with:
 
 ```powershell
-ferrioxid migrate up
+fexu migrate up
 ```
 
-This step is deliberately not part of `ferrioxid upgrade`.
+This step is deliberately not part of `fexu upgrade`.
 
 ## Files
 
-Without a manifest containing file hashes, Ferrioxid cannot classify a file as unchanged. `ferrioxid upgrade --yes` creates only `.ferrioxid/project.json` with `origin: legacy` and an empty file list. Models, routes, templates, static files, migrations and custom files remain byte-for-byte unchanged.
+Without a manifest containing file hashes, Fexu cannot classify a file as unchanged. `fexu upgrade --yes` creates only `.fexu/project.json` with `origin: legacy` and an empty file list. Models, routes, templates, static files, migrations and custom files remain byte-for-byte unchanged.
 
-A second `ferrioxid upgrade --yes` finds the manifest and does not change it.
+A second `fexu upgrade --yes` finds the manifest and does not change it.
 
 ## Not automatically
 
@@ -40,4 +40,4 @@ These points remain manual, even after the Legacy Manifest:
 - Users, roles and passwords
 - already applied migration files
 
-`ferrioxid doctor` does not infer missing storage routes from a `[storage]` section in `ferrioxid.toml`. It reports a missing directory as `project.file.missing` and explains that route registration cannot be determined from source code.
+`fexu doctor` does not infer missing storage routes from a `[storage]` section in `fexu.toml`. It reports a missing directory as `project.file.missing` and explains that route registration cannot be determined from source code.

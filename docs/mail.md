@@ -2,7 +2,7 @@
 
 [Overview](index.md) · SMTP: [mail-smtp.md](mail-smtp.md) · Security: [mail-security.md](mail-security.md) · Notifications: [notifications.md](notifications.md) · Password: [password-reset.md](password-reset.md)
 
-**Milestone:** v0.23. The Cargo version remains `0.1.0`. The crate is `ferrioxid-mail`. The facade is `ferrioxid::mail`.
+**Milestone:** v0.23. The Cargo version remains `0.1.0`. The crate is `fexu-mail`. The facade is `fexu::mail`.
 
 ## Purpose
 
@@ -17,7 +17,7 @@
 | `memory` |Holds the message in the process. `MemoryInbox::messages` returns them.|
 | `smtp` |An attempt via STARTTLS or implicit TLS. Details in [mail-smtp.md](mail-smtp.md).|
 
-`FERRIOXID_ENV=production` rejects `console` and `memory` and falls back to `disabled`. The password is never in `ferrioxid.toml`. SMTP reads `FERRIOXID_SMTP_USERNAME` and `FERRIOXID_SMTP_PASSWORD`.
+`FEXU_ENV=production` rejects `console` and `memory` and falls back to `disabled`. The password is never in `fexu.toml`. SMTP reads `FEXU_SMTP_USERNAME` and `FEXU_SMTP_PASSWORD`.
 
 ## Configuration
 
@@ -30,14 +30,14 @@ reset_ttl_minutes = 30
 
 For SMTP additionally `host`, `port`, `security = "starttls"` or `"tls"`, `from` and `timeout_secs` between 1 and 30. `reset_ttl_minutes` is between 5 and 1440. An active backend needs a plausible sender address and a trusted `public_origin`: `http://127.0.0.1`, `http://localhost` or `https` without user info, path, query and fragment. Keys `mail.password`, `mail.secret` and `mail.smtp_password` are an error.
 
-Environment variables override file settings: `FERRIOXID_MAIL_BACKEND`, `FERRIOXID_MAIL_FROM`, `FERRIOXID_MAIL_REPLY_TO`, `FERRIOXID_PUBLIC_ORIGIN`, `FERRIOXID_RESET_TTL_MINUTES`, `FERRIOXID_SMTP_HOST`, `FERRIOXID_SMTP_PORT`, `FERRIOXID_SMTP_SECURITY`, `FERRIOXID_SMTP_TIMEOUT_SECS`, `FERRIOXID_SMTP_USERNAME` and `FERRIOXID_SMTP_PASSWORD`.
+Environment variables override file settings: `FEXU_MAIL_BACKEND`, `FEXU_MAIL_FROM`, `FEXU_MAIL_REPLY_TO`, `FEXU_PUBLIC_ORIGIN`, `FEXU_RESET_TTL_MINUTES`, `FEXU_SMTP_HOST`, `FEXU_SMTP_PORT`, `FEXU_SMTP_SECURITY`, `FEXU_SMTP_TIMEOUT_SECS`, `FEXU_SMTP_USERNAME` and `FEXU_SMTP_PASSWORD`.
 
-`ferrioxid check` and `ferrioxid doctor` do not open network sockets. SMTP without `FERRIOXID_SMTP_PASSWORD` produces `mail.credentials`; `check --strict` exits with code 2 for this warning. `ferrioxid upgrade` does not rewrite existing `ferrioxid.toml` files. The current project template version is `0.24`.
+`fexu check` and `fexu doctor` do not open network sockets. SMTP without `FEXU_SMTP_PASSWORD` produces `mail.credentials`; `check --strict` exits with code 2 for this warning. `fexu upgrade` does not rewrite existing `fexu.toml` files. The current project template version is `0.24`.
 
 ## API
 
 ```rust
-use ferrioxid::mail::{MailConfig, MailMessage, MailService, Notice};
+use fexu::mail::{MailConfig, MailMessage, MailService, Notice};
 use std::time::Duration;
 
 let mail = MailService::open(&MailConfig {
@@ -71,7 +71,7 @@ mail.notify(Notice::PasswordChanged {
 let _ = Duration::from_secs(mail.reset_ttl_secs() as u64);
 ```
 
-`App::with_mail` and `ferrioxid::mail_for(&project)` are connected to the same service. The generated templates call `mail_for`. A new project compiles with `backend = "disabled"` and does not send an email at start.
+`App::with_mail` and `fexu::mail_for(&project)` are connected to the same service. The generated templates call `mail_for`. A new project compiles with `backend = "disabled"` and does not send an email at start.
 
 Errors are `mail.disabled`, `mail.invalid`, `mail.unavailable`, `mail.timeout` and `mail.rejected`. The display text is the code. SMTP responses and access data are not included. `Debug` for `SmtpSettings` replaces username and password with `[redacted]`.
 

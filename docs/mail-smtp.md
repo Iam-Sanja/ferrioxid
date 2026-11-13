@@ -9,7 +9,7 @@
 `security = "starttls"` uses `starttls_relay`. `security = "tls"` uses `relay` for implicit TLS. Both check the certificate on the rustls standard roots. Another value does not activate SMTP. The timeout is the smaller value of configuration and 30 seconds, at least one second. An expired timeout is `mail.timeout`. A rejected or failed handover is `mail.rejected`. A non-constructable transport is `mail.unavailable`. The library message is not logged because it can repeat access data.
 
 ```rust
-use ferrioxid::mail::{MailService, SmtpSecurity, SmtpSettings};
+use fexu::mail::{MailService, SmtpSecurity, SmtpSettings};
 use std::time::Duration;
 
 let mail = MailService::smtp(
@@ -17,8 +17,8 @@ let mail = MailService::smtp(
         host: "smtp.example.com".into(),
         port: 587,
         security: SmtpSecurity::Starttls,
-        username: std::env::var("FERRIOXID_SMTP_USERNAME").unwrap_or_default(),
-        password: std::env::var("FERRIOXID_SMTP_PASSWORD").unwrap_or_default(),
+        username: std::env::var("FEXU_SMTP_USERNAME").unwrap_or_default(),
+        password: std::env::var("FEXU_SMTP_PASSWORD").unwrap_or_default(),
         timeout: Duration::from_secs(15),
     },
     "noreply@example.com",
@@ -44,6 +44,6 @@ public_origin = "https://shop.example.com"
 reset_ttl_minutes = 30
 ```
 
-Username and password come from `FERRIOXID_SMTP_USERNAME` and `FERRIOXID_SMTP_PASSWORD`. If one of these is missing, the service remains deactivated and writes `mail.invalid` without giving the password.
+Username and password come from `FEXU_SMTP_USERNAME` and `FEXU_SMTP_PASSWORD`. If one of these is missing, the service remains deactivated and writes `mail.invalid` without giving the password.
 
 The workspace test does not address a public SMTP server. An error case against `127.0.0.1:9` only checks that the token is not usable afterwards and that the error code does not contain a secret.

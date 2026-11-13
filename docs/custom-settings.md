@@ -1,10 +1,10 @@
 # Custom settings
 
-[Overview](index.md) · Shared file: [settings.md](settings.md) · **Implemented file:** `crates/ferrioxid-migrations/src/project.rs`.
+[Overview](index.md) · Shared file: [settings.md](settings.md) · **Implemented file:** `crates/fexu-migrations/src/project.rs`.
 
 ## Purpose
 
-Application values are under `[custom.<name>]`. Ferrioxid stores it on the read `ProjectConfig` and converts a section into a structure that implements `serde::Deserialize`. There is no second parser and no singleton.
+Application values are under `[custom.<name>]`. Fexu stores it on the read `ProjectConfig` and converts a section into a structure that implements `serde::Deserialize`. There is no second parser and no singleton.
 
 ## File
 
@@ -27,7 +27,7 @@ struct ShopSettings {
     open: bool,
 }
 
-let settings = ferrioxid::migrations::Settings::discover(std::path::Path::new("."))?;
+let settings = fexu::migrations::Settings::discover(std::path::Path::new("."))?;
 let shop: ShopSettings = settings.project().custom_settings("shop")?;
 ```
 

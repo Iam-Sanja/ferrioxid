@@ -3,17 +3,17 @@ services:
     image: postgres:16-alpine
     restart: unless-stopped
     environment:
-      POSTGRES_DB: ferrioxid
-      POSTGRES_USER: ferrioxid
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-ferrioxid_dev_only}
+      POSTGRES_DB: fexu
+      POSTGRES_USER: fexu
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-fexu_dev_only}
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
-      - ferrioxid_pgdata:/var/lib/postgresql/data
+      - fexu_pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U ferrioxid -d ferrioxid"]
+      test: ["CMD-SHELL", "pg_isready -U fexu -d fexu"]
       interval: 5s
       timeout: 3s
       retries: 10
 volumes:
-  ferrioxid_pgdata:
+  fexu_pgdata:

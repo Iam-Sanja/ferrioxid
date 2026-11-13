@@ -1,14 +1,14 @@
 # Models
 
-[Overview](index.md) · Components: [model-components.md](model-components.md) · Timestamps: [model-timestamps.md](model-timestamps.md) · **Implemented:** `FerrioxidModel` in `crates/ferrioxid-macros`.
+[Overview](index.md) · Components: [model-components.md](model-components.md) · Timestamps: [model-timestamps.md](model-timestamps.md) · **Implemented:** `FexuModel` in `crates/fexu-macros`.
 
-A model is a Rust struct with `#[derive(FerrioxidModel)]`. That struct supplies columns, repository methods, JSON, REST routes and admin metadata.
+A model is a Rust struct with `#[derive(FexuModel)]`. That struct supplies columns, repository methods, JSON, REST routes and admin metadata.
 
 ```rust
-use ferrioxid::prelude::*;
+use fexu::prelude::*;
 
-#[derive(FerrioxidModel, ferrioxid::serde::Serialize, ferrioxid::serde::Deserialize)]
-#[ferrioxid(
+#[derive(FexuModel, fexu::serde::Serialize, fexu::serde::Deserialize)]
+#[fexu(
     table = "products",
     api = "/api/v1/products",
     allow_anonymous = true
@@ -30,19 +30,19 @@ pub struct Product {
 
 ## Decimal and choices
 
-`Decimal` comes from `rust_decimal` and is re-exported as `ferrioxid::core::Decimal`. A field declares its limits:
+`Decimal` comes from `rust_decimal` and is re-exported as `fexu::core::Decimal`. A field declares its limits:
 
 ```rust
 #[field(precision = 12, scale = 2)]
 pub price: Decimal,
 ```
 
-Precision is `1..=28` and scale is at most the precision. A value with extra fractional digits, such as `1.005` at scale 2, is a validation error. Ferrioxid does not round it. `0.1 + 0.2` stays `0.3` because the arithmetic is decimal, not binary floating point. `i64` minor units such as `price_cents` stay valid.
+Precision is `1..=28` and scale is at most the precision. A value with extra fractional digits, such as `1.005` at scale 2, is a validation error. Fexu does not round it. `0.1 + 0.2` stays `0.3` because the arithmetic is decimal, not binary floating point. `i64` minor units such as `price_cents` stay valid.
 
 SQLite stores the unscaled coefficient as a 16-byte `BLOB`. PostgreSQL stores the same bytes as `BYTEA`. The high bit is inverted and the rest is big-endian, so `ORDER BY` and range filters follow numeric order. JSON and fixture text use a decimal string. `rust_decimal` also accepts a JSON number when its lexical token is an exact decimal; writers in this crate emit strings. There is no currency column.
 
 ```rust
-#[derive(Clone, Copy, FerrioxidChoice)]
+#[derive(Clone, Copy, FexuChoice)]
 pub enum ProductStatus {
     #[choice(value = "draft", de = "Entwurf", en = "Draft")]
     Draft,

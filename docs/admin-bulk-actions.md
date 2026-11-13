@@ -29,4 +29,4 @@ Duplicate IDs count once. An unknown action, invalid UUID or exceeded selection 
 
 `App::bootstrap_schema` does not create foreign keys. The rollback test therefore rebuilds its product table with `ON DELETE RESTRICT`. In applications, foreign keys come from migrations.
 
-Code: `crates/ferrioxid-admin/src/actions.rs` and the `stage_bulk`, `show_bulk`, `apply_bulk` functions in `html.rs`. Template: `templates/models/bulk.html`.
+Code: `crates/fexu-admin/src/actions.rs` and the `stage_bulk`, `show_bulk`, `apply_bulk` functions in `html.rs`. Template: `templates/models/bulk.html`.

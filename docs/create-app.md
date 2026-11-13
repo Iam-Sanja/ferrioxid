@@ -5,18 +5,18 @@
 From a layout-2 project:
 
 ```powershell
-ferrioxid new app produkte
-ferrioxid new app berichte --templates shared
+fexu new app produkte
+fexu new app berichte --templates shared
 ```
 
-`project.apps_dir = "apps"` creates `apps/produkte`; `"."` creates `produkte/`. The generator checks names, destinations and all registration markers before writing. Existing app/template/model files are refused. It updates the module/install/schema markers in `src/apps.rs` and appends `[app.produkte]` with the matching migration directory to `ferrioxid.toml`, preserving other code.
+`project.apps_dir = "apps"` creates `apps/produkte`; `"."` creates `produkte/`. The generator checks names, destinations and all registration markers before writing. Existing app/template/model files are refused. It updates the module/install/schema markers in `src/apps.rs` and appends `[app.produkte]` with the matching migration directory to `fexu.toml`, preserving other code.
 
-Each app has `mod.rs`, `models/mod.rs`, `urls.rs`, `views.rs`, `admin.rs`, `migrations/.gitkeep`, `templates/produkte/index.html` and `static/produkte/produkte.css`. Its `FerrioxidApplication` type registers a named `produkte.index` HTML route at `/produkte`. Model/schema/admin functions initially contain no business models:
+Each app has `mod.rs`, `models/mod.rs`, `urls.rs`, `views.rs`, `admin.rs`, `migrations/.gitkeep`, `templates/produkte/index.html` and `static/produkte/produkte.css`. Its `FexuApplication` type registers a named `produkte.index` HTML route at `/produkte`. Model/schema/admin functions initially contain no business models:
 
 ```powershell
-ferrioxid generate model Customer --app produkte
-ferrioxid migrate make initial --app produkte
-ferrioxid migrate up
+fexu generate model Customer --app produkte
+fexu migrate make initial --app produkte
+fexu migrate up
 ```
 
 `--app` is required for models in layout 2. Migration history IDs are namespaced, such as `produkte:0001_initial`. Empty apps need no initial migration. Registration itself does not apply migrations.
