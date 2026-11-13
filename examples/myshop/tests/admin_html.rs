@@ -4088,10 +4088,11 @@ async fn html_many_to_many_respects_scope_and_keyboard_markup() {
     let db = ferrioxid::db::connect("sqlite::memory:").await.unwrap();
     ferrioxid::auth::apply_migrations(&db).await.unwrap();
     let auth = AuthService::new(db.clone(), AuthConfig::development());
-    auth.create_user("staff@example.com", "correct-horse-battery", true, false)
+    let password = format!("test-{}", ferrioxid::uuid::Uuid::new_v4());
+    auth.create_user("staff@example.com", &password, true, false)
         .await
         .unwrap();
-    auth.create_user("narrow@example.com", "correct-horse-battery", true, false)
+    auth.create_user("narrow@example.com", &password, true, false)
         .await
         .unwrap();
     for (role, codes) in [
@@ -4190,7 +4191,7 @@ async fn html_many_to_many_respects_scope_and_keyboard_markup() {
         Some(form(&[
             ("csrf_token", &login_csrf),
             ("email", "staff@example.com"),
-            ("password", "correct-horse-battery"),
+            ("password", password.as_str()),
             ("next", "/admin"),
         ])),
         format!("Cookie: ferrioxid_login_csrf={login_csrf}\r\n"),
@@ -4374,7 +4375,7 @@ async fn html_many_to_many_respects_scope_and_keyboard_markup() {
         Some(form(&[
             ("csrf_token", &narrow_csrf),
             ("email", "narrow@example.com"),
-            ("password", "correct-horse-battery"),
+            ("password", password.as_str()),
             ("next", "/admin"),
         ])),
         format!("Cookie: ferrioxid_login_csrf={narrow_csrf}\r\n"),
