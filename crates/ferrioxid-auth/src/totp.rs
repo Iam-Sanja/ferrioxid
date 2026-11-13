@@ -6,7 +6,7 @@
 use crate::error::AuthError;
 use crate::service::constant_eq;
 use aes_gcm::aead::{Aead, KeyInit, Payload};
-use aes_gcm::{Aes256Gcm, Nonce};
+use aes_gcm::{AeadCore, Aes256Gcm, Nonce};
 use argon2::password_hash::rand_core::{OsRng, RngCore};
 use hmac::{Hmac, Mac};
 use sha1::Sha1;
@@ -38,18 +38,17 @@ pub fn seal(
 ) -> Result<(String, String), AuthError> {
     let cipher = Aes256Gcm::new_from_slice(key)
         .map_err(|_| AuthError::Validation("mfa key is invalid".into()))?;
-    let mut nonce = [0u8; 12];
-    OsRng.fill_bytes(&mut nonce);
+    let nonce = Aes256Gcm::generate_nonce(&mut OsRng);
     let ciphertext = cipher
         .encrypt(
-            Nonce::from_slice(&nonce),
+            &nonce,
             Payload {
                 msg: plaintext,
                 aad: user_id.as_bytes(),
             },
         )
         .map_err(|_| AuthError::Validation("mfa secret could not be stored".into()))?;
-    Ok((hex(&nonce), hex(&ciphertext)))
+    Ok((hex(nonce.as_slice()), hex(&ciphertext)))
 }
 
 pub fn open(

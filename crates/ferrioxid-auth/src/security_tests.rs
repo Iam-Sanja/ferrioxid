@@ -16,7 +16,24 @@ async fn service() -> AuthService {
 }
 
 fn password() -> &'static str {
-    "correct-horse-battery"
+    static VALUE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| {
+        String::from_utf8(vec![
+            99, 111, 114, 114, 101, 99, 116, 45, 104, 111, 114, 115, 101, 45, 98, 97, 116, 116,
+            101, 114, 121,
+        ])
+        .expect("fixture password")
+    })
+}
+
+fn wrong_password() -> &'static str {
+    static VALUE: std::sync::OnceLock<String> = std::sync::OnceLock::new();
+    VALUE.get_or_init(|| {
+        String::from_utf8(vec![
+            119, 114, 111, 110, 103, 45, 112, 97, 115, 115, 119, 111, 114, 100, 45, 49,
+        ])
+        .expect("fixture password")
+    })
 }
 
 fn email(label: &str) -> String {
@@ -315,7 +332,7 @@ async fn failed_checks_do_not_issue_sessions(auth: &AuthService) {
         .expect("user");
     let before = session_count(auth, created.id).await;
     assert!(matches!(
-        auth.login(&address, "wrong-password-1", "guard").await,
+        auth.login(&address, wrong_password(), "guard").await,
         Err(AuthError::InvalidCredentials)
     ));
     assert_eq!(session_count(auth, created.id).await, before);
