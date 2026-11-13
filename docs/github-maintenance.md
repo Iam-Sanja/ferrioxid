@@ -7,7 +7,7 @@ The repository is already **public**. Use the [public release security checklist
 ## Tracked policies and workflows
 
 - [CI](../.github/workflows/ci.yml) validates main and PRs on Ubuntu and Windows, with a separate disposable PostgreSQL 16 job. PostgreSQL runs fresh framework initialization first, then HTTP and migration roundtrips.
-- [Security audit](../.github/workflows/security.yml) runs cargo-audit 0.22.2, preserves an unfiltered report and guards the existing RSA exception with an all-target enabled-dependency check.
+- [Security audit](../.github/workflows/security.yml) runs cargo-audit 0.22.2 without an advisory ignore and fails if RSA appears in the enabled dependency graph.
 - [Dependabot](../.github/dependabot.yml) proposes weekly Cargo and GitHub Actions updates; it does not merge them.
 - [CODEOWNERS](../.github/CODEOWNERS) routes changes to `@Iam-Sanja`; it grants no permissions and the current ruleset does not require code-owner approval.
 - [Issue forms](../.github/ISSUE_TEMPLATE/config.yml) disallow blank issues and link to the security policy; the [PR template](../.github/pull_request_template.md) requests validation and security considerations.

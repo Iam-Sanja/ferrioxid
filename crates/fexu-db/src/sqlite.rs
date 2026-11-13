@@ -51,6 +51,15 @@ struct Worker {
     fail_reopen: bool,
     #[cfg(test)]
     fail_rollback: bool,
+    #[cfg(test)]
+    hold: Option<Arc<Hold>>,
+}
+
+#[cfg(test)]
+struct Hold {
+    entered: AtomicBool,
+    release: std::sync::Mutex<bool>,
+    cvar: std::sync::Condvar,
 }
 
 #[derive(Clone, Debug)]
@@ -70,6 +79,8 @@ struct Inner {
     thread: std::sync::Mutex<Option<JoinHandle<()>>>,
     closed: AtomicBool,
     fatal: std::sync::Mutex<Option<String>>,
+    #[cfg(test)]
+    stopped: Arc<AtomicBool>,
 }
 
 #[derive(Clone)]
@@ -180,6 +191,22 @@ impl SqliteSession {
     }
 
     #[cfg(test)]
+    fn worker_stopped(&self) -> Arc<AtomicBool> {
+        Arc::clone(&self.inner.stopped)
+    }
+
+    #[cfg(test)]
+    async fn hold_next_statement(&self, hold: Arc<Hold>) {
+        let _permit = self.inner.gate.clone().lock_owned().await;
+        self.dispatch_locked(move |worker| {
+            worker.hold = Some(hold);
+            Ok(())
+        })
+        .await
+        .unwrap();
+    }
+
+    #[cfg(test)]
     pub(crate) async fn fail_next_rollback(&self) {
         let _permit = self.inner.gate.clone().lock_owned().await;
         let _ = self
@@ -249,14 +276,25 @@ impl SqliteSession {
     async fn start(target: Target) -> Result<Self, DbErr> {
         let (cmd, receiver) = mpsc::channel();
         let (ready_tx, ready_rx) = mpsc::sync_channel(1);
+        #[cfg(test)]
+        let thread_done = Arc::new(AtomicBool::new(false));
+        #[cfg(test)]
+        let serve_done = Arc::clone(&thread_done);
         let thread = std::thread::Builder::new()
             .name("fexu-sqlite".to_owned())
             .spawn(move || match Worker::open(target) {
                 Ok(worker) => {
                     let _ = ready_tx.send(Ok(()));
-                    serve(receiver, worker);
+                    serve(
+                        receiver,
+                        worker,
+                        #[cfg(test)]
+                        serve_done,
+                    );
                 }
                 Err(error) => {
+                    #[cfg(test)]
+                    serve_done.store(true, Ordering::SeqCst);
                     let _ = ready_tx.send(Err(error));
                 }
             })
@@ -273,6 +311,8 @@ impl SqliteSession {
                     thread: std::sync::Mutex::new(Some(thread)),
                     closed: AtomicBool::new(false),
                     fatal: std::sync::Mutex::new(None),
+                    #[cfg(test)]
+                    stopped: thread_done,
                 }),
             }),
             Err(error) => {
@@ -290,6 +330,12 @@ impl Drop for Inner {
         }
         let (reply, ready) = mpsc::sync_channel(1);
         let sent = self.cmd.send(Job::Shutdown(reply)).is_ok();
+        if ON_SQLITE_THREAD.with(|flag| flag.get()) {
+            // A cleanup job can own the last session. Joining from that job
+            // would wait for this same thread. serve() reads the shutdown
+            // after the job returns and exits with its rollback result.
+            return;
+        }
         let handle = self
             .thread
             .lock()
@@ -297,11 +343,16 @@ impl Drop for Inner {
             .take();
         // Wait here. A detached close checkpoints the WAL after the caller
         // has already read the file, so a read-only open would look like a write.
-        if sent {
-            let _ = ready.recv_timeout(Duration::from_secs(5));
-        }
+        // The worker never waits on this runtime, so the join cannot deadlock it.
         if let Some(handle) = handle {
             let _ = handle.join();
+        }
+        if sent {
+            if let Ok(Err(error)) = ready.try_recv() {
+                // Drop cannot return this. close() awaits the same shutdown
+                // and returns it. Print it so a failed rollback is not discarded.
+                eprintln!("SQLite shutdown rollback failed: {error}");
+            }
         }
     }
 }
@@ -436,7 +487,27 @@ impl Worker {
             fail_reopen: false,
             #[cfg(test)]
             fail_rollback: false,
+            #[cfg(test)]
+            hold: None,
         })
+    }
+
+    #[cfg(test)]
+    fn wait_if_held(&mut self) {
+        let Some(hold) = self.hold.take() else {
+            return;
+        };
+        hold.entered.store(true, Ordering::SeqCst);
+        let mut release = hold
+            .release
+            .lock()
+            .unwrap_or_else(|error| error.into_inner());
+        while !*release {
+            release = hold
+                .cvar
+                .wait(release)
+                .unwrap_or_else(|error| error.into_inner());
+        }
     }
 
     fn ensure(&self) -> Result<&rusqlite::Connection, DbErr> {
@@ -448,6 +519,8 @@ impl Worker {
     }
 
     fn execute(&mut self, sql: &str, params: &[SqlValue]) -> Result<u64, DbErr> {
+        #[cfg(test)]
+        self.wait_if_held();
         let changed = match self
             .ensure_mut()?
             .execute(sql, params_from_iter(params.iter()))
@@ -484,6 +557,8 @@ impl Worker {
     }
 
     fn query(&mut self, sql: &str, params: &[SqlValue]) -> Result<Vec<SqliteRecord>, DbErr> {
+        #[cfg(test)]
+        self.wait_if_held();
         let connection = self.ensure_mut()?;
         let mut statement = connection
             .prepare(sql)
@@ -622,7 +697,7 @@ impl Worker {
     }
 }
 
-fn serve(receiver: Receiver<Job>, mut worker: Worker) {
+fn serve(receiver: Receiver<Job>, mut worker: Worker, #[cfg(test)] stopped: Arc<AtomicBool>) {
     ON_SQLITE_THREAD.with(|flag| flag.set(true));
     while let Ok(job) = receiver.recv() {
         match job {
@@ -639,6 +714,8 @@ fn serve(receiver: Receiver<Job>, mut worker: Worker) {
             }
         }
     }
+    #[cfg(test)]
+    stopped.store(true, Ordering::SeqCst);
 }
 
 fn open_connection(target: &Target) -> Result<rusqlite::Connection, DbErr> {
@@ -860,7 +937,10 @@ pub(crate) fn bind_value(value: &Value) -> Result<SqlValue, DbErr> {
 
 #[cfg(test)]
 mod tests {
-    use super::SqliteSession;
+    use super::{Hold, SqliteSession};
+    use std::sync::atomic::{AtomicBool, Ordering};
+    use std::sync::Arc;
+    use std::time::Duration;
 
     fn file_url() -> (std::path::PathBuf, String) {
         let directory =
@@ -926,5 +1006,186 @@ mod tests {
         let error = session.execute("SELECT 1", &[]).await.unwrap_err();
         assert!(error.to_string().contains("stopped") || error.to_string().contains("closed"));
         std::fs::remove_dir_all(directory).unwrap();
+    }
+
+    fn finish_within(seconds: u64, work: impl FnOnce() + Send + 'static) {
+        let (done, wait) = std::sync::mpsc::channel();
+        let thread = std::thread::spawn(move || {
+            work();
+            let _ = done.send(());
+        });
+        match wait.recv_timeout(Duration::from_secs(seconds)) {
+            Ok(()) => thread.join().unwrap(),
+            Err(error) => panic!("SQLite shutdown did not finish: {error}"),
+        }
+    }
+
+    fn wait_until_stopped(flag: &AtomicBool) {
+        let started = std::time::Instant::now();
+        while !flag.load(Ordering::SeqCst) {
+            if started.elapsed() > Duration::from_secs(3) {
+                panic!("SQLite worker did not stop");
+            }
+            std::thread::yield_now();
+        }
+    }
+
+    fn current_thread() -> tokio::runtime::Runtime {
+        tokio::runtime::Builder::new_current_thread()
+            .enable_all()
+            .build()
+            .unwrap()
+    }
+
+    #[test]
+    fn current_thread_runtime_drop_closes_without_blocking_the_worker() {
+        finish_within(5, || {
+            current_thread().block_on(async {
+                let (directory, url) = file_url();
+                let session = SqliteSession::open_url(&url).await.unwrap();
+                let stopped = session.worker_stopped();
+                session
+                    .execute("CREATE TABLE seen (id INTEGER PRIMARY KEY)", &[])
+                    .await
+                    .unwrap();
+                drop(session);
+                wait_until_stopped(&stopped);
+                let again = SqliteSession::open_url(&url).await.unwrap();
+                let rows = again
+                    .query("SELECT name FROM sqlite_master WHERE name = 'seen'", &[])
+                    .await
+                    .unwrap();
+                assert_eq!(rows.len(), 1);
+                again.close().await.unwrap();
+                std::fs::remove_dir_all(directory).unwrap();
+            });
+        });
+    }
+
+    #[test]
+    fn dropping_the_last_session_inside_rollback_does_not_deadlock() {
+        finish_within(5, || {
+            current_thread().block_on(async {
+                let (directory, url) = file_url();
+                let session = SqliteSession::open_url(&url).await.unwrap();
+                let stopped = session.worker_stopped();
+                session
+                    .execute("CREATE TABLE kept (id INTEGER PRIMARY KEY)", &[])
+                    .await
+                    .unwrap();
+                session
+                    .execute("INSERT INTO kept (id) VALUES (1)", &[])
+                    .await
+                    .unwrap();
+                let transaction = session.transaction().await.unwrap();
+                transaction.execute("DELETE FROM kept", &[]).await.unwrap();
+                drop(session);
+                drop(transaction);
+                wait_until_stopped(&stopped);
+                let again = SqliteSession::open_url(&url).await.unwrap();
+                let rows = again.query("SELECT id FROM kept", &[]).await.unwrap();
+                assert_eq!(rows.len(), 1);
+                again.close().await.unwrap();
+                std::fs::remove_dir_all(directory).unwrap();
+            });
+        });
+    }
+
+    #[test]
+    fn drop_during_a_query_waits_for_that_query_then_stops() {
+        finish_within(5, || {
+            current_thread().block_on(async {
+                let (directory, url) = file_url();
+                let session = SqliteSession::open_url(&url).await.unwrap();
+                let stopped = session.worker_stopped();
+                let hold = Arc::new(Hold {
+                    entered: AtomicBool::new(false),
+                    release: std::sync::Mutex::new(false),
+                    cvar: std::sync::Condvar::new(),
+                });
+                session.hold_next_statement(Arc::clone(&hold)).await;
+                let running = session.clone();
+                let query = tokio::spawn(async move { running.query("SELECT 1", &[]).await });
+                while !hold.entered.load(Ordering::SeqCst) {
+                    tokio::task::yield_now().await;
+                }
+                let release = Arc::clone(&hold);
+                let releaser = std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(100));
+                    *release.release.lock().unwrap() = true;
+                    release.cvar.notify_one();
+                });
+                query.abort();
+                let _ = query.await;
+                drop(session);
+                releaser.join().unwrap();
+                wait_until_stopped(&stopped);
+                let again = SqliteSession::open_url(&url).await.unwrap();
+                again.close().await.unwrap();
+                std::fs::remove_dir_all(directory).unwrap();
+            });
+        });
+    }
+
+    #[test]
+    fn close_during_a_query_returns_instead_of_deadlocking() {
+        finish_within(5, || {
+            current_thread().block_on(async {
+                let (directory, url) = file_url();
+                let session = SqliteSession::open_url(&url).await.unwrap();
+                let hold = Arc::new(Hold {
+                    entered: AtomicBool::new(false),
+                    release: std::sync::Mutex::new(false),
+                    cvar: std::sync::Condvar::new(),
+                });
+                session.hold_next_statement(Arc::clone(&hold)).await;
+                let reader = session.clone();
+                let query = tokio::spawn(async move { reader.query("SELECT 1", &[]).await });
+                while !hold.entered.load(Ordering::SeqCst) {
+                    tokio::task::yield_now().await;
+                }
+                let release = Arc::clone(&hold);
+                let releaser = std::thread::spawn(move || {
+                    std::thread::sleep(Duration::from_millis(100));
+                    *release.release.lock().unwrap() = true;
+                    release.cvar.notify_one();
+                });
+                session.close().await.unwrap();
+                releaser.join().unwrap();
+                let result = tokio::time::timeout(Duration::from_secs(2), query)
+                    .await
+                    .expect("query did not finish after close")
+                    .unwrap();
+                match result {
+                    Ok(_) => {}
+                    Err(error) => {
+                        let message = error.to_string();
+                        assert!(
+                            message.contains("closed") || message.contains("stopped"),
+                            "{message}"
+                        );
+                    }
+                }
+                std::fs::remove_dir_all(directory).unwrap();
+            });
+        });
+    }
+
+    #[test]
+    fn failed_reopen_drop_on_the_worker_thread_does_not_deadlock() {
+        finish_within(5, || {
+            current_thread().block_on(async {
+                let (directory, url) = file_url();
+                let session = SqliteSession::open_url(&url).await.unwrap();
+                let stopped = session.worker_stopped();
+                session.fail_next_rollback().await;
+                session.fail_next_reopen().await;
+                let transaction = session.transaction().await.unwrap();
+                drop(session);
+                drop(transaction);
+                wait_until_stopped(&stopped);
+                std::fs::remove_dir_all(directory).unwrap();
+            });
+        });
     }
 }
