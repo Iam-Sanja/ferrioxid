@@ -200,7 +200,7 @@ PostgreSQL 18.6 auf `127.0.0.1` danach, nur über Wegwerfdatenbanken `ferrioxid_
 - TOTP und Recovery-Codes hängen am CSRF-Geheimnis. Details und der Folgeplan stehen in [auth-threat-model.md](auth-threat-model.md).
 - Issue #8 bleibt offen. `rsa 0.9.10` ist nur über `sqlx-mysql` im Lockfile. Der Abbau steht in [security-rsa.md](security-rsa.md). Die Ausnahme wird nicht erweitert.
 - Docker ist auf dieser Maschine nicht installiert. `deploy/compose.yaml` und `examples/deploy/compose.yaml` wurden nicht gestartet.
-- Playwright lief lokal nicht. Der erste Browser-Job auf `febc241` scheiterte, weil `ubuntu-latest` Ubuntu 26.04 ist und Playwright Chromium dort nicht installiert. Der Job ist auf `ubuntu-24.04` festgelegt. Sein neuer Lauf ist der Nachweis.
+- Playwright lief lokal nicht. Auf `febc241` installierte Playwright Chromium auf Ubuntu 26.04 nicht. Der Browser-Job läuft deshalb auf `ubuntu-24.04`. Auf `57f0266` startete `cargo run -p myshop` nicht, weil das Paket zusätzlich `ferrioxid-manage` enthält. `default-run` ist `myshop`, und der Job ruft `--bin myshop` auf. Der PostgreSQL-Job ist ebenfalls auf `ubuntu-24.04` festgelegt: der Client von `ubuntu-latest` schreibt `SET transaction_timeout`, und der Dienst `postgres:16` lehnt das ab. Der Nachweis ist der Lauf nach diesem Commit.
 
 ## Rollback
 

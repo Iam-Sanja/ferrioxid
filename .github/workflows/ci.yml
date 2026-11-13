@@ -75,7 +75,9 @@ jobs:
 
   postgres:
     name: PostgreSQL
-    runs-on: ubuntu-latest
+    # ubuntu-latest is 26.04 and installs a PostgreSQL 18 client. pg_dump then
+    # writes SET transaction_timeout, which the postgres:16 service rejects.
+    runs-on: ubuntu-24.04
     timeout-minutes: 45
     services:
       postgres:
@@ -191,9 +193,9 @@ jobs:
           FERRIOXID_BROWSER_BASE_URL: http://127.0.0.1:4173
         run: |
           mkdir -p /tmp/ferrioxid-browser
-          DATABASE_URL="sqlite:///tmp/ferrioxid-browser/browser.sqlite3?mode=rwc" BIND_ADDRESS=127.0.0.1:4173 cargo run -p myshop --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" >/tmp/ferrioxid-browser/server.log 2>&1 &
+          DATABASE_URL="sqlite:///tmp/ferrioxid-browser/browser.sqlite3?mode=rwc" BIND_ADDRESS=127.0.0.1:4173 cargo run -p myshop --bin myshop --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" >/tmp/ferrioxid-browser/server.log 2>&1 &
           echo $! > /tmp/ferrioxid-browser/server.pid
-          for i in $(seq 1 90); do
+          for i in $(seq 1 180); do
             if curl -fsS http://127.0.0.1:4173/admin/login >/dev/null; then
               npx playwright test
               status=$?
