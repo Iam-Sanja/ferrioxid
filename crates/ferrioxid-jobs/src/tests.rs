@@ -1123,6 +1123,132 @@ impl JobHandler for BoomJob {
 }
 
 #[tokio::test]
+async fn parallel_claims_and_idempotent_enqueue_keep_one_job() {
+    let (queue, _clock, path) = started().await;
+    let id = created(
+        &queue,
+        &Label {
+            label: "shared".into(),
+        },
+        When::now(),
+    )
+    .await;
+    let hits = Arc::new(AtomicU32::new(0));
+    let mut tasks = Vec::new();
+    for _ in 0..8 {
+        let queue = queue.clone();
+        let hits = hits.clone();
+        tasks.push(tokio::spawn(async move {
+            worker(queue, registry(hits, Arc::new(AtomicU32::new(0)), false))
+                .run_once()
+                .await
+        }));
+    }
+    let mut ran = 0;
+    for task in tasks {
+        if task.await.expect("join").expect("worker") {
+            ran += 1;
+        }
+    }
+    assert_eq!(ran, 1);
+    assert_eq!(hits.load(Ordering::SeqCst), 1);
+    let stored = queue.get(id).await.expect("finished");
+    assert_eq!(stored.status, JobStatus::Succeeded);
+    assert_eq!(stored.attempts, 1);
+
+    let mut tasks = Vec::new();
+    for _ in 0..12 {
+        let queue = queue.clone();
+        tasks.push(tokio::spawn(async move {
+            queue
+                .enqueue_json(
+                    CountJob::NAME,
+                    1,
+                    &Label {
+                        label: "same".into(),
+                    },
+                    When {
+                        idempotency_key: Some("parallel-once".into()),
+                        ..When::now()
+                    },
+                )
+                .await
+        }));
+    }
+    let mut created_count = 0;
+    let mut ids = std::collections::HashSet::new();
+    for task in tasks {
+        match task.await.expect("join").expect("enqueue") {
+            EnqueueOutcome::Created(id) => {
+                created_count += 1;
+                ids.insert(id);
+            }
+            EnqueueOutcome::Existing(id) => {
+                ids.insert(id);
+            }
+        }
+    }
+    assert_eq!(created_count, 1);
+    assert_eq!(ids.len(), 1);
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
+async fn schedule_errors_and_long_keys_leave_a_consistent_queue() {
+    let (queue, _clock, path) = started().await;
+    assert!(When::cron("bad", "61 * * * *", "utc").is_err());
+    assert!(When::cron("bad", "0 9 * * *", "Mars/Base").is_err());
+    let mixed = When {
+        interval_secs: Some(60),
+        schedule_key: Some("both".into()),
+        cron_expression: Some("0 9 * * *".into()),
+        cron_zone: Some("utc".into()),
+        ..When::now()
+    };
+    assert_eq!(
+        queue
+            .enqueue_json(
+                CountJob::NAME,
+                1,
+                &Label {
+                    label: "mixed".into(),
+                },
+                mixed,
+            )
+            .await
+            .expect_err("interval and cron")
+            .code(),
+        "job.schedule"
+    );
+    assert!(queue.list(10).await.expect("empty").is_empty());
+    let long_key = "k".repeat(70);
+    let scheduled = queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "long".into(),
+            },
+            When::every(&long_key, 60),
+        )
+        .await
+        .expect("long schedule key");
+    assert!(matches!(scheduled, EnqueueOutcome::Created(_)));
+    assert!(queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "too-long".into(),
+            },
+            When::every("k".repeat(81), 60),
+        )
+        .await
+        .is_err());
+    let _ = std::fs::remove_file(path);
+}
+
+#[tokio::test]
 #[ignore = "requires DATABASE_URL and a running PostgreSQL database"]
 async fn postgres_job_claim_and_rollback() {
     let url = std::env::var("DATABASE_URL").expect("DATABASE_URL");
@@ -1317,6 +1443,72 @@ async fn postgres_job_claim_and_rollback() {
         .expect("stopped");
     assert_eq!(
         queue.get(parked).await.expect("still pending").status,
+        JobStatus::Pending
+    );
+    let first = queue.database().begin().await.expect("first");
+    queue
+        .enqueue_json_on(
+            &first,
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "race".into(),
+            },
+            When {
+                idempotency_key: Some("pg-race".into()),
+                ..When::now()
+            },
+        )
+        .await
+        .expect("race insert");
+    let second = queue.database().begin().await.expect("second");
+    let racing = queue.clone();
+    let pending = tokio::spawn(async move {
+        racing
+            .enqueue_json_on(
+                &second,
+                CountJob::NAME,
+                1,
+                &Label {
+                    label: "race".into(),
+                },
+                When {
+                    idempotency_key: Some("pg-race".into()),
+                    ..When::now()
+                },
+            )
+            .await
+    });
+    tokio::time::sleep(std::time::Duration::from_millis(200)).await;
+    first.commit().await.expect("commit race");
+    match pending.await.expect("join race") {
+        Ok(EnqueueOutcome::Existing(_)) => {}
+        Err(error) => assert_eq!(error.code(), "job.conflict"),
+        Ok(EnqueueOutcome::Created(_)) => panic!("duplicate job became visible"),
+    }
+    queue
+        .enqueue_json(
+            CountJob::NAME,
+            1,
+            &Label {
+                label: "after-abort".into(),
+            },
+            When {
+                idempotency_key: Some("pg-after-abort".into()),
+                ..When::now()
+            },
+        )
+        .await
+        .expect("connection recovered");
+    clock.advance(8 * 24 * 60 * 60);
+    let removed = queue.retain().await.expect("retain");
+    assert!(
+        removed >= 1,
+        "retention must delete terminal PostgreSQL rows"
+    );
+    assert!(queue.get(kept).await.is_err());
+    assert_eq!(
+        queue.get(parked).await.expect("pending stays").status,
         JobStatus::Pending
     );
 }

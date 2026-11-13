@@ -35,15 +35,15 @@ pub fn open_download(key: &[u8], token: &str, now: i64) -> Result<(Uuid, Uuid), 
         return Err(StorageError::NotFound);
     }
     let expires_at: i64 = expires.parse().map_err(|_| StorageError::NotFound)?;
-    if expires_at <= now {
-        return Err(StorageError::Expired);
-    }
     let owner_id = Uuid::parse_str(owner).map_err(|_| StorageError::NotFound)?;
     let file_id = Uuid::parse_str(id).map_err(|_| StorageError::NotFound)?;
     let body = format!("v1.{owner}.{id}.{expires}");
     let expected = mac(key, body.as_bytes())?;
     if !constant_eq(presented.as_bytes(), expected.as_bytes()) {
         return Err(StorageError::NotFound);
+    }
+    if expires_at <= now {
+        return Err(StorageError::Expired);
     }
     Ok((owner_id, file_id))
 }
@@ -85,11 +85,21 @@ mod tests {
             open_download(key, &token, 1_699).expect("open"),
             (owner, id)
         );
-        assert!(open_download(key, &token, 1_700).is_err());
+        assert_eq!(
+            open_download(key, &token, 1_700),
+            Err(crate::StorageError::Expired)
+        );
         let mut forged = token.clone();
         forged.pop();
         forged.push('0');
-        assert!(open_download(key, &forged, 1_699).is_err());
+        assert_eq!(
+            open_download(key, &forged, 1_699),
+            Err(crate::StorageError::NotFound)
+        );
+        assert_eq!(
+            open_download(key, &forged, 1_700),
+            Err(crate::StorageError::NotFound)
+        );
         let other = b"abcdef0123456789abcdef0123456789";
         assert!(open_download(other, &token, 1_699).is_err());
         assert!(sign_download(b"short", owner, id, 1_700).is_err());
