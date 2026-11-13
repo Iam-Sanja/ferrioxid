@@ -5,11 +5,11 @@
 <input type="hidden" name="next" value="{{ next }}">
 <div class="field">
 <label for="email">{{ i18n.email }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
-<input id="email" name="email" type="email" autocomplete="username" required value="{{ email }}">
+<input id="email" name="email" type="email" autocomplete="username" required value="{{ email }}" {% if alert %}aria-invalid="true" aria-describedby="admin-alert"{% endif %}>
 </div>
 <div class="field">
 <label for="password">{{ i18n.password }} <span aria-hidden="true">*</span> <span class="hint">{{ i18n.required }}</span></label>
-<input id="password" name="password" type="password" autocomplete="current-password" required>
+<input id="password" name="password" type="password" autocomplete="current-password" required {% if alert %}aria-invalid="true" aria-describedby="admin-alert"{% endif %}>
 </div>
 <div class="actions">
 <button type="submit">{{ i18n.login }}</button>

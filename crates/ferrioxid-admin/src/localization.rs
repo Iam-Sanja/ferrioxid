@@ -84,6 +84,41 @@ const STRINGS: &[(&str, &str, &str)] = &[
         "Wählen Sie einen sichtbaren Eintrag.",
         "Choose a visible record.",
     ),
+    (
+        "form_errors",
+        "Bitte korrigieren Sie die markierten Felder.",
+        "Correct the marked fields.",
+    ),
+    (
+        "m2m_hint",
+        "Mehrere vorhandene Einträge können ausgewählt werden. Eine leere Auswahl entfernt die sichtbaren Verbindungen.",
+        "Several existing records can be selected. An empty selection removes the visible links.",
+    ),
+    (
+        "m2m_empty",
+        "Keine auswählbaren Einträge.",
+        "No records are available to select.",
+    ),
+    (
+        "m2m_truncated",
+        "Die Liste zeigt die ersten 100 sichtbaren Einträge. Bereits ausgewählte sichtbare Einträge bleiben erhalten.",
+        "The list shows the first 100 visible records. Already selected visible records stay listed.",
+    ),
+    (
+        "m2m_blocked",
+        "Die verbundenen Einträge können mit diesem Konto nicht gelesen werden.",
+        "This account cannot read the related records.",
+    ),
+    (
+        "m2m_invalid",
+        "Die Auswahl enthält einen ungültigen oder nicht sichtbaren Eintrag.",
+        "The selection contains an invalid or hidden record.",
+    ),
+    (
+        "m2m_size",
+        "Es können höchstens 1000 Verbindungen gespeichert werden.",
+        "At most 1000 links can be saved.",
+    ),
     ("cancel", "Abbrechen", "Cancel"),
     ("create", "Anlegen", "Create"),
     ("edit", "Bearbeiten", "Edit"),
@@ -507,6 +542,18 @@ pub fn validation_text(locale: &str, detail: &str) -> String {
     }
     if detail.contains("conflict.stale") {
         return catalog(locale)["inline_conflict"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
+    }
+    if detail.contains("admin.relation.size") {
+        return catalog(locale)["m2m_size"]
+            .as_str()
+            .unwrap_or(detail)
+            .to_owned();
+    }
+    if detail.contains("admin.relation") {
+        return catalog(locale)["m2m_invalid"]
             .as_str()
             .unwrap_or(detail)
             .to_owned();

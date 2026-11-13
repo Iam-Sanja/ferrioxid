@@ -34,6 +34,7 @@ pub struct ModelAdmin {
     fieldsets_set: bool,
     actions: Vec<(&'static str, &'static str)>,
     per_page: Option<u16>,
+    links: Vec<ManyLink>,
 }
 
 #[derive(Debug, Clone, Copy)]
@@ -42,6 +43,27 @@ struct FieldsetDecl {
     description: &'static str,
     optional: bool,
     fields: &'static [&'static str],
+}
+
+/// Geprüfte Many-to-Many-Angabe. Die HTML-Oberfläche schreibt sie über `replace_links`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ManyLink {
+    pub name: &'static str,
+    pub label: &'static str,
+    pub join_table: &'static str,
+    pub parent_column: &'static str,
+    pub child_column: &'static str,
+    pub child_key: &'static str,
+}
+
+impl ManyLink {
+    pub(crate) fn relation(self) -> ferrioxid_db::ManyToMany {
+        ferrioxid_db::ManyToMany {
+            join_table: self.join_table,
+            parent_column: self.parent_column,
+            child_column: self.child_column,
+        }
+    }
 }
 
 #[derive(Debug, Clone)]
@@ -53,6 +75,7 @@ pub struct CheckedModelAdmin {
     ordering_replaced: bool,
     actions: Vec<(&'static str, &'static str)>,
     per_page: Option<u16>,
+    links: Vec<ManyLink>,
 }
 
 impl ModelAdmin {
@@ -69,6 +92,7 @@ impl ModelAdmin {
             fieldsets_set: false,
             actions: Vec::new(),
             per_page: None,
+            links: Vec::new(),
         }
     }
 
@@ -128,6 +152,29 @@ impl ModelAdmin {
 
     pub fn per_page(mut self, per_page: u16) -> Self {
         self.per_page = Some(per_page);
+        self
+    }
+
+    /// Bestehende Kinddatensätze über eine Verbindungstabelle. Wirksam nach `seal`.
+    ///
+    /// `name` darf keine Modellspalte sein. `child_key` muss beim Versiegeln registriert sein.
+    pub fn many_to_many(
+        mut self,
+        name: &'static str,
+        label: &'static str,
+        join_table: &'static str,
+        parent_column: &'static str,
+        child_column: &'static str,
+        child_key: &'static str,
+    ) -> Self {
+        self.links.push(ManyLink {
+            name,
+            label,
+            join_table,
+            parent_column,
+            child_column,
+            child_key,
+        });
         self
     }
 
@@ -220,6 +267,7 @@ impl ModelAdmin {
             }
             actions.push((*action, *code));
         }
+        let links = checked_links(&self.links, columns)?;
         Ok(CheckedModelAdmin {
             key: self.key,
             fields,
@@ -228,6 +276,7 @@ impl ModelAdmin {
             ordering_replaced,
             actions,
             per_page: self.per_page,
+            links,
         })
     }
 }
@@ -260,6 +309,55 @@ impl CheckedModelAdmin {
     pub(crate) fn per_page(&self) -> Option<u16> {
         self.per_page
     }
+
+    pub(crate) fn links(&self) -> &[ManyLink] {
+        &self.links
+    }
+}
+
+fn checked_links(links: &[ManyLink], columns: &[ColumnSpec]) -> Result<Vec<ManyLink>, ConfigError> {
+    if links.len() > 8 {
+        return Err(error(
+            "admin.relation",
+            "A model can declare at most 8 many-to-many widgets.".into(),
+        ));
+    }
+    let mut checked = Vec::new();
+    for link in links {
+        if !ident(link.name)
+            || columns.iter().any(|column| column.name == link.name)
+            || checked
+                .iter()
+                .any(|existing: &ManyLink| existing.name == link.name)
+        {
+            return Err(error(
+                "admin.relation",
+                format!("`{}` is not a free many-to-many name.", link.name),
+            ));
+        }
+        if !ident(link.join_table)
+            || !ident(link.parent_column)
+            || !ident(link.child_column)
+            || !ident(link.child_key)
+            || link.parent_column == link.child_column
+        {
+            return Err(error(
+                "admin.relation",
+                format!("`{}` does not name a safe join table.", link.name),
+            ));
+        }
+        if link.label.is_empty()
+            || link.label.len() > 80
+            || link.label.chars().any(|char| char.is_control())
+        {
+            return Err(error(
+                "admin.relation",
+                format!("`{}` needs a short visible label.", link.name),
+            ));
+        }
+        checked.push(*link);
+    }
+    Ok(checked)
 }
 
 #[derive(Clone, Copy)]
@@ -567,5 +665,23 @@ mod tests {
         let gap = super::relation_targets_registered(&columns(), &["notes"]);
         assert!(gap.unwrap_err().contains("users"));
         super::relation_targets_registered(&columns(), &["notes", "users"]).unwrap();
+    }
+
+    #[test]
+    fn many_to_many_rejects_column_names_and_unsafe_joins() {
+        let checked = ModelAdmin::new("notes")
+            .many_to_many("tags", "Tags", "note_tags", "note_id", "tag_id", "tags")
+            .check(&meta(), &columns())
+            .unwrap();
+        assert_eq!(checked.links().len(), 1);
+        assert_eq!(checked.links()[0].child_key, "tags");
+        let column = ModelAdmin::new("notes")
+            .many_to_many("title", "Tags", "note_tags", "note_id", "tag_id", "tags")
+            .check(&meta(), &columns());
+        assert_eq!(column.unwrap_err().code, "admin.relation");
+        let same = ModelAdmin::new("notes")
+            .many_to_many("tags", "Tags", "note_tags", "tag_id", "tag_id", "tags")
+            .check(&meta(), &columns());
+        assert_eq!(same.unwrap_err().code, "admin.relation");
     }
 }

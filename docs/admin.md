@@ -41,6 +41,8 @@ App::new(db).with_auth(auth).with_admin(admin)
 
 The surface is below `http://127.0.0.1:3000/admin`. The API is under `/admin/api`.
 
+`ModelAdmin::many_to_many` adds one checkbox group to the existing record form. The browser posts `m2m_present` and repeated `m2m.{name}` values. The server accepts only UUIDs that the current user can read on the child model, keeps links outside that scope, and writes the join rows with `replace_links` after the parent row is saved. An empty posted selection clears the visible links. A missing `m2m_present` marker leaves the join table unchanged. Invalid or hidden ids are rejected before `replace_links`. The parent write and the join write stay two existing calls: the join write is one transaction, and a failed join write redisplays the form instead of reporting success. The checkbox list shows the first 100 visible children plus already selected visible rows.
+
 ## Typed configuration
 
 `ModelAdmin` narrows an existing `AdminModelMeta`. It does not start a second admin. Call `check` with the model metadata and columns, then `AdminRegistry::configure`, then `seal`. Until `seal`, the derive metadata stays in effect. A configuration can reduce list, search and filter fields, mark more fields readonly or hidden, replace fieldsets, set ordering and page size, and require an extra `resource.action` code through `holds`. It cannot reveal a sensitive or hidden field. Foreign keys of a configured model must point at a table that is also in the registry. Inlines stay on the model derive. Has-many editing remains `save_with_children`. Many-to-many membership uses `replace_links` inside one transaction. The HTML picker already pages past 100 rows; the select shows the first 100 and links to that search.
@@ -71,11 +73,13 @@ Admin model and directory requests require a valid session and `is_staff = true`
 
 ## Tests
 
-`examples/myshop/tests/admin_http.rs` covers the JSON API. `examples/myshop/tests/admin_html.rs` covers login, lists, search, filters, sorting, pagination, CRUD forms, user management, confirmation, relation labels, CSRF and HTML escaping.
+`examples/myshop/tests/admin_http.rs` covers the JSON API. `examples/myshop/tests/admin_html.rs` covers login, lists, search, filters, sorting, pagination, CRUD forms, user management, confirmation, relation labels, CSRF, HTML escaping, many-to-many selection, and keyboard-related form markup.
 
 ## Limitations
 
 General plugin hooks, OAuth, MFA and multi-tenancy are not implemented. The admin supports German and English. It cannot grant superuser access or physically delete users. Directory management requires a staff superuser and uses dedicated create, edit and password routes rather than generic model CRUD. Deactivation is the supported alternative to deletion.
+
+The HTML admin aims at clearer labels, focus, and validation text. That is not a WCAG 2.2 AA conformance claim. A screen reader was not run. Contrast was not measured. Table-row clicks remain a mouse enhancement; the record link is the keyboard path. The many-to-many widget does not page inside the checkbox list. Login rate limits use the error page.
 
 ## Later
 

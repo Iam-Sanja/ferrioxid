@@ -16,19 +16,27 @@
 <p class="brand-note">{{ site_header }}</p>
 <nav aria-label="{{ i18n.navigation }}">
 {% for section in nav_sections %}
-{% if section.label %}<p class="nav-label">{{ section.label }}</p>{% endif %}
+{% if section.label %}<p class="nav-label" id="nav-{{ section.key }}">{{ section.label }}</p>{% endif %}
 {% if section.key == "apps" %}
 {% if section.empty %}<p class="nav-empty">{{ i18n.no_models }}</p>{% endif %}
+<ul {% if section.label %}aria-labelledby="nav-{{ section.key }}"{% endif %}>
 {% for group in section.groups %}
-<p class="nav-app">{{ group.label }}</p>
+<li>
+<p class="nav-app" id="nav-{{ section.key }}-{{ loop.index }}">{{ group.label }}</p>
+<ul aria-labelledby="nav-{{ section.key }}-{{ loop.index }}">
 {% for item in group.items %}
-<a class="nav-child" href="{{ item.href | safe }}" {% if item.current %}aria-current="page"{% endif %}>{{ item.label }}</a>
+<li><a class="nav-child" href="{{ item.href | safe }}" {% if item.current %}aria-current="page"{% endif %}>{{ item.label }}</a></li>
 {% endfor %}
+</ul>
+</li>
 {% endfor %}
+</ul>
 {% else %}
+<ul {% if section.label %}aria-labelledby="nav-{{ section.key }}"{% endif %}>
 {% for item in section.items %}
-<a href="{{ item.href | safe }}" {% if item.current %}aria-current="page"{% endif %}>{{ item.label }}</a>
+<li><a href="{{ item.href | safe }}" {% if item.current %}aria-current="page"{% endif %}>{{ item.label }}</a></li>
 {% endfor %}
+</ul>
 {% endif %}
 {% endfor %}
 </nav>
@@ -47,14 +55,14 @@
 <form class="prefs" method="post" action="/admin/preferences" data-track-dirty="prefs">
 <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 <input type="hidden" name="next" value="{{ current_path }}">
-<label>{{ i18n.language }}
-<select name="locale">
+<label for="pref-locale">{{ i18n.language }}
+<select id="pref-locale" name="locale">
 <option value="de" {% if locale == "de" %}selected{% endif %}>Deutsch</option>
 <option value="en" {% if locale == "en" %}selected{% endif %}>English</option>
 </select>
 </label>
-<label>{{ i18n.theme }}
-<select name="theme">
+<label for="pref-theme">{{ i18n.theme }}
+<select id="pref-theme" name="theme">
 <option value="system" {% if theme == "system" %}selected{% endif %}>{{ i18n.system }}</option>
 <option value="light" {% if theme == "light" %}selected{% endif %}>{{ i18n.light }}</option>
 <option value="dark" {% if theme == "dark" %}selected{% endif %}>{{ i18n.dark }}</option>
@@ -72,7 +80,7 @@
 {% endif %}
 </header>
 {% if notice %}<p class="notice" role="status" tabindex="-1" {% if not alert %}autofocus{% endif %}>{{ notice }}</p>{% endif %}
-{% if alert %}<p class="alert" role="alert">{{ alert }}</p>{% endif %}
+{% if alert %}<p class="alert" id="admin-alert" role="alert" tabindex="-1" autofocus>{{ alert }}</p>{% endif %}
 <main id="content">{% block content %}{% endblock %}</main>
 </div>
 </div>
