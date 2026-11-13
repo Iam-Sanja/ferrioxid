@@ -191,6 +191,12 @@ fn finish(
 
 async fn wait_for(flight: Arc<Flight>) -> Result<Vec<u8>, CacheError> {
     loop {
+        // Subscribe before reading the slot. `notify_waiters` does not store a
+        // permit, so a producer that finishes in that gap would leave the waiter
+        // parked forever.
+        let notified = flight.notify.notified();
+        tokio::pin!(notified);
+        notified.as_mut().enable();
         if let Some(result) = flight
             .result
             .lock()
@@ -199,7 +205,7 @@ async fn wait_for(flight: Arc<Flight>) -> Result<Vec<u8>, CacheError> {
         {
             return result;
         }
-        flight.notify.notified().await;
+        notified.await;
     }
 }
 
