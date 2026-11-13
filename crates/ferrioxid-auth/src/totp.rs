@@ -367,6 +367,7 @@ mod tests {
         accept_totp, legacy_mfa_key, legacy_reauth_proof, open, open_stored, recovery_format,
         recovery_hash, seal, seal_format, totp_code, RecoveryFormat, SealFormat,
     };
+    use argon2::password_hash::rand_core::{OsRng, RngCore};
     use uuid::Uuid;
 
     #[test]
@@ -387,8 +388,11 @@ mod tests {
 
     #[test]
     fn sealed_secret_is_bound_to_the_user_and_codes_do_not_repeat() {
-        let legacy = legacy_mfa_key(b"ferrioxid-dev-csrf-key-32-bytes!");
-        let mfa = *b"ferrioxid-dev-mfa-key-32-bytes!!";
+        let mut csrf_material = [0u8; 32];
+        let mut mfa = [0u8; 32];
+        OsRng.fill_bytes(&mut csrf_material);
+        OsRng.fill_bytes(&mut mfa);
+        let legacy = legacy_mfa_key(&csrf_material);
         let user = Uuid::new_v4();
         let secret = b"12345678901234567890";
         let (nonce, ciphertext) = seal(&legacy, user, secret).unwrap();

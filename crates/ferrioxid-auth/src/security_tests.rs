@@ -1,6 +1,7 @@
 //! Sicherheitsprüfungen für den zweiten Faktor, Sitzungen und Kontoschluss.
 
 use crate::{AuthConfig, AuthError, AuthService, RemoteProtocol};
+use argon2::password_hash::rand_core::{OsRng, RngCore};
 use axum::body::Body;
 use axum::http::{Request, StatusCode};
 use axum::Router;
@@ -549,7 +550,9 @@ async fn legacy_totp_migrates_and_recovery_hashes_stay_until_used() {
     assert_eq!(remaining[0].1, second_hash);
 
     let mut rotated = auth.config().clone();
-    rotated.csrf_secret = *b"rotated-csrf-secret-32-bytes!!!!";
+    let mut rotated_csrf = [0u8; 32];
+    OsRng.fill_bytes(&mut rotated_csrf);
+    rotated.csrf_secret = rotated_csrf;
     let rotated = AuthService::new(auth.database().clone(), rotated);
     let crate::AuthError::MfaPending(after) = rotated
         .login(&address, password(), "rotated")

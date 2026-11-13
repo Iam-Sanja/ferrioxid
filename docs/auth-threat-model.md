@@ -29,7 +29,7 @@ The login rate limit and the MFA attempt limit live in process memory. A restart
 
 The reauthentication proof can be replayed on the same session until it expires. Password change still revokes sessions.
 
-`FERRIOXID_MFA_KEY` is 32 bytes, encoded as 64 hexadecimal characters with no prefix. Those bytes are the AES-256-GCM key. There is no `FERRUM_MFA_KEY` alias. Production refuses to start when the variable is missing or not 64 hex characters, and the error does not include the value. Development reads `.ferrioxid/mfa.key` as 32 raw bytes, or creates that file once. `AuthConfig::development` uses a fixed key that is not the CSRF development key.
+`FERRIOXID_MFA_KEY` is 32 bytes, encoded as 64 hexadecimal characters with no prefix. Those bytes are the AES-256-GCM key. There is no `FERRUM_MFA_KEY` alias. Production refuses to start when the variable is missing or not 64 hex characters, and the error does not include the value. Development reads `.ferrioxid/mfa.key` as 32 raw bytes, or creates that file once. `AuthConfig::development` draws a process-local random MFA key. It is not the CSRF development key and it is not a published constant.
 
 New TOTP rows store the nonce as `v2.` plus 24 hex characters. New recovery records store `v2.` plus a 64-hex HMAC-SHA256 over the label `ferrioxid-recovery-v2`, the user id and the normalized code. A legacy nonce is exactly 24 hex characters and opens only with HMAC-SHA256 of the CSRF secret and the label `ferrioxid-mfa-v1`. A legacy recovery record is exactly 64 hex characters and uses the label `ferrioxid-recovery-v1` with that same derived key. A password hash, including an Argon2 PHC string, matches neither format and is not decrypted.
 

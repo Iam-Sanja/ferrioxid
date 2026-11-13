@@ -75,7 +75,7 @@ impl AuthConfig {
             login_max_attempts: 5,
             login_window_secs: 15 * 60,
             csrf_secret: *b"ferrioxid-dev-csrf-key-32-bytes!",
-            mfa_key: *b"ferrioxid-dev-mfa-key-32-bytes!!",
+            mfa_key: development_mfa_key(),
         }
     }
 
@@ -251,6 +251,15 @@ fn load_csrf_secret() -> Result<[u8; 32], String> {
         tracing::warn!("CSRF-Schlüsseldatei konnte nicht geschrieben werden. Der Prozessschlüssel gilt nur bis zum Neustart.");
     }
     Ok(secret)
+}
+
+fn development_mfa_key() -> [u8; 32] {
+    static KEY: std::sync::OnceLock<[u8; 32]> = std::sync::OnceLock::new();
+    *KEY.get_or_init(|| {
+        let mut key = [0u8; 32];
+        getrandom::getrandom(&mut key).expect("mfa key");
+        key
+    })
 }
 
 fn load_mfa_key(environment: Environment) -> Result<[u8; 32], String> {
