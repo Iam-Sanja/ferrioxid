@@ -58,18 +58,20 @@ Compiler: `rustc 1.98.1` and `cargo 1.98.1` on Windows. Edition is 2021. `rust-t
 
 ## Re-check on work/release-readiness-final
 
-The same dry-run, without `--allow-dirty`, was repeated after the cherry-pick onto `26e79f2`. Upload was aborted in every successful run.
+The same dry-run, without `--allow-dirty`, was repeated after the cherry-pick onto `26e79f2` and again after merging `5e7525c`. The table is the later measurement. Upload was aborted in every successful run.
 
 | Crate | Result | Archive |
 |---|---|---|
 | `ferrioxid-core` | Verified | 12 files, 88.5KiB (25.0KiB compressed) |
 | `ferrioxid-macros` | Verified | 8 files, 113.4KiB (21.8KiB compressed) |
-| `ferrioxid-cache` | Verified | 11 files, 40.3KiB (12.2KiB compressed) |
+| `ferrioxid-cache` | Verified | 11 files, 46.1KiB (13.1KiB compressed) |
 | `ferrioxid-static` | Verified | 6 files, 36.1KiB (12.1KiB compressed) |
 | `ferrioxid-middleware` | Verified | 6 files, 42.1KiB (13.6KiB compressed) |
 | `ferrioxid-mail` | Stopped. crates.io has no `ferrioxid-core` 0.1.0. | Not produced |
 
-`cargo metadata --locked` and `cargo check -p ferrioxid -p ferrioxid-cli -p ferrioxid-cache -p ferrioxid-static -p ferrioxid-mail` passed. The full workspace test suite was not repeated on this branch.
+After the merge of `5e7525c` (#110), the dry-run was repeated. `ferrioxid-cache` is the archive that changed, from 40.3KiB (12.2KiB compressed) to the size above. The other successful archives kept the sizes in the table. `ferrioxid-mail` again stopped because crates.io has no `ferrioxid-core` 0.1.0.
+
+On that merged head, `cargo fmt --all -- --check`, `cargo clippy --workspace --all-targets -- -D warnings`, `cargo test --workspace`, `cargo build --workspace`, and `cargo metadata --locked` passed. The ignored PostgreSQL tests were left to the GitHub PostgreSQL job.
 
 ## Release blockers
 
@@ -78,7 +80,7 @@ The same dry-run, without `--allow-dirty`, was repeated after the cherry-pick on
 - The SQLite patch below blocks publishing any crate whose graph includes `sqlx-sqlite`.
 - MSRV is not measured. `libsqlite3-sys` 0.39 requires Rust 1.88 or newer. That floor is not a measured minimum for the whole workspace.
 - The rename to Fexu is planned in [fexu-rename-plan.md](fexu-rename-plan.md) and was not performed. Publish the renamed crates once, not both names.
-- This branch is `work/release-readiness-final`, cut from `origin/main` at `26e79f2` (`#101` squashed). It cherry-picks only the three release commits from `work/release-readiness`. Pull requests #102 and #105 were not changed.
+- This branch is `work/release-readiness-final`. It started from `origin/main` at `26e79f2` (`#101` squashed), cherry-picks only the three release commits from `work/release-readiness`, and then merges `origin/main` at `5e7525c` (`#110`). Pull requests #102 and #105 were not changed.
 
 ## SQLite patch for external users
 
