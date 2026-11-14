@@ -67,7 +67,7 @@ Proposed ADR topics: macro/ORM strategy, schema format, access policy, the admin
 
 ## 7. Next admin phases
 
-Read [roadmap.md](roadmap.md) before extending the admin. Milestones through v0.28 are implemented, including date/time fields in v0.19. Keep planned work separate from those existing features.
+Read [roadmap.md](roadmap.md) before extending the admin. Historical feature milestones through v0.28 are implemented in source, not Cargo releases. Consult the current roadmap and keep proposals separate from available features.
 
 Impeccable, a Cloudflare audit skill, sub-mode and ponytail are not stored in the work tree as a skill. Don't install them on the side. Read a skill only after express consent and only for the phase that calls it. No skill or hook generates commits or pushes.
 
