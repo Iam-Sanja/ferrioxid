@@ -103,7 +103,7 @@ v0.24 mounts named application routes on the same router through `App::urls`. `U
 | `fexu-api` | `fexu-db` | Generic `M: ModelRepository` bound | `crates/fexu-api/src/lib.rs` |
 | `myshop` | `fexu` | `prelude`, `db::connect`, `App` | `crates/fexu/src/lib.rs` |
 
-## 6. Architecture for later modules (planned, not implemented)
+## 6. Historical architecture proposals (check actual implementation below)
 
 ```text
 Rust-Modelle + Makros
@@ -125,7 +125,7 @@ Rust-Modelle + Makros
 - `CREATE TABLE IF NOT EXISTS` does not report schema drift.
 - OpenAPI 3.1 is generated from registered model metadata. A general plugin system is not implemented. Auth, migrations and the native admin are available.
 
-## 8. Admin writes in v0.18
+## 8. Admin writes (implemented; historical milestone v0.18)
 
 `ModelRepository` exposes `get_tx`, `create_tx`, `update_tx` and `delete_tx` on `&DatabaseTransaction`. SQL helpers accept `&impl ConnectionTrait`. `ManagedModel::update` and `remove` receive the `AuthUser`. Admin creates, updates and deletes write the record and `_fexu_admin_audit` in one transaction; a failure rolls back both. Direct repository calls do not write admin audit entries.
 
