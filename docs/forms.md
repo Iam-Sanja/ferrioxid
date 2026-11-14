@@ -1,6 +1,6 @@
 # Forms
 
-**Milestone:** v0.19, with widget and model-binding additions in review. The Cargo version remains `0.1.0`. `required_date`, `optional_date`, `required_time`, `optional_time`, `required_datetime_utc` and `required_datetime_local` check the canonical strings. The local DateTime field is considered UTC.
+**Current package version:** `0.1.0` (experimental). Widget and model-binding additions are on `main`; historical `v0.19` is an internal milestone, not a registry version. `required_date`, `optional_date`, `required_time`, `optional_time`, `required_datetime_utc` and `required_datetime_local` check the canonical strings. The local DateTime field is considered UTC.
 
 ## Responsibility
 
