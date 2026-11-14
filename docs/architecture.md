@@ -21,7 +21,7 @@
 examples/myshop → fexu (Fassade)
                     ├── fexu-core
                     ├── fexu-macros
-                    ├── fexu-db → fexu-core, SeaORM
+                    ├── fexu-db → fexu-core, SeaQuery, rusqlite (SQLite), sqlx-postgres/sqlx-core (PostgreSQL)
                     ├── fexu-auth → fexu-core, fexu-db, fexu-migrations
                     ├── fexu-admin → fexu-auth, fexu-core, fexu-db
                     ├── fexu-api → fexu-admin, fexu-auth, fexu-core, fexu-db, fexu-static, fexu-middleware, Axum
