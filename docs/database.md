@@ -10,7 +10,7 @@ SQLite uses `max_connections(1)`. During a write transaction, no call may reques
 
 ## Responsibility (Implemented)
 
-- `connect(url)` opens SeaORM. URLs with `sqlite:` set the pool to a connection and activate `PRAGMA foreign_keys=ON`.
+- `connect(url)` opens the Fexu database driver. SQLite uses a dedicated worker-thread connection through bundled rusqlite, with `PRAGMA foreign_keys=ON`; PostgreSQL uses the SQLx PostgreSQL driver. See [database driver](database-driver.md).
 - Without set `DATABASE_URL`, myshop uses `DEFAULT_SQLITE_URL`: `sqlite://db.sqlite3?mode=rwc`. The path is relative to the working directory of the process.
 - `ModelRepository` is the public interface for `list`, `get`, `create`, `update` and `delete`. Each method also has a `_scoped` variant accepting a `QueryScope`. Handlers do not need to know the SQL dialect. See [query-scopes.md](query-scopes.md).
 - There is a query implementation. SeaQuery renders SQLite or PostgreSQL. MySQL is rejected.
@@ -214,7 +214,7 @@ Text, email and slug rules from `update_record` are not repeated here. `rows_aff
 
 `render_schema` stores a Fexu UUID as SQLite `TEXT` and PostgreSQL `UUID`. Do not change that. A column that an application created as `BLOB` is different: `sea_orm::Value::Uuid` matches the bytes SQLite stored for a typed UUID, while `Value::String` of the hyphenated text does not. `Statement::from_sql_and_values` with `Value::Uuid` is the raw-SQL form. Prefer `Item::query()` so the column type comes from the model. `sqlite_uuid_text_does_not_match_a_blob_parameter` demonstrates the mismatch. Case-insensitive text search uses `LOWER`, which on SQLite folds ASCII only; `München` does not match `MÜNCHEN` there.
 
-`QueryCounter` counts model queries on the current thread. Call `QueryCounter::record` after a direct statement you want included. Direct SeaORM calls and failed direct statements stay uncounted. Independent threads do not share the counter.
+`QueryCounter` counts model queries on the current thread. Call `QueryCounter::record` after a direct statement you want included. Direct `ConnectionTrait` calls and failed direct statements stay uncounted unless explicitly recorded. Independent threads do not share the counter.
 
 ## Admin lists
 
