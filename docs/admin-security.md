@@ -74,4 +74,4 @@ History does not store sensitive values. A staff without a superuser only sees e
 
 ## Later
 
-A directory administrator separate from the superuser. OAuth, MFA and individually revocable CSRF tokens per tab are planned and not implemented.
+A directory administrator separate from the superuser, OAuth/OIDC sign-in and individually revocable CSRF tokens per browser tab are not implemented. TOTP-based MFA with recovery codes is implemented for local accounts; see [auth providers](auth-providers.md).
