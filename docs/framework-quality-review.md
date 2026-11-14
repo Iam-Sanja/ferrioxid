@@ -2,7 +2,7 @@
 
 [Overview](index.md) · [Capability matrix](django-capability-matrix.md) · [Roadmap](roadmap.md)
 
-This note describes the local branch `feat/framework-completion`. It is a stable, integrated development snapshot of the work that has tests and documentation. It is not a numbered release, and it does not set a first public version.
+**Historical development snapshot:** this note describes `feat/framework-completion` as it existed during an earlier review. Its 'In PR', 'not merged' and local test claims are preserved as historical evidence; the documented features have since been integrated into `main`. For current implementation, test status and release guidance, consult the [roadmap](roadmap.md), [capability matrix](django-capability-matrix.md) and [database driver](database-driver.md).
 
 The branch starts from `main` at `6d79283` (`fix(security): signed anonymous sessions and CSRF protection (#62)`). Nothing on this branch has been pushed.
 
