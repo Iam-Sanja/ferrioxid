@@ -1,10 +1,18 @@
 # Changelog
 
+## 0.1.0 — initial crates.io rollout (2026-11-14)
+
+- First experimental `0.1.0` crates are being published in dependency order; this is a **rollout record**, not confirmation that all 16 packages exist. Verify each package in crates.io.
+- SQLite now uses bundled rusqlite 0.42.0 / libsqlite3-sys 0.40.0; PostgreSQL uses sqlx-postgres/sqlx-core 0.8.6; SeaQuery builds SQL. The SQLx SQLite vendor patch and SeaORM runtime were removed (#115).
+- Rust 1.89.0 is the declared minimum supported version. See [release readiness](docs/release-readiness.md) (#116).
+- TestShop passed 24 SQLite tests, 24 serial PostgreSQL tests and an isolated PostgreSQL 17 Docker HTTP acceptance against `a39c952` (#118). Concurrent PostgreSQL fixtures remain tracked in #117.
+- The 'Unreleased' headings below are **historical development milestones**, not separate crates.io versions.
+
 ## Unreleased — Fexu, without Ferrioxid or Ferrum compatibility
 
 - The framework, crates, CLI, configuration, environment variables, cookies, project directory and internal tables use Fexu names only. `FERRIOXID_*`, `FERRUM_*`, `ferrioxid.toml`, `ferrum.toml` and the old cookies are not read.
 - Embedded auth and job migration IDs are unchanged. Table names inside those files are `_fexu_*`, and the checksums were recalculated. An existing database is not converted.
-- Nothing was published to crates.io. The GitHub repository is [`Iam-Sanja/fexu-rs`](https://github.com/Iam-Sanja/fexu-rs). `fexu.dev` is not a live documentation site. See [the rename record](docs/fexu-rename-plan.md).
+- At the time of this rename milestone, nothing was published to crates.io. The GitHub repository is [`Iam-Sanja/fexu-rs`](https://github.com/Iam-Sanja/fexu-rs). `fexu.dev` is not a live documentation site. See [the rename record](docs/fexu-rename-plan.md).
 
 ## Unreleased — Integration of pull requests #103, #102 and #104
 
