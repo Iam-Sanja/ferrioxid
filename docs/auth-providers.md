@@ -12,7 +12,7 @@
 
 ## Second factor
 
-`begin_totp` stores a 20-byte secret with AES-256-GCM. The key is `HMAC-SHA256(csrf_secret, "fexu-mfa-v1")`. The user id is additional authenticated data. `confirm_totp` checks a 6-digit RFC 6238 SHA-1 code in a window of one step and returns eight recovery codes once. Codes look like `XXXXX-XXXXX` and avoid ambiguous characters. Only an HMAC is stored. Each code works once.
+`begin_totp` stores a 20-byte secret with AES-256-GCM. New TOTP secrets use the independent 32-byte `FEXU_MFA_KEY` (AES-256-GCM), not a key derived from the CSRF secret. Legacy records use the historical HMAC-SHA256 derivation only for backwards-compatible reads and migration. The user id is additional authenticated data. `confirm_totp` checks a 6-digit RFC 6238 SHA-1 code in a window of one step and returns eight recovery codes once. Codes look like `XXXXX-XXXXX` and avoid ambiguous characters. Only an HMAC is stored. Each code works once.
 
 Unconfirmed enrollment does not change login. After confirmation, `login` and `login_replacing` return `AuthError::MfaPending` and do not set a session cookie or revoke the anonymous session. `POST /auth/login` answers 401 with `auth.mfa_required`, `challenge` and `expires_at`. The challenge lives for five minutes and allows five attempts. `POST /auth/mfa/complete` is the only route that turns a challenge into a session. The challenge is not a session token. `Debug` redacts it.
 
@@ -40,4 +40,4 @@ Authenticated POSTs still require the session cookie and CSRF header. Login and 
 | `POST /auth/reauthenticate` | `password`, optional `code` | Short-lived proof |
 | `POST /auth/account/close` | `password` | User inactive |
 
-Rotating `csrf_secret` makes stored TOTP secrets and reauthentication proofs unreadable. Plan that rotation before changing the key.
+For newly stored `v2.` TOTP secrets, recovery records and reauthentication proofs, `FEXU_MFA_KEY` is independent of the CSRF secret. Rotating `FEXU_MFA_KEY` without a supported re-encryption plan makes current TOTP secrets unreadable. Legacy TOTP, unused legacy recovery records and `v1.` proofs can still depend on the historical CSRF-derived key; rotating `FEXU_CSRF_SECRET` invalidates those legacy records. See [auth threat model](auth-threat-model.md) before key rotation.
