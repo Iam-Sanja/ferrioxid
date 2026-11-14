@@ -1,168 +1,48 @@
-# Fexu Roadmap – Status and Next Phases
+# Fexu Roadmap
 
-[Overview](index.md) · [Django 6.1 capability matrix](django-capability-matrix.md) · Admin comparison: [admin-django-parity.md](admin-django-parity.md) · UX backlog: [admin-ux-backlog.md](admin-ux-backlog.md)
+[Documentation](index.md) · [Django capability matrix](django-capability-matrix.md) · [Admin comparison](admin-django-parity.md) · [GitHub issues](https://github.com/Iam-Sanja/fexu-rs/issues)
 
-**Status:** milestones through v0.28 are implemented; the Cargo version remains `0.1.0`. This roadmap distinguishes completed work from proposals. A planned phase is neither a release nor an available feature.
+**Baseline:** Fexu source at `a39c952` (2026-11-14). **Cargo package version: `0.1.0`**, experimental. Individual workspace crates are being published to crates.io in dependency order; a partially published set is not yet an installable standalone framework. Check [release readiness](release-readiness.md) and the [crates.io package](https://crates.io/crates/fexu) for current availability. Publication does not imply production readiness.
 
-## Product decision
+## Release versions versus historical milestones
 
-The default admin remains server-rendered HTML with Rust, Axum and Tera. React, Vite and Node.js are not standard admins. Core actions, i.e. lists, forms, deletion, login, log-out and directory, must work without JavaScript. The optional `admin.js` must only offer comfort, for example focus.
+Older documents and the [changelog](../CHANGELOG.md) use internal feature milestones such as `v0.13` and `v0.28`. **Those labels are not crates.io releases or Cargo semver versions.** They record a development sequence. The first planned crates.io package version is `0.1.0`. This page tracks the actual current design and remaining work instead of presenting a second version numbering system.
 
-In the long term, the admin should cover the relevant functions of the Django admin in a functionally equivalent manner. The internal API does not have to be django compatible. The surface should become a dense working environment, not a decorative redesign.
+## Available in the source baseline
 
-## Implemented milestones
-
-| Milestone | Status | Goal | Limit |
-|---|---|---|---|
-| v0.1 | Implemented; SQLite tested in the workspace | Typed models, list, GET, POST, PATCH, DELETE and safe migrations | PostgreSQL HTTP tests remain ignored unless a server is available. |
-| v0.6 | Implemented | Unique constraints, indexes, foreign keys, belongs-to, has-many, snapshots and diffs | Many-to-many, eager loading, `down` and PostgreSQL baseline are missing. |
-| v0.7 | Implemented |Argon2id, sessions, cookies, CSRF, RBAC, model permissions|OAuth, MFA and JWT are missing. Password reset follows in v0.23|
-| v0.8 to v0.12 | Implemented | Admin metadata, JSON API, query scopes, generator, settings, forms, static files, uploads and middleware | The React interface was removed in v0.13 |
-| v0.13 | Implemented |Native Admin under `/admin`, Tera, CSS in Binary, JSON API remains|Cargo version remains `0.1.0`|
-| v0.13.1 | Implemented | Login origins follow the bind address; `Origin: null` is allowed only with `Sec-Fetch-Site: same-origin`. | The Host header never supplies the allowlist. |
-| v0.14 | Implemented |Logging out on authenticated 403 pages, flag notices, standard columns|Users are still created v0.16|
-| v0.15 | Implemented |Design tokens, field groups, table rhythm, role selection, contrast gate|Cargo version remains `0.1.0`|
-| v0.16 | Implemented |User maintenance, server-side confirmation, readable foreign keys, filter selection, isolated generator databases|Superuser remains CLI. No user hard delete. JSON API without `confirm`|
-| v0.17 | Implemented |List configuration, fieldsets, three save destinations, form state, foreign key selection page|No date type. Cargo version remains `0.1.0`|
-| v0.18 | Implemented |Draft forms, has-many inlines, bulk actions, audit, registered actions|No common parent-child storage. Directory audit is not the same transaction|
-| v0.19 | Completed |`Date`, `Time`, `DateTime<Utc>`, Migration `0004_events`, admin fields, UTC date hierarchy|PostgreSQL runtime untested. No tacit text-to-date conversion|
-| v0.20 | Completed | Shared transactions for model, auth and audit writes, directory auditing and opt-in parent-child forms | No many-to-many or framework-wide optimistic locking. PostgreSQL runtime tests were not run for this milestone. |
-| v0.21 | Completed |Reading Auth and App Diagnosis. `check --strict`. Upgrading only creates a missing legacy manifest|No automatic template replacement. No silent migrations. PostgreSQL runtime untested|
-| v0.21.1 | Completed | Generator tests limit nested release builds to two jobs; the subsequent unrestricted workspace run passed | The cause of rustc crashes `0xc0000005` and `0xc0000409` remains unresolved |
-| v0.22 | Completed |Public admin extension: Pages, actions, filters, widgets, templates|No second admin engine. PostgreSQL runtime untested. The rustc crash remains unexplained|
-| v0.23 | Completed |Email service, self-service password reset, typed notes|No delivery guarantee. No admin notification center. PostgreSQL runtime untested|
-| v0.24 | Completed | Typed settings, `[custom.*]`, `UrlSet`, view helpers and project layout | `require_user` does not check CSRF; API projects retain HTML homepages |
-| v0.25 | Completed |`App::install`, App Migrations, Tera-`url`, App Templates and Static Files, `fexu generate app`|`merge` of a raw router does not see names. PostgreSQL runtime untested|
-| v0.27 | Completed |Persistent queue, lease, limited retries, worker, ordinary mail jobs|Cron is missing. Reset tokens remain outside the queue. PostgreSQL runtime untested|
-| v0.27.1 | Completed | `WorkerHost`, `fexu generate worker`, app handlers and hidden job payloads | CLI workers do not load application code; no exactly-once guarantee |
-| v0.26 | Completed | Validated app startup, Rust/TOML migration matching, flat field groups and managed timestamps | Soft delete remains planned |
-| v0.28 | Completed | Admin navigation grouped by app, model links and permission-aware visibility | See [admin-navigation.md](admin-navigation.md) for limits |
-
-## In review
-
-- Forms ([#47](https://github.com/Iam-Sanja/ferrioxid/issues/47)): text, number, email, password, checkbox, select and textarea widgets, escaped labels and values, and model binding through an explicit column allow-list. Create and replace require every required field. Patch leaves missing keys unchanged. Formsets are still absent. Merged in PR #60. Status: **Partial**.
-- Validation display ([#48](https://github.com/Iam-Sanja/ferrioxid/issues/48)): one German/English catalog, field overrides, and model errors stored as stable codes. Unknown locales use English. SQL and stack traces are not shown. Merged in PR #60. Status: **Partial**.
-- Error pages and named routes ([#50](https://github.com/Iam-Sanja/ferrioxid/issues/50)): status templates with a safe fallback, project `url()` across prefixes, and percent-encoded path parameters. Merged in PR #60. Status: **Partial**.
-- Anonymous sessions and CSRF ([#46](https://github.com/Iam-Sanja/ferrioxid/issues/46)): server-side anonymous sessions, the same HMAC as user sessions, login rotation, and an opted-in myshop contact form. Merged in PR #62. Status: **Partial**. `postgres_anonymous_session_roundtrip` passed in the PostgreSQL CI job on `6d79283`.
-
-## ORM queries
-
-`Model::query()` in [database.md](database.md) filters, orders and pages without replacing `list`. `load_by_ids` and `load_children` in [relations.md](relations.md) batch foreign keys and has-many rows on the same connection, including an open transaction ([transactions.md](transactions.md)). This is not a new version milestone. PR #59 is merged. The capability matrix rows are **Partial**: SQLite tests pass and PostgreSQL SQL generation is asserted, while `postgres_filters_and_pages_runtime` and `postgres_transaction_query_and_rollback_runtime` are not in the PostgreSQL CI job.
-
-On `feat/framework-completion`, and not as a numbered milestone, the same query API adds:
-
-- `Select::keyset` for cursor pages. The order includes an `id` tie-break. Offset, nullable order columns and boolean order columns are rejected. The page size stays between 1 and 100.
-- `annotate` for one `COUNT` or one bigint `SUM`. The child query scope stays inside the grouped subquery. Missing children are 0. The parent page is still capped at 100.
-- `load_many_to_many` for an explicit join table. Hidden children stay hidden. This is not an automatic fetch on every model read.
-
-Those three are **In PR**. SQLite tests passed. `postgres_keyset_annotations_and_many_to_many` was not run locally.
-
-## Decimal fields and typed choices
-
-`Decimal` and `FexuChoice` are described in [models.md](models.md). myshop migration `0006_prices_and_status` adds a precise product price, `ProductStatus`, and optional `Order.state`. This is not a new version milestone. PR #61 is merged. The rows are **Partial**. Local tests cover SQLite. `postgres_decimal_and_choice_roundtrip` passed in the PostgreSQL CI job on `6d79283`.
-
-## Fixtures
-
-`dumpdata` and `loaddata` are described in [fixtures.md](fixtures.md). myshop `fixtures/catalog.json` loads one category and two priced products. A second plain load does not create duplicates, and a conflicting file rolls back. This is not a new version milestone. PR #61 is merged. The row is **Partial**. `postgres_fixture_roundtrip` passed in the PostgreSQL CI job on `6d79283`. Natural keys are not implemented.
-
-## Management commands
-
-Project commands live in the compiled `fexu-manage` binary. `fexu manage` only checks the command name and starts that binary with separate arguments. The contract is in [management-commands.md](management-commands.md). myshop's `seed-shop` upserts `fixtures/catalog.json` and can be run again without adding rows. This is not a new version milestone. PR #61 is merged. The row is **Partial**. The sample command was exercised on SQLite. It was not run against PostgreSQL locally.
-
-## Open after v0.27.1
-
-- Cron-Syntax.
-- Soft Delete.
-- PostgreSQL runtime against a running server.
-- The CLI worker only executes the mail handler. Application handlers remain in the project binary.
-
-## Open after v0.26
-
-- Soft Delete, including queries, restores, audits and foreign keys.
-- `merge` of a raw router does not see route names.
-- The CLI does not load app Rust into its own process. `fexu manage` starts the project's compiled binary. See [management-commands.md](management-commands.md).
-
-## Open after v0.25
-
-- `require_user` continues to authenticate with GET. Mutations use `require_mutation`.
-- Since v0.26, the process start compares both lists. The CLI remains with `fexu.toml`.
-- `fexu new` does not yet generate `src/apps/`.
-
-## Open after v0.24
-
-- `require_user` authenticates with GET and does not check CSRF.
-- The API template continues to write `templates/index.html` because the start page remains active.
-
-## Open after v0.23
-
-- An assumed SMTP response does not prove the inbox. A process termination can devalue an already accepted token when cleaning up.
-- `AccountDeactivated` and `SecurityNotice` do not depend on user care.
-- The reset rate limit remains process-local.
-- The JSON directory API does not require `confirm`.
-- A non-superuser cannot distinguish a missing foreign key line from an invisible one.
-- Filter selections and the form select show a maximum of 100 eligible targets. The selection page also scrolls.
-- Cancel does not immediately delete a draft form. It expires after 30 minutes.
-- The form fingerprint is not a version stable database value.
-- Further child foreign keys are not resolved in the inline transaction.
-
-## Planned phases
-
-The order is binding for the next work. A later phase does not begin until the previous P0 removal is fulfilled.
-
-| Phase |Priority| Contents |Depends on|
-|---|---|---|---|
-| v0.15 | Implemented |Design tokens, distances, form groups, selection instead of free text for roles| v0.14 |
-| v0.16 | Implemented |Create users, change email and password, revoke sessions, confirmation and readable relations| v0.15 |
-| v0.17 | Implemented |List links, standard sorting, page size, fieldsets, save destinations, form state, selection page| [admin-django-parity.md](admin-django-parity.md) |
-| v0.18 | Implemented |Drafts, Has-Many-Inlines, Atomic bulk actions, Audit, `AdminAction`| [admin-bulk-actions.md](admin-bulk-actions.md) |
-| v0.19 | Completed |Date, time, UTC time, date hierarchy| [date-time-types.md](date-time-types.md) |
-| v0.20 | Completed |Transactions, directory audit, parent-child forms| [transactions.md](transactions.md) |
-| v0.21 | Completed |Migration Diagnosis and Secure Project Manifest| [migration-diagnostics.md](migration-diagnostics.md) |
-| v0.22 | Completed |Registered admin pages, actions, filters, widgets and templates| [admin-extension-api.md](admin-extension-api.md) |
-| v0.23 | Completed |Email, Password Reset and Typed Notes| [password-reset.md](password-reset.md) |
-| v0.24 | Completed |Settings, named URLs, views and project structure| [settings.md](settings.md) |
-
-Not in these numbered phases: React return, OAuth, MFA, JWT, S3, virus scanning, PostgreSQL baseline and automatic superuser semantics. Many-to-many loads, `migrate down`, explicit backfills, derived forms, OpenAPI 3.1 and the in-process test client are on the local branch `feat/framework-completion`. They are **In PR** and are not a numbered milestone. See [framework-quality-review.md](framework-quality-review.md).
-
-## Boundaries that remain
-
-- Cargo version `0.1.0`. milestones are only in the changelog and in this roadmap.
-- SQLite is the local standard. PostgreSQL tests remain ignored until a server is reachable.
-- `0001_initial.json` and the auth migration `0001_auth_schema` are not rewritten.
-- GET does not change data. Write accesses are POST with CSRF, except for the existing JSON API, which uses the header `x-csrf-token`.
-- Password hashes, session tokens and CSRF tokens do not appear in HTML, URLs or logs.
-- Skills are read before use. Impeccable has been read for v0.15, v0.16 and the form sections in v0.17. No skill, hook or agent commits or pushes on its own.
-
-## Features for later phases
-
-Tested on 2026-11-07: Impeccable is below `.cursor/skills/impeccable/` and has been read for v0.15. Context, Critique (two separate assessments), audit, layout and the polishing of the existing system “The Night Shift” were carried out. Nothing was reinstalled and nothing committed.
-
-| Skill |Used only after testing|Do not do|
+| Area | Present | Boundaries |
 |---|---|---|
-| Impeccable |Design criticism, audit, layout and fine-tuning of the native admin in v0.15|External installation without consent, decorative alterations without functional gain|
-| Cloudflare Security Audit |Targeted testing of CSRF, XSS, sessions and file access before v0.16 and v0.18|Blind adoption of findings without comparison with the Fexu code|
-| ub-mode |Architectural boundaries and tests for directory and audit|New frameworks or a second CRUD engine|
-| Ponytail |Complexity in `html.rs` and lower the metadata if a phase grows otherwise|Remove behaviour requiring removal|
+| Models and queries | `FexuModel`, typed model methods, explicit registration, filters, keyset pages, aggregate annotations, batch relations including explicit many-to-many loading | Not a general replacement for Django QuerySets or arbitrary SQL |
+| Persistence | SeaQuery-generated SQL; bundled rusqlite 0.42 for SQLite, sqlx-postgres/sqlx-core 0.8.6 for PostgreSQL | SQLite and PostgreSQL only; do not mix `sqlx-sqlite` into the dependency graph |
+| Migrations | Versioned app/framework migrations, dependency checks, `migrate up`, guarded `migrate down`, explicit backfills and SQLite rebuild protections | Never rewrite recorded migration checksums or migrate a production DB without backup |
+| API and routing | Axum HTTP, generated model CRUD, model-derived OpenAPI 3.1, cursor-based lists, named routes, in-process TestClient | Custom routes require explicit documentation; API access requires policy configuration |
+| Auth and security | Argon2id, sessions, permissions, cookie CSRF, MFA support in framework, password reset, deployment checks | No claim of universal production hardening; test application flows separately |
+| Native admin | Axum + Tera, server-rendered CRUD, directory, filters, fieldsets, actions, audit, navigation and extension points | No React/Vite/Node dependency for basic admin; no promise of full Django parity |
+| Services | Forms, templates, i18n, local storage, email, cache, jobs and worker host | Remote storage and mail delivery require external integration and deployment review |
+| Developer tooling | CLI, project/app generators, migration diagnostics, SQLite tests and PostgreSQL CI | CLI can only load code compiled into its own process; a separate project binary hosts app handlers |
 
-## Implemented in v0.16
+Details and limits are in the [capability matrix](django-capability-matrix.md), [database driver](database-driver.md), [API documentation](api.md), [auth](auth.md) and [admin guide](admin.md). This is a feature inventory, **not** a blanket assurance that every capability is complete.
 
-1. Users create, display, edit and password via their dedicated HTML routes and `AuthService`.
-2. `confirm=1` is checked on the server side. Superusers and their own lock remain protected.
-3. Foreign keys show a metadata name. Bool and foreign key filters are choices.
-4. Generator child processes overwrite `DATABASE_URL` locally and clean up the test file.
+## Next priorities
 
-## Implemented in v0.17
+1. **Finish and independently validate the first registry release.** Release all 16 crates in the documented dependency order. After publishing, test `cargo add fexu` and `cargo install fexu-cli` in a clean external project with no path dependency. Do not report these commands as tested before their packages are indexed.
+2. **Resolve parallel PostgreSQL test fixture contention** ([#117](https://github.com/Iam-Sanja/fexu-rs/issues/117)). Isolated database creation can collide via `template1` when tests run concurrently. Serial fixture execution works; concurrency needs a regression test on PostgreSQL 17 and 18.
+3. **Keep the public documentation aligned with the shipped code** ([#119](https://github.com/Iam-Sanja/fexu-rs/issues/119)). Verify install instructions, the current DB driver, CLI command behavior and compatibility notes.
+4. **Extend deployment and integration coverage.** The TestShop passed 24 SQLite tests, 24 serial PostgreSQL tests and a separate PostgreSQL 17 Docker HTTP acceptance against `a39c952` ([#118](https://github.com/Iam-Sanja/fexu-rs/issues/118)). That TestShop does not cover MFA or `Prefer` TLS negotiation against an SSL-enabled PostgreSQL server.
+5. **Improve framework ergonomics and capability parity** according to individually scoped issues and the [Django capability matrix](django-capability-matrix.md). Do not promise unimplemented features or dates.
 
-1. `list_link`, `admin_ordering` and `admin_per_page` control link, standard sorting and HTML page size.
-2. `admin_fieldset` groups form fields. Three save buttons distinguish `save=detail`, `save=edit` and `save=new`.
-3. Validation errors retain text, selection, and ticks. Passwords are not written back.
-4. The foreign key selection page searches and scrolls in the reader right of the destination. An unreadable UUID is not stored.
+## Long-term direction
 
-## Implemented in v0.18
+Fexu should offer model-first Rust development with an integrated, accessible, server-rendered admin. Core admin tasks must work without JavaScript, while optional client scripting adds convenience. Focus on correctness, documented limits, security tests, PostgreSQL portability and maintainable public APIs before declaring a stable 1.0 release.
 
-1. A session draft holds text, number, ticks, and selection while the foreign key page is open.
-2. `admin_inline` shows linked lines and creates a child record with a fixed parent key.
-3. Bulk actions are POST, confirmation and a transaction. A denied line does not change a line.
-4. Model changes and their audit entry share a transaction. The history for Staff is limited to own events.
+Further possible work includes deeper Django-admin workflows, remote object-storage integrations, broader automated browser coverage, operational observability and scheduling improvements. These are **proposals**, not current release guarantees.
 
-Acceptance and limits are in [admin-ux-backlog.md](admin-ux-backlog.md). The shop verification list for the local framework changes is [framework-shop-verification.md](framework-shop-verification.md).
+## Historical development records
+
+- [CHANGELOG](../CHANGELOG.md) preserves the original internal implementation milestones.
+- [Admin UX backlog](admin-ux-backlog.md) captures detailed UX decisions and historical implementation notes.
+- [Framework quality review](framework-quality-review.md) documents an older branch snapshot, not the current release state.
+- [Database driver](database-driver.md) explains the PR #115 execution-layer migration.
+- [Release readiness](release-readiness.md) records publication ordering and pre-release checks.
+
+Historical branch names, screenshots, test outputs and issue links should remain dated rather than silently rewritten as if they described today's `main`.
