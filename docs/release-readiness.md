@@ -1,6 +1,6 @@
 # Release readiness
 
-> **Rollout snapshot (2026-11-14):** seven crates (`fexu-core`, `fexu-macros`, `fexu-cache`, `fexu-static`, `fexu-middleware`, `fexu-mail`, `fexu-db`) were confirmed in the crates.io index by Cargo. `fexu-db` passed the dry-run and was subsequently published and independently downloaded from crates.io. Its earlier HTTP 429 was temporary. **This is a dated snapshot, not a live counter; verify individual crates on crates.io before proceeding.** This documentation branch does not publish anything.
+> **Rollout snapshot (2026-11-14):** eight crates (`fexu-core`, `fexu-macros`, `fexu-cache`, `fexu-static`, `fexu-middleware`, `fexu-mail`, `fexu-db`, `fexu-migrations`) were reported as published; the first seven were independently confirmed by the user's `cargo info` outputs and `fexu-migrations` publication was reported by the maintainer in the crates.io index by Cargo. `fexu-db` passed the dry-run and was subsequently published and independently downloaded from crates.io. Its earlier HTTP 429 was temporary. **This is a dated snapshot, not a live counter; verify individual crates on crates.io before proceeding.** This documentation branch does not publish anything.
 
 Original readiness assessment checked on 2026-11-14 from `origin/main` at `e803261` (`feat: integrate SQLite and PostgreSQL without vendor patches`, pull request 115) on branch `release/crates-io-readiness`. The original readiness check uploaded or tagged nothing; PR #116 was subsequently squash-merged into `main` as `a39c952`.
 
