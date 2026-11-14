@@ -11,7 +11,7 @@ A Django-inspired, experimental web framework built with **Axum**, **Tera**, **S
 ![Status: experimental](https://img.shields.io/badge/status-experimental-orange)
 [![fexu-core on crates.io](https://img.shields.io/crates/v/fexu-core.svg?label=fexu-core)](https://crates.io/crates/fexu-core)
 
-[**Quick start**](#quick-start) · [**Features**](#what-can-fexu-do) · [**Docs**](docs/index.md) · [**Contribute**](#help-build-fexu) · [**Roadmap**](docs/roadmap.md)
+[**Quick start**](#quick-start) · [**Features**](#why-fexu) · [**Docs**](docs/index.md) · [**Contribute**](#help-build-fexu) · [**Roadmap**](docs/roadmap.md)
 
 > [!IMPORTANT]
 > **Fexu 0.1.0 is experimental, not production-ready.** APIs, configuration and migrations may change. The initial 16-crate crates.io publication is being completed in dependency order; some component crates (including [`fexu-core`](https://crates.io/crates/fexu-core)) are published, but the main `fexu` and `fexu-cli` packages must be checked on crates.io before using registry install commands. Until then, install the CLI from a source checkout. Do not expose a demo application directly to the public internet.
