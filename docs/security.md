@@ -6,7 +6,7 @@
 
 - Models without anonymous access or a configured permission policy receive 403 handlers for GET, POST, PATCH and DELETE, using the `ApiError` contract.
 - Create and update DTOs validate declared fields. `deny_unknown_fields` rejects auto-generated IDs and fields excluded from the relevant DTO. Read-only fields remain writable at creation; managed timestamps are excluded from both DTOs.
-- INSERT, UPDATE and DELETE bind values via SeaORM. The DELETE and UPDATE statements always contain `WHERE "id" = $1`. Table and column names come only from checked macro attributes.
+- INSERT, UPDATE and DELETE use bound parameters through Fexu's SQLite/rusqlite or PostgreSQL/SQLx driver. The DELETE and UPDATE statements always contain `WHERE "id" = $1`. Table and column names come only from checked macro attributes.
 - `ApiError` logs DB details internally and delivers only generic information to the outside world at 500. Since v0.11, the same answer has a stable `code`. SQL and hashes are also replaced if a free text contained them. HTML error pages use the same rule: a 500 response and the built-in fallback do not include stack traces, SQL or the template error chain.
 - Axum’s JSON-Extractor uses Serde DTOs with `deny_unknown_fields` on the Create type as standard.
 - Demo bind is `127.0.0.1:3000`; Docker Postgres port is published on `127.0.0.1`.
