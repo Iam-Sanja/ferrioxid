@@ -2,7 +2,7 @@
 
 [Overview](index.md)
 
-This note covers the services on `work/framework-services`: authentication providers, jobs, cache and storage. They cooperate only through explicit calls. Auth does not enqueue jobs, cache sessions, or delete files.
+**Historical integration note:** this page records `work/framework-services` before the later PR integrations into `main`. Branch-specific pending merge instructions below are archival, not tasks currently awaiting completion. For current capabilities see [roadmap](roadmap.md), [auth providers](auth-providers.md), and [release readiness](release-readiness.md). It covers authentication providers, jobs, cache and storage. They cooperate only through explicit calls. Auth does not enqueue jobs, cache sessions, or delete files.
 
 ## What is implemented
 
