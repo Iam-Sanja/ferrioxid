@@ -2,7 +2,7 @@
 
 This checklist records verified settings and remaining work for [Iam-Sanja/fexu-rs](https://github.com/Iam-Sanja/fexu-rs). The repository is already **public**. Checked items are evidence observed on **2026-11-08**, when the repository was named `Iam-Sanja/ferrioxid`, not a permanent security certification. Settings can change independently of Git. No repository setting was changed during this documentation update, and the separate historical `fexu` repository was not modified.
 
-Current source baseline: `main` at `5c9bd7c438179b53d02f36130871ac42f313ef5e`. See [GitHub maintenance](github-maintenance.md) for the settings snapshot and repeatable verification endpoints.
+**Snapshot source baseline (2026-11-08):** `main` at `5c9bd7c438179b53d02f36130871ac42f313ef5e`. The 2026-11-14 Fexu `0.1.0` release baseline is `a39c952`; the older checkboxes here are historical observations, not newly revalidated settings. See [GitHub maintenance](github-maintenance.md) for the settings snapshot and repeatable verification endpoints.
 
 ## 1. Publication and historical exposure
 

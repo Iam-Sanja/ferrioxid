@@ -1,6 +1,6 @@
 # Advanced framework progress
 
-This file records the current development pass. An issue is complete only after the code is tested, documented, CI is green, and the change is on `main`. Nothing in this pass is on `main` yet.
+**Historical engineering log (November 2026):** this file preserves the status of the original integration branches when written. Statements such as 'not merged', 'not on main', and 'CI not run' apply to those earlier snapshots; they do not describe the current `main` at `a39c952`. Consult the [roadmap](roadmap.md) and [capability matrix](django-capability-matrix.md) for current status.
 
 The integration branch `work/integration` combines the four pull requests in order: #97, #98, #99, #100. The sections below keep the original per-branch reports.
 

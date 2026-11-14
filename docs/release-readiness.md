@@ -1,8 +1,10 @@
 # Release readiness
 
-Checked on 2026-11-14 from `origin/main` at `e803261` (`feat: integrate SQLite and PostgreSQL without vendor patches`, pull request 115) on branch `release/crates-io-readiness`. Nothing in this check was uploaded, tagged, or merged.
+> **Rollout snapshot (2026-11-14):** eight crates (`fexu-core`, `fexu-macros`, `fexu-cache`, `fexu-static`, `fexu-middleware`, `fexu-mail`, `fexu-db`, `fexu-migrations`) were reported as published; the first seven were independently confirmed by the user's `cargo info` outputs and `fexu-migrations` publication was reported by the maintainer in the crates.io index by Cargo. `fexu-db` passed the dry-run and was subsequently published and independently downloaded from crates.io. Its earlier HTTP 429 was temporary. **This is a dated snapshot, not a live counter; verify individual crates on crates.io before proceeding.** This documentation branch does not publish anything.
 
-Decision: **READY** to publish the 16 Fexu crates at `0.1.0`, in the order below, by a person who already has a crates.io token. This file is not that publication. `0.1.0` remains experimental and is not a 1.0 or production release.
+Original readiness assessment checked on 2026-11-14 from `origin/main` at `e803261` (`feat: integrate SQLite and PostgreSQL without vendor patches`, pull request 115) on branch `release/crates-io-readiness`. The original readiness check uploaded or tagged nothing; PR #116 was subsequently squash-merged into `main` as `a39c952`.
+
+Original decision: **READY** to begin publishing the 16 Fexu crates at `0.1.0`, in the order below, by a person who already has a crates.io token. This file is not that publication. `0.1.0` remains experimental and is not a 1.0 or production release.
 
 The Fexu rename is already on `main`. Publish these `fexu*` names once. Do not publish a `ferrioxid` crate from this tree. There is no `[patch.crates-io]` table and no `vendor/sqlx-sqlite` directory. `cargo audit` has no advisory ignore.
 

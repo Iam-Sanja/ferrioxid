@@ -37,7 +37,7 @@ Active, Staff and Superuser have separate columns. Non-superuser rows open one e
 
 These paths are separate from model CRUD routes. Password hashes and plaintext passwords never appear in HTML, logs or redirect URLs. A superuser still needs staff status to enter the admin. Users are deactivated rather than deleted.
 
-v0.28 separates the user and role lists into entries under "Users and access". Roles are created at `/admin/directory/roles/new`; the user editor assigns existing roles. Role rows open `/admin/directory/roles/{id}` to manage permissions. Physical user deletion is not available. Its effects on sessions, role assignments and history require a separate milestone.
+The current source separates user and role lists into entries under "Users and access" (historical feature milestone `v0.28`, not a Cargo version). Roles are created at `/admin/directory/roles/new`; the user editor assigns existing roles. Role rows open `/admin/directory/roles/{id}` to manage permissions. Physical user deletion is not available. Its effects on sessions, role assignments and history require a separate milestone.
 
 Check writing HTML actions of the directory in this order: CSRF, staff superuser, affected line, superuser and self-lock, then `confirm`. Only the value `1` applies. If it is missing, the answer is 422 and the record remains. `true`, `on` or an empty value do not apply. The confirmation does not replace any authorization.
 

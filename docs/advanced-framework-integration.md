@@ -1,5 +1,7 @@
 # Integration der Pull Requests #97 bis #100
 
+**Historischer Integrationsbericht (12. November 2026):** Angaben zu offenen PRs, nicht gemergten Branches und damaligen Release-Blockern sind zeitgebundene Test-/Entwicklungsnachweise, keine Aussagen über den aktuellen Stand `a39c952` vom 14. November 2026. Aktueller Stand: [Roadmap](roadmap.md), [Release readiness](release-readiness.md).
+
 Stand: 12. November 2026. Branch `work/integration` in `D:\04_Projekte_Arbeit\Projekte\fexu-wt-integration`. Basis `origin/main` bei `53a95aa`. Die vier PR-Branches wurden nicht überschrieben und nicht nach `main` gemerged.
 
 ## Merge-Reihenfolge

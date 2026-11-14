@@ -2,7 +2,7 @@
 
 This page records repository settings, contributor workflow and CI maintenance for [Iam-Sanja/fexu-rs](https://github.com/Iam-Sanja/fexu-rs). Settings were checked through GitHub's API on **2026-11-08** against main at `5c9bd7c438179b53d02f36130871ac42f313ef5e`, when the repository was named `Iam-Sanja/ferrioxid`. They may change independently of Git; Markdown cannot enforce them.
 
-The repository is already **public**. Use the [public release security checklist](public-release-checklist.md) to distinguish completed configuration from unresolved historical-secret, licensing, policy and contributor-flow reviews. Public source availability does not imply a stable crates.io release: Cargo `0.1.0` remains pre-release; use the workspace/path dependency as documented in the [README](../README.md).
+The repository is already **public**. Use the [public release security checklist](public-release-checklist.md) to distinguish completed configuration from unresolved historical-secret, licensing, policy and contributor-flow reviews. Public source availability does not imply a stable crates.io release: Cargo `0.1.0` remains experimental. Component crates began publishing on 2026-11-14; check the [README](../README.md) and live crates.io entries for installation instructions.
 
 ## Tracked policies and workflows
 

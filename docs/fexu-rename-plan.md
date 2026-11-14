@@ -2,7 +2,7 @@
 
 The framework is Fexu. This checkout no longer reads Ferrioxid or Ferrum names.
 
-Nothing has been published to crates.io. Generated projects and their databases do not need to keep working under the old names, so this rename does not add a second configuration file, a second environment prefix, old cookie names, or a migration of existing production databases.
+**Historical rename decision:** no Fexu crate had been published at the time of the rename. Initial Fexu `0.1.0` components began publishing on 2026-11-14. The rename does not add a second configuration file, environment prefix, old cookie names, or an automatic conversion of existing application databases.
 
 ## Names
 

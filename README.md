@@ -2,18 +2,19 @@
 
 **Build model-driven web applications in Rust.**
 
-A Django-inspired, experimental web framework built on **Axum**, **SeaORM**, and **Tera**. Define typed models, manage migrations, use SQLite or PostgreSQL, and work with a server-rendered admin — without requiring React, Vite, or Node.js for the admin.
+A Django-inspired, experimental web framework built with **Axum**, **Tera**, **SeaQuery**, **rusqlite** (SQLite), and **SQLx PostgreSQL**. Define typed models, manage migrations, use SQLite or PostgreSQL, and work with a server-rendered admin — without requiring React, Vite, or Node.js for the admin.
 
 [![Rust CI](https://github.com/Iam-Sanja/fexu-rs/actions/workflows/ci.yml/badge.svg)](https://github.com/Iam-Sanja/fexu-rs/actions/workflows/ci.yml)
 [![Security audit](https://github.com/Iam-Sanja/fexu-rs/actions/workflows/security.yml/badge.svg)](https://github.com/Iam-Sanja/fexu-rs/actions/workflows/security.yml)
 ![Rust](https://img.shields.io/badge/language-Rust-CE422B?logo=rust&logoColor=white)
 ![License: MIT](https://img.shields.io/badge/license-MIT-blue)
 ![Status: experimental](https://img.shields.io/badge/status-experimental-orange)
+[![fexu-core on crates.io](https://img.shields.io/crates/v/fexu-core.svg?label=fexu-core)](https://crates.io/crates/fexu-core)
 
-[**Quick start**](#quick-start) · [**Features**](#what-can-fexu-do) · [**Docs**](docs/index.md) · [**Contribute**](#help-build-fexu) · [**Roadmap**](docs/roadmap.md)
+[**Quick start**](#quick-start) · [**Features**](#why-fexu) · [**Docs**](docs/index.md) · [**Contribute**](#help-build-fexu) · [**Roadmap**](docs/roadmap.md)
 
 > [!IMPORTANT]
-> **Fexu is under active development, not a stable release.** APIs, configuration and migrations may change. The workspace currently uses Cargo version `0.1.0`; its crates are **not published on crates.io**. Install the CLI from a source checkout. Do not expose a demo application directly to the public internet.
+> **Fexu 0.1.0 is experimental, not production-ready.** APIs, configuration and migrations may change. The initial 16-crate crates.io publication is being completed in dependency order; some component crates (including [`fexu-core`](https://crates.io/crates/fexu-core)) are published, but the main `fexu` and `fexu-cli` packages must be checked on crates.io before using registry install commands. Until then, install the CLI from a source checkout. Do not expose a demo application directly to the public internet.
 
 ## Why Fexu?
 
@@ -32,7 +33,7 @@ These features have **documented limitations**. In particular, public model rout
 
 ## Quick start
 
-**Requirements:** stable Rust and Cargo. For the default SQLite setup, you do not need to install a database server.
+**Requirements:** Rust **1.89.0 or newer** and Cargo. For the default SQLite setup, you do not need to install a database server.
 
 Clone the repository and try the included MyShop example:
 
@@ -108,7 +109,7 @@ Admin screenshots and a visual walkthrough will be added as the project matures.
 
 Fexu is a **work in progress**, not a drop-in Django replacement.
 
-`main` includes model-derived OpenAPI, keyset pagination, many-to-many loading, `migrate down`, and the SQLite/PostgreSQL driver without a vendor patch. The [Django capability matrix](docs/django-capability-matrix.md) and [roadmap](docs/roadmap.md) remain the map of what is still missing. The experimental framework has **not** been declared production-ready, and version `0.1.0` has not been uploaded to crates.io.
+`main` includes model-derived OpenAPI, keyset pagination, many-to-many loading, `migrate down`, and the SQLite/PostgreSQL driver without a vendor patch. The [Django capability matrix](docs/django-capability-matrix.md) and [roadmap](docs/roadmap.md) remain the map of what is still missing. The experimental framework has **not** been declared production-ready, and the full set of `0.1.0` crates is not yet confirmed published.
 
 ## Help build Fexu
 

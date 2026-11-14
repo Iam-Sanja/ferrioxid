@@ -1,6 +1,6 @@
 # Admin and developer workflow
 
-This branch extends the existing admin, forms, app registry, views and CLI. It does not add a second admin engine and it does not load plugins at runtime.
+**Historical implementation note:** 'this branch' below refers to the original development snapshot, not the current source baseline. The work extends the existing admin, forms, app registry, views and CLI; it does not add a second admin engine or runtime-loaded plugins. For the current status see the [roadmap](roadmap.md).
 
 ## Issue status
 

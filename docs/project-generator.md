@@ -15,7 +15,7 @@ The default is `--template fullstack`; `--template api` omits admin registration
 
 The directory/display name remains `Shop`. Its Rust package/import name is `shop`; `MyShop` becomes `my_shop` and `HTTPServer` becomes `http_server`. Names must start with an ASCII letter, contain only ASCII letters, digits or underscores, and fit within 48 characters. Rust keywords, Windows device names and reserved project directories are rejected.
 
-Crates are not published yet. `--fexu-path` points to the framework checkout; without it the generator uses its build-time checkout. Create projects outside the framework workspace. Existing target directories are refused; newly generated files use exclusive creation.
+The component crates are being published in dependency order. Until `fexu` and `fexu-cli` are independently confirmed on crates.io, use a source checkout and `--fexu-path`; without it the generator uses its build-time checkout. Create projects outside the framework workspace. Existing target directories are refused; newly generated files use exclusive creation.
 
 Generated `main` calls `App::with_auth` and `into_router`. That router rejects POST, PUT, PATCH and DELETE when the configured session cookie or `fexu_anonymous` is present and the CSRF proof does not match. Register those routes on `App` before `into_router`. A client with no session cookie, including `Authorization: Bearer`, is not blocked by this check. `allow_anonymous` still means a cookie-less request can write. The bearer value is not validated. See [csrf.md](csrf.md).
 

@@ -1,6 +1,6 @@
 # ORM-Fähigkeiten
 
-Stand: 12.11.2026, Branch `feat/orm-migrations-lifecycle` auf `main` `53a95aa`.
+**Historischer Vergleich (12.11.2026):** Grundlage war `feat/orm-migrations-lifecycle` auf `main` `53a95aa`. Dieser Teststand ist nicht der aktuelle Release-Commit `a39c952`. Für die aktuelle Datenbanklaufzeit siehe [database-driver.md](database-driver.md); für die aktuelle Aufgabenplanung [roadmap.md](roadmap.md).
 
 Die Tabelle beschreibt die öffentliche Fexu-API für gewöhnliche Modelloperationen. SeaQuery bleibt im Framework. Anwendungs- und Geschäftslogik für die genannten Standardfälle braucht keine selbst geschriebenen SQL-Texte. Die Angaben sind an den Tests dieses Branch festgemacht, nicht an einer Produktionsfreigabe.
 
