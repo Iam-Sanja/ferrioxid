@@ -1,6 +1,6 @@
 # Fexu documentation portal
 
-Fexu is an experimental Rust framework with a model-first data layer, versioned migrations, authentication, a native admin, typed apps and background jobs. The current feature milestone is v0.28; the Cargo package version remains `0.1.0`. SQLite is the local default, and PostgreSQL is the optional server backend. The documentation is in English; the admin supports German and English.
+Fexu is an experimental Rust framework with a model-first data layer, versioned migrations, authentication, a native admin, typed apps and background jobs. The Cargo package version is `0.1.0` (experimental); historical v0.x feature milestones are not registry releases. SQLite is the local default, and PostgreSQL is the optional server backend. The documentation is in English; the admin supports German and English.
 
 ## How to read this manual
 
@@ -10,7 +10,7 @@ The main flow is: Rust model → `FexuModel` metadata and repository methods →
 
 ## Django capability comparison
 
-The [Django 6.1 capability matrix](django-capability-matrix.md) compares Fexu's documented behavior with Django's major developer benefits. The [framework comparison](framework-comparison.md) records Fexu, Runique, Cot and Loco from published pages, without runtime numbers. [Release readiness](release-readiness.md) is the pre-release note. No crate was published.
+The [Django 6.1 capability matrix](django-capability-matrix.md) compares Fexu's documented behavior with Django's major developer benefits. The [framework comparison](framework-comparison.md) records Fexu, Runique, Cot and Loco from published pages, without runtime numbers. [Release readiness](release-readiness.md) records the staged first crates.io publication; check individual crate pages for current availability.
 
 ## Documentation by topic
 
@@ -44,8 +44,8 @@ The [Django 6.1 capability matrix](django-capability-matrix.md) compares Fexu's 
 | Static files | Implemented, v0.12 | [staticfiles.md](staticfiles.md) | Application CSS and JavaScript, separate from admin assets |
 | Storage and uploads | Local storage implemented; remote object storage is configuration only | [storage.md](storage.md), [storage-remote.md](storage-remote.md), [uploads.md](uploads.md) | Local files, lifecycle, signed downloads and an S3 plan without a network client |
 | Middleware | Implemented, v0.12 | [middleware.md](middleware.md), [request-lifecycle.md](request-lifecycle.md) | Request IDs, logging, limits and security headers |
-| Admin | Implemented through v0.28 | [admin.md](admin.md), [admin-devex.md](admin-devex.md), [admin-native.md](admin-native.md), [admin-navigation.md](admin-navigation.md), [admin-components.md](admin-components.md), [admin-extension-api.md](admin-extension-api.md), [transactions.md](transactions.md), [admin-directory-audit.md](admin-directory-audit.md), [admin-transactional-inlines.md](admin-transactional-inlines.md), [admin-form-drafts.md](admin-form-drafts.md), [admin-inlines.md](admin-inlines.md), [admin-bulk-actions.md](admin-bulk-actions.md), [admin-audit-log.md](admin-audit-log.md), [admin-custom-actions.md](admin-custom-actions.md), [admin-django-parity.md](admin-django-parity.md) | Native HTML, JSON API, permissions, navigation, forms, transactions, actions, history and extensions |
-| OpenAPI | In PR on this branch | [openapi.md](openapi.md) | OpenAPI 3.1 from model metadata, plus an optional explorer |
+| Admin | Implemented with documented limitations | [admin.md](admin.md), [admin-devex.md](admin-devex.md), [admin-native.md](admin-native.md), [admin-navigation.md](admin-navigation.md), [admin-components.md](admin-components.md), [admin-extension-api.md](admin-extension-api.md), [transactions.md](transactions.md), [admin-directory-audit.md](admin-directory-audit.md), [admin-transactional-inlines.md](admin-transactional-inlines.md), [admin-form-drafts.md](admin-form-drafts.md), [admin-inlines.md](admin-inlines.md), [admin-bulk-actions.md](admin-bulk-actions.md), [admin-audit-log.md](admin-audit-log.md), [admin-custom-actions.md](admin-custom-actions.md), [admin-django-parity.md](admin-django-parity.md) | Native HTML, JSON API, permissions, navigation, forms, transactions, actions, history and extensions |
+| OpenAPI | Implemented in main | [openapi.md](openapi.md) | OpenAPI 3.1 from model metadata, plus an optional explorer |
 | General plugin hooks | Planned only | [extensions.md](extensions.md) | Extension points beyond the implemented admin API |
 | Deployment | Local SQLite, optional Docker PostgreSQL, and a disposable app image in `deploy/` | [deployment.md](deployment.md), [deploy-docker.md](deploy-docker.md) | Local startup, proxy boundaries, trusted proxies and embedded framework migrations |
 | Implementation process | Implemented and planned | [implementation-guide.md](implementation-guide.md) | Change scope, acceptance checks and architecture decisions |
