@@ -52,7 +52,7 @@ cargo build --workspace
 | `crates/fexu` | Public framework facade |
 | `crates/fexu-api` | HTTP application, routes, views, and app registry |
 | `crates/fexu-cli` | `fexu` developer command |
-| `crates/fexu-db` | SeaORM connection and SQL |
+| `crates/fexu-db` | SeaQuery SQL generation, rusqlite SQLite driver and sqlx-postgres execution |
 | `crates/fexu-migrations` | Project settings and migrations |
 | `crates/fexu-auth` | Accounts, sessions, and password reset |
 | `crates/fexu-admin` | Server-rendered admin |
