@@ -20,8 +20,7 @@ The app container does not run migrations on startup. Run
 `fexu migrate up` as a separate step. `/healthz` only shows that the
 process is up. `/readyz` runs `SELECT 1`.
 
-`FEXU_TRUST_PROXY=1` is not set. On this branch that flag trusts
-`X-Forwarded-For` from every peer. A peer allow-list is pull request 97 and is
+`FEXU_TRUST_PROXY=1` is not set. If enabling it, configure `FEXU_TRUSTED_PROXIES` with explicit immediate peer addresses. The application ignores wildcard entries and does not trust forwarded client addresses from unlisted peers. A peer allow-list is
 not included here.
 
 No container from this file was started while the files were added if Docker
