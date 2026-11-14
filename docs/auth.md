@@ -96,7 +96,7 @@ The response sets `Set-Cookie: fexu_session=...` and returns `user` and `csrf_to
 ## Limitations
 
 - The rate limit is in the process. Several processes do not share it. The map can be replaced later. The reset uses its own key and the same window.
-- There is no MFA, no OAuth and no JWT for external APIs. The e-mail reset is present in v0.23 and does not guarantee delivery.
+- TOTP-based MFA with recovery codes and a login challenge is implemented. OIDC, OAuth and JWT authentication for external APIs are not implemented. Password reset is implemented but delivery is not guaranteed; see [auth providers](auth-providers.md).
 - `is_active` is required for a valid session. Inactive accounts cannot log in.
 - `is_staff` opens the administration and does not bypass model permissions.
 - `is_superuser` bypasses roles and object rules, but does not replace `is_staff`. A superuser without staff receives 403 in the admin and can log out there.
@@ -104,7 +104,7 @@ The response sets `Set-Cookie: fexu_session=...` and returns `user` and `csrf_to
 
 ## Planned extensions
 
-Multi-process rate limit, MFA and OAuth are reserved for later versions. The password reset is implemented.
+A distributed/multi-process rate limiter and OIDC/OAuth sign-in are not implemented. TOTP MFA, recovery codes and password reset are implemented; see [auth providers](auth-providers.md) and [auth threat model](auth-threat-model.md).
 
 ## Admin and CSRF Bootstrap
 
