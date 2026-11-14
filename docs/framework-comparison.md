@@ -37,7 +37,7 @@ A four-framework application with the same models, files and admin was not built
 
 - Fexu remains experimental `0.1.0`; during the staged rollout, component crates may be available before the top-level package.
 - Public list filters exist only for admin-filterable fields that the read serializer still returns.
-- `FEXU_TRUST_PROXY=1` is unsafe on this branch. Pull request 97 is not merged.
+- `FEXU_TRUST_PROXY=1` requires explicit `FEXU_TRUSTED_PROXIES` peer addresses; an empty or wildcard-only list trusts no peer. The trusted-peer safeguard was integrated into `main` (PR #97). See [deployment](deployment.md).
 - Playwright covers the login page with a fresh profile. It does not submit a password or walk an authenticated form. That spec was not launched on this Windows machine.
 - Docker was not started. Docker is not installed here.
 - A local PostgreSQL 18.6 run of the ignored tests, including `pg_dump` and `pg_restore`, passed on disposable `fexu_test_*` databases. That is not a performance measurement.
