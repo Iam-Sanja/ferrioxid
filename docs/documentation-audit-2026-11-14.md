@@ -19,12 +19,17 @@
 |---|---|---|
 | `README.md`, `docs/architecture.md`, `docs/database.md`, `docs/security.md`, `CONTRIBUTING.md` | Active SeaORM execution path, stale publication status | Described SeaQuery with bundled rusqlite SQLite and direct sqlx-postgres; added release qualification |
 | `docs/roadmap.md`, `docs/index.md`, `docs/implementation-guide.md` | Internal v0.12–v0.28 feature labels presented like releases, features marked in PR | Replaced with source capability overview; distinguished Cargo 0.1.0 from historical milestones |
-| `docs/django-capability-matrix.md`, `docs/framework-comparison.md` | Old work branches and pre-merge status | Current main baseline and revised status; retained dated comparative evidence |
+| `docs/django-capability-matrix.md`, `docs/framework-comparison.md` | Old work branches and pre-merge status; incorrect claims of no MFA, cron, cache or cursor-list support | Corrected current main baseline, MFA, cron, typed cache, cursor/OpenAPI and historical comparative evidence |
 | `docs/auth.md`, `docs/security.md`, `docs/admin.md`, `docs/admin-security.md` | TOTP MFA falsely listed as missing | Documented implemented local TOTP/recovery and distinguish absent OAuth/OIDC/JWT |
 | `docs/auth-providers.md` | MFA key wrongly derived from CSRF key for new enrollments | Documented `FEXU_MFA_KEY` for v2 records, with legacy-CSRF recovery and rotation limitations |
 | `docs/deployment.md`, `deploy/README.md`, `docs/framework-comparison.md` | PR #97 'unmerged', any trusted proxy accepted | Aligned with current `FEXU_TRUSTED_PROXIES` peer allow-list and CLI checks |
 | `docs/release-readiness.md`, `CHANGELOG.md`, `docs/project-generator.md`, `docs/cli.md` | No crates available or no first release record | Dated staged-release notes with an explicit per-crate confirmation boundary |
 | `docs/advanced-framework-progress.md`, `docs/framework-quality-review.md`, `docs/advanced-services.md`, `docs/advanced-framework-integration.md`, `docs/orm-capability-matrix.md`, `docs/admin-devex.md`, `docs/public-release-checklist.md`, `docs/github-maintenance.md` | Past branch snapshots sounded like today's development state | Added historical-context labels while preserving dated observations |
+
+## Additional link check
+
+- The README's `Features` fragment linked to non-existent `#what-can-fexu-do`; corrected to `#why-fexu` after checking actual headings.
+- Anchor fragment validation is **not** complete across all 148 documents. The path-only Markdown scan found no missing local document targets; external URLs are unverified.
 
 ## Release status is intentionally time-scoped
 
